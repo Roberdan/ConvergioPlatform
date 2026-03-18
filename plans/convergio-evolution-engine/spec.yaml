@@ -1,0 +1,1661 @@
+user_request: >-
+  Design a complete, documented plan for a self-improving optimization system
+  (Convergio Evolution Engine) that proposes optimizations based on real data
+  across the Convergio ecosystem — agents, mesh, latency, performance, database,
+  workload distribution — with MaranelloLuceDesign serving as both canary repo
+  and observability/dashboard UI surface, operating under strict human-approval
+  governance. Governance: plan_scope=ecosystem-complete,
+  automation_authority=recommend-and-open-prs-only,
+  cadence=daily-micro-plus-weekly-runner,
+  web_research_policy=internal-plus-web-as-hypothesis,
+  maranello_role=both-canary-and-ui.
+  Dashboard architecture decision: Option 3 Hybrid — dashboard_web remains app
+  shell (Convergio Control Room), Maranello remains reusable DS component platform.
+  New Evolution Engine views added to dashboard_web consuming mn- components.
+  Reusable patterns promoted back to Maranello as new web components.
+  Architecture decision v3: Evolution Engine core is a standalone reusable
+  Convergio package with clear API boundaries — not embedded permanently in any
+  single repo. Individual repos (MLD, dashboard_web, future Convergio projects)
+  consume the core via thin local adapters for telemetry, canary, UI, and policy.
+  Tool/model intelligence: system continuously monitors model/tool versions and
+  capabilities (Claude, Copilot, OpenCode, Gemini), treats all capability changes
+  as hypothesis-only, benchmarks before recommending adoption, no auto-upgrade.
+
+constraints:
+  - id: C-01
+    text: >-
+      All optimization proposals are recommendations only — human approval
+      required before any change is applied to any system
+    type: permission
+    verify: "grep -rq 'requireApproval\\|APPROVAL_REQUIRED\\|ApprovalGate' src/ts/evolution/"
+  - id: C-02
+    text: >-
+      Maximum autonomous action is open a Pull Request — no auto-merge,
+      no auto-deploy, no direct production writes
+    type: security
+    verify: "! grep -rq 'autoMerge\\|autoDeploy\\|auto_apply' src/ts/evolution/"
+  - id: C-03
+    text: >-
+      External/web knowledge is hypothesis-only — never auto-adopted as truth,
+      always tagged with source, date, confidence score
+    type: process
+    verify: "grep -rq 'HypothesisStatus\\|HYPOTHESIS' src/ts/evolution/research/"
+  - id: C-04
+    text: >-
+      MaranelloLuceDesign has dual mandatory role — canary repo for all
+      optimization proposals AND observability/dashboard UI surface
+    type: technical
+    verify: "test -f src/ts/evolution/canary/mld-canary.ts && test -d dashboard_web/evolution/"
+  - id: C-05
+    text: >-
+      NaSra agent treated as agent optimization canary — first target for
+      agent config proposals before ecosystem-wide rollout
+    type: technical
+    verify: "grep -rq 'NaSra\\|nasra' src/ts/evolution/agents/"
+  - id: C-06
+    text: >-
+      All UI must use Maranello Luce Design System — mn- prefix components,
+      NaSra advisory for design tokens/themes, WCAG 2.2 AA compliance
+    type: compliance
+    verify: "grep -rq 'mn-' dashboard_web/evolution/"
+  - id: C-07
+    text: Each new TypeScript module must be under 500 lines of code
+    type: compliance
+    verify: "find src/ts/evolution/ -name '*.ts' | while read f; do test $(wc -l < \"$f\") -le 500 || exit 1; done"
+  - id: C-08
+    text: Telemetry storage must not exceed 50MB per day per monitored service
+    type: cost
+    verify: "grep -q 'MAX_DAILY_STORAGE_MB\\|storageLimitMb' src/ts/evolution/telemetry/config.ts"
+  - id: C-09
+    text: >-
+      Evolution Engine core must be a standalone reusable Convergio package
+      with clear API boundaries — not permanently embedded in any single repo.
+      Individual repos consume the core via thin local adapters.
+    type: technical
+    verify: "test -f src/ts/evolution/core/index.ts && test -f src/ts/evolution/adapters/adapter-interface.ts"
+  - id: C-10
+    text: >-
+      No auto-upgrade of models or tools — capability changes from Claude,
+      Copilot, OpenCode, Gemini are treated as hypothesis-only input,
+      benchmarked against current workflows before any adoption recommendation
+    type: process
+    verify: "grep -q 'HYPOTHESIS\\|benchmarkRequired' src/ts/evolution/agents/model-intelligence.ts"
+
+requirements:
+  # ─── Group A: Telemetry & Data Collection ───
+  - id: F-01
+    text: >-
+      Unified telemetry SDK capturing runtime metrics (latency, errors,
+      throughput, utilization, response times) from all Convergio services
+    wave: W1
+  - id: F-02
+    text: >-
+      Specific metric families — mesh topology health, inter-service latency,
+      DB query perf, workload distribution balance, memory/CPU, bundle sizes, build times
+    wave: W1
+  - id: F-03
+    text: >-
+      Time-series storage for all metrics with retention policy and historical
+      comparison queries (F1 lap-over-lap telemetry model)
+    wave: W1
+  - id: F-04
+    text: >-
+      Agent-level telemetry — token usage, cost per task, completion rate,
+      model selection patterns per agent and per repo
+    wave: W1
+  # ─── Group B: Evaluation & Analysis ───
+  - id: F-05
+    text: >-
+      Evaluation engine analyzing collected telemetry, detecting anomalies,
+      identifying optimization opportunities with confidence scoring
+    wave: W2
+  - id: F-06
+    text: >-
+      Outcome tracking for previously applied optimizations — measure
+      effectiveness over time, detect regressions from past changes
+    wave: W2
+  - id: F-07
+    text: >-
+      Evaluation domains: runtime performance, infrastructure mesh, agent
+      efficiency, cost optimization, developer experience
+    wave: W2
+  - id: F-08
+    text: >-
+      Hypothesis-driven evaluation — each proposal has stated hypothesis,
+      target metric, measurable success/failure criteria, scoring model
+    wave: W2
+  # ─── Group C: Experimentation ───
+  - id: F-09
+    text: >-
+      Three execution modes: shadow (parallel no-apply), canary (MLD-first),
+      full (with human approval gate)
+    wave: W3
+  - id: F-10
+    text: >-
+      MaranelloLuceDesign as designated canary repo — all optimization
+      proposals tested on MLD before wider ecosystem rollout
+    wave: W3
+  - id: F-11
+    text: >-
+      Replay mode — replay historical proposals against current state
+      for what-if analysis without side effects
+    wave: W3
+  - id: F-12
+    text: >-
+      Structured experiment reports — before/after metrics, confidence
+      intervals, statistical significance, recommendation
+    wave: W3
+  # ─── Group D: Cadence & Scheduling ───
+  - id: F-13
+    text: >-
+      Daily micro-loops: collect latest telemetry, run lightweight evaluation,
+      propose fast-turnaround optimizations
+    wave: W3
+  - id: F-14
+    text: >-
+      Weekly night runner: deep cross-domain analysis, resource-intensive
+      evaluations, comprehensive report generation
+    wave: W3
+  - id: F-15
+    text: >-
+      Configurable cadence (cron expressions) + manual trigger override
+      for on-demand analysis runs
+    wave: W3
+  # ─── Group E: Web Research ───
+  - id: F-16
+    text: >-
+      Web research integration — search internet for best practices,
+      benchmarks, known optimization patterns for detected issues
+    wave: W4
+  - id: F-17
+    text: >-
+      All external knowledge tagged as hypothesis with source URL,
+      retrieval date, confidence score — never auto-adopted
+    wave: W4
+  - id: F-18
+    text: >-
+      Research results cached, deduplicated, versioned — no repeated
+      lookups for same topic within configurable TTL
+    wave: W4
+  # ─── Group F: Guardrails & Human Approval ───
+  - id: F-19
+    text: >-
+      System MUST NOT auto-apply any optimization — all proposals surfaced
+      as recommendations, never executed without human approval
+    wave: W4
+  - id: F-20
+    text: >-
+      Human approval gate UI in dashboard for reviewing, approving, or
+      rejecting proposals with audit-trail comments
+    wave: W4
+  - id: F-21
+    text: >-
+      Promotion gate: shadow → canary → human-review → production,
+      with configurable threshold at each stage
+    wave: W4
+  - id: F-22
+    text: >-
+      Blast radius declaration — each proposal declares scope (single
+      repo, single service, ecosystem-wide) before review
+    wave: W4
+  - id: F-23
+    text: >-
+      Kill switch — any running experiment immediately haltable and
+      rolled back by single human action
+    wave: W4
+  - id: F-24
+    text: >-
+      Rate limiting — configurable limits on proposals per day/week
+      and maximum concurrent open PRs
+    wave: W4
+  # ─── Group G: Agent Optimization ───
+  - id: F-25
+    text: >-
+      Agent optimization sub-system evaluating .claude files, prompts,
+      tool configurations, model routing across all repos
+    wave: W5
+  - id: F-26
+    text: >-
+      Agent proposals: prompt refinements, tool selection changes,
+      model routing optimization, context window management
+    wave: W5
+  - id: F-27
+    text: >-
+      Agent optimization under same PR-only governance — proposals as
+      PRs to agent config repos, never direct writes
+    wave: W5
+  - id: F-28
+    text: >-
+      NaSra agent (MLD) as canary for agent optimization — proposals
+      tested on NaSra before wider agent ecosystem rollout
+    wave: W5
+  # ─── Group H: Runtime & Infrastructure ───
+  - id: F-29
+    text: >-
+      Service mesh optimization: evaluate topology, routing rules,
+      retry policies, circuit breaker configurations
+    wave: W6
+  - id: F-30
+    text: >-
+      Latency optimization: identify p50/p95/p99 hotspots, propose
+      caching, connection pooling, request batching
+    wave: W6
+  - id: F-31
+    text: >-
+      Database optimization: analyze slow queries, index usage,
+      connection pools, schema efficiency, propose improvements
+    wave: W6
+  - id: F-32
+    text: >-
+      Workload distribution: analyze load imbalance, queue depths,
+      propose scaling/rebalancing strategies
+    wave: W6
+  - id: F-33
+    text: >-
+      General performance: bundle size, build time, startup time,
+      memory footprint, CPU utilization — with regression detection
+    wave: W6
+  # ─── Group I: MLD Evolution ───
+  - id: F-34
+    text: >-
+      MLD dual-role architecture definition: canary repo for ecosystem
+      optimizations + primary UI surface for Evolution Engine
+    wave: W7
+  - id: F-35
+    text: >-
+      AutoPilot Dashboard views: proposal list (mn-data-table), trend
+      charts (mn-chart), approval chain, experiment status, config panels
+    wave: W7
+  - id: F-36
+    text: >-
+      MLD own build/bundle/test metrics collected by telemetry layer
+      and fed into the optimization loop as first-class data source
+    wave: W7
+  - id: F-37
+    text: >-
+      Kill switch and experiment controls accessible from MLD dashboard
+      UI (not just CLI) with real-time status feedback
+    wave: W7
+  # ─── Group J: Documentation & Governance ───
+  - id: F-38
+    text: >-
+      Complete architecture documentation: data flows, schemas,
+      integration points, deployment topology
+    wave: W8
+  - id: F-39
+    text: >-
+      ADR for self-improvement system in docs/adr/ following existing
+      repo conventions (compact format, max 20 lines)
+    wave: W8
+  - id: F-40
+    text: >-
+      Governance model document: approval roles, escalation paths,
+      blast radius classification rules
+    wave: W8
+  - id: F-41
+    text: >-
+      Proposal traceability: unique ID, timestamp, source cadence,
+      hypothesis, outcome, full decision chain
+    wave: W8
+  # ─── Group K: ROI ───
+  - id: F-42
+    text: >-
+      ROI measurement: improvement gains vs cost of running system
+      (tokens, compute, human review time)
+    wave: W8
+  - id: F-43
+    text: >-
+      Cumulative impact tracking: proposals generated/accepted/rejected,
+      positive/negative delta per optimization domain
+    wave: W8
+  # ─── Wiring requirements (normalized from F-xxw) ───
+  - id: F-44
+    text: >-
+      Wire telemetry data into dashboard_web via Maranello chart, gauge,
+      liveGraph components with explicit data contracts
+    wave: W1
+  - id: F-45
+    text: >-
+      Wire weekly analysis report output into dashboard view using
+      existing Maranello data-table and chart components
+    wave: W3
+  - id: F-46
+    text: >-
+      Wire AutoPilot Dashboard into MaranelloLuceDesign demo site
+      as new navigable section with routing
+    wave: W7
+  - id: F-47
+    text: >-
+      Wire ROI scoreboard into MLD dashboard using kpiScorecard
+      or equivalent component with live data binding
+    wave: W8
+  # ─── Non-Functional (normalized from NF-xx) ───
+  - id: F-48
+    text: >-
+      Safety: system must never autonomously change production systems,
+      data, or configs — all writes gated by human approval
+    wave: W4
+  - id: F-49
+    text: >-
+      Auditability: every system action logged with timestamp, actor,
+      input, output — queryable audit log with retention policy
+    wave: W4
+  - id: F-50
+    text: >-
+      Reversibility: every applied change must be reversible with
+      documented rollback procedure and automated rollback support
+    wave: W4
+  - id: F-51
+    text: >-
+      Cost control: configurable budget limits for compute, API calls,
+      tokens, web research per optimization cycle
+    wave: W8
+  - id: F-52
+    text: >-
+      Privacy: telemetry must not capture PII, secrets, or sensitive
+      business data — data minimization enforced at collection
+    wave: W8
+  - id: F-53
+    text: >-
+      Platform portability: not locked to single CI/CD, cloud, or
+      observability vendor — adapter pattern for integrations
+    wave: W8
+  - id: F-54
+    text: >-
+      MLD Constitution compliance: WCAG 2.2 AA, zero emoji, mn- prefix,
+      NaSra advisory for all UI components
+    wave: W7
+  - id: F-55
+    text: >-
+      Graceful degradation: Evolution Engine unavailability must not
+      impact production Convergio services or dashboard_web core
+    wave: W8
+  # ─── Tool/Model/Version Intelligence ───
+  - id: F-56
+    text: >-
+      Continuous monitoring of model/tool versions and capabilities
+      (Claude, Copilot, OpenCode, Gemini) with structured capability
+      profiles: context window, tool access, pricing, safety policies
+    wave: W5
+  - id: F-57
+    text: >-
+      Capability delta analysis: detect changes in context window size,
+      tool access, pricing/cost profile, safety policy, workflow-relevant
+      features — all treated as hypothesis-only input, never auto-adopted
+    wave: W5
+  - id: F-58
+    text: >-
+      Benchmark new model/tool capabilities against current workflows
+      before recommending adoption — produce comparative evidence,
+      no auto-upgrade of any model or tool
+    wave: W5
+  # ─── Standalone Reusable Core ───
+  - id: F-59
+    text: >-
+      Evolution Engine core as standalone Convergio package with clear
+      API boundaries, extractable from any single repo — core contains
+      telemetry SDK, analysis, experiments, guardrails, research, ROI
+    wave: W0
+  - id: F-60
+    text: >-
+      Thin local adapters per repo/project for telemetry collection,
+      canary integration, UI embedding, and policy configuration —
+      each consuming repo gets a lightweight adapter, not a full dependency
+    wave: W0
+
+waves:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W0: Foundation & Cross-Plan Review
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W0
+    name: "Foundation & Cross-Plan Review"
+    merge_mode: sync
+    theme: foundation
+    estimated_hours: 5
+    tasks:
+      - id: T0-01
+        do: >-
+          Review full plan spec: reassign models/effort per task based on
+          model-strategy decision tree, flag any tasks needing replanning,
+          verify all F-xx covered, confirm dashboard_web architecture decision
+        files:
+          - plans/convergio-evolution-engine/spec.yaml
+        verify:
+          - "test -f plans/convergio-evolution-engine/spec.yaml"
+        ref: "F-01"
+        priority: P0
+        type: chore
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: copilot
+        summary: "Cross-plan review and model reassignment"
+      - id: T0-02
+        do: >-
+          Create Evolution Engine as standalone reusable Convergio package:
+          (1) Core package structure at src/ts/evolution/core/ with clear
+          API boundaries — contains telemetry SDK interfaces, analysis engine
+          interfaces, experiment types, guardrail contracts, research types,
+          ROI types. (2) Adapter interface contract at src/ts/evolution/adapters/
+          defining AdapterInterface with methods: collectTelemetry, runCanary,
+          embedUI, configurePolicy. (3) Shared TypeScript interfaces (Metric,
+          Proposal, Experiment, EvaluationResult, AuditEntry) in core/types.ts.
+          (4) Config schema with defaults. Architecture principle: core is
+          repo-agnostic and extractable to its own Convergio repo; individual
+          repos consume via thin adapters. No direct dependency on MLD, dashboard_web,
+          or any specific repo internals from within core/.
+        files:
+          - src/ts/evolution/core/types.ts
+          - src/ts/evolution/core/index.ts
+          - src/ts/evolution/core/config.ts
+          - src/ts/evolution/adapters/adapter-interface.ts
+          - tsconfig.json
+          - package.json
+        verify:
+          - "test -d src/ts/evolution/core"
+          - "test -d src/ts/evolution/adapters"
+          - "test -f src/ts/evolution/core/types.ts"
+          - "test -f src/ts/evolution/core/index.ts"
+          - "test -f src/ts/evolution/adapters/adapter-interface.ts"
+          - "grep -q 'Proposal' src/ts/evolution/core/types.ts"
+          - "grep -q 'Metric' src/ts/evolution/core/types.ts"
+          - "grep -q 'AuditEntry' src/ts/evolution/core/types.ts"
+          - "grep -q 'AdapterInterface\\|collectTelemetry\\|runCanary\\|embedUI\\|configurePolicy' src/ts/evolution/adapters/adapter-interface.ts"
+          - "! grep -q 'dashboard_web\\|maranello' src/ts/evolution/core/"
+        ref: "F-59,F-01,F-02"
+        priority: P0
+        type: feature
+        model: claude-opus-4.6
+        effort: 3
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/adapters/mld-adapter.ts
+          - src/ts/evolution/adapters/dashboard-adapter.ts
+          - src/ts/evolution/telemetry/sdk.ts
+          - src/ts/evolution/analysis/engine.ts
+          - src/ts/evolution/experiments/runner.ts
+          - src/ts/evolution/guardrails/approval-gate.ts
+        summary: "Standalone core package + adapter interface contract"
+      - id: T0-03
+        do: >-
+          Create thin local adapters for initial consuming repos:
+          (1) MLD adapter (src/ts/evolution/adapters/mld-adapter.ts) —
+          implements AdapterInterface for MaranelloLuceDesign: telemetry
+          from CI pipeline, canary runs via MLD PR, policy from repo CLAUDE.md.
+          (2) Dashboard adapter (src/ts/evolution/adapters/dashboard-adapter.ts) —
+          implements AdapterInterface for dashboard_web: UI embedding via
+          mn- components, telemetry display, control surface wiring.
+          (3) Generic adapter template (src/ts/evolution/adapters/template-adapter.ts) —
+          starter for future Convergio repos to integrate with Evolution Engine.
+          Each adapter is under 200 LOC and imports only from core/.
+        files:
+          - src/ts/evolution/adapters/mld-adapter.ts
+          - src/ts/evolution/adapters/dashboard-adapter.ts
+          - src/ts/evolution/adapters/template-adapter.ts
+          - tests/evolution/adapters/adapters.test.ts
+        verify:
+          - "test -f src/ts/evolution/adapters/mld-adapter.ts"
+          - "test -f src/ts/evolution/adapters/dashboard-adapter.ts"
+          - "test -f src/ts/evolution/adapters/template-adapter.ts"
+          - "grep -q 'AdapterInterface' src/ts/evolution/adapters/mld-adapter.ts"
+          - "grep -q 'AdapterInterface' src/ts/evolution/adapters/dashboard-adapter.ts"
+          - "wc -l < src/ts/evolution/adapters/mld-adapter.ts | xargs test 200 -ge"
+          - "wc -l < src/ts/evolution/adapters/dashboard-adapter.ts | xargs test 200 -ge"
+          - "npx vitest run tests/evolution/adapters/adapters.test.ts"
+        ref: "F-60"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/telemetry/sdk.ts
+          - src/ts/evolution/canary/mld-canary.ts
+          - dashboard_web/evolution/telemetry-view.js
+        summary: "MLD + dashboard + template thin adapters"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W1: Telemetry & Data Collection
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W1
+    name: "Telemetry & Data Collection"
+    merge_mode: batch
+    theme: telemetry
+    estimated_hours: 10
+    precondition:
+      type: wave_status
+      wave_id: W0
+      status: done
+    tasks:
+      - id: T1-01
+        do: >-
+          Implement unified telemetry SDK with pluggable collectors for:
+          latency (p50/p95/p99), error rates, throughput, resource utilization,
+          response times. Define metric family schemas for: mesh topology health,
+          inter-service latency, DB query performance, workload distribution
+          balance, memory/CPU profiles, bundle sizes, build times. Each
+          collector implements a common MetricCollector interface from types.ts.
+          Include adapter pattern for portability (C-06 platform portability).
+        files:
+          - src/ts/evolution/telemetry/sdk.ts
+          - src/ts/evolution/telemetry/collectors.ts
+          - src/ts/evolution/telemetry/metric-families.ts
+          - src/ts/evolution/telemetry/config.ts
+          - tests/evolution/telemetry/sdk.test.ts
+        verify:
+          - "test -f src/ts/evolution/telemetry/sdk.ts"
+          - "test -f src/ts/evolution/telemetry/collectors.ts"
+          - "grep -q 'MetricCollector' src/ts/evolution/telemetry/sdk.ts"
+          - "grep -q 'meshTopology\\|interServiceLatency\\|dbQuery\\|workload\\|bundleSize\\|buildTime' src/ts/evolution/telemetry/metric-families.ts"
+          - "npx vitest run tests/evolution/telemetry/sdk.test.ts"
+          - "wc -l < src/ts/evolution/telemetry/sdk.ts | xargs test 500 -ge"
+        ref: "F-01,F-02"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 3
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/telemetry/storage.ts
+          - src/ts/evolution/analysis/engine.ts
+          - src/ts/evolution/cadence/daily-runner.ts
+        summary: "Unified telemetry SDK with 7 metric families"
+      - id: T1-02
+        do: >-
+          Implement time-series storage layer: SQLite-backed with WAL mode,
+          retention policy (configurable, default 90d raw / 1y aggregated),
+          aggregation engine (1min→5min→1h→1d rollups), historical comparison
+          query API (compare windows, detect trends, regression detection).
+          Enforce MAX_DAILY_STORAGE_MB=50 limit from config. Include data
+          minimization filter to strip PII/secrets before storage (F-52).
+        files:
+          - src/ts/evolution/telemetry/storage.ts
+          - src/ts/evolution/telemetry/aggregation.ts
+          - src/ts/evolution/telemetry/retention.ts
+          - tests/evolution/telemetry/storage.test.ts
+        verify:
+          - "test -f src/ts/evolution/telemetry/storage.ts"
+          - "grep -q 'WAL\\|wal' src/ts/evolution/telemetry/storage.ts"
+          - "grep -q 'MAX_DAILY_STORAGE_MB\\|storageLimitMb' src/ts/evolution/telemetry/config.ts"
+          - "grep -q 'aggregate\\|rollup' src/ts/evolution/telemetry/aggregation.ts"
+          - "npx vitest run tests/evolution/telemetry/storage.test.ts"
+        ref: "F-03"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 3
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/analysis/engine.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+          - dashboard_web/evolution/telemetry-view.js
+        summary: "Time-series storage with retention and aggregation"
+      - id: T1-03
+        do: >-
+          Implement agent-level telemetry collectors: token usage per task,
+          cost per task (model-aware pricing), task completion rate, model
+          selection frequency, prompt length distribution, context window
+          utilization. Read from plan-db.sh agent data and mesh heartbeat.
+          Wire into unified SDK from T1-01.
+        files:
+          - src/ts/evolution/telemetry/agent-collectors.ts
+          - tests/evolution/telemetry/agent-collectors.test.ts
+        verify:
+          - "test -f src/ts/evolution/telemetry/agent-collectors.ts"
+          - "grep -q 'tokenUsage\\|costPerTask\\|completionRate\\|modelSelection' src/ts/evolution/telemetry/agent-collectors.ts"
+          - "npx vitest run tests/evolution/telemetry/agent-collectors.test.ts"
+        ref: "F-04"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/agents/profiler.ts
+          - src/ts/evolution/analysis/engine.ts
+        summary: "Agent telemetry — tokens, cost, model patterns"
+      - id: T1-04
+        do: >-
+          Wire telemetry data into dashboard_web: create dashboard_web/evolution/
+          directory, implement telemetry-view.js consuming Maranello mn-chart
+          (sparklines, time-series), mn-gauge (utilization), liveGraph
+          (real-time feed). Define explicit DataContract types mapping
+          telemetry storage queries to component props. Add navigation entry
+          to dashboard_web/index.html header for Evolution section.
+        files:
+          - dashboard_web/evolution/telemetry-view.js
+          - dashboard_web/evolution/data-contracts.js
+          - dashboard_web/index.html
+        verify:
+          - "test -f dashboard_web/evolution/telemetry-view.js"
+          - "test -f dashboard_web/evolution/data-contracts.js"
+          - "grep -q 'mn-chart\\|mn-gauge' dashboard_web/evolution/telemetry-view.js"
+          - "grep -q 'evolution' dashboard_web/index.html"
+        ref: "F-44"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - dashboard_web/index.html
+          - dashboard_web/evolution/proposals-view.js
+        summary: "Wire telemetry to dashboard via Maranello components"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W2: Evaluation & Analysis Engine
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W2
+    name: "Evaluation & Analysis Engine"
+    merge_mode: batch
+    theme: analysis
+    estimated_hours: 10
+    precondition:
+      type: wave_status
+      wave_id: W1
+      status: done
+    tasks:
+      - id: T2-01
+        do: >-
+          Build evaluation engine core: pattern recognition across telemetry
+          time-series (trend detection, seasonality, drift), anomaly detection
+          (z-score, IQR, rolling-window deviation) for cost spikes, latency
+          regressions, error rate increases. Confidence scoring for each
+          detected anomaly. Output: ranked list of OptimizationOpportunity
+          objects with confidence, domain, severity, proposed action.
+          This is cross-system architecture — engine must be domain-agnostic,
+          with domain-specific analyzers plugged in via strategy pattern.
+        files:
+          - src/ts/evolution/analysis/engine.ts
+          - src/ts/evolution/analysis/anomaly-detector.ts
+          - src/ts/evolution/analysis/pattern-recognizer.ts
+          - tests/evolution/analysis/engine.test.ts
+        verify:
+          - "test -f src/ts/evolution/analysis/engine.ts"
+          - "grep -q 'AnomalyDetector\\|PatternRecognizer' src/ts/evolution/analysis/engine.ts"
+          - "grep -q 'OptimizationOpportunity\\|confidence' src/ts/evolution/analysis/engine.ts"
+          - "npx vitest run tests/evolution/analysis/engine.test.ts"
+          - "wc -l < src/ts/evolution/analysis/engine.ts | xargs test 500 -ge"
+        ref: "F-05,F-06"
+        priority: P0
+        type: feature
+        model: claude-opus-4.6
+        effort: 3
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/analysis/domain-analyzers.ts
+          - src/ts/evolution/experiments/runner.ts
+          - src/ts/evolution/cadence/daily-runner.ts
+        summary: "Core evaluation engine — anomalies, patterns, scoring"
+      - id: T2-02
+        do: >-
+          Implement evaluation domain analyzers: (a) runtime performance
+          analyzer, (b) mesh/infrastructure analyzer, (c) agent efficiency
+          analyzer, (d) cost optimizer, (e) developer experience analyzer.
+          Each analyzer implements DomainAnalyzer interface, plugs into
+          engine from T2-01. Include outcome tracking: for each previously
+          applied optimization, record before/after metrics, compute
+          effectiveness delta, flag regressions.
+        files:
+          - src/ts/evolution/analysis/domain-analyzers.ts
+          - src/ts/evolution/analysis/outcome-tracker.ts
+          - tests/evolution/analysis/domain-analyzers.test.ts
+        verify:
+          - "test -f src/ts/evolution/analysis/domain-analyzers.ts"
+          - "grep -q 'RuntimeAnalyzer\\|MeshAnalyzer\\|AgentAnalyzer\\|CostAnalyzer\\|DXAnalyzer' src/ts/evolution/analysis/domain-analyzers.ts"
+          - "grep -q 'OutcomeTracker\\|effectivenessDelta' src/ts/evolution/analysis/outcome-tracker.ts"
+          - "npx vitest run tests/evolution/analysis/domain-analyzers.test.ts"
+        ref: "F-07,F-06"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/analysis/engine.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+        summary: "5 domain analyzers + outcome tracking"
+      - id: T2-03
+        do: >-
+          Implement hypothesis-driven evaluation framework: each Proposal
+          object must include stated hypothesis (string), target metric
+          (MetricRef), predicted improvement (numeric range), success
+          threshold, failure threshold, measurement window. Build scoring
+          model that ranks proposals by: expected impact × confidence ×
+          (1/blast_radius). Output ProposalScore with recommendation
+          (proceed/defer/reject) and reasoning trace.
+        files:
+          - src/ts/evolution/analysis/hypothesis.ts
+          - src/ts/evolution/analysis/scoring-model.ts
+          - tests/evolution/analysis/hypothesis.test.ts
+        verify:
+          - "test -f src/ts/evolution/analysis/hypothesis.ts"
+          - "grep -q 'hypothesis\\|targetMetric\\|successThreshold\\|failureThreshold' src/ts/evolution/analysis/hypothesis.ts"
+          - "grep -q 'ProposalScore\\|expectedImpact\\|blastRadius' src/ts/evolution/analysis/scoring-model.ts"
+          - "npx vitest run tests/evolution/analysis/hypothesis.test.ts"
+        ref: "F-08"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/experiments/runner.ts
+          - src/ts/evolution/guardrails/promotion-gate.ts
+          - dashboard_web/evolution/proposals-view.js
+        summary: "Hypothesis-driven proposals with scoring model"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W3: Experimentation, Cadence & Scheduling
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W3
+    name: "Experimentation, Cadence & Scheduling"
+    merge_mode: sync
+    theme: experimentation
+    estimated_hours: 12
+    precondition:
+      type: wave_status
+      wave_id: W2
+      status: done
+    tasks:
+      - id: T3-01
+        do: >-
+          Implement three execution modes with MLD as designated canary:
+          (1) Shadow mode — run proposal logic in parallel, record predicted
+          outcome, compare against actual, no mutations. (2) Canary mode —
+          apply proposal to MLD repo first via PR, measure impact, gate on
+          success before wider rollout. (3) Full mode — with human approval
+          gate, apply to target repo(s) via PR. Each mode returns a
+          structured ExperimentResult. MLD canary integration uses existing
+          CI pipeline for feedback loop.
+        files:
+          - src/ts/evolution/experiments/runner.ts
+          - src/ts/evolution/experiments/modes.ts
+          - src/ts/evolution/canary/mld-canary.ts
+          - tests/evolution/experiments/runner.test.ts
+        verify:
+          - "test -f src/ts/evolution/experiments/runner.ts"
+          - "test -f src/ts/evolution/experiments/modes.ts"
+          - "test -f src/ts/evolution/canary/mld-canary.ts"
+          - "grep -q 'ShadowMode\\|CanaryMode\\|FullMode' src/ts/evolution/experiments/modes.ts"
+          - "grep -q 'ExperimentResult' src/ts/evolution/experiments/runner.ts"
+          - "npx vitest run tests/evolution/experiments/runner.test.ts"
+        ref: "F-09,F-10"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort: 3
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/cadence/daily-runner.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+          - src/ts/evolution/guardrails/kill-switch.ts
+        summary: "3 execution modes + MLD canary integration"
+      - id: T3-02
+        do: >-
+          Implement replay mode and rollback mechanism: replay allows
+          re-running a historical proposal against current state for
+          what-if analysis (read-only, no side effects). Rollback creates
+          a revert-PR for any applied change, triggered manually or by
+          kill switch. Build structured experiment report generator:
+          before/after metric snapshots, confidence intervals (bootstrap
+          method), statistical significance (p-value), clear recommendation
+          (apply/reject/needs-more-data).
+        files:
+          - src/ts/evolution/experiments/replay.ts
+          - src/ts/evolution/experiments/rollback.ts
+          - src/ts/evolution/experiments/report-generator.ts
+          - tests/evolution/experiments/replay.test.ts
+        verify:
+          - "test -f src/ts/evolution/experiments/replay.ts"
+          - "test -f src/ts/evolution/experiments/rollback.ts"
+          - "grep -q 'replay\\|whatIf' src/ts/evolution/experiments/replay.ts"
+          - "grep -q 'revertPR\\|rollback' src/ts/evolution/experiments/rollback.ts"
+          - "grep -q 'confidenceInterval\\|pValue\\|beforeAfter' src/ts/evolution/experiments/report-generator.ts"
+          - "npx vitest run tests/evolution/experiments/replay.test.ts"
+        ref: "F-11,F-12"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/cadence/weekly-runner.ts
+          - dashboard_web/evolution/experiment-view.js
+          - src/ts/evolution/guardrails/kill-switch.ts
+        summary: "Replay mode, rollback, experiment reports"
+      - id: T3-03
+        do: >-
+          Implement cadence runners: (1) Daily micro-loop — collects latest
+          telemetry snapshot, runs lightweight evaluation (fast analyzers
+          only, <30s), generates low-blast-radius proposals, respects rate
+          limits. (2) Weekly night runner — full deep analysis across all
+          5 domains, resource-intensive evaluations permitted, cross-domain
+          correlation, comprehensive markdown report. Both runners use
+          experiment framework from T3-01 and evaluation engine from W2.
+        files:
+          - src/ts/evolution/cadence/daily-runner.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+          - src/ts/evolution/cadence/scheduler.ts
+          - tests/evolution/cadence/runners.test.ts
+        verify:
+          - "test -f src/ts/evolution/cadence/daily-runner.ts"
+          - "test -f src/ts/evolution/cadence/weekly-runner.ts"
+          - "grep -q 'dailyMicroLoop\\|lightweightEval' src/ts/evolution/cadence/daily-runner.ts"
+          - "grep -q 'deepAnalysis\\|crossDomainCorrelation' src/ts/evolution/cadence/weekly-runner.ts"
+          - "npx vitest run tests/evolution/cadence/runners.test.ts"
+        ref: "F-13,F-14"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 3
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/cadence/scheduler.ts
+          - dashboard_web/evolution/cadence-view.js
+        summary: "Daily micro-loop + weekly deep runner"
+      - id: T3-04
+        do: >-
+          Implement configurable cadence: cron expression support for both
+          daily and weekly schedules, manual trigger API (CLI + HTTP endpoint),
+          override mechanism for on-demand runs. Wire weekly report output
+          into dashboard_web using mn-data-table for findings list and
+          mn-chart for trend visualization. Add cadence status to
+          dashboard_web/evolution/ navigation.
+        files:
+          - src/ts/evolution/cadence/cron-config.ts
+          - src/ts/evolution/cadence/manual-trigger.ts
+          - dashboard_web/evolution/cadence-view.js
+          - tests/evolution/cadence/cron-config.test.ts
+        verify:
+          - "test -f src/ts/evolution/cadence/cron-config.ts"
+          - "test -f src/ts/evolution/cadence/manual-trigger.ts"
+          - "test -f dashboard_web/evolution/cadence-view.js"
+          - "grep -q 'cronExpression\\|manualTrigger' src/ts/evolution/cadence/cron-config.ts"
+          - "grep -q 'mn-data-table\\|mn-chart' dashboard_web/evolution/cadence-view.js"
+          - "npx vitest run tests/evolution/cadence/cron-config.test.ts"
+        ref: "F-15,F-45"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - dashboard_web/evolution/cadence-view.js
+          - src/ts/evolution/cadence/scheduler.ts
+        summary: "Cron config, manual trigger, weekly report in dashboard"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W4: Web Research & Guardrails (P0 safety-critical)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W4
+    name: "Web Research & Guardrails"
+    merge_mode: sync
+    theme: safety
+    estimated_hours: 14
+    precondition:
+      type: wave_pr_created
+      wave_id: W2
+    tasks:
+      - id: T4-01
+        do: >-
+          Implement web research integration module: search API adapter
+          (pluggable — not locked to single provider per C-06), result
+          parser, hypothesis tagger (ALL external knowledge gets status
+          HYPOTHESIS with source URL, retrieval date, confidence 0.0-1.0),
+          cache layer with configurable TTL (default 7d), deduplication
+          by semantic hash, version history. Research budget limiter
+          integrated with cost control config.
+        files:
+          - src/ts/evolution/research/web-search.ts
+          - src/ts/evolution/research/hypothesis-tagger.ts
+          - src/ts/evolution/research/cache.ts
+          - tests/evolution/research/web-search.test.ts
+        verify:
+          - "test -f src/ts/evolution/research/web-search.ts"
+          - "grep -q 'HYPOTHESIS\\|HypothesisStatus' src/ts/evolution/research/hypothesis-tagger.ts"
+          - "grep -q 'sourceUrl\\|retrievalDate\\|confidence' src/ts/evolution/research/hypothesis-tagger.ts"
+          - "grep -q 'cache\\|TTL\\|dedup' src/ts/evolution/research/cache.ts"
+          - "npx vitest run tests/evolution/research/web-search.test.ts"
+        ref: "F-16,F-17,F-18"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 3
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/analysis/engine.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+        summary: "Web research with hypothesis tagging and cache"
+      - id: T4-02
+        do: >-
+          Implement core guardrails (P0 security-critical): (1) PR-only
+          execution enforcer — middleware that intercepts ALL proposal
+          execution, ensures output is always a PR draft, blocks any
+          direct-write paths. (2) Promotion gate — state machine enforcing
+          shadow→canary→human-review→production pipeline with configurable
+          thresholds per stage. (3) Blast radius declaration — each proposal
+          must include BlastRadius enum (single-file, single-repo,
+          multi-repo, ecosystem) before entering promotion pipeline.
+          Safety invariant: APPROVAL_REQUIRED flag on every Proposal.
+        files:
+          - src/ts/evolution/guardrails/pr-only-enforcer.ts
+          - src/ts/evolution/guardrails/promotion-gate.ts
+          - src/ts/evolution/guardrails/blast-radius.ts
+          - tests/evolution/guardrails/pr-only-enforcer.test.ts
+          - tests/evolution/guardrails/promotion-gate.test.ts
+        verify:
+          - "test -f src/ts/evolution/guardrails/pr-only-enforcer.ts"
+          - "grep -q 'APPROVAL_REQUIRED\\|requireApproval' src/ts/evolution/guardrails/pr-only-enforcer.ts"
+          - "grep -q 'shadow.*canary.*review.*production' src/ts/evolution/guardrails/promotion-gate.ts"
+          - "grep -q 'BlastRadius\\|singleFile\\|singleRepo\\|multiRepo\\|ecosystem' src/ts/evolution/guardrails/blast-radius.ts"
+          - "! grep -q 'autoMerge\\|autoDeploy' src/ts/evolution/guardrails/"
+          - "npx vitest run tests/evolution/guardrails/pr-only-enforcer.test.ts"
+          - "npx vitest run tests/evolution/guardrails/promotion-gate.test.ts"
+        ref: "F-19,F-21,F-22"
+        priority: P0
+        type: feature
+        model: claude-sonnet-4.6
+        effort: 3
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/experiments/runner.ts
+          - src/ts/evolution/cadence/daily-runner.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+        summary: "PR-only enforcer + promotion gate + blast radius"
+      - id: T4-03
+        do: >-
+          Implement kill switch and rate limiter: (1) Kill switch — single
+          function call or dashboard button that immediately halts any
+          running experiment, triggers rollback via T3-02 rollback module,
+          logs halt event to audit trail. State: RUNNING→KILLED with
+          immutable audit record. (2) Rate limiter — configurable max
+          proposals per day (default 5), per week (default 15), max
+          concurrent open PRs (default 3). Exceeding limits queues
+          proposals, does not drop them.
+        files:
+          - src/ts/evolution/guardrails/kill-switch.ts
+          - src/ts/evolution/guardrails/rate-limiter.ts
+          - tests/evolution/guardrails/kill-switch.test.ts
+          - tests/evolution/guardrails/rate-limiter.test.ts
+        verify:
+          - "test -f src/ts/evolution/guardrails/kill-switch.ts"
+          - "test -f src/ts/evolution/guardrails/rate-limiter.ts"
+          - "grep -q 'KILLED\\|immediatHalt\\|rollback' src/ts/evolution/guardrails/kill-switch.ts"
+          - "grep -q 'maxProposalsPerDay\\|maxConcurrentPRs' src/ts/evolution/guardrails/rate-limiter.ts"
+          - "npx vitest run tests/evolution/guardrails/kill-switch.test.ts"
+          - "npx vitest run tests/evolution/guardrails/rate-limiter.test.ts"
+        ref: "F-23,F-24"
+        priority: P0
+        type: feature
+        model: claude-sonnet-4.6
+        effort: 2
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/experiments/runner.ts
+          - dashboard_web/evolution/controls-view.js
+        summary: "Kill switch + rate limiter"
+      - id: T4-04
+        do: >-
+          Implement human approval gate UI and full audit trail: (1) Approval
+          UI in dashboard_web using existing Maranello approvalChain and
+          decisionMatrix components — proposal detail view with hypothesis,
+          metrics, blast radius, approve/reject/defer buttons with mandatory
+          comment. (2) Audit trail: every system action (proposal created,
+          evaluated, approved, rejected, applied, rolled back) logged with
+          timestamp, actor (human/system), input, output. Queryable via
+          time range, actor, action type. Stored in SQLite alongside
+          telemetry DB.
+        files:
+          - dashboard_web/evolution/approval-view.js
+          - src/ts/evolution/guardrails/approval-gate.ts
+          - src/ts/evolution/guardrails/audit-trail.ts
+          - tests/evolution/guardrails/audit-trail.test.ts
+        verify:
+          - "test -f dashboard_web/evolution/approval-view.js"
+          - "grep -q 'mn-.*approval\\|approvalChain\\|decisionMatrix' dashboard_web/evolution/approval-view.js"
+          - "grep -q 'AuditEntry\\|timestamp\\|actor\\|action' src/ts/evolution/guardrails/audit-trail.ts"
+          - "npx vitest run tests/evolution/guardrails/audit-trail.test.ts"
+        ref: "F-20,F-49"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - dashboard_web/evolution/proposals-view.js
+          - src/ts/evolution/experiments/runner.ts
+        summary: "Approval gate UI + queryable audit trail"
+      - id: T4-05
+        do: >-
+          Implement safety and reversibility enforcement layer: (1) Safety
+          validator — pre-execution check that confirms APPROVAL_REQUIRED
+          flag is set, PR-only mode active, blast radius declared, rate
+          limit not exceeded. Blocks execution if any check fails.
+          (2) Reversibility guarantor — for every applied change, stores
+          complete rollback recipe (revert PR ref, config snapshot, metric
+          baseline) so any change can be reversed. Includes automated
+          rollback test that verifies revert-PR would apply cleanly.
+        files:
+          - src/ts/evolution/guardrails/safety-validator.ts
+          - src/ts/evolution/guardrails/reversibility.ts
+          - tests/evolution/guardrails/safety-validator.test.ts
+        verify:
+          - "test -f src/ts/evolution/guardrails/safety-validator.ts"
+          - "test -f src/ts/evolution/guardrails/reversibility.ts"
+          - "grep -q 'APPROVAL_REQUIRED\\|prOnlyMode\\|blastRadius\\|rateLimit' src/ts/evolution/guardrails/safety-validator.ts"
+          - "grep -q 'rollbackRecipe\\|revertPR\\|configSnapshot' src/ts/evolution/guardrails/reversibility.ts"
+          - "npx vitest run tests/evolution/guardrails/safety-validator.test.ts"
+        ref: "F-48,F-50"
+        priority: P0
+        type: feature
+        model: claude-sonnet-4.6
+        effort: 2
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/experiments/runner.ts
+          - src/ts/evolution/guardrails/kill-switch.ts
+        summary: "Safety validator + reversibility guarantor"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W5: Agent Optimization
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W5
+    name: "Agent Optimization & Model Intelligence"
+    merge_mode: batch
+    theme: agents
+    estimated_hours: 14
+    precondition:
+      type: wave_status
+      wave_id: W3
+      status: done
+    tasks:
+      - id: T5-01
+        do: >-
+          Build agent optimization sub-system: (1) Agent profiler — reads
+          .claude files, CLAUDE.md, agent definitions, prompt templates,
+          tool configs, model routing tables across all configured repos.
+          Generates AgentProfile with cost, efficiency, token waste metrics.
+          (2) Agent proposal generator — produces proposals for: prompt
+          refinements (reduce token waste), tool selection optimization
+          (remove unused tools), model routing changes (use cheaper model
+          where adequate per model-strategy patterns), context window
+          management (reduce context bloat). Cross-system architecture
+          requiring understanding of multiple repo structures.
+        files:
+          - src/ts/evolution/agents/profiler.ts
+          - src/ts/evolution/agents/proposal-generator.ts
+          - src/ts/evolution/agents/agent-types.ts
+          - tests/evolution/agents/profiler.test.ts
+        verify:
+          - "test -f src/ts/evolution/agents/profiler.ts"
+          - "test -f src/ts/evolution/agents/proposal-generator.ts"
+          - "grep -q 'AgentProfile\\|tokenWaste\\|costEfficiency' src/ts/evolution/agents/profiler.ts"
+          - "grep -q 'promptRefinement\\|toolSelection\\|modelRouting\\|contextOptimization' src/ts/evolution/agents/proposal-generator.ts"
+          - "npx vitest run tests/evolution/agents/profiler.test.ts"
+        ref: "F-25,F-26"
+        priority: P1
+        type: feature
+        model: claude-opus-4.6
+        effort: 3
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/agents/nasra-canary.ts
+          - src/ts/evolution/cadence/daily-runner.ts
+          - dashboard_web/evolution/agents-view.js
+        summary: "Agent profiler + proposal generator"
+      - id: T5-02
+        do: >-
+          Implement agent governance integration: all agent optimization
+          proposals flow through same PR-only guardrails (W4). Agent
+          proposals target .claude files and agent config repos — output
+          is always a PR draft with clear diff. Include validation that
+          proposed changes don't break agent functionality (dry-run
+          syntax check on .claude files, prompt template validation).
+        files:
+          - src/ts/evolution/agents/governance.ts
+          - src/ts/evolution/agents/validators.ts
+          - tests/evolution/agents/governance.test.ts
+        verify:
+          - "test -f src/ts/evolution/agents/governance.ts"
+          - "grep -q 'prOnly\\|ApprovalGate\\|draftPR' src/ts/evolution/agents/governance.ts"
+          - "grep -q 'dryRun\\|syntaxCheck\\|validatePrompt' src/ts/evolution/agents/validators.ts"
+          - "npx vitest run tests/evolution/agents/governance.test.ts"
+        ref: "F-27"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/agents/profiler.ts
+          - src/ts/evolution/guardrails/pr-only-enforcer.ts
+        summary: "Agent PR-only governance + validation"
+      - id: T5-03
+        do: >-
+          Implement NaSra canary integration: configure NaSra agent
+          (MaranelloLuceDesign/.github/agents/NaSra.agent.md) as first
+          target for all agent optimization proposals. Before any agent
+          proposal reaches wider ecosystem, it must pass NaSra canary:
+          apply proposal to NaSra config in shadow mode, measure impact
+          on NaSra task success rate and token efficiency, gate on
+          improvement before promoting to other agents.
+        files:
+          - src/ts/evolution/agents/nasra-canary.ts
+          - tests/evolution/agents/nasra-canary.test.ts
+        verify:
+          - "test -f src/ts/evolution/agents/nasra-canary.ts"
+          - "grep -q 'NaSra\\|nasra' src/ts/evolution/agents/nasra-canary.ts"
+          - "grep -q 'canaryFirst\\|shadowMode\\|tokenEfficiency' src/ts/evolution/agents/nasra-canary.ts"
+          - "npx vitest run tests/evolution/agents/nasra-canary.test.ts"
+        ref: "F-28"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/experiments/runner.ts
+          - src/ts/evolution/agents/profiler.ts
+        summary: "NaSra as agent optimization canary"
+      - id: T5-04
+        do: >-
+          Build tool/model/version intelligence system: (1) Model registry
+          (src/ts/evolution/agents/model-intelligence.ts) — structured
+          capability profiles for Claude (Opus/Sonnet/Haiku), Copilot
+          (gpt-5.x, codex), OpenCode (qwen, deepseek), Gemini (2.5/3-pro)
+          with fields: context_window, tool_access, pricing_per_1k_tokens,
+          safety_policy_version, workflow_features, release_date.
+          (2) Capability delta detector — compares current profile vs latest
+          known, emits CapabilityDelta events (context_window_change,
+          pricing_change, new_tool_access, safety_policy_change).
+          ALL deltas tagged as HYPOTHESIS status per C-10 — never auto-adopted.
+          (3) Benchmark runner — given a CapabilityDelta, replays recent
+          tasks (from agent telemetry) against new capability in shadow mode,
+          produces comparative report (cost delta, quality delta, speed delta).
+          Only if benchmark shows clear improvement does system recommend
+          adoption via standard PR-only proposal flow. No auto-upgrade path.
+          (4) Integrates with agent profiler (T5-01) — profiler consumes
+          registry for current capability baselines, intelligence system
+          consumes profiler for workflow patterns to benchmark against.
+        files:
+          - src/ts/evolution/agents/model-intelligence.ts
+          - src/ts/evolution/agents/capability-delta.ts
+          - src/ts/evolution/agents/model-benchmark.ts
+          - tests/evolution/agents/model-intelligence.test.ts
+        verify:
+          - "test -f src/ts/evolution/agents/model-intelligence.ts"
+          - "test -f src/ts/evolution/agents/capability-delta.ts"
+          - "test -f src/ts/evolution/agents/model-benchmark.ts"
+          - "grep -q 'context_window\\|pricing\\|tool_access\\|safety_policy' src/ts/evolution/agents/model-intelligence.ts"
+          - "grep -q 'CapabilityDelta\\|HYPOTHESIS' src/ts/evolution/agents/capability-delta.ts"
+          - "grep -q 'benchmarkRequired\\|shadowReplay\\|costDelta\\|qualityDelta' src/ts/evolution/agents/model-benchmark.ts"
+          - "! grep -q 'autoUpgrade\\|auto_upgrade' src/ts/evolution/agents/"
+          - "npx vitest run tests/evolution/agents/model-intelligence.test.ts"
+        ref: "F-56,F-57,F-58"
+        priority: P1
+        type: feature
+        model: claude-opus-4.6
+        effort: 3
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/agents/profiler.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+          - dashboard_web/evolution/agents-view.js
+        summary: "Model/tool version intelligence + benchmark runner"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W6: Runtime & Infrastructure Optimization
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W6
+    name: "Runtime & Infrastructure Optimization"
+    merge_mode: batch
+    theme: runtime
+    estimated_hours: 10
+    precondition:
+      type: wave_pr_created
+      wave_id: W3
+    tasks:
+      - id: T6-01
+        do: >-
+          Implement mesh and latency optimization analyzers: (1) Mesh
+          analyzer — evaluates topology (node connectivity, single points
+          of failure), routing rules (efficiency, redundancy), retry
+          policies (backoff strategy, max retries), circuit breaker
+          configs (thresholds, recovery). (2) Latency analyzer — identifies
+          p50/p95/p99 hotspots from telemetry, proposes caching strategies,
+          connection pooling optimizations, request batching opportunities.
+          Both analyzers plug into evaluation engine as DomainAnalyzer
+          implementations. Cross-system: must understand ConvergioMesh
+          topology and rsync patterns.
+        files:
+          - src/ts/evolution/runtime/mesh-analyzer.ts
+          - src/ts/evolution/runtime/latency-analyzer.ts
+          - tests/evolution/runtime/mesh-analyzer.test.ts
+        verify:
+          - "test -f src/ts/evolution/runtime/mesh-analyzer.ts"
+          - "test -f src/ts/evolution/runtime/latency-analyzer.ts"
+          - "grep -q 'topology\\|circuitBreaker\\|retryPolicy' src/ts/evolution/runtime/mesh-analyzer.ts"
+          - "grep -q 'p50\\|p95\\|p99\\|hotspot\\|caching' src/ts/evolution/runtime/latency-analyzer.ts"
+          - "npx vitest run tests/evolution/runtime/mesh-analyzer.test.ts"
+        ref: "F-29,F-30"
+        priority: P1
+        type: feature
+        model: claude-opus-4.6
+        effort: 3
+        executor_agent: claude
+        consumers:
+          - src/ts/evolution/analysis/domain-analyzers.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+        summary: "Mesh topology + latency hotspot analyzers"
+      - id: T6-02
+        do: >-
+          Implement database and workload optimization analyzers:
+          (1) DB analyzer — detects slow queries from telemetry (>100ms),
+          evaluates index usage (missing/unused indexes), connection pool
+          sizing, schema efficiency (normalization opportunities, type
+          mismatches). (2) Workload analyzer — detects load imbalance
+          across mesh nodes, queue depth anomalies, proposes scaling
+          strategies (horizontal/vertical) and rebalancing configurations.
+          Both implement DomainAnalyzer interface.
+        files:
+          - src/ts/evolution/runtime/db-analyzer.ts
+          - src/ts/evolution/runtime/workload-analyzer.ts
+          - tests/evolution/runtime/db-analyzer.test.ts
+        verify:
+          - "test -f src/ts/evolution/runtime/db-analyzer.ts"
+          - "test -f src/ts/evolution/runtime/workload-analyzer.ts"
+          - "grep -q 'slowQuery\\|indexUsage\\|connectionPool' src/ts/evolution/runtime/db-analyzer.ts"
+          - "grep -q 'loadImbalance\\|queueDepth\\|scaling' src/ts/evolution/runtime/workload-analyzer.ts"
+          - "npx vitest run tests/evolution/runtime/db-analyzer.test.ts"
+        ref: "F-31,F-32"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/analysis/domain-analyzers.ts
+          - src/ts/evolution/cadence/weekly-runner.ts
+        summary: "DB + workload optimization analyzers"
+      - id: T6-03
+        do: >-
+          Implement general performance analyzer and wire all runtime
+          analyzers into evaluation engine: (1) Performance analyzer —
+          tracks bundle sizes (flag regressions >5%), build times (flag
+          >10% increase), startup time, memory footprint, CPU utilization.
+          Reads from CI artifacts and telemetry. (2) Wire mesh, latency,
+          DB, workload, and performance analyzers into evaluation engine
+          as registered DomainAnalyzer instances. Verify all 5 analyzers
+          are callable from engine.evaluate() pipeline.
+        files:
+          - src/ts/evolution/runtime/performance-analyzer.ts
+          - src/ts/evolution/runtime/index.ts
+          - tests/evolution/runtime/performance-analyzer.test.ts
+        verify:
+          - "test -f src/ts/evolution/runtime/performance-analyzer.ts"
+          - "test -f src/ts/evolution/runtime/index.ts"
+          - "grep -q 'bundleSize\\|buildTime\\|startup\\|memoryFootprint' src/ts/evolution/runtime/performance-analyzer.ts"
+          - "grep -q 'MeshAnalyzer\\|LatencyAnalyzer\\|DbAnalyzer\\|WorkloadAnalyzer\\|PerformanceAnalyzer' src/ts/evolution/runtime/index.ts"
+          - "npx vitest run tests/evolution/runtime/performance-analyzer.test.ts"
+        ref: "F-33"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/analysis/engine.ts
+          - src/ts/evolution/cadence/daily-runner.ts
+        summary: "Performance analyzer + wire all 5 runtime analyzers"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W7: MLD Evolution & Dashboard
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W7
+    name: "MLD Evolution & Dashboard"
+    merge_mode: sync
+    theme: mld
+    estimated_hours: 12
+    precondition:
+      type: wave_status
+      wave_id: W4
+      status: done
+    tasks:
+      - id: T7-01
+        do: >-
+          Implement MLD dual-role architecture: (1) Canary role — MLD CI
+          pipeline emits telemetry (build time, bundle size, test pass rate,
+          a11y score, coverage) to Evolution Engine telemetry layer.
+          Create GitHub Actions workflow step or post-build hook that
+          pushes metrics to telemetry storage. (2) Self-optimization —
+          MLD own metrics fed into optimization loop as first-class data
+          source, enabling the engine to propose MLD-specific improvements.
+          NaSra agent advisory for all UI tasks per C-06.
+        files:
+          - src/ts/evolution/canary/mld-telemetry-feed.ts
+          - src/ts/evolution/canary/mld-canary.ts
+          - tests/evolution/canary/mld-telemetry.test.ts
+        verify:
+          - "test -f src/ts/evolution/canary/mld-telemetry-feed.ts"
+          - "grep -q 'buildTime\\|bundleSize\\|testPassRate\\|a11yScore\\|coverage' src/ts/evolution/canary/mld-telemetry-feed.ts"
+          - "npx vitest run tests/evolution/canary/mld-telemetry.test.ts"
+        ref: "F-34,F-36"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - src/ts/evolution/telemetry/sdk.ts
+          - src/ts/evolution/analysis/engine.ts
+        summary: "MLD CI telemetry feed + self-optimization loop"
+      - id: T7-02
+        do: >-
+          Build AutoPilot Dashboard views in dashboard_web/evolution/:
+          (1) proposals-view.js — proposal list using mn-data-table with
+          columns (ID, hypothesis, domain, blast radius, status, score),
+          detail panel using mn-detail-panel. (2) experiment-view.js —
+          active experiments with before/after charts (mn-chart), status
+          badges, timeline. (3) agents-view.js — agent efficiency overview
+          using agentCostBreakdown and tokenMeter components from Maranello.
+          Wire navigation into dashboard_web/index.html Evolution section.
+          All views use Maranello DS tokens and comply with WCAG 2.2 AA.
+        files:
+          - dashboard_web/evolution/proposals-view.js
+          - dashboard_web/evolution/experiment-view.js
+          - dashboard_web/evolution/agents-view.js
+          - dashboard_web/index.html
+        verify:
+          - "test -f dashboard_web/evolution/proposals-view.js"
+          - "test -f dashboard_web/evolution/experiment-view.js"
+          - "test -f dashboard_web/evolution/agents-view.js"
+          - "grep -q 'mn-data-table' dashboard_web/evolution/proposals-view.js"
+          - "grep -q 'mn-chart' dashboard_web/evolution/experiment-view.js"
+          - "grep -q 'agentCostBreakdown\\|tokenMeter' dashboard_web/evolution/agents-view.js"
+        ref: "F-35,F-46"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 3
+        executor_agent: copilot
+        consumers:
+          - dashboard_web/index.html
+          - dashboard_web/evolution/approval-view.js
+        summary: "AutoPilot Dashboard — proposals, experiments, agents"
+      - id: T7-03
+        do: >-
+          Add kill switch and experiment controls to dashboard UI:
+          (1) controls-view.js — prominent kill switch button (red,
+          confirmation dialog), experiment pause/resume controls, rate
+          limit status display, active experiment list with real-time
+          status (WebSocket or polling). (2) Wire controls to backend
+          kill-switch.ts and rate-limiter.ts from W4. Include system
+          status indicator using mn-system-status component.
+        files:
+          - dashboard_web/evolution/controls-view.js
+          - tests/evolution/dashboard/controls.test.ts
+        verify:
+          - "test -f dashboard_web/evolution/controls-view.js"
+          - "grep -q 'killSwitch\\|kill-switch' dashboard_web/evolution/controls-view.js"
+          - "grep -q 'mn-system-status' dashboard_web/evolution/controls-view.js"
+          - "grep -q 'rateLimitStatus\\|experimentPause' dashboard_web/evolution/controls-view.js"
+        ref: "F-37"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - dashboard_web/index.html
+          - src/ts/evolution/guardrails/kill-switch.ts
+        summary: "Dashboard kill switch + experiment controls"
+      - id: T7-04
+        do: >-
+          Wire AutoPilot section into MLD demo site and ensure Constitution
+          compliance: (1) Add Evolution Engine section to demo/index.html
+          with navigation entry. (2) Create any reusable mn- components
+          discovered during W7 development (e.g., mn-proposal-card,
+          mn-experiment-badge) and add to src/wc/. (3) WCAG 2.2 AA audit
+          of all Evolution dashboard views — keyboard navigation, ARIA
+          labels, color contrast, screen reader compatibility. (4) Run
+          NaSra compliance check on all new components.
+        files:
+          - demo/index.html
+          - src/wc/mn-proposal-card.js
+          - src/ts/evolution/index.ts
+        verify:
+          - "grep -q 'evolution\\|autopilot' demo/index.html"
+          - "test -f src/wc/mn-proposal-card.js || echo 'optional component'"
+          - "grep -q 'mn-' dashboard_web/evolution/proposals-view.js"
+        ref: "F-46,F-54"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - demo/index.html
+          - src/wc/index.ts
+        summary: "MLD demo wiring + WCAG audit + reusable components"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # W8: Documentation, Governance, ROI & NF Validation
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: W8
+    name: "Documentation, Governance, ROI & NF Validation"
+    merge_mode: batch
+    theme: docs
+    estimated_hours: 10
+    precondition:
+      type: wave_status
+      wave_id: W7
+      status: done
+    tasks:
+      - id: T8-01
+        do: >-
+          Create complete architecture documentation and ADRs:
+          (1) docs/evolution/architecture.md — system overview, data flow
+          diagram (telemetry→storage→analysis→proposal→experiment→approval
+          →apply→monitor), component diagram, integration points with
+          ConvergioMesh and dashboard_web, deployment topology.
+          (2) docs/adr/NNNN-evolution-engine.md — ADR for self-improvement
+          system decision (compact format, max 20 lines per convention).
+          (3) docs/evolution/schemas.md — all TypeScript interface
+          documentation with examples.
+        files:
+          - docs/evolution/architecture.md
+          - docs/adr/0100-evolution-engine.md
+          - docs/evolution/schemas.md
+        verify:
+          - "test -f docs/evolution/architecture.md"
+          - "test -f docs/adr/0100-evolution-engine.md"
+          - "test -f docs/evolution/schemas.md"
+          - "wc -l < docs/adr/0100-evolution-engine.md | xargs test 25 -ge"
+          - "grep -q 'data flow\\|integration' docs/evolution/architecture.md"
+        ref: "F-38,F-39"
+        priority: P1
+        type: documentation
+        model: claude-sonnet-4.6
+        effort: 2
+        executor_agent: copilot
+      - id: T8-02
+        do: >-
+          Document governance model and proposal traceability:
+          (1) docs/evolution/governance.md — approval roles (who can
+          approve what blast radius), escalation paths (single-repo→auto
+          if score>0.9, multi-repo→senior-approval, ecosystem→team-review),
+          blast radius classification rules with examples.
+          (2) docs/evolution/traceability.md — proposal lifecycle with
+          unique ID format (EVO-YYYYMMDD-NNNN), timestamp requirements,
+          source cadence tagging (daily/weekly/manual), hypothesis tracking,
+          outcome chain documentation. Include example proposal lifecycle.
+        files:
+          - docs/evolution/governance.md
+          - docs/evolution/traceability.md
+        verify:
+          - "test -f docs/evolution/governance.md"
+          - "test -f docs/evolution/traceability.md"
+          - "grep -q 'escalation\\|blast.radius\\|approval.role' docs/evolution/governance.md"
+          - "grep -q 'EVO-.*NNNN\\|lifecycle\\|outcome.chain' docs/evolution/traceability.md"
+        ref: "F-40,F-41"
+        priority: P1
+        type: documentation
+        model: claude-sonnet-4.6
+        effort: 2
+        executor_agent: copilot
+      - id: T8-03
+        do: >-
+          Build ROI tracking and cumulative impact measurement:
+          (1) src/ts/evolution/roi/tracker.ts — tracks improvement gains
+          (latency reduced, cost saved, errors prevented) vs system cost
+          (tokens consumed, compute time, human review hours). Computes
+          net ROI per optimization domain and aggregate.
+          (2) src/ts/evolution/roi/scoreboard.ts — cumulative stats:
+          total proposals generated/accepted/rejected, positive/negative
+          delta per domain, trend over time.
+          (3) Wire scoreboard into dashboard_web using kpiScorecard
+          component from Maranello with live data binding.
+        files:
+          - src/ts/evolution/roi/tracker.ts
+          - src/ts/evolution/roi/scoreboard.ts
+          - dashboard_web/evolution/roi-view.js
+          - tests/evolution/roi/tracker.test.ts
+        verify:
+          - "test -f src/ts/evolution/roi/tracker.ts"
+          - "test -f src/ts/evolution/roi/scoreboard.ts"
+          - "test -f dashboard_web/evolution/roi-view.js"
+          - "grep -q 'netROI\\|improvementGains\\|systemCost' src/ts/evolution/roi/tracker.ts"
+          - "grep -q 'proposalsGenerated\\|proposalsAccepted\\|proposalsRejected' src/ts/evolution/roi/scoreboard.ts"
+          - "grep -q 'kpiScorecard\\|mn-' dashboard_web/evolution/roi-view.js"
+          - "npx vitest run tests/evolution/roi/tracker.test.ts"
+        ref: "F-42,F-43,F-47"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        consumers:
+          - dashboard_web/evolution/roi-view.js
+          - dashboard_web/index.html
+        summary: "ROI tracker + scoreboard + dashboard wiring"
+      - id: T8-04
+        do: >-
+          NF validation suite — comprehensive tests for all non-functional
+          requirements: (1) Cost control: verify configurable budget limits
+          for tokens, compute, web research per cycle (F-51). (2) Privacy:
+          verify telemetry collectors strip PII/secrets, data minimization
+          enforced (F-52). (3) Platform portability: verify no vendor
+          lock-in in search, CI, storage adapters (F-53).
+          (4) Graceful degradation: verify Evolution Engine failure does
+          NOT impact dashboard_web core or production services — test with
+          engine disabled, dashboard must still render (F-55).
+          (5) LOC limits: verify all modules under 500 lines (C-07).
+        files:
+          - tests/evolution/nf/cost-control.test.ts
+          - tests/evolution/nf/privacy.test.ts
+          - tests/evolution/nf/portability.test.ts
+          - tests/evolution/nf/degradation.test.ts
+        verify:
+          - "test -f tests/evolution/nf/cost-control.test.ts"
+          - "test -f tests/evolution/nf/privacy.test.ts"
+          - "test -f tests/evolution/nf/portability.test.ts"
+          - "test -f tests/evolution/nf/degradation.test.ts"
+          - "npx vitest run tests/evolution/nf/"
+          - "find src/ts/evolution/ -name '*.ts' | while read f; do test $(wc -l < \"$f\") -le 500 || echo \"FAIL: $f exceeds 500 LOC\"; done"
+        ref: "F-51,F-52,F-53,F-55"
+        priority: P1
+        type: test
+        model: gpt-5.3-codex
+        effort: 3
+        executor_agent: copilot
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # WF: Closure
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - id: WF
+    name: "Closure"
+    merge_mode: sync
+    theme: closure
+    estimated_hours: 4
+    precondition:
+      type: wave_status
+      wave_id: W8
+      status: done
+    tasks:
+      - id: TF-tests
+        do: >-
+          Run full test suite with coverage gate: vitest for all
+          tests/evolution/ suites, e2e tests for dashboard_web/evolution/
+          views, coverage threshold >=80% for evolution modules.
+          Fix any failing tests. Generate coverage report.
+        files:
+          - vitest.config.ts
+          - tests/evolution/
+        verify:
+          - "npx vitest run tests/evolution/ --coverage"
+          - "npx vitest run tests/evolution/ 2>&1 | grep -q 'passed'"
+        ref: "F-01"
+        priority: P0
+        type: test
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: copilot
+        summary: "Full test suite + 80% coverage gate"
+      - id: TF-doc
+        do: >-
+          Update README with Evolution Engine section, update CHANGELOG
+          with all wave entries per knowledge-codification protocol,
+          create docs/adr/plan-NNN-notes.md running notes, verify all
+          docs/evolution/ files are complete and cross-referenced.
+        files:
+          - README.md
+          - CHANGELOG.md
+          - docs/adr/plan-notes.md
+        verify:
+          - "grep -q 'Evolution Engine\\|evolution' README.md"
+          - "grep -q 'Evolution' CHANGELOG.md"
+          - "test -f docs/adr/plan-notes.md"
+        ref: "F-38"
+        priority: P1
+        type: documentation
+        model: claude-haiku-4.5
+        effort: 1
+        executor_agent: copilot
+        summary: "README + CHANGELOG + running notes"
+      - id: TF-pr
+        do: >-
+          Version bump, git tag, push branch, open PR to main with
+          comprehensive description covering all 55 requirements,
+          wave summary, and test evidence. PR must reference this plan ID.
+        files:
+          - package.json
+        verify:
+          - "git --no-pager log --oneline -1 | grep -q 'evolution'"
+          - "gh pr list --head $(git branch --show-current) | grep -q 'Evolution'"
+        ref: "F-38"
+        priority: P0
+        type: chore
+        model: gpt-5-mini
+        effort: 1
+        executor_agent: copilot
+        summary: "Tag + PR to main"
+      - id: TF-04
+        do: >-
+          Verify deployment: after PR merge, confirm npm publish succeeds
+          (if applicable), dashboard_web/evolution/ views render correctly,
+          Evolution Engine module is importable from dist/, demo site
+          shows Evolution section. Run smoke test on deployed artifacts.
+        files:
+          - dist/
+          - demo/index.html
+        verify:
+          - "test -d dist/"
+          - "grep -q 'evolution' demo/index.html"
+          - "node -e \"require('./dist/ts/evolution/index.js')\" 2>/dev/null || echo 'check dist path'"
+        ref: "F-38"
+        priority: P0
+        type: chore
+        model: gpt-5-mini
+        effort: 1
+        executor_agent: copilot
+        summary: "Deploy verification — dist + demo + smoke test"
