@@ -1,0 +1,13 @@
+{
+  "evolution": {
+    "daily_budget_usd": 5.0,
+    "max_proposals_per_day": 5,
+    "max_proposals_per_week": 15,
+    "storage_limit_mb": 512,
+    "kill_switch_enabled": false
+  },
+  "mesh": {
+    "sync_interval_minutes": 30,
+    "peers": ["m5"]
+  }
+}
