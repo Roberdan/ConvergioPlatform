@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "typeRoots": ["./evolution/node_modules/@types"],
+    "paths": {
+      "vitest": ["./evolution/node_modules/vitest/dist/index.d.ts"]
+    }
+  },
+  "include": ["types/**/*.ts", "tests/evolution/nf/**/*.ts", "tests/nf/**/*.ts"]
+}
