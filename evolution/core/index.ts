@@ -29,3 +29,11 @@ export { EvolutionEngine } from './engine.js';
 export type { CycleSummary, AuditSink } from './engine.js';
 export type { Evaluator } from './evaluators/evaluator.js';
 export { BaseEvaluator } from './evaluators/base-evaluator.js';
+export {
+  OutcomeTracker,
+  LatencyEvaluator,
+  BundleEvaluator,
+  AgentCostEvaluator,
+  MeshEvaluator,
+  WorkloadEvaluator,
+} from './evaluators/index.js';
