@@ -35,10 +35,5 @@ function inferCostDelta(proposal: Proposal): number {
   if (proposal.expectedDelta) {
     return Math.abs(proposal.expectedDelta.max);
   }
-  const text = proposal.estimatedGain;
-  const percentMatch = text.match(/(-?\d+(?:\.\d+)?)%/);
-  if (!percentMatch) {
-    return 0;
-  }
-  return Math.abs(Number(percentMatch[1]) / 100);
+  return 0;
 }
