@@ -330,13 +330,24 @@ phase_repos() {
 				peer_ok=false
 			fi
 
-			# Rsync full repo — preserves hidden files, .env, .claude/, permissions, symlinks
-			local _script_dir
-			_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-			if "$_script_dir/mesh-rsync.sh" "$local_repo" "$d" "$rpath" 2>/dev/null; then
-				echo -e "    ${G}RSYNC${N}: $local_repo → $p:$rpath"
-			else
-				echo -e "    ${R}RSYNC FAIL${N}: $local_repo → $p:$rpath"
+			# Rsync ONLY non-git files listed in repos.conf sync_files.
+			# NEVER rsync the full repo — git-tracked files must flow through git only.
+			if [[ -n "$rsyncfiles" ]]; then
+				IFS=',' read -ra _sync_items <<< "$rsyncfiles"
+				for _item in "${_sync_items[@]}"; do
+					_item="${_item// /}"
+					[[ -z "$_item" ]] && continue
+					local _src="${local_repo%/}/${_item%/}"
+					[[ ! -e "$_src" ]] && continue
+					local _dst_dir="${rpath%/}/$(dirname "$_item")"
+					if rsync -az \
+						-e "ssh -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new" \
+						"$_src" "${d}:${_dst_dir}/" 2>/dev/null; then
+						echo -e "    ${G}RSYNC${N}: $rpath/$_item → $p"
+					else
+						echo -e "    ${Y}RSYNC SKIP${N}: $rpath/$_item (not on peer or error)"
+					fi
+				done
 			fi
 		done
 		((synced++)) || true
