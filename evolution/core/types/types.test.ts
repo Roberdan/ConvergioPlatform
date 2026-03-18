@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { Metric, Proposal, Experiment } from './index.js';
 import type { PlatformAdapter } from './adapter.js';
+import {
+  MLDAdapter,
+  ClaudeConfigAdapter,
+  DashboardAdapter,
+  TemplateAdapter,
+} from '../../adapters/index.js';
 
 describe('Evolution Engine Types', () => {
   it('Metric type is well-formed', () => {
@@ -61,5 +67,31 @@ describe('Evolution Engine Types', () => {
       healthCheck: async () => ({ healthy: true, details: 'ok' }),
     };
     expect(mockAdapter.name).toBe('test-adapter');
+  });
+});
+
+describe('PlatformAdapter implementations', () => {
+  it('MLDAdapter satisfies PlatformAdapter', () => {
+    const adapter: PlatformAdapter = new MLDAdapter('/tmp/test-mld-repo');
+    expect(adapter.name).toBe('mld');
+    expect(typeof adapter.collectMetrics).toBe('function');
+    expect(typeof adapter.runCanary).toBe('function');
+    expect(typeof adapter.openPR).toBe('function');
+    expect(typeof adapter.healthCheck).toBe('function');
+  });
+
+  it('ClaudeConfigAdapter satisfies PlatformAdapter', () => {
+    const adapter: PlatformAdapter = new ClaudeConfigAdapter();
+    expect(adapter.name).toBe('claude-config');
+  });
+
+  it('DashboardAdapter satisfies PlatformAdapter', () => {
+    const adapter: PlatformAdapter = new DashboardAdapter('http://localhost:3000');
+    expect(adapter.name).toBe('dashboard');
+  });
+
+  it('TemplateAdapter satisfies PlatformAdapter', () => {
+    const adapter: PlatformAdapter = new TemplateAdapter('test-target');
+    expect(adapter.name).toBe('template');
   });
 });
