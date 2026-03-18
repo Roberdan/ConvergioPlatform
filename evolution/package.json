@@ -1,0 +1,18 @@
+{
+  "name": "@convergio/evolution-engine",
+  "version": "0.1.0",
+  "description": "Self-improving optimization engine — standalone Convergio capability",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "dev": "tsc --watch"
+  },
+  "license": "MPL-2.0",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  }
+}

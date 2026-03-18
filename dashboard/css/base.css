@@ -1,0 +1,117 @@
+@font-face {
+  font-family: "JetBrainsMono Nerd Font";
+  src: url("../fonts/JetBrainsMonoNerdFont-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ── Surface (Maranello Nero foundation) ── */
+  --bg-deep: var(--nero-profondo, #0a0a0a);
+  --bg-panel: var(--mn-surface-raised, #1a1a1a);
+  --bg-card: var(--mn-surface, #111111);
+  --bg-input: var(--mn-surface-sunken, #0a0a0a);
+  --border: var(--mn-border, #2a2a2a);
+  --border-hover: var(--mn-border-subtle, rgba(255,255,255,0.07));
+  --border-accent: rgba(255, 199, 44, 0.4);
+  /* ── Palette (semantic from DS) ── */
+  --cyan: var(--giallo-ferrari, #FFC72C);
+  --magenta: var(--rosso-corsa, #DC0000);
+  --gold: var(--giallo-ferrari, #FFC72C);
+  --green: var(--verde-racing, #00A651);
+  --red: var(--rosso-corsa, #DC0000);
+  --blue: #4EA8DE;
+  --text: var(--mn-text-muted, #9e9e9e);
+  --text-dim: var(--grigio-medio, #616161);
+  --text-main: var(--mn-text, #fafafa);
+  --text-bright: var(--mn-text, #fafafa);
+  /* ── Typography ── */
+  --font-mono: "Barlow Condensed", "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+  --font-display: var(--font-display, "Outfit", "Inter", sans-serif);
+  /* ── Accents ── */
+  --gradient-h1: linear-gradient(90deg, var(--giallo-ferrari, #FFC72C), var(--rosso-corsa, #DC0000));
+  --header-bg: linear-gradient(180deg, var(--mn-surface-raised, #141414), var(--nero-profondo, #0a0a0a));
+  --scanline-color: rgba(255, 199, 44, 0.006);
+  --kpi-accent: var(--giallo-ferrari, #FFC72C);
+  /* ── Semantic Aliases ── */
+  --accent: var(--giallo-ferrari, #FFC72C);
+  --accent-hover: var(--giallo-hover, #e6b326);
+  --danger: var(--rosso-corsa, #DC0000);
+  --success: var(--verde-racing, #00A651);
+  --warning: var(--arancio-warm, #D4622B);
+  --info: #4EA8DE;
+  /* ── Maranello Accents ── */
+  --mn-accent: var(--giallo-ferrari, #FFC72C);
+  --mn-accent-hover: var(--giallo-hover, #e6b326);
+  --mn-accent-text: var(--nero-carbon, #111111);
+  --mn-rosso: var(--rosso-corsa, #DC0000);
+  --mn-verde: var(--verde-racing, #00A651);
+  --mn-arancio: var(--arancio-warm, #D4622B);
+  --mn-grigio: var(--mn-text-muted, #9e9e9e);
+  /* ── Status ── */
+  --status-active: var(--signal-ok, #00C853);
+  --status-warning: var(--signal-warning, #FFB300);
+  --status-danger: var(--signal-danger, #FF1744);
+  --status-info: #448AFF;
+  /* ── Chart Palette ── */
+  --chart-1: var(--giallo-ferrari, #FFC72C);
+  --chart-2: var(--rosso-corsa, #DC0000);
+  --chart-3: #4EA8DE;
+  --chart-4: var(--verde-racing, #00A651);
+  --chart-5: var(--arancio-warm, #D4622B);
+  --chart-6: #8B5CF6;
+  --chart-7: #0891B2;
+  --chart-8: #F59E0B;
+  --chart-9: #E879F9;
+  --chart-10: #38BDF8;
+  /* ── Shadows ── */
+  --shadow-card: 0 4px 16px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03);
+  --shadow-elevated: 0 8px 40px rgba(0,0,0,0.4);
+  --shadow-deep: 0 16px 64px rgba(0,0,0,0.5);
+  --shadow-glow-gold: 0 0 12px rgba(255,199,44,0.25);
+  /* ── Radius ── */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  /* ── Transition ── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-sm: 200ms;
+  --duration-md: 400ms;
+  /* ── Chart tokens ── */
+  --mn-chart-bg: var(--mn-surface-raised, #1a1a1a);
+  --mn-chart-tooltip-bg: var(--mn-surface, #111);
+  --mn-chart-tooltip-border: var(--mn-border, #2a2a2a);
+  --mn-chart-tooltip-text: var(--mn-text, #fafafa);
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+body {
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    var(--scanline-color, rgba(0, 229, 255, 0.012)) 2px,
+    var(--scanline-color, rgba(0, 229, 255, 0.012)) 4px
+  );
+}

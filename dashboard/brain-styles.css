@@ -1,0 +1,115 @@
+/* brain-styles.css — Augmented Brain: Maranello DS neural aesthetic */
+#brain-widget { min-height: 0; }
+#brain-widget .mn-widget__header { display: flex; justify-content: space-between; align-items: center; }
+#brain-widget .brain-stats {
+  font: calc(11px * var(--mn-a11y-font-scale, 1)) var(--font-mono, 'Barlow Condensed', monospace);
+  color: var(--text-dim, #616161);
+}
+#brain-canvas-container {
+  background: radial-gradient(circle at center, color-mix(in srgb, var(--info, #4EA8DE) 8%, transparent), var(--bg-deep, #0a0a0a) 70%);
+  border-radius: 0 0 var(--radius-md, 12px) var(--radius-md, 12px);
+  position: relative; flex: 1; min-height: 0;
+}
+.brain-embedded {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.brain-immersive {
+  width: 100%;
+  height: 100% !important;
+  min-height: 100% !important;
+  position: relative;
+  overflow: hidden;
+}
+.brain-hidden { display: none; }
+#brain-immersive-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: var(--bg-deep, #0a0a0a);
+}
+@keyframes brainExpand {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes brainCollapse {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
+}
+.brain-controls { display: flex; gap: 6px; margin-left: auto; margin-right: 12px; }
+.brain-ctrl-btn {
+  background: none;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-dim, #616161);
+  font-size: 13px; width: 32px; height: 28px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.brain-ctrl-btn:hover {
+  color: var(--accent, #FFC72C);
+  border-color: var(--accent, #FFC72C);
+  background: color-mix(in srgb, var(--accent, #FFC72C) 6%, transparent);
+}
+.brain-ctrl-btn.active { color: var(--accent, #FFC72C); }
+
+/* Overlay for DOM cards on top of canvas */
+.brain-overlay {
+  position: relative; z-index: 1; padding: 80px 20px 20px; pointer-events: auto;
+}
+.an-grid {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-md, 12px);
+}
+
+/* Neural node cards — Maranello card-dark pattern */
+.an-node {
+  background: var(--bg-card, var(--mn-surface, #111));
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: var(--radius-md, 12px);
+  padding: 10px 14px; min-width: 140px; max-width: 180px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.an-node.online {
+  border-color: color-mix(in srgb, var(--accent, #FFC72C) 25%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent, #FFC72C) 8%, transparent);
+}
+.an-node.online.claude {
+  border-color: color-mix(in srgb, var(--accent, #FFC72C) 30%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent, #FFC72C) 10%, transparent);
+}
+.an-node.online.copilot {
+  border-color: color-mix(in srgb, var(--info, #4EA8DE) 30%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--info, #4EA8DE) 10%, transparent);
+}
+.an-node:hover {
+  box-shadow: 0 0 24px color-mix(in srgb, var(--accent, #FFC72C) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent, #FFC72C) 40%, transparent);
+}
+.an-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.an-label {
+  font: bold calc(12px * var(--mn-a11y-font-scale, 1)) var(--font-mono, 'Barlow Condensed', monospace);
+  flex: 1; color: var(--text-bright, var(--mn-text, #fafafa));
+}
+.an-node.claude .an-label { color: var(--accent, #FFC72C); }
+.an-node.copilot .an-label { color: var(--info, #4EA8DE); }
+.an-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.an-dot.on { background: var(--success, var(--verde-racing, #00A651)); box-shadow: 0 0 6px var(--success, #00A651); }
+.an-dot.off { background: var(--danger, var(--rosso-corsa, #DC0000)); opacity: 0.6; }
+.an-info {
+  font: calc(10px * var(--mn-a11y-font-scale, 1)) var(--font-mono, 'Barlow Condensed', monospace);
+  color: var(--text-dim, #616161); line-height: 1.5;
+}
+.an-info.bright { color: var(--accent, #FFC72C); }
+.an-badge {
+  display: inline-block; margin-top: 4px; padding: 1px 6px;
+  border-radius: var(--radius-sm, 6px);
+  font: calc(9px * var(--mn-a11y-font-scale, 1)) var(--font-mono, 'Barlow Condensed', monospace);
+  background: color-mix(in srgb, var(--success, #00A651) 10%, transparent);
+  color: var(--success, var(--verde-racing, #00A651));
+  border: 1px solid color-mix(in srgb, var(--success, #00A651) 20%, transparent);
+}

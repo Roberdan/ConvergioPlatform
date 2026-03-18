@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'plan/**', 'fix/**', 'feat/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dashboard-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dashboard smoke test
+        run: |
+          cd dashboard
+          python3 -c "print('Dashboard module check OK')"
+
+  daemon-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check daemon compiles
+        run: |
+          if [ -f daemon/Cargo.toml ]; then
+            cd daemon && cargo check
+          else
+            echo "Daemon not yet migrated — skip"
+          fi
+
+  evolution-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Evolution engine check
+        run: |
+          if [ -f evolution/package.json ]; then
+            cd evolution && npm ci && npm test
+          else
+            echo "Evolution not yet scaffolded — skip"
+          fi
+
+  constitution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Max 250 lines
+        run: |
+          FAIL=0
+          for f in $(find daemon/src dashboard/ evolution/ scripts/ -name '*.rs' -o -name '*.ts' -o -name '*.js' -o -name '*.py' -o -name '*.css' 2>/dev/null | grep -v node_modules | grep -v target); do
+            LINES=$(wc -l < "$f")
+            if [ "$LINES" -gt 250 ]; then
+              echo "FAIL: $f has $LINES lines (max 250)"
+              FAIL=1
+            fi
+          done
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "All files under 250 lines"

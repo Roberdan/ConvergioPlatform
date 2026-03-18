@@ -1,0 +1,1 @@
+cargo:rustc-env=MIME_TYPES_GENERATED_PATH=/Users/roberdan/GitHub/ConvergioPlatform/daemon/target/debug/build/mime_guess-f63255bf2ca1b8e2/out/mime_types_generated.rs

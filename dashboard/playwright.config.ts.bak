@@ -1,0 +1,24 @@
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/e2e',
+  testMatch: ['**/smoke.spec.ts'],
+  timeout: 15000,
+  retries: 0,
+  workers: 6,
+  reporter: [['list'], ['html', { open: 'never' }]],
+  use: {
+    browserName: 'chromium',
+    headless: true,
+    viewport: { width: 1440, height: 900 },
+    baseURL: 'http://localhost:8420',
+    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
+  },
+  webServer: {
+    command: 'npx -y serve -l 8420 -s .',
+    port: 8420,
+    timeout: 10000,
+    reuseExistingServer: true,
+  },
+});
