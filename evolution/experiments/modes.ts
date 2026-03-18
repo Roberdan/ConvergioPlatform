@@ -6,11 +6,7 @@ export interface ExperimentModeHandler {
 }
 
 export class ShadowMode implements ExperimentModeHandler {
-  async execute(
-    experiment: Experiment,
-    adapter: PlatformAdapter,
-    _proposal: Proposal,
-  ): Promise<ExperimentResult> {
+  async execute(experiment: Experiment, adapter: PlatformAdapter): Promise<ExperimentResult> {
     const before = await adapter.collectMetrics();
     const after = await adapter.collectMetrics();
     experiment.beforeMetrics = before;
