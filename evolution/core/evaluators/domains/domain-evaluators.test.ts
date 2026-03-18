@@ -38,6 +38,8 @@ describe('domain evaluators', () => {
     ], history);
 
     expect(result.anomalies.some((a) => a.metric === 'bundle.js_size_bytes')).toBe(true);
+    expect(result.anomalies.some((a) => a.metric === 'bundle.css_size_bytes')).toBe(true);
+    expect(result.anomalies.some((a) => a.metric === 'build.duration_ms')).toBe(true);
   });
 
   it('detects agent cost and completion anomalies', async () => {
