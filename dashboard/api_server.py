@@ -176,8 +176,16 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
     
     def get_plans(self):
         conn = sqlite3.connect(DB_PATH)
-        cursor = conn.execute('SELECT id, name, status, execution_host, progress_percentage FROM plans LIMIT 20')
-        plans = [{"id": row[0], "name": row[1], "status": row[2], "execution_host": row[3], "progress": row[4]} for row in cursor]
+        cursor = conn.execute('''
+            SELECT id, name, status, execution_host, tasks_done, tasks_total
+            FROM plans ORDER BY id DESC LIMIT 50
+        ''')
+        plans = [{
+            "id": row[0], "name": row[1], "status": row[2],
+            "execution_host": row[3],
+            "progress": round(row[4] * 100.0 / row[5]) if row[5] and row[5] > 0 else 0,
+            "tasks_done": row[4], "tasks_total": row[5]
+        } for row in cursor]
         conn.close()
         return {"plans": plans}
     
@@ -190,8 +198,23 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
     
     def get_tasks(self):
         conn = sqlite3.connect(DB_PATH)
-        cursor = conn.execute('SELECT id, plan_id, title, status, progress_percentage FROM tasks LIMIT 20')
-        tasks = [{"id": row[0], "plan_id": row[1], "title": row[2], "status": row[3], "progress": row[4]} for row in cursor]
+        qs = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(qs)
+        plan_id = params.get('plan_id', [None])[0]
+        if plan_id:
+            cursor = conn.execute('''
+                SELECT id, plan_id, title, status, wave_id, type, priority
+                FROM tasks WHERE plan_id = ? ORDER BY id
+            ''', (plan_id,))
+        else:
+            cursor = conn.execute('''
+                SELECT id, plan_id, title, status, wave_id, type, priority
+                FROM tasks ORDER BY id DESC LIMIT 50
+            ''')
+        tasks = [{
+            "id": row[0], "plan_id": row[1], "title": row[2],
+            "status": row[3], "wave_id": row[4], "type": row[5], "priority": row[6]
+        } for row in cursor]
         conn.close()
         return {"tasks": tasks}
 
