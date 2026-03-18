@@ -1,0 +1,68 @@
+# Convergio LLM — LiteLLM Proxy Configuration
+# Routes requests to local backend or cloud providers
+# Uncomment local models after downloading them.
+
+model_list:
+  # === LOCAL MODELS (oMLX/vLLM/llama.cpp on this machine) ===
+  # Uncomment after: convergio-llm.sh start ~/models/<model>
+
+  # - model_name: "local/qwen-coder-32b"
+  #   litellm_params:
+  #     model: openai/qwen2.5-coder-32b
+  #     api_base: "http://localhost:8321/v1"
+  #     api_key: "sk-local"
+  #     drop_params: true
+  #     modify_params: true
+
+  # - model_name: "local/qwen-coder-7b"
+  #   litellm_params:
+  #     model: openai/qwen2.5-coder-7b
+  #     api_base: "http://localhost:8321/v1"
+  #     api_key: "sk-local"
+  #     drop_params: true
+  #     modify_params: true
+
+  # - model_name: "local/llama-70b"
+  #   litellm_params:
+  #     model: openai/llama-3.3-70b
+  #     api_base: "http://localhost:8321/v1"
+  #     api_key: "sk-local"
+  #     drop_params: true
+  #     modify_params: true
+
+  # === REMOTE NODES (other mesh machines) ===
+  # - model_name: "remote/qwen-coder-32b"
+  #   litellm_params:
+  #     model: openai/qwen2.5-coder-32b
+  #     api_base: "http://<tailscale-ip>:8321/v1"
+  #     api_key: "sk-local"
+  #     drop_params: true
+
+  # === CLOUD FALLBACK ===
+  - model_name: "claude-sonnet"
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: "os.environ/ANTHROPIC_API_KEY"
+
+  - model_name: "claude-opus"
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: "os.environ/ANTHROPIC_API_KEY"
+
+  - model_name: "claude-haiku"
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: "os.environ/ANTHROPIC_API_KEY"
+
+router_settings:
+  routing_strategy: "latency-based-routing"
+  num_retries: 2
+  timeout: 120
+
+litellm_settings:
+  drop_params: true
+  modify_params: true
+  disable_key_check: true
+
+general_settings:
+  master_key: "REDACTED_KEY"
