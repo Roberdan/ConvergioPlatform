@@ -125,13 +125,15 @@ export class MLDAdapter implements PlatformAdapter {
   /** Pushes `evo/<id>` and opens a real PR on MLD repo. */
   async openPR(proposal: Proposal): Promise<{ prUrl: string; prNumber: number }> {
     const branch = `evo/${proposal.id}`;
+    const title = proposal.title || proposal.hypothesis || `Evolution proposal ${proposal.id}`;
+    const target = proposal.targetMetric || `${proposal.targetAdapter}.score`;
     spawnSync('git', ['push', 'origin', branch], { cwd: this.repoPath, encoding: 'utf8' });
 
     const res = gh(
       'pr', 'create', '--repo', MLD_REPO,
       '--head', branch,
-      '--title', proposal.hypothesis,
-      '--body', `Evolution Engine — proposal ${proposal.id}\nTarget: ${proposal.targetMetric}`,
+      '--title', title,
+      '--body', `Evolution Engine — proposal ${proposal.id}\nTarget: ${target}`,
     );
     if (!res.ok) throw new Error(`gh pr create failed: ${res.stderr}`);
 

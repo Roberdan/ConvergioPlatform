@@ -74,23 +74,35 @@ export type ProposalStatus =
 export interface Proposal {
   /** Stable ID, format EVO-YYYYMMDD-NNNN */
   id: string;
-  /** Human-readable hypothesis statement */
-  hypothesis: string;
-  /** Primary metric this proposal aims to improve */
-  targetMetric: string;
-  /** Expected relative delta range (negative = improvement for latency/cost) */
-  expectedDelta: { min: number; max: number };
-  /** Condition that marks the experiment a success */
-  successCriteria: string;
+  /** Human-readable proposal title */
+  title: string;
+  /** Detailed proposal rationale */
+  description: string;
   /** Condition that triggers automatic rollback */
   failureCriteria: string;
+  /** Rollback plan used by adapters during canary */
+  rollbackStrategy: string;
+  /** Estimated gain from applying this proposal */
+  estimatedGain: string;
+  /** Confidence score [0-1] */
+  confidence: number;
+  /** Optional hypothesis reference in hypothesis store */
+  hypothesisRef?: string;
+  /** Unix epoch milliseconds when proposal was created */
+  createdAt: number;
   /** Scope of impact — drives approval gate selection */
   blastRadius: BlastRadius;
   /** How this proposal was generated */
   sourceType: SourceType;
   /** Current lifecycle state */
   status: ProposalStatus;
-  /** Optional SHA / PR reference once applied */
+  /** Preferred adapter for this proposal */
+  targetAdapter: string;
+  /** Legacy compatibility fields for existing adapters/tests */
+  hypothesis?: string;
+  targetMetric?: string;
+  expectedDelta?: { min: number; max: number };
+  successCriteria?: string;
   appliedRef?: string;
 }
 
@@ -235,4 +247,6 @@ export interface EvolutionConfig {
   rateLimits: { proposalsPerDay: number; proposalsPerWeek: number };
   /** Maximum cumulative storage for metrics snapshots, in MB */
   storageLimitMb: number;
+  /** Max proposals generated in one evaluation cycle */
+  maxProposalsPerCycle?: number;
 }

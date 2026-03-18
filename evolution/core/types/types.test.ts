@@ -21,20 +21,28 @@ describe('Evolution Engine Types', () => {
     expect(m.family).toBe('Runtime');
   });
 
-  it('Proposal requires hypothesis and blast radius', () => {
+  it('Proposal requires title, confidence, and blast radius', () => {
     const p: Proposal = {
       id: 'EVO-20260318-0001',
+      title: 'Enable edge caching',
+      description: 'Caching reduces p95 by 30%',
+      failureCriteria: 'p95 > 50ms or error_rate > 1%',
+      rollbackStrategy: 'Disable cache and restore previous config',
+      estimatedGain: '-30% p95 latency',
+      confidence: 0.82,
+      createdAt: Date.now(),
+      blastRadius: 'SingleRepo',
+      sourceType: 'Internal',
+      status: 'Draft',
+      targetAdapter: 'mld',
       hypothesis: 'Caching reduces p95 by 30%',
       targetMetric: 'p95_latency',
       expectedDelta: { min: -0.2, max: -0.4 },
       successCriteria: 'p95 < 30ms',
-      failureCriteria: 'p95 > 50ms or error_rate > 1%',
-      blastRadius: 'SingleRepo',
-      sourceType: 'Internal',
-      status: 'Draft',
     };
     expect(p.blastRadius).toBe('SingleRepo');
-    expect(p.hypothesis).toBeTruthy();
+    expect(p.title).toBeTruthy();
+    expect(p.confidence).toBeGreaterThan(0);
     expect(p.status).toBe('Draft');
   });
 
