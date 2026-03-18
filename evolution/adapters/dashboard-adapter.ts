@@ -88,7 +88,8 @@ export class DashboardAdapter implements PlatformAdapter {
     const latencyAfter = after.find((m) => m.name === 'web.health_latency_ms')?.value ?? 0;
 
     const delta = latencyBefore > 0 ? (latencyAfter - latencyBefore) / latencyBefore : 0;
-    const improved = delta < (proposal.expectedDelta.max ?? 0);
+    const maxDelta = proposal.expectedDelta?.max ?? -0.05;
+    const improved = delta < maxDelta;
 
     return {
       confidence: improved ? 0.7 : 0.2,
@@ -102,17 +103,19 @@ export class DashboardAdapter implements PlatformAdapter {
   /** Pushes the experiment branch and opens a PR on ConvergioPlatform. */
   async openPR(proposal: Proposal): Promise<{ prUrl: string; prNumber: number }> {
     const branch = `evo/dashboard/${proposal.id}`;
+    const title = proposal.title || proposal.hypothesis || `Evolution proposal ${proposal.id}`;
+    const target = proposal.targetMetric || `${proposal.targetAdapter}.score`;
     if (this.sourcePath) {
       spawnSync('git', ['push', 'origin', branch], { cwd: this.sourcePath, encoding: 'utf8' });
     }
     const res = spawnSync(
-      'gh',
-      [
-        'pr', 'create', '--repo', CONVERGIO_REPO,
-        '--head', branch,
-        '--title', proposal.hypothesis,
-        '--body', `Evolution Engine — dashboard proposal ${proposal.id}\nTarget: ${proposal.targetMetric}`,
-      ],
+        'gh',
+        [
+          'pr', 'create', '--repo', CONVERGIO_REPO,
+          '--head', branch,
+          '--title', title,
+          '--body', `Evolution Engine — dashboard proposal ${proposal.id}\nTarget: ${target}`,
+        ],
       { encoding: 'utf8' },
     );
     if (res.status !== 0) throw new Error(`gh pr create failed: ${res.stderr}`);
