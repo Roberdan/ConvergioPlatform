@@ -103,16 +103,18 @@ export class ClaudeConfigAdapter implements PlatformAdapter {
   /** Opens a PR on ConvergioPlatform with claude-config/ changes. */
   async openPR(proposal: Proposal): Promise<{ prUrl: string; prNumber: number }> {
     const branch = `evo/claude/${proposal.id}`;
+    const title = proposal.title || proposal.hypothesis || `Evolution proposal ${proposal.id}`;
+    const target = proposal.targetMetric || `${proposal.targetAdapter}.score`;
     spawnSync('git', ['push', 'origin', branch], { encoding: 'utf8' });
 
     const res = spawnSync(
-      'gh',
-      [
-        'pr', 'create', '--repo', CONVERGIO_REPO,
-        '--head', branch,
-        '--title', proposal.hypothesis,
-        '--body', `Evolution Engine — claude-config proposal ${proposal.id}\nTarget: ${proposal.targetMetric}`,
-      ],
+        'gh',
+        [
+          'pr', 'create', '--repo', CONVERGIO_REPO,
+          '--head', branch,
+          '--title', title,
+          '--body', `Evolution Engine — claude-config proposal ${proposal.id}\nTarget: ${target}`,
+        ],
       { encoding: 'utf8' },
     );
     if (res.status !== 0) throw new Error(`gh pr create failed: ${res.stderr}`);
