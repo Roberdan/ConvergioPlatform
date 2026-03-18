@@ -48,9 +48,7 @@ export class NaSraCanaryAdapter implements PlatformAdapter {
   }
 
   async openPR(proposal: Proposal): Promise<{ prUrl: string; prNumber: number }> {
-    const prTitle = `[Agent] ${proposal.hypothesis}`;
-    const prBody = `${proposal.successCriteria}\n\nFailure criteria: ${proposal.failureCriteria}`;
-    const result = spawnSync('gh', ['pr', 'create', '--title', prTitle, '--body', prBody], {
+    const result = spawnSync('gh', ['pr', 'create', '--title', `[Agent] ${proposal.title}`, '--body', proposal.description], {
       cwd: this.repoPath,
       encoding: 'utf8',
     });
@@ -58,11 +56,7 @@ export class NaSraCanaryAdapter implements PlatformAdapter {
       throw new Error(result.stderr || 'gh pr create failed');
     }
 
-    const url =
-      (result.stdout ?? '')
-        .trim()
-        .split('\n')
-        .find((line: string) => line.startsWith('http')) ?? 'unknown';
+    const url = (result.stdout ?? '').trim().split('\n').find((line) => line.startsWith('http')) ?? 'unknown';
     const match = url.match(/\/(\d+)$/);
     return { prUrl: url, prNumber: match ? Number(match[1]) : 0 };
   }
