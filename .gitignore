@@ -144,3 +144,4 @@ data/dashboard.db
 data/dashboard.db-*
 data/*.jsonl
 data/*.json
+daemon/target/
