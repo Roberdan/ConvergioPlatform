@@ -27,15 +27,21 @@ export class AgentProposalGenerator {
     const suffix = Math.floor(Math.random() * 10_000).toString().padStart(4, '0');
     return {
       id: `EVO-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${suffix}`,
+      title: hypothesis,
+      description: `Generated from profile for ${profile.agentName} (${profile.windowDays}d window).`,
+      failureCriteria: 'Task quality drops or completion_rate regresses',
+      rollbackStrategy: 'Revert model routing and restore previous prompting policy.',
+      estimatedGain: '3-20% efficiency improvement',
+      blastRadius: 'SingleRepo',
+      sourceType: 'Internal',
+      status: 'Draft',
+      targetAdapter: 'nasra-canary',
+      confidence,
+      createdAt: Date.now(),
       hypothesis,
       targetMetric: 'agent.optimization.score',
       expectedDelta: { min: 0.03, max: 0.2 },
       successCriteria: `Improve ${profile.agentName}; confidence=${confidence}`,
-      failureCriteria: 'Task quality drops or completion_rate regresses',
-      blastRadius: 'SingleRepo',
-      sourceType: 'Internal',
-      status: 'Draft',
-      confidence,
     };
   }
 }

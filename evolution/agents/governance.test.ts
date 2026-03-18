@@ -15,13 +15,17 @@ function sqlite(db: string, sql: string): void {
 function proposal(): Proposal {
   return {
     id: 'EVO-20260318-0001',
-    hypothesis: 'Route simple work to cheaper model',
-    targetMetric: 'agent.cost_per_task',
-    successCriteria: 'cost per task decreases',
+    title: 'Model routing',
+    description: 'Reduce cost per task',
     failureCriteria: 'quality drops',
+    rollbackStrategy: 'restore previous model mapping',
+    estimatedGain: '-25% cost',
+    confidence: 0.8,
+    createdAt: Date.now(),
     blastRadius: 'SingleRepo',
     sourceType: 'Internal',
     status: 'Draft',
+    targetAdapter: 'nasra-canary',
     expectedDelta: { min: -0.3, max: -0.25 },
   };
 }
