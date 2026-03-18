@@ -1,0 +1,78 @@
+import { describe, expect, it } from 'vitest';
+import type { Metric } from '../../types/index.js';
+import type { AggregatedPoint } from '../../../telemetry/aggregation.js';
+import { LatencyEvaluator } from './latency-evaluator.js';
+import { BundleEvaluator } from './bundle-evaluator.js';
+import { AgentCostEvaluator } from './agent-cost-evaluator.js';
+import { MeshEvaluator } from './mesh-evaluator.js';
+import { WorkloadEvaluator } from './workload-evaluator.js';
+
+const now = Date.now();
+
+function mk(name: string, value: number, family: Metric['family']): Metric {
+  return { name, value, timestamp: now, labels: {}, family };
+}
+
+const history: AggregatedPoint[] = [];
+
+describe('domain evaluators', () => {
+  it('detects runtime latency anomalies', async () => {
+    const evaluator = new LatencyEvaluator();
+    const result = await evaluator.evaluate([
+      mk('http.p95_latency_ms', 650, 'Runtime'),
+      mk('http.p50_latency_ms', 250, 'Runtime'),
+    ], history);
+
+    expect(result.anomalies.length).toBeGreaterThan(0);
+    expect(result.opportunities.length).toBe(3);
+  });
+
+  it('detects bundle and build opportunities', async () => {
+    const evaluator = new BundleEvaluator();
+    const result = await evaluator.evaluate([
+      mk('bundle.js_size_bytes', 1_100_000, 'Bundle'),
+      mk('bundle.css_size_bytes', 300_000, 'Bundle'),
+      mk('build.duration_ms', 80_000, 'Build'),
+    ], history);
+
+    expect(result.anomalies.some((a) => a.metric === 'bundle.js_size_bytes')).toBe(true);
+    expect(result.opportunities.length).toBe(3);
+  });
+
+  it('detects agent cost and completion anomalies', async () => {
+    const evaluator = new AgentCostEvaluator();
+    const result = await evaluator.evaluate([
+      mk('agent.cost.usd', 120, 'Agent'),
+      mk('agent.task.completion_rate', 0.35, 'Agent'),
+      mk('agent.tokens.input', 10000, 'Agent'),
+      mk('agent.tokens.output', 8000, 'Agent'),
+    ], [{ name: 'agent.cost.usd', family: 'Agent', ts: now - 60_000, avg: 60, min: 55, max: 65, count: 7 }]);
+
+    expect(result.anomalies.length).toBeGreaterThanOrEqual(2);
+    expect(result.opportunities.length).toBe(3);
+  });
+
+  it('detects mesh and database pressure', async () => {
+    const evaluator = new MeshEvaluator();
+    const result = await evaluator.evaluate([
+      mk('mesh.sync_lag_ms', 130_000, 'Mesh'),
+      mk('db.query_p95_ms', 280, 'Database'),
+      mk('db.connection_pool_usage', 0.92, 'Database'),
+    ], history);
+
+    expect(result.anomalies.length).toBeGreaterThanOrEqual(2);
+    expect(result.opportunities.length).toBe(3);
+  });
+
+  it('detects workload saturation', async () => {
+    const evaluator = new WorkloadEvaluator();
+    const result = await evaluator.evaluate([
+      mk('workload.queue_depth', 700, 'Workload'),
+      mk('workload.task_error_rate', 0.2, 'Workload'),
+      mk('runtime.memory_mb', 2048, 'Runtime'),
+    ], history);
+
+    expect(result.anomalies.length).toBeGreaterThanOrEqual(2);
+    expect(result.opportunities.length).toBe(3);
+  });
+});
