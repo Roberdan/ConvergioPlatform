@@ -9,7 +9,6 @@ import type {
   Metric,
   EvaluationResult,
   Proposal,
-  ProposalStatus,
   Experiment,
   ExperimentResult,
   AuditEntry,
@@ -26,6 +25,7 @@ import {
   MeshEvaluator,
   WorkloadEvaluator,
 } from './evaluators/domains/index.js';
+import { ProposalGenerator } from './analysis/proposal-generator.js';
 
 /** Callback signature for audit log subscribers. */
 export type AuditSink = (entry: AuditEntry) => void;
@@ -41,6 +41,7 @@ export class EvolutionEngine {
   private readonly config: EvolutionConfig;
   private readonly adapters: ReadonlyArray<PlatformAdapter>;
   private readonly evaluators: ReadonlyArray<Evaluator>;
+  private readonly proposalGenerator: ProposalGenerator;
   private readonly auditSinks: AuditSink[] = [];
   private cycleCount = 0;
   private static readonly DEFAULT_EVALUATORS: readonly Evaluator[] = [
@@ -61,6 +62,7 @@ export class EvolutionEngine {
     this.config = opts.config
       ? mergeConfig(opts.config)
       : createDefaultConfig();
+    this.proposalGenerator = ProposalGenerator.fromConfig(this.config);
   }
 
   /** Register an audit log consumer (e.g. file writer, event bus). */
@@ -95,7 +97,7 @@ export class EvolutionEngine {
     const healthyAdapters = await this.checkHealth();
     const metrics = await this.collectMetrics(healthyAdapters);
     const evaluations = await this.evaluate(metrics);
-    const proposals = this.generateProposals(evaluations, cycleId);
+    const proposals = this.generateProposals(evaluations);
     const experiments = await this.runExperiments(healthyAdapters, proposals);
 
     const summary: CycleSummary = {
@@ -194,31 +196,12 @@ export class EvolutionEngine {
   /** Convert evaluation opportunities into draft proposals (rate-limited). */
   private generateProposals(
     evaluations: EvaluationResult[],
-    cycleId: number,
   ): Proposal[] {
-    const proposals: Proposal[] = [];
-    const { proposalsPerDay } = this.config.rateLimits;
-    const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-
-    for (const evaluation of evaluations) {
-      for (const opp of evaluation.opportunities) {
-        if (proposals.length >= proposalsPerDay) break;
-        const seq = String(proposals.length + 1).padStart(4, '0');
-        const proposal: Proposal = {
-          id: `EVO-${dateStamp}-${seq}`,
-          hypothesis: opp.description,
-          targetMetric: `${evaluation.domain}.score`,
-          expectedDelta: { min: -0.05, max: -0.20 },
-          successCriteria: `${evaluation.domain} score improves >= 5%`,
-          failureCriteria: 'Any regression > 2% on guarded metrics',
-          blastRadius: opp.suggestedBlastRadius,
-          sourceType: 'Internal',
-          status: 'Draft' as ProposalStatus,
-        };
-        proposals.push(proposal);
-      }
-    }
-    this.audit('proposals.generated', { cycleId, count: proposals.length });
+    const proposals = this.proposalGenerator.generate(
+      evaluations,
+      this.adapters.map((adapter) => adapter.name),
+    );
+    this.audit('proposals.generated', { count: proposals.length });
     return proposals;
   }
 

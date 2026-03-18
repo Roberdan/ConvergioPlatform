@@ -40,6 +40,7 @@ export function createDefaultConfig(): EvolutionConfig {
       proposalsPerWeek: 15,
     },
     storageLimitMb: 512,
+    maxProposalsPerCycle: 5,
   };
 }
 
@@ -57,5 +58,7 @@ export function mergeConfig(
     budgetLimits: { ...base.budgetLimits, ...overrides.budgetLimits },
     rateLimits: { ...base.rateLimits, ...overrides.rateLimits },
     storageLimitMb: overrides.storageLimitMb ?? base.storageLimitMb,
+    maxProposalsPerCycle:
+      overrides.maxProposalsPerCycle ?? base.maxProposalsPerCycle,
   };
 }
