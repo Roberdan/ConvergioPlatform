@@ -15,7 +15,10 @@
   "include": [
     "core/**/*.ts",
     "adapters/**/*.ts",
-    "telemetry/**/*.ts"
+    "telemetry/**/*.ts",
+    "experiments/**/*.ts",
+    "canary/**/*.ts",
+    "cadence/**/*.ts"
   ],
   "exclude": [
     "node_modules",
