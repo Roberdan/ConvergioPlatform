@@ -16,7 +16,9 @@ import type {
   EvolutionConfig,
 } from './types/index.js';
 import type { PlatformAdapter } from './types/adapter.js';
+import type { Evaluator } from './evaluators/evaluator.js';
 import { createDefaultConfig, mergeConfig } from './config.js';
+import { rollup5m } from '../telemetry/aggregation.js';
 
 /** Callback signature for audit log subscribers. */
 export type AuditSink = (entry: AuditEntry) => void;
@@ -31,14 +33,17 @@ export type AuditSink = (entry: AuditEntry) => void;
 export class EvolutionEngine {
   private readonly config: EvolutionConfig;
   private readonly adapters: ReadonlyArray<PlatformAdapter>;
+  private readonly evaluators: ReadonlyArray<Evaluator>;
   private readonly auditSinks: AuditSink[] = [];
   private cycleCount = 0;
 
   constructor(opts: {
     adapters: PlatformAdapter[];
+    evaluators?: Evaluator[];
     config?: Partial<EvolutionConfig>;
   }) {
     this.adapters = opts.adapters;
+    this.evaluators = opts.evaluators ?? [];
     this.config = opts.config
       ? mergeConfig(opts.config)
       : createDefaultConfig();
@@ -127,18 +132,49 @@ export class EvolutionEngine {
     return all;
   }
 
-  /**
-   * Evaluate collected metrics.
-   * Placeholder: real evaluators will be plugged in via constructor in T0-03+.
-   */
   private async evaluate(metrics: Metric[]): Promise<EvaluationResult[]> {
-    const result: EvaluationResult = {
-      domain: 'baseline',
-      anomalies: [],
-      opportunities: [],
-      score: metrics.length > 0 ? 75 : 0,
-    };
-    return [result];
+    if (this.evaluators.length === 0) {
+      return [
+        {
+          domain: 'baseline',
+          anomalies: [],
+          opportunities: [],
+          score: metrics.length > 0 ? 75 : 0,
+        },
+      ];
+    }
+
+    const history = rollup5m(metrics);
+    const evaluations = await Promise.all(
+      this.evaluators.map(async (evaluator) => {
+        const evaluatorMetrics = metrics.filter((metric) =>
+          evaluator.metricFamilies.includes(metric.family),
+        );
+        const evaluatorHistory = history.filter((point) =>
+          evaluator.metricFamilies.includes(point.family),
+        );
+        return evaluator.evaluate(evaluatorMetrics, evaluatorHistory);
+      }),
+    );
+
+    const weightedScore = this.computeCompositeScore(evaluations);
+    this.audit('evaluations.composite', {
+      domains: evaluations.map((evaluation) => evaluation.domain),
+      score: weightedScore,
+    });
+
+    return evaluations;
+  }
+
+  private computeCompositeScore(results: EvaluationResult[]): number {
+    if (results.length === 0) return 0;
+    const weighted = results.map((result) => ({
+      score: result.score,
+      weight: Math.max(1, result.anomalies.length + result.opportunities.length),
+    }));
+    const weightSum = weighted.reduce((sum, item) => sum + item.weight, 0);
+    const scoreSum = weighted.reduce((sum, item) => sum + item.score * item.weight, 0);
+    return Math.round(scoreSum / weightSum);
   }
 
   /** Convert evaluation opportunities into draft proposals (rate-limited). */
