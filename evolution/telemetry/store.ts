@@ -36,17 +36,6 @@ CREATE TABLE IF NOT EXISTS telemetry_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_tm_name_ts ON telemetry_metrics(name, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_tm_family ON telemetry_metrics(family, ts DESC);
-CREATE TABLE IF NOT EXISTS evolution_experiments (
-  id TEXT PRIMARY KEY,
-  proposal_id TEXT NOT NULL,
-  mode TEXT NOT NULL,
-  status TEXT NOT NULL,
-  started_at INTEGER,
-  completed_at INTEGER,
-  result_json TEXT,
-  report_md TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_evolution_experiments_started ON evolution_experiments(started_at DESC);
 `;
 
 export class MetricStore {
