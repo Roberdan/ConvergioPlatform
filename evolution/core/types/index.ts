@@ -3,8 +3,6 @@
  * All adapters and core modules import from here.
  */
 
-export type { PlatformAdapter } from './adapter.js';
-
 // ── Metric ────────────────────────────────────────────────────────────────────
 
 /** Telemetry signal categories collected across platform targets. */
@@ -32,6 +30,19 @@ export interface Metric {
   labels: Record<string, string>;
   /** High-level grouping for routing and budget tracking */
   family: MetricFamily;
+}
+
+/**
+ * Pluggable metric source that the engine polls on each evaluation cycle.
+ * Adapters implement this to feed domain-specific telemetry into the core.
+ */
+export interface MetricCollector {
+  /** Stable collector identifier, e.g. `lighthouse`, `vitest-coverage` */
+  readonly id: string;
+  /** Metric families this collector can produce */
+  readonly families: readonly MetricFamily[];
+  /** Gather metrics from the underlying source. */
+  collect(): Promise<Metric[]>;
 }
 
 // ── Proposal ─────────────────────────────────────────────────────────────────
@@ -121,6 +132,23 @@ export interface Experiment {
 // ── Evaluation ────────────────────────────────────────────────────────────────
 
 /**
+ * A concrete optimisation opportunity surfaced by an evaluator.
+ * Carries enough detail for the engine to auto-generate a Proposal.
+ */
+export interface OptimizationOpportunity {
+  /** Short label, e.g. `tree-shake lodash`, `enable gzip` */
+  title: string;
+  /** Free-form explanation of the improvement */
+  description: string;
+  /** Estimated relative gain as a human-readable string, e.g. `-15% bundle size` */
+  estimatedGain: string;
+  /** Domain this opportunity belongs to */
+  domain: string;
+  /** Suggested blast radius for any resulting proposal */
+  suggestedBlastRadius: BlastRadius;
+}
+
+/**
  * Output of an evaluator scanning one domain (latency, cost, quality, …).
  */
 export interface EvaluationResult {
@@ -129,7 +157,7 @@ export interface EvaluationResult {
   /** Detected regressions or anomalies */
   anomalies: Array<{ metric: string; severity: 'low' | 'medium' | 'high'; detail: string }>;
   /** Actionable opportunities discovered */
-  opportunities: Array<{ description: string; estimatedGain: string }>;
+  opportunities: OptimizationOpportunity[];
   /** Composite health score [0–100] */
   score: number;
 }
@@ -167,6 +195,28 @@ export interface CapabilityProfile {
   /** Supported feature flags, e.g. `streaming`, `vision`, `code-interpreter` */
   features: string[];
   lastChecked: number;
+}
+
+// ── Capability Delta ──────────────────────────────────────────────────────────
+
+/**
+ * Difference between two CapabilityProfile snapshots.
+ * Produced when re-scanning a provider reveals changes (new model,
+ * price change, dropped feature).
+ */
+export interface CapabilityDelta {
+  /** Provider being compared */
+  provider: string;
+  /** Model being compared */
+  model: string;
+  /** Fields that changed between snapshots */
+  changes: Array<{
+    field: keyof CapabilityProfile;
+    before: unknown;
+    after: unknown;
+  }>;
+  /** When the delta was detected (Unix epoch ms) */
+  detectedAt: number;
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@
 export type {
   Metric,
   MetricFamily,
+  MetricCollector,
   Proposal,
   BlastRadius,
   SourceType,
@@ -14,9 +15,15 @@ export type {
   ExperimentMode,
   ExperimentResult,
   EvaluationResult,
+  OptimizationOpportunity,
   AuditEntry,
   CapabilityProfile,
+  CapabilityDelta,
   EvolutionConfig,
 } from './types/index.js';
 
 export type { PlatformAdapter } from './types/adapter.js';
+
+export { createDefaultConfig, mergeConfig } from './config.js';
+export { EvolutionEngine } from './engine.js';
+export type { CycleSummary, AuditSink } from './engine.js';

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { Metric, Proposal, Experiment, PlatformAdapter } from './index.js';
+import type { Metric, Proposal, Experiment } from './index.js';
+import type { PlatformAdapter } from './adapter.js';
 
 describe('Evolution Engine Types', () => {
   it('Metric type is well-formed', () => {
@@ -56,6 +57,7 @@ describe('Evolution Engine Types', () => {
         sideEffects: [],
       }),
       openPR: async () => ({ prUrl: 'https://github.com/test/pr/1', prNumber: 1 }),
+      rollback: async () => {},
       healthCheck: async () => ({ healthy: true, details: 'ok' }),
     };
     expect(mockAdapter.name).toBe('test-adapter');

@@ -70,6 +70,11 @@ export class DashboardAdapter implements PlatformAdapter {
     throw new Error(`openPR not yet implemented for proposal ${proposal.id}`);
   }
 
+  /** Reverts a canary deployment by switching traffic back to control. */
+  async rollback(experimentId: string): Promise<void> {
+    throw new Error(`rollback not yet implemented for experiment ${experimentId}`);
+  }
+
   /** GETs `baseUrl/__health` — expects 200 with `{ ok: true }`. */
   async healthCheck(): Promise<{ healthy: boolean; details: string }> {
     return { healthy: false, details: `${this.baseUrl}/__health not yet reachable` };

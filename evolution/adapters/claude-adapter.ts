@@ -58,6 +58,11 @@ export class ClaudeConfigAdapter implements PlatformAdapter {
     throw new Error(`openPR not yet implemented for proposal ${proposal.id}`);
   }
 
+  /** Reverts a running experiment by resetting modified config files. */
+  async rollback(experimentId: string): Promise<void> {
+    throw new Error(`rollback not yet implemented for experiment ${experimentId}`);
+  }
+
   /** Confirms ~/.claude directory is readable and dashboard.db exists. */
   async healthCheck(): Promise<{ healthy: boolean; details: string }> {
     return { healthy: false, details: 'Not yet wired to ~/.claude/data/dashboard.db' };

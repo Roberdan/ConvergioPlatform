@@ -8,7 +8,7 @@ import type { Metric, Proposal, ExperimentResult } from './index.js';
  * must remain adapter-agnostic.
  */
 export interface PlatformAdapter {
-  /** Unique identifier for this adapter, e.g. `maranello`, `claude-config` */
+  /** Unique identifier for this adapter, e.g. `design-system`, `agent-config` */
   readonly name: string;
 
   /** Collect telemetry signals from this platform target. */
@@ -25,6 +25,12 @@ export interface PlatformAdapter {
    * Returns the PR URL and number for audit logging.
    */
   openPR(proposal: Proposal): Promise<{ prUrl: string; prNumber: number }>;
+
+  /**
+   * Roll back a running or applied experiment.
+   * Reverts the target to its pre-experiment state (branch delete, deploy revert, etc.).
+   */
+  rollback(experimentId: string): Promise<void>;
 
   /** Verify the adapter's target is reachable and healthy before operations. */
   healthCheck(): Promise<{ healthy: boolean; details: string }>;

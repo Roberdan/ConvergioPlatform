@@ -68,6 +68,11 @@ export class MaranelloAdapter implements PlatformAdapter {
     throw new Error(`openPR not yet implemented for proposal ${proposal.id}`);
   }
 
+  /** Deletes the experiment branch and reverts any local changes. */
+  async rollback(experimentId: string): Promise<void> {
+    throw new Error(`rollback not yet implemented for experiment ${experimentId}`);
+  }
+
   /** Confirms repoPath exists and `git status` exits 0. */
   async healthCheck(): Promise<{ healthy: boolean; details: string }> {
     return { healthy: false, details: `Repo path ${this.repoPath} not yet verified` };
