@@ -231,7 +231,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     /// Exact content mirroring ~/.claude/config/peers.conf (minus comment header).
-    /// BTreeMap sorts sections alphabetically: mac-worker-1, mac-worker-2, linux-worker.
+    /// BTreeMap sorts sections alphabetically: mac-worker-1, mac-worker-2, linux_worker.
     const PEERS_INI: &str = "\
 [mesh]
 shared_secret=test-shared-secret-for-unit-tests
@@ -266,7 +266,7 @@ ssh_alias=linux-worker-ts
 user=roberdan
 os=linux
 tailscale_ip=100.64.0.2
-dns_name=linux-worker.example.ts.net
+dns_name=linux_worker.example.ts.net
 capabilities=claude,copilot
 role=worker
 status=active
@@ -304,23 +304,23 @@ gh_account=Roberdan
     #[test]
     fn parse_capabilities_split() {
         let reg = load_from_str(PEERS_INI);
-        let mac-worker-2 = reg.peers.get("mac-worker-2").unwrap();
-        assert_eq!(mac-worker-2.capabilities, vec!["claude", "copilot", "ollama"]);
+        let mac_worker_2 = reg.peers.get("mac-worker-2").unwrap();
+        assert_eq!(mac_worker_2.capabilities, vec!["claude", "copilot", "ollama"]);
     }
 
     #[test]
     fn parse_optional_fields() {
         let reg = load_from_str(PEERS_INI);
-        let mac-worker-1 = reg.peers.get("mac-worker-1").unwrap();
-        assert_eq!(mac-worker-1.mac_address.as_deref(), Some("AA:BB:CC:DD:EE:FF"));
-        assert_eq!(mac-worker-1.runners, Some(3));
+        let mac_worker_1 = reg.peers.get("mac-worker-1").unwrap();
+        assert_eq!(mac_worker_1.mac_address.as_deref(), Some("AA:BB:CC:DD:EE:FF"));
+        assert_eq!(mac_worker_1.runners, Some(3));
         assert_eq!(
-            mac-worker-1.runner_paths.as_deref(),
+            mac_worker_1.runner_paths.as_deref(),
             Some("/Users/testuser/actions-runner,/Users/testuser/actions-runner-2,/Users/testuser/actions-runner-3")
         );
-        let mac-worker-2 = reg.peers.get("mac-worker-2").unwrap();
-        assert!(mac-worker-2.mac_address.is_none());
-        assert!(mac-worker-2.runners.is_none());
+        let mac_worker_2 = reg.peers.get("mac-worker-2").unwrap();
+        assert!(mac_worker_2.mac_address.is_none());
+        assert!(mac_worker_2.runners.is_none());
     }
 
     #[test]

@@ -118,7 +118,7 @@ fn ts_name_matches_hostname() {
 #[test]
 fn ts_name_matches_linux-worker() {
     let node: serde_json::Value = serde_json::from_str(
-        r#"{"HostName":"linux-worker","DNSName":"linux-worker.example.ts.net.","TailscaleIPs":["100.64.0.2"],"Online":true}"#
+        r#"{"HostName":"linux-worker","DNSName":"linux_worker.example.ts.net.","TailscaleIPs":["100.64.0.2"],"Online":true}"#
     ).unwrap();
     assert!(super::ws_pty::ts_name_matches(&node, "linux-worker"));
 }
@@ -126,7 +126,7 @@ fn ts_name_matches_linux-worker() {
 #[test]
 fn ts_name_no_match() {
     let node: serde_json::Value = serde_json::from_str(
-        r#"{"HostName":"linux-worker","DNSName":"linux-worker.example.ts.net.","TailscaleIPs":["100.64.0.2"],"Online":true}"#
+        r#"{"HostName":"linux-worker","DNSName":"linux_worker.example.ts.net.","TailscaleIPs":["100.64.0.2"],"Online":true}"#
     ).unwrap();
     assert!(!super::ws_pty::ts_name_matches(&node, "mac-worker-1"));
 }
