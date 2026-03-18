@@ -4,7 +4,7 @@ import type { AggregatedPoint } from '../../../telemetry/aggregation.js';
 import { LatencyEvaluator } from './latency-evaluator.js';
 import { BundleEvaluator } from './bundle-evaluator.js';
 import { AgentCostEvaluator } from './agent-cost-evaluator.js';
-import { MeshEvaluator } from './mesh-evaluator.js';
+import { MeshTopologyEvaluator } from './mesh-topology-evaluator.js';
 import { WorkloadEvaluator } from './workload-evaluator.js';
 
 const now = Date.now();
@@ -21,9 +21,11 @@ describe('domain evaluators', () => {
     const result = await evaluator.evaluate([
       mk('http.p95_latency_ms', 650, 'Runtime'),
       mk('http.p50_latency_ms', 250, 'Runtime'),
+      mk('http.error_rate_pct', 3, 'Runtime'),
     ], history);
 
     expect(result.anomalies.length).toBeGreaterThan(0);
+    expect(result.anomalies.some((a) => a.metric === 'http.error_rate_pct')).toBe(true);
     expect(result.opportunities.length).toBe(3);
   });
 
@@ -52,14 +54,15 @@ describe('domain evaluators', () => {
     expect(result.opportunities.length).toBe(3);
   });
 
-  it('detects mesh and database pressure', async () => {
-    const evaluator = new MeshEvaluator();
+  it('detects mesh topology pressure', async () => {
+    const evaluator = new MeshTopologyEvaluator();
     const result = await evaluator.evaluate([
       mk('mesh.sync_lag_ms', 130_000, 'Mesh'),
-      mk('db.query_p95_ms', 280, 'Database'),
-      mk('db.connection_pool_usage', 0.92, 'Database'),
+      mk('mesh.packet_loss_pct', 6, 'Mesh'),
+      mk('mesh.peer_count', 3, 'Mesh'),
     ], history);
 
+    expect(result.domain).toBe('mesh_topology');
     expect(result.anomalies.length).toBeGreaterThanOrEqual(2);
     expect(result.opportunities.length).toBe(3);
   });
