@@ -4,7 +4,7 @@
 
 model_list:
   # === LOCAL MODELS (oMLX/vLLM/llama.cpp on this machine) ===
-  # Uncomment after: convergio-llm.sh start ~/models/<model>
+  # Uncomment after: convergio-llm.sh start ~/GitHub/LocalModels/<model>
 
   # - model_name: "local/qwen-coder-32b"
   #   litellm_params:

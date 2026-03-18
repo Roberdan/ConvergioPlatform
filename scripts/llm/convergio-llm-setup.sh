@@ -152,7 +152,7 @@ python3 -c "import litellm; print('LiteLLM: OK')"
 python3 -c "import soundfile" 2>/dev/null || pip install 'soundfile>=0.13.1' --quiet 2>/dev/null
 
 # --- Directories ---
-mkdir -p "$HOME/models" "$HOME/.convergio-llm/logs"
+mkdir -p "$HOME/GitHub/LocalModels" "$HOME/.convergio-llm/logs"
 
 # --- Save platform info ---
 echo "$PLATFORM" > "$HOME/.convergio-llm/platform"
@@ -163,7 +163,7 @@ echo "=== Setup Complete ==="
 echo "Platform: $PLATFORM"
 echo "Backend:  $BACKEND"
 echo "Venv:     $VENV"
-echo "Models:   ~/models/ (empty)"
+echo "Models:   ~/GitHub/LocalModels/ (empty)"
 echo "Logs:     ~/.convergio-llm/logs/"
 echo ""
 echo "Next:"
@@ -178,5 +178,5 @@ case "$PLATFORM" in
     echo "  convergio-llm-download.sh bartowski/Qwen2.5-Coder-7B-Instruct-GGUF qwen2.5-coder-7b"
     ;;
 esac
-echo "  convergio-llm.sh start ~/models/<model>"
+echo "  convergio-llm.sh start ~/GitHub/LocalModels/<model>"
 echo "  claude-local"

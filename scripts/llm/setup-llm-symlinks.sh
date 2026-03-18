@@ -80,8 +80,8 @@ fi
 
 # --- 5. Runtime dirs ---
 mkdir -p "$HOME/.convergio-llm/logs"
-mkdir -p "$HOME/models"
-echo "  Runtime dirs: ~/.convergio-llm/ ~/models/"
+mkdir -p "$HOME/GitHub/LocalModels"
+echo "  Runtime dirs: ~/.convergio-llm/ ~/GitHub/LocalModels/"
 
 echo ""
 echo "=== Verify ==="
@@ -94,7 +94,7 @@ echo "=== Next ==="
 echo "  1. source $RCFILE"
 echo "  2. convergio-llm.sh setup     (install backend + LiteLLM)"
 echo "  3. convergio-llm-download.sh <hf_repo> <name>"
-echo "  4. convergio-llm.sh start ~/models/<model>"
+echo "  4. convergio-llm.sh start ~/GitHub/LocalModels/<model>"
 echo "  5. claude-local"
 echo ""
 echo "Done."

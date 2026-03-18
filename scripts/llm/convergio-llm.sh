@@ -153,7 +153,7 @@ case "$CMD" in
       start_backend "$MODEL_DIR"
     else
       echo "No model dir — skipping backend"
-      echo "  Usage: convergio-llm.sh start ~/models/<model>"
+      echo "  Usage: convergio-llm.sh start ~/GitHub/LocalModels/<model>"
     fi
     start_litellm
     echo ""
