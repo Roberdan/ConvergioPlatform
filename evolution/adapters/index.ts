@@ -6,3 +6,4 @@ export { MLDAdapter } from './mld-adapter.js';
 export { ClaudeConfigAdapter } from './claude-adapter.js';
 export { DashboardAdapter } from './dashboard-adapter.js';
 export { TemplateAdapter } from './template-adapter.js';
+export { AgentMetricCollector } from './agent-telemetry-collector.js';
