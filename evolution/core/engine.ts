@@ -206,6 +206,13 @@ export class EvolutionEngine {
         const seq = String(proposals.length + 1).padStart(4, '0');
         const proposal: Proposal = {
           id: `EVO-${dateStamp}-${seq}`,
+          title: `${evaluation.domain} optimisation ${seq}`,
+          description: opp.description,
+          createdAt: Date.now(),
+          rollbackStrategy: 'Automatic canary rollback on guarded regression',
+          estimatedGain: '5-20% improvement',
+          confidence: 0.7,
+          targetAdapter: 'auto',
           hypothesis: opp.description,
           targetMetric: `${evaluation.domain}.score`,
           expectedDelta: { min: -0.05, max: -0.20 },
