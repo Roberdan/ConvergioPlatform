@@ -47,8 +47,12 @@ Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 - Evolution: standalone core, thin adapters, PR-only governance
 - Mesh: Tailscale + HMAC-SHA256
 
-## AI Agent
+## AI Agents
 
-Convergio — platform control plane expert.
+| Agent | Role |
+|---|---|
+| Convergio | Platform control plane expert |
+| ConvergioLLM | Local LLM infrastructure manager |
 
 @.github/agents/Convergio.agent.md
+@.github/agents/ConvergioLLM.agent.md

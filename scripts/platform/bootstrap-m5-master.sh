@@ -21,7 +21,7 @@ echo ""
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$HOME/.claude/scripts:$PATH"
 
 # ------ Step 1: Clone ConvergioPlatform ------
-echo "[1/8] Cloning ConvergioPlatform..."
+echo "[1/9] Cloning ConvergioPlatform..."
 if [ -d "$PLATFORM_DIR" ]; then
   echo "  Already exists — pulling latest"
   cd "$PLATFORM_DIR" && git pull origin main
@@ -32,7 +32,7 @@ fi
 echo "  OK: $PLATFORM_DIR"
 
 # ------ Step 2: Copy dashboard.db from M3 ------
-echo "[2/8] Copying dashboard.db from M3..."
+echo "[2/9] Copying dashboard.db from M3..."
 mkdir -p "$PLATFORM_DIR/data"
 scp "$M3_TS:GitHub/ConvergioPlatform/data/dashboard.db" "$PLATFORM_DIR/data/dashboard.db"
 echo "  OK: $(du -sh "$PLATFORM_DIR/data/dashboard.db" | cut -f1)"
@@ -42,7 +42,7 @@ scp "$M3_TS:GitHub/ConvergioPlatform/data/session-learnings.jsonl" "$PLATFORM_DI
 scp "$M3_TS:GitHub/ConvergioPlatform/data/thor-audit.jsonl" "$PLATFORM_DIR/data/" 2>/dev/null || true
 
 # ------ Step 3: Set up .claude essentials ------
-echo "[3/8] Setting up .claude config..."
+echo "[3/9] Setting up .claude config..."
 mkdir -p "$CLAUDE_DIR/data" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/agents" "$CLAUDE_DIR/scripts" "$CLAUDE_DIR/reference"
 
 # Symlink DB into .claude for backward compat
@@ -64,13 +64,13 @@ scp -r "$M3_TS:.claude/scripts/lib/" "$CLAUDE_DIR/scripts/lib/" 2>/dev/null || t
 scp -r "$M3_TS:.claude/scripts/archive/" "$CLAUDE_DIR/scripts/archive/" 2>/dev/null || true
 
 # ------ Step 4: Set up peers.conf ------
-echo "[4/8] Setting up mesh config..."
+echo "[4/9] Setting up mesh config..."
 mkdir -p "$CLAUDE_DIR/config"
 scp "$M3_TS:.claude/config/peers.conf" "$CLAUDE_DIR/config/peers.conf"
 echo "  OK: peers.conf copied"
 
 # ------ Step 5: Set DASHBOARD_DB env var ------
-echo "[5/8] Setting environment..."
+echo "[5/9] Setting environment..."
 if ! grep -q 'DASHBOARD_DB' ~/.zshenv 2>/dev/null; then
   echo "export DASHBOARD_DB=\"$PLATFORM_DIR/data/dashboard.db\"" >> ~/.zshenv
   echo "  Added DASHBOARD_DB to .zshenv"
@@ -78,7 +78,7 @@ fi
 export DASHBOARD_DB="$PLATFORM_DIR/data/dashboard.db"
 
 # ------ Step 6: Verify tools ------
-echo "[6/8] Verifying tools..."
+echo "[6/9] Verifying tools..."
 claude --version 2>/dev/null | head -1 && echo "  ✅ Claude CLI" || echo "  ❌ Claude CLI missing"
 gh --version 2>/dev/null | head -1 && echo "  ✅ gh" || echo "  ❌ gh missing"
 cargo --version 2>/dev/null && echo "  ✅ Rust" || echo "  ❌ Rust missing"
@@ -86,7 +86,7 @@ node --version 2>/dev/null && echo "  ✅ Node" || echo "  ❌ Node missing"
 python3 --version 2>/dev/null && echo "  ✅ Python" || echo "  ❌ Python missing"
 
 # ------ Step 7: Verify DB ------
-echo "[7/8] Verifying database..."
+echo "[7/9] Verifying database..."
 PLANS=$(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT count(*) FROM plans;" 2>/dev/null)
 TASKS=$(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT count(*) FROM tasks;" 2>/dev/null)
 echo "  Plans: $PLANS"
@@ -94,8 +94,13 @@ echo "  Tasks: $TASKS"
 echo "  Plan 664: $(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT status FROM plans WHERE id=664;")"
 echo "  Plan 659: $(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT status FROM plans WHERE id=659;")"
 
-# ------ Step 8: Verify plan-db.sh works ------
-echo "[8/8] Verifying plan-db.sh..."
+# ------ Step 8: Set up LLM infrastructure ------
+echo "[8/9] Setting up local LLM infrastructure..."
+bash "$PLATFORM_DIR/scripts/llm/setup-llm-symlinks.sh" "$PLATFORM_DIR"
+echo "  To install oMLX + LiteLLM: convergio-llm.sh setup"
+
+# ------ Step 9: Verify plan-db.sh works ------
+echo "[9/9] Verifying plan-db.sh..."
 export PATH="$CLAUDE_DIR/scripts:$PATH"
 plan-db.sh status convergio 2>/dev/null | head -10 || echo "  ⚠️ plan-db.sh needs setup"
 
