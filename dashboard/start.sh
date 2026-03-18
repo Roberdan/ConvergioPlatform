@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
-# Start the ConvergioPlatform dashboard
+# Start the ConvergioPlatform dashboard via Rust daemon
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR"
+PLATFORM_DIR="$(cd "$DIR/.." && pwd)"
+DAEMON="$PLATFORM_DIR/daemon/target/release/convergio-platform-daemon"
 
-# Load .env if exists
-[ -f .env ] && export $(grep -v '^#' .env | xargs)
+export DASHBOARD_DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 
-# Default DB path
-export DASHBOARD_DB="${DASHBOARD_DB:-$HOME/.claude/data/dashboard.db}"
-
-# Check DB exists
 if [ ! -f "$DASHBOARD_DB" ]; then
   echo "ERROR: dashboard.db not found at $DASHBOARD_DB"
-  echo "Set DASHBOARD_DB env var to the correct path"
   exit 1
 fi
 
-echo "Starting ConvergioPlatform Dashboard..."
-echo "  DB: $DASHBOARD_DB"
-echo "  Port: ${PORT:-8788}"
+if [ ! -f "$DAEMON" ]; then
+  echo "Building daemon (first time)..."
+  cd "$PLATFORM_DIR/daemon" && cargo build --release
+fi
 
-python3 api_server.py
+PORT="${PORT:-8420}"
+echo "Starting Convergio Control Room on http://localhost:$PORT"
+exec "$DAEMON" serve --static-dir "$DIR" --bind "0.0.0.0:$PORT"
