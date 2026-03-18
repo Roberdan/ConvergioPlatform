@@ -19,6 +19,13 @@ import type { PlatformAdapter } from './types/adapter.js';
 import type { Evaluator } from './evaluators/evaluator.js';
 import { createDefaultConfig, mergeConfig } from './config.js';
 import { rollup5m } from '../telemetry/aggregation.js';
+import {
+  AgentCostEvaluator,
+  BundleEvaluator,
+  LatencyEvaluator,
+  MeshEvaluator,
+  WorkloadEvaluator,
+} from './evaluators/domains/index.js';
 
 /** Callback signature for audit log subscribers. */
 export type AuditSink = (entry: AuditEntry) => void;
@@ -36,6 +43,13 @@ export class EvolutionEngine {
   private readonly evaluators: ReadonlyArray<Evaluator>;
   private readonly auditSinks: AuditSink[] = [];
   private cycleCount = 0;
+  private static readonly DEFAULT_EVALUATORS: readonly Evaluator[] = [
+    new LatencyEvaluator(),
+    new BundleEvaluator(),
+    new AgentCostEvaluator(),
+    new MeshEvaluator(),
+    new WorkloadEvaluator(),
+  ];
 
   constructor(opts: {
     adapters: PlatformAdapter[];
@@ -43,7 +57,7 @@ export class EvolutionEngine {
     config?: Partial<EvolutionConfig>;
   }) {
     this.adapters = opts.adapters;
-    this.evaluators = opts.evaluators ?? [];
+    this.evaluators = opts.evaluators ?? EvolutionEngine.DEFAULT_EVALUATORS;
     this.config = opts.config
       ? mergeConfig(opts.config)
       : createDefaultConfig();
