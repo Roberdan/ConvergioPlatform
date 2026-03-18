@@ -15,7 +15,9 @@
   "include": [
     "core/**/*.ts",
     "adapters/**/*.ts",
-    "telemetry/**/*.ts"
+    "telemetry/**/*.ts",
+    "research/**/*.ts",
+    "guardrails/**/*.ts"
   ],
   "exclude": [
     "node_modules",
