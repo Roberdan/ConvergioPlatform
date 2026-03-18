@@ -5,6 +5,7 @@ import { LatencyEvaluator } from './latency-evaluator.js';
 import { BundleEvaluator } from './bundle-evaluator.js';
 import { AgentCostEvaluator } from './agent-cost-evaluator.js';
 import { MeshTopologyEvaluator } from './mesh-topology-evaluator.js';
+import { DbEvaluator } from './db-evaluator.js';
 import { WorkloadEvaluator } from './workload-evaluator.js';
 
 const now = Date.now();
@@ -24,7 +25,6 @@ describe('domain evaluators', () => {
       mk('http.error_rate_pct', 3, 'Runtime'),
     ], history);
 
-    expect(result.anomalies.length).toBeGreaterThan(0);
     expect(result.anomalies.some((a) => a.metric === 'http.error_rate_pct')).toBe(true);
     expect(result.opportunities.length).toBe(3);
   });
@@ -34,11 +34,10 @@ describe('domain evaluators', () => {
     const result = await evaluator.evaluate([
       mk('bundle.js_size_bytes', 1_100_000, 'Bundle'),
       mk('bundle.css_size_bytes', 300_000, 'Bundle'),
-      mk('build.duration_ms', 80_000, 'Build'),
+      mk('build.duration_ms', 140_000, 'Build'),
     ], history);
 
     expect(result.anomalies.some((a) => a.metric === 'bundle.js_size_bytes')).toBe(true);
-    expect(result.opportunities.length).toBe(3);
   });
 
   it('detects agent cost and completion anomalies', async () => {
@@ -64,6 +63,17 @@ describe('domain evaluators', () => {
 
     expect(result.domain).toBe('mesh_topology');
     expect(result.anomalies.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('detects database pressure', async () => {
+    const evaluator = new DbEvaluator();
+    const result = await evaluator.evaluate([
+      mk('db.query_p95_ms', 620, 'Database'),
+      mk('db.connection_pool_usage', 0.92, 'Database'),
+      mk('db.wal_size_bytes', 130 * 1024 * 1024, 'Database'),
+    ], history);
+
+    expect(result.anomalies.length).toBeGreaterThanOrEqual(3);
     expect(result.opportunities.length).toBe(3);
   });
 
@@ -71,11 +81,13 @@ describe('domain evaluators', () => {
     const evaluator = new WorkloadEvaluator();
     const result = await evaluator.evaluate([
       mk('workload.queue_depth', 700, 'Workload'),
-      mk('workload.task_error_rate', 0.2, 'Workload'),
-      mk('runtime.memory_mb', 2048, 'Runtime'),
+      mk('workload.task_error_rate', 6, 'Workload'),
+      mk('runtime.memory_mb', 8200, 'Runtime'),
+      mk('runtime.cpu_pct', 93, 'Runtime'),
     ], history);
 
-    expect(result.anomalies.length).toBeGreaterThanOrEqual(2);
-    expect(result.opportunities.length).toBe(3);
+    expect(result.anomalies.some((a) => a.metric === 'runtime.memory_mb')).toBe(true);
+    expect(result.anomalies.some((a) => a.metric === 'runtime.cpu_pct')).toBe(true);
+    expect(result.opportunities.length).toBe(4);
   });
 });

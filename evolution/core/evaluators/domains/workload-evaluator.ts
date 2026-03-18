@@ -11,6 +11,8 @@ export class WorkloadEvaluator extends BaseEvaluator {
     const anomalies: EvaluationResult['anomalies'] = [];
     const queueDepth = latestValue(metrics, 'workload.queue_depth');
     const errorRate = latestValue(metrics, 'workload.task_error_rate');
+    const memoryMb = latestValue(metrics, 'runtime.memory_mb');
+    const cpuPct = latestValue(metrics, 'runtime.cpu_pct');
 
     if (queueDepth !== null && queueDepth > 500) {
       anomalies.push({ metric: 'workload.queue_depth', severity: 'high', detail: `Queue depth=${queueDepth} > 500` });
@@ -18,16 +20,23 @@ export class WorkloadEvaluator extends BaseEvaluator {
       anomalies.push({ metric: 'workload.queue_depth', severity: 'medium', detail: `Queue depth=${queueDepth} > 100` });
     }
 
-    if (errorRate !== null && errorRate > 0.15) {
-      anomalies.push({ metric: 'workload.task_error_rate', severity: 'high', detail: `Error rate=${(errorRate * 100).toFixed(1)}% > 15%` });
-    } else if (errorRate !== null && errorRate > 0.05) {
-      anomalies.push({ metric: 'workload.task_error_rate', severity: 'medium', detail: `Error rate=${(errorRate * 100).toFixed(1)}% > 5%` });
+    const errorPct = errorRate !== null && errorRate <= 1 ? errorRate * 100 : errorRate;
+    if (errorPct !== null && errorPct > 5) {
+      anomalies.push({ metric: 'workload.task_error_rate', severity: 'medium', detail: `Error rate=${errorPct.toFixed(1)}% > 5%` });
+    }
+
+    if (memoryMb !== null && memoryMb > 8000) {
+      anomalies.push({ metric: 'runtime.memory_mb', severity: 'medium', detail: `Memory=${memoryMb}MB > 8000MB` });
+    }
+
+    if (cpuPct !== null && cpuPct > 90) {
+      anomalies.push({ metric: 'runtime.cpu_pct', severity: 'high', detail: `CPU=${cpuPct}% > 90%` });
     }
 
     return {
       anomalies,
       opportunities: anomalies.length
-        ? opportunities(this.domain, ['Scale worker pool', 'Add circuit breaker', 'Implement backpressure'], '-20% queue and error pressure')
+        ? opportunities(this.domain, ['Scale worker pool', 'Add circuit breaker', 'Implement backpressure', 'Optimize memory usage'], '-20% queue and error pressure')
         : [],
     };
   }
