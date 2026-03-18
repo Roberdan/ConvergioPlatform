@@ -37,5 +37,3 @@ export {
   MeshEvaluator,
   WorkloadEvaluator,
 } from './evaluators/index.js';
-export { ProposalGenerator, HypothesisStore } from './analysis/index.js';
-export type { Hypothesis } from './analysis/index.js';
