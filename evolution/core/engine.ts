@@ -11,81 +11,50 @@ import type {
   Proposal,
   ProposalStatus,
   Experiment,
-  ExperimentResult,
   AuditEntry,
   EvolutionConfig,
 } from './types/index.js';
 import type { PlatformAdapter } from './types/adapter.js';
 import type { Evaluator } from './evaluators/evaluator.js';
+import type { AggregatedPoint } from '../telemetry/aggregation.js';
 import { createDefaultConfig, mergeConfig } from './config.js';
-import { rollup5m } from '../telemetry/aggregation.js';
-import {
-  AgentCostEvaluator,
-  BundleEvaluator,
-  LatencyEvaluator,
-  MeshEvaluator,
-  WorkloadEvaluator,
-} from './evaluators/domains/index.js';
+import { EvaluatorRegistry } from './evaluators/registry.js';
 
 /** Callback signature for audit log subscribers. */
 export type AuditSink = (entry: AuditEntry) => void;
 
-/**
- * Core Evolution Engine.
- *
- * Framework-agnostic, zero external dependencies.
- * Wire adapters + evaluators at construction time;
- * call {@link run} to execute one full optimisation cycle.
- */
+type MetricStoreLike = {
+  aggregate(options: { from: number; to: number }): AggregatedPoint[];
+};
+
 export class EvolutionEngine {
   private readonly config: EvolutionConfig;
   private readonly adapters: ReadonlyArray<PlatformAdapter>;
   private readonly evaluators: ReadonlyArray<Evaluator>;
+  private readonly metricStore?: MetricStoreLike;
   private readonly auditSinks: AuditSink[] = [];
   private cycleCount = 0;
-  private static readonly DEFAULT_EVALUATORS: readonly Evaluator[] = [
-    new LatencyEvaluator(),
-    new BundleEvaluator(),
-    new AgentCostEvaluator(),
-    new MeshEvaluator(),
-    new WorkloadEvaluator(),
-  ];
 
   constructor(opts: {
     adapters: PlatformAdapter[];
     evaluators?: Evaluator[];
     config?: Partial<EvolutionConfig>;
+    metricStore?: MetricStoreLike;
   }) {
     this.adapters = opts.adapters;
-    this.evaluators = opts.evaluators ?? EvolutionEngine.DEFAULT_EVALUATORS;
-    this.config = opts.config
-      ? mergeConfig(opts.config)
-      : createDefaultConfig();
+    this.evaluators = opts.evaluators ?? new EvaluatorRegistry().getAll();
+    this.metricStore = opts.metricStore;
+    this.config = opts.config ? mergeConfig(opts.config) : createDefaultConfig();
   }
 
-  /** Register an audit log consumer (e.g. file writer, event bus). */
   onAudit(sink: AuditSink): void {
     this.auditSinks.push(sink);
   }
 
-  /** Current engine configuration (read-only copy). */
   getConfig(): Readonly<EvolutionConfig> {
     return { ...this.config };
   }
 
-  /**
-   * Execute one full optimisation cycle across all registered adapters.
-   *
-   * Steps:
-   * 1. Health-check every adapter; skip unhealthy ones.
-   * 2. Collect metrics from healthy adapters.
-   * 3. Evaluate metrics to find anomalies and opportunities.
-   * 4. Generate proposals from opportunities (respecting rate limits).
-   * 5. Run canary experiments for approved proposals.
-   * 6. Report results and write audit entries.
-   *
-   * @returns Summary of the completed cycle.
-   */
   async run(): Promise<CycleSummary> {
     const cycleId = ++this.cycleCount;
     const startedAt = Date.now();
@@ -113,7 +82,6 @@ export class EvolutionEngine {
     return summary;
   }
 
-  /** Filter adapters to only those reporting healthy. */
   private async checkHealth(): Promise<PlatformAdapter[]> {
     const results = await Promise.allSettled(
       this.adapters.map(async (a) => {
@@ -123,21 +91,13 @@ export class EvolutionEngine {
       }),
     );
     return results
-      .filter(
-        (r): r is PromiseFulfilledResult<PlatformAdapter | null> =>
-          r.status === 'fulfilled',
-      )
+      .filter((r): r is PromiseFulfilledResult<PlatformAdapter | null> => r.status === 'fulfilled')
       .map((r) => r.value)
       .filter((a): a is PlatformAdapter => a !== null);
   }
 
-  /** Collect metrics from all healthy adapters in parallel. */
-  private async collectMetrics(
-    adapters: PlatformAdapter[],
-  ): Promise<Metric[]> {
-    const batches = await Promise.allSettled(
-      adapters.map((a) => a.collectMetrics()),
-    );
+  private async collectMetrics(adapters: PlatformAdapter[]): Promise<Metric[]> {
+    const batches = await Promise.allSettled(adapters.map((a) => a.collectMetrics()));
     const all: Metric[] = [];
     for (const batch of batches) {
       if (batch.status === 'fulfilled') all.push(...batch.value);
@@ -146,27 +106,22 @@ export class EvolutionEngine {
     return all;
   }
 
+  private historyFromStore(metrics: Metric[]): AggregatedPoint[] {
+    if (!this.metricStore || metrics.length === 0) return [];
+    const timestamps = metrics.map((metric) => metric.timestamp);
+    return this.metricStore.aggregate({ from: Math.min(...timestamps), to: Math.max(...timestamps) });
+  }
+
   private async evaluate(metrics: Metric[]): Promise<EvaluationResult[]> {
     if (this.evaluators.length === 0) {
-      return [
-        {
-          domain: 'baseline',
-          anomalies: [],
-          opportunities: [],
-          score: metrics.length > 0 ? 75 : 0,
-        },
-      ];
+      return [{ domain: 'baseline', anomalies: [], opportunities: [], score: metrics.length > 0 ? 75 : 0 }];
     }
 
-    const history = rollup5m(metrics);
+    const history = this.historyFromStore(metrics);
     const evaluations = await Promise.all(
       this.evaluators.map(async (evaluator) => {
-        const evaluatorMetrics = metrics.filter((metric) =>
-          evaluator.metricFamilies.includes(metric.family),
-        );
-        const evaluatorHistory = history.filter((point) =>
-          evaluator.metricFamilies.includes(point.family),
-        );
+        const evaluatorMetrics = metrics.filter((metric) => evaluator.metricFamilies.includes(metric.family));
+        const evaluatorHistory = history.filter((point) => evaluator.metricFamilies.includes(point.family));
         return evaluator.evaluate(evaluatorMetrics, evaluatorHistory);
       }),
     );
@@ -191,11 +146,7 @@ export class EvolutionEngine {
     return Math.round(scoreSum / weightSum);
   }
 
-  /** Convert evaluation opportunities into draft proposals (rate-limited). */
-  private generateProposals(
-    evaluations: EvaluationResult[],
-    cycleId: number,
-  ): Proposal[] {
+  private generateProposals(evaluations: EvaluationResult[], cycleId: number): Proposal[] {
     const proposals: Proposal[] = [];
     const { proposalsPerDay } = this.config.rateLimits;
     const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -229,11 +180,7 @@ export class EvolutionEngine {
     return proposals;
   }
 
-  /** Run canary experiments on approved proposals. */
-  private async runExperiments(
-    adapters: PlatformAdapter[],
-    proposals: Proposal[],
-  ): Promise<Experiment[]> {
+  private async runExperiments(adapters: PlatformAdapter[], proposals: Proposal[]): Promise<Experiment[]> {
     const approved = proposals.filter((p) => p.status === 'Approved');
     const experiments: Experiment[] = [];
 
@@ -261,7 +208,6 @@ export class EvolutionEngine {
     return experiments;
   }
 
-  /** Write an audit entry to all registered sinks. */
   private audit(action: string, data: Record<string, unknown>): void {
     const entry: AuditEntry = {
       id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -272,27 +218,22 @@ export class EvolutionEngine {
       output: {},
     };
     for (const sink of this.auditSinks) {
-      try { sink(entry); } catch { /* never let a sink crash the engine */ }
+      try {
+        sink(entry);
+      } catch {
+        // never let a sink crash the engine
+      }
     }
   }
 }
 
-/** Summary returned after each optimisation cycle. */
 export interface CycleSummary {
-  /** Monotonically increasing cycle counter */
   cycleId: number;
-  /** Unix epoch ms when cycle started */
   startedAt: number;
-  /** Unix epoch ms when cycle completed */
   completedAt: number;
-  /** Total metrics collected across all adapters */
   metricsCollected: number;
-  /** Per-domain evaluation results */
   evaluations: EvaluationResult[];
-  /** Number of proposals generated this cycle */
   proposalsGenerated: number;
-  /** Number of experiments executed */
   experimentsRun: number;
-  /** Full experiment records */
   experiments: Experiment[];
 }
