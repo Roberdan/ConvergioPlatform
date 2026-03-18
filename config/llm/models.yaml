@@ -1,0 +1,43 @@
+# Convergio LLM — Model Catalog
+# Download: convergio-llm-download.sh <hf_repo> <local_name>
+# Format varies by platform: MLX (macOS), AWQ (Linux NVIDIA), GGUF (CPU/Windows)
+
+models:
+  # === CODING ===
+  - name: qwen2.5-coder-32b
+    use_case: "Primary coding model"
+    ram_required_gb: 24
+    variants:
+      macos: { hf_repo: "mlx-community/Qwen2.5-Coder-32B-Instruct-4bit", size_gb: 20 }
+      linux_nvidia: { hf_repo: "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ", size_gb: 18 }
+      linux_cpu: { hf_repo: "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF", size_gb: 20, quant: "Q4_K_M" }
+
+  - name: qwen2.5-coder-7b
+    use_case: "Fast completions, tab autocomplete"
+    ram_required_gb: 8
+    variants:
+      macos: { hf_repo: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit", size_gb: 4.5 }
+      linux_nvidia: { hf_repo: "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ", size_gb: 4 }
+      linux_cpu: { hf_repo: "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF", size_gb: 4.5, quant: "Q4_K_M" }
+
+  # === REASONING ===
+  - name: llama-3.3-70b
+    use_case: "Complex reasoning — needs 48GB+ RAM or 2x24GB VRAM"
+    ram_required_gb: 48
+    variants:
+      macos: { hf_repo: "mlx-community/Llama-3.3-70B-Instruct-4bit", size_gb: 40 }
+      linux_nvidia: { hf_repo: "hugging-quants/Meta-Llama-3.3-70B-Instruct-AWQ-INT4", size_gb: 38 }
+
+  - name: qwen3-32b
+    use_case: "General reasoning, hybrid thinking"
+    ram_required_gb: 24
+    variants:
+      macos: { hf_repo: "mlx-community/Qwen3-32B-4bit", size_gb: 20 }
+      linux_nvidia: { hf_repo: "Qwen/Qwen3-32B-AWQ", size_gb: 18 }
+      linux_cpu: { hf_repo: "bartowski/Qwen3-32B-GGUF", size_gb: 20, quant: "Q4_K_M" }
+
+  # === TO EVALUATE ===
+  # - name: glm-4-32b
+  #   note: "GLM-4 — evaluate when quantized versions available"
+  # - name: minimax-m1-80b
+  #   note: "MiniMax M1 — needs 60GB+ RAM"

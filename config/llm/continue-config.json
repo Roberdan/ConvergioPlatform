@@ -1,0 +1,32 @@
+{
+  "models": [
+    {
+      "title": "Claude Sonnet (cloud)",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "apiKey": ""
+    },
+    {
+      "title": "Local Qwen Coder 32B",
+      "provider": "openai",
+      "model": "local/qwen-coder-32b",
+      "apiBase": "http://localhost:4000/v1",
+      "apiKey": "sk-convergio-llm-2026"
+    },
+    {
+      "title": "Local Qwen Coder 7B",
+      "provider": "openai",
+      "model": "local/qwen-coder-7b",
+      "apiBase": "http://localhost:4000/v1",
+      "apiKey": "sk-convergio-llm-2026"
+    }
+  ],
+  "tabAutocompleteModel": {
+    "title": "Local Qwen 7B (autocomplete)",
+    "provider": "openai",
+    "model": "local/qwen-coder-7b",
+    "apiBase": "http://localhost:4000/v1",
+    "apiKey": "sk-convergio-llm-2026"
+  },
+  "allowAnonymousTelemetry": false
+}
