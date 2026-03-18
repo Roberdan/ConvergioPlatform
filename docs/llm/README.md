@@ -34,7 +34,7 @@ LiteLLM proxy is the same on all platforms — only the backend changes.
 | Path | What |
 |---|---|
 | `~/llm-local/` | Python venv (backend + LiteLLM) |
-| `~/models/` | Downloaded models |
+| `~/GitHub/LocalModels/` | Downloaded models |
 | `~/.convergio-llm/` | PIDs + logs |
 | `~/bin/convergio-llm*.sh` | Symlinks to scripts/llm/ |
 | `~/.continue/config.json` | Symlink to config/llm/ |
@@ -44,7 +44,7 @@ LiteLLM proxy is the same on all platforms — only the backend changes.
 | Command | What |
 |---|---|
 | `convergio-llm.sh setup` | Install backend + LiteLLM |
-| `convergio-llm.sh start ~/models/<m>` | Start backend + proxy |
+| `convergio-llm.sh start ~/GitHub/LocalModels/<m>` | Start backend + proxy |
 | `convergio-llm.sh stop` | Stop all |
 | `convergio-llm.sh status` | Service status |
 | `convergio-llm.sh models` | List available models |
@@ -62,7 +62,7 @@ Requires: Homebrew, Python 3.10+
 scripts/llm/setup-llm-symlinks.sh        # symlinks
 convergio-llm.sh setup                    # installs oMLX + LiteLLM
 convergio-llm-download.sh mlx-community/Qwen2.5-Coder-32B-Instruct-4bit qwen2.5-coder-32b
-convergio-llm.sh start ~/models/qwen2.5-coder-32b
+convergio-llm.sh start ~/GitHub/LocalModels/qwen2.5-coder-32b
 claude-local
 ```
 
@@ -74,7 +74,7 @@ Requires: Python 3.10+, CUDA 12+, NVIDIA driver 535+
 scripts/llm/setup-llm-symlinks.sh        # symlinks
 convergio-llm.sh setup                    # detects NVIDIA → installs vLLM
 convergio-llm-download.sh Qwen/Qwen2.5-Coder-32B-Instruct-AWQ qwen2.5-coder-32b
-convergio-llm.sh start ~/models/qwen2.5-coder-32b
+convergio-llm.sh start ~/GitHub/LocalModels/qwen2.5-coder-32b
 claude-local
 ```
 
@@ -86,7 +86,7 @@ Requires: Python 3.10+, cmake, gcc
 scripts/llm/setup-llm-symlinks.sh        # symlinks
 convergio-llm.sh setup                    # detects no GPU → installs llama.cpp
 convergio-llm-download.sh bartowski/Qwen2.5-Coder-7B-Instruct-GGUF qwen2.5-coder-7b
-convergio-llm.sh start ~/models/qwen2.5-coder-7b
+convergio-llm.sh start ~/GitHub/LocalModels/qwen2.5-coder-7b
 claude-local
 ```
 

@@ -9,7 +9,7 @@ set -euo pipefail
 
 HF_REPO="${1:?Usage: convergio-llm-download.sh <hf_repo> [local_name]}"
 LOCAL_NAME="${2:-$(basename "$HF_REPO")}"
-MODEL_DIR="$HOME/models/$LOCAL_NAME"
+MODEL_DIR="$HOME/GitHub/LocalModels/$LOCAL_NAME"
 VENV="$HOME/llm-local"
 
 if [ ! -d "$VENV" ]; then

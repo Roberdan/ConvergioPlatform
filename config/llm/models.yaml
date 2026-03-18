@@ -1,43 +1,50 @@
 # Convergio LLM — Model Catalog
 # Download: convergio-llm-download.sh <hf_repo> <local_name>
-# Format varies by platform: MLX (macOS), AWQ (Linux NVIDIA), GGUF (CPU/Windows)
+# Target: M5 Max 64GB (56GB usable after OS)
+# Format: MLX (macOS), AWQ (Linux NVIDIA), GGUF (CPU/Windows)
 
+# === RECOMMENDED (fits 64GB, tested) ===
 models:
-  # === CODING ===
-  - name: qwen2.5-coder-32b
-    use_case: "Primary coding model"
-    ram_required_gb: 24
+  - name: qwen3.5-27b
+    use_case: "Primary workhorse — best quality/size ratio, Python+Rust"
+    ram_required_gb: 20
+    benchmarks: { swe_bench: "72.4%", tool_calling: "yes (native)", context: "128K" }
+    recommended: true
     variants:
-      macos: { hf_repo: "mlx-community/Qwen2.5-Coder-32B-Instruct-4bit", size_gb: 20 }
-      linux_nvidia: { hf_repo: "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ", size_gb: 18 }
-      linux_cpu: { hf_repo: "bartowski/Qwen2.5-Coder-32B-Instruct-GGUF", size_gb: 20, quant: "Q4_K_M" }
+      macos: { hf_repo: "mlx-community/Qwen3.5-27B-4bit", size_gb: 15 }
+      macos_8bit: { hf_repo: "mlx-community/Qwen3.5-27B-8bit", size_gb: 30, note: "better quality if RAM allows" }
+      linux_nvidia: { hf_repo: "Qwen/Qwen3.5-27B-AWQ", size_gb: 14 }
+      linux_cpu: { hf_repo: "bartowski/Qwen3.5-27B-GGUF", size_gb: 15, quant: "Q4_K_M" }
 
-  - name: qwen2.5-coder-7b
-    use_case: "Fast completions, tab autocomplete"
-    ram_required_gb: 8
+  - name: qwen3-coder-30b
+    use_case: "Coding-focused secondary — 256K context, fast completions"
+    ram_required_gb: 22
+    benchmarks: { tool_calling: "yes", context: "256K" }
+    recommended: true
     variants:
-      macos: { hf_repo: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit", size_gb: 4.5 }
-      linux_nvidia: { hf_repo: "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ", size_gb: 4 }
-      linux_cpu: { hf_repo: "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF", size_gb: 4.5, quant: "Q4_K_M" }
+      macos: { hf_repo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit", size_gb: 17 }
+      linux_nvidia: { hf_repo: "Qwen/Qwen3-Coder-30B-A3B-Instruct-AWQ", size_gb: 16 }
 
-  # === REASONING ===
-  - name: llama-3.3-70b
-    use_case: "Complex reasoning — needs 48GB+ RAM or 2x24GB VRAM"
-    ram_required_gb: 48
+# === OPTIONAL (fits 64GB but tighter) ===
+  - name: qwen3-coder-next
+    use_case: "Agentic coding — tool use + failure recovery. Tight on 64GB."
+    ram_required_gb: 52
+    benchmarks: { swe_bench: "70.6%", tool_calling: "yes (agentic)", context: "262K" }
+    note: "45GB leaves only ~10GB for context. Best on 96GB+ machines."
     variants:
-      macos: { hf_repo: "mlx-community/Llama-3.3-70B-Instruct-4bit", size_gb: 40 }
-      linux_nvidia: { hf_repo: "hugging-quants/Meta-Llama-3.3-70B-Instruct-AWQ-INT4", size_gb: 38 }
+      macos: { hf_repo: "mlx-community/Qwen3-Coder-Next-4bit", size_gb: 45 }
 
-  - name: qwen3-32b
-    use_case: "General reasoning, hybrid thinking"
-    ram_required_gb: 24
+  - name: codestral-25.01
+    use_case: "Pure code completion/FIM — no tool calling"
+    ram_required_gb: 16
+    benchmarks: { humaneval: "86.6%", context: "256K" }
+    note: "No tool use. Good for tab-autocomplete only."
     variants:
-      macos: { hf_repo: "mlx-community/Qwen3-32B-4bit", size_gb: 20 }
-      linux_nvidia: { hf_repo: "Qwen/Qwen3-32B-AWQ", size_gb: 18 }
-      linux_cpu: { hf_repo: "bartowski/Qwen3-32B-GGUF", size_gb: 20, quant: "Q4_K_M" }
+      macos: { hf_repo: "mlx-community/Codestral-25.01-4bit", size_gb: 12 }
 
-  # === TO EVALUATE ===
-  # - name: glm-4-32b
-  #   note: "GLM-4 — evaluate when quantized versions available"
-  # - name: minimax-m1-80b
-  #   note: "MiniMax M1 — needs 60GB+ RAM"
+# === TOO LARGE FOR 64GB ===
+# MiniMax-M2.5 (229B MoE) — SWE-bench 80.2% (near Opus!) but 129GB at 4-bit
+# MiniMax-M2-THRIFT-55 (106B pruned) — 56.2GB, zero margin for context
+# GLM-4.7 (355B MoE) — 199GB at 4-bit
+# Qwen3.5-122B-A10B (122B MoE) — 70GB, tool-calling champion but too tight
+# DeepSeek V3.2 (685B MoE) — 378GB
