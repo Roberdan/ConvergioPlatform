@@ -145,3 +145,13 @@ data/dashboard.db-*
 data/*.jsonl
 data/*.json
 daemon/target/
+.DS_Store
+
+# Local symlinks
+claude-config/scripts/copilot
+
+# Sensitive/binary dotfile backups
+claude-config/config/dotfiles-backup/**/development_credentials
+claude-config/config/dotfiles-backup/**/settings.local.json
+claude-config/config/dotfiles-backup/**/*.mdb
+claude-config/config/dotfiles-backup/**/.tmp*

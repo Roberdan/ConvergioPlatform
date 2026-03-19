@@ -1,0 +1,32 @@
+[
+  {
+    "label": "claude",
+    "command": "claude",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true
+  },
+  {
+    "label": "lazygit",
+    "command": "lazygit",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "claude-orchestrate",
+    "command": "~/.claude/scripts/tmux-parallel.sh 4 && sleep 2 && tmux attach -t claude-workers",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "claude-monitor",
+    "command": "~/.claude/scripts/tmux-monitor.sh",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": true
+  },
+  {
+    "label": "claude-attach",
+    "command": "tmux attach -t claude-workers",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false
+  }
+]

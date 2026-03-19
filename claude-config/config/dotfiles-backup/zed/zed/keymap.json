@@ -1,0 +1,27 @@
+[
+  {
+    "context": "Workspace",
+    "bindings": {
+      "cmd-t": ["task::Spawn", { "task_name": "claude" }],
+      "cmd-g": ["task::Spawn", { "task_name": "lazygit" }],
+      "cmd-1": "project_panel::ToggleFocus",
+      "cmd-2": "git_panel::ToggleFocus",
+      "cmd-shift-o": ["task::Spawn", { "task_name": "claude-orchestrate" }],
+      "cmd-shift-m": ["task::Spawn", { "task_name": "claude-monitor" }],
+      "cmd-shift-a": ["task::Spawn", { "task_name": "claude-attach" }]
+    }
+  },
+  {
+    "context": "Pane",
+    "bindings": {
+      "alt-tab": "pane::ActivateNextItem"
+    }
+  },
+  {
+    "context": "Terminal",
+    "bindings": {
+      "alt-tab": "pane::ActivateNextItem",
+      "cmd-l": "workspace::ToggleZoom"
+    }
+  }
+]

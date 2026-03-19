@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "palette": {
+    "white": "#FFFFFF",
+    "dark": "#1a1a1a",
+    "blush": "#DA627D",
+    "salmon": "#FCA17D",
+    "teal_blue": "#33658A"
+  },
+  "blocks": [
+    {
+      "alignment": "left",
+      "segments": [
+        {
+          "background": "p:blush",
+          "foreground": "p:white",
+          "leading_diamond": "\ue0b6",
+          "style": "diamond",
+          "template": " {{ .Path }} ",
+          "type": "path",
+          "properties": {
+            "style": "folder"
+          }
+        },
+        {
+          "background": "p:salmon",
+          "foreground": "p:dark",
+          "powerline_symbol": "\ue0b0",
+          "style": "powerline",
+          "template": " \u279c {{ .HEAD }} ",
+          "type": "git",
+          "properties": {
+            "branch_icon": "",
+            "fetch_status": false
+          }
+        },
+        {
+          "background": "p:teal_blue",
+          "foreground": "p:white",
+          "powerline_symbol": "\ue0b0",
+          "style": "powerline",
+          "template": " \u2665 {{ .CurrentDate | date .Format }} ",
+          "type": "time",
+          "properties": {
+            "time_format": "15:04"
+          }
+        },
+        {
+          "background": "transparent",
+          "foreground": "p:teal_blue",
+          "style": "diamond",
+          "leading_diamond": "\ue0b0",
+          "template": "",
+          "type": "text"
+        }
+      ],
+      "type": "prompt"
+    }
+  ],
+  "transient_prompt": {
+    "background": "transparent",
+    "foreground": "p:blush",
+    "template": "\u279c "
+  },
+  "final_space": true,
+  "version": 3
+}

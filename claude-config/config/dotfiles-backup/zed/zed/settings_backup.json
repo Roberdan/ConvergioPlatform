@@ -1,0 +1,77 @@
+{
+  "agent": {
+    "inline_assistant_model": {
+      "provider": "copilot_chat",
+      "model": "gpt-5-mini",
+    },
+    "default_model": {
+      "provider": "openai",
+      "model": "gpt-5-mini",
+    },
+    "model_parameters": [],
+  },
+  "tab_bar": {
+    "show_tab_bar_buttons": true,
+  },
+  "ui_font_weight": 400.0,
+  "buffer_line_height": "standard",
+  "buffer_font_weight": 400.0,
+  "session": {
+    "trust_all_worktrees": true,
+  },
+  "edit_predictions": {
+    "mode": "subtle",
+  },
+  "ui_font_family": "JetBrainsMonoNL Nerd Font Propo",
+  "git_panel": {
+    "tree_view": true,
+    "sort_by_path": true,
+  },
+  "cursor_shape": "block",
+  "git": {
+    "inline_blame": {
+      "enabled": false,
+    },
+  },
+  "buffer_font_family": "JetBrainsMonoNL Nerd Font Propo",
+  "redact_private_values": true,
+  "base_keymap": "VSCode",
+  "file_types": {
+    "typescript": ["*.svelte"],
+  },
+  "minimap": {
+    "show": "never",
+  },
+  "terminal": {
+    "font_size": 18.0,
+    "font_weight": 400,
+    "env": {
+      "CW_NEW_SESSION": "1",
+    },
+    "font_family": "JetBrainsMonoNL Nerd Font Propo",
+  },
+  "icon_theme": {
+    "mode": "system",
+    "light": "VSCode Great Icons Theme",
+    "dark": "VSCode Great Icons Theme",
+  },
+  "features": {
+    "edit_prediction_provider": "none",
+  },
+  "theme": {
+    "mode": "dark",
+    "light": "JetBrains Light",
+    "dark": "Warp Navy",
+  },
+  "theme_overrides": {
+    "Warp Navy": {
+      "tab.active_background": "#2a7ab8",
+    },
+  },
+  "telemetry": {
+    "diagnostics": false,
+    "metrics": false,
+  },
+  "ui_font_size": 17.0,
+  "buffer_font_size": 17.0,
+}

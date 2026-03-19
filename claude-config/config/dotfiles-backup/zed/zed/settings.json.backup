@@ -1,0 +1,87 @@
+// Zed settings
+//
+// For information on how to configure Zed, see the Zed
+// documentation: https://zed.dev/docs/configuring-zed
+//
+// To see all of Zed's default settings without changing your
+// custom settings, run the `open default settings` command
+// from the command palette or from `Zed` application menu.
+{
+  "edit_predictions": {
+    "mode": "eager"
+  },
+  "ui_font_family": "JetBrainsMonoNL Nerd Font Propo",
+  "git_panel": {
+    "sort_by_path": true
+  },
+  "cursor_shape": "block",
+  "git": {
+    "inline_blame": {
+      "show_commit_summary": true
+    }
+  },
+  "calls": {
+    "mute_on_join": true
+  },
+  "agent_buffer_font_size": 15.0,
+  "agent_ui_font_size": 17.0,
+  "buffer_font_family": "JetBrainsMonoNL Nerd Font",
+  "redact_private_values": true,
+  "agent_servers": {
+    "Convergio": {
+      "type": "custom",
+      "command": "/Users/roberdan/GitHub/ConvergioCLI/build/bin/convergio-acp",
+      "args": [],
+      "env": {}
+    }
+  },
+  "base_keymap": "VSCode",
+  "file_types": {
+    "typescript": ["*.svelte"]
+  },
+  "minimap": {
+    "show": "never"
+  },
+  "terminal": {
+    "font_size": 16.0,
+    "env": {
+      "CW_NEW_SESSION": "1"
+    },
+    "font_family": "JetBrainsMonoNL Nerd Font Propo"
+  },
+  "icon_theme": "Zed (Default)",
+  "context_servers": {
+    "mcp-server-github": {
+      "enabled": true,
+      "settings": {}
+    }
+  },
+  "agent": {
+    "play_sound_when_agent_done": true,
+    "always_allow_tool_actions": true,
+    "inline_assistant_model": {
+      "provider": "copilot_chat",
+      "model": "gpt-5.1-codex-max"
+    },
+    "default_profile": "write",
+    "default_model": {
+      "provider": "openai",
+      "model": "gpt-4o"
+    }
+  },
+  "features": {
+    "edit_prediction_provider": "zed"
+  },
+  "theme": {
+    "mode": "system",
+    "light": "JetBrains Light",
+    "dark": "One Dark"
+  },
+  "telemetry": {
+    "diagnostics": false,
+    "metrics": false
+  },
+  "ui_font_size": 16.0,
+  "buffer_font_size": 15.0,
+  "editor.fontFamily": "'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace"
+}

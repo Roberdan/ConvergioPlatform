@@ -182,7 +182,7 @@ $TC
 Run this BEFORE you finish. If you already ran it above, verify with:
 \`\`\`bash
 curl -sf "http://localhost:8421/api/plan-db/context/$PLAN_ID" \
-  | jq -r --argjson task_id "$TASK_ID" '[.tasks[] | select((.id // .db_task_id) == $task_id) | .status][0]'
+  | jq -r --argjson tid "$TASK_ID" '[.tasks[] | select((.id // .db_task_id) == \$tid) | .status][0]'
 # Must show: submitted (Thor will validate to done)
 \`\`\`
 
