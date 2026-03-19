@@ -27,3 +27,15 @@ export type { PlatformAdapter } from './types/adapter.js';
 export { createDefaultConfig, mergeConfig } from './config.js';
 export { EvolutionEngine } from './engine.js';
 export type { CycleSummary, AuditSink } from './engine.js';
+export type { Evaluator } from './evaluators/evaluator.js';
+export { BaseEvaluator } from './evaluators/base-evaluator.js';
+export {
+  OutcomeTracker,
+  LatencyEvaluator,
+  BundleEvaluator,
+  AgentCostEvaluator,
+  MeshEvaluator,
+  WorkloadEvaluator,
+} from './evaluators/index.js';
+export { ProposalGenerator, HypothesisStore } from './analysis/index.js';
+export type { Hypothesis } from './analysis/index.js';

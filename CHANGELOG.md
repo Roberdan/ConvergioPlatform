@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.0.0] - 2026-03-18
+
+### Added — Evolution Engine v3
+- Telemetry SDK with 7 MetricFamily collectors + SQLite time-series store
+- Evaluation engine: 5 domain evaluators (latency, bundle, agent-cost, mesh, workload)
+- Hypothesis-driven proposal generator with blast radius classification
+- Experiment runner: Shadow/Canary/BlueGreen modes + auto-rollback
+- Web research with hypothesis tagging and 7-day cache
+- Guardrails: PREnforcer, KillSwitch, RateLimiter, SafetyValidator, AuditTrail
+- Cadence: DailyRunner + WeeklyRunner + CadenceScheduler (cron-based)
+- Agent profiler + ModelIntelligence + BenchmarkRunner
+- MLD CI telemetry feed + NaSra canary adapter
+- AutoPilot dashboard: proposals, experiments, agents views
+- ROI tracker + scoreboard + NF validation suite (19 tests)
+- Architecture docs + ADRs + governance model
+- System agents git-tracked in .github/agents/ for cross-machine sync
+
 ## [0.1.0] — 2026-03-18
 
 ### W1: Scaffold + CI
