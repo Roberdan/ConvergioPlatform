@@ -38,8 +38,8 @@ _ssh "cd ~/.claude && git fetch myconvergio main && git reset --hard myconvergio
 
 # 2. Build binary (unless skipped)
 if ! $SKIP_BUILD; then
-  info "Step 2/8: Building claude-core"
-  _ssh "cd ~/.claude/rust/claude-core && cargo build --release 2>&1 | tail -3" && ok "Binary built" || fail "Build failed"
+  info "Step 2/8: Building convergio-platform-daemon"
+  _ssh "cd ~/GitHub/ConvergioPlatform/daemon && cargo build --release 2>&1 | tail -3" && ok "Binary built" || fail "Build failed"
 else
   warn "Step 2/8: Build skipped"
 fi
@@ -84,7 +84,7 @@ if [[ "$OS" == "linux" ]]; then
 Description=Claude Mesh CRDT Daemon
 After=network-online.target tailscaled.service
 [Service]
-ExecStart=$REMOTE_HOME/.claude/rust/claude-core/target/release/claude-core daemon start --peers-conf $REMOTE_HOME/.claude/config/peers.conf --db-path $REMOTE_HOME/.claude/data/dashboard.db --port 9420 --crsqlite-path $CRSQL_EXT
+ExecStart=$REMOTE_HOME/GitHub/ConvergioPlatform/daemon/target/release/convergio-platform-daemon daemon start --peers-conf $REMOTE_HOME/.claude/config/peers.conf --db-path $REMOTE_HOME/.claude/data/dashboard.db --port 9420 --crsqlite-path $CRSQL_EXT
 Restart=always
 RestartSec=5
 [Install]
@@ -98,7 +98,7 @@ else
 <plist version=\"1.0\"><dict>
 <key>Label</key><string>com.claude.mesh-daemon</string>
 <key>ProgramArguments</key><array>
-<string>$REMOTE_HOME/.claude/rust/claude-core/target/release/claude-core</string>
+<string>$REMOTE_HOME/GitHub/ConvergioPlatform/daemon/target/release/convergio-platform-daemon</string>
 <string>daemon</string><string>start</string>
 <string>--peers-conf</string><string>$REMOTE_HOME/.claude/config/peers.conf</string>
 <string>--db-path</string><string>$REMOTE_HOME/.claude/data/dashboard.db</string>
@@ -152,7 +152,7 @@ fi
 # 8. Verify
 info "Step 8/8: Verification"
 sleep 3
-DAEMON_OK=$(_ssh "ps aux | grep 'claude-core daemon' | grep -v grep | wc -l" 2>/dev/null)
+DAEMON_OK=$(_ssh "ps aux | grep 'convergio-platform-daemon daemon' | grep -v grep | wc -l" 2>/dev/null)
 DB_PLANS=$(_ssh "sqlite3 ~/.claude/data/dashboard.db 'SELECT COUNT(*) FROM plans;'" 2>/dev/null)
 TOOLS=$(_ssh "which copilot claude 2>/dev/null | wc -l" 2>/dev/null)
 

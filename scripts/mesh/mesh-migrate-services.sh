@@ -92,7 +92,7 @@ Description=Elephant Memory Service
 After=network-online.target
 
 [Service]
-ExecStart=/bin/bash -c 'source $HOME/.cargo/env; $HOME/.claude/rust/claude-core/target/release/claude-core elephant start'
+ExecStart=/bin/bash -c 'source $HOME/.cargo/env; $HOME/GitHub/ConvergioPlatform/daemon/target/release/convergio-platform-daemon elephant start'
 Restart=always
 RestartSec=10
 Environment=HOME=%h CLAUDE_HOME=%h/.claude PATH=/usr/local/bin:/usr/bin:/bin
