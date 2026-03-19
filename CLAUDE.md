@@ -22,7 +22,7 @@ Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 | Layer | Path | Lang | Modules |
 |---|---|---|---|
 | Daemon | `daemon/` | Rust | mesh(40) server(32) ipc(15) db(7) hooks(3) tui(3) |
-| Dashboard | `dashboard/` | Python+JS | api_server, app, KPI, mesh, chat, brain, IPC |
+| Dashboard | `dashboard/` | JS (Maranello DS) | app, KPI, mesh, chat, brain, IPC (served by daemon) |
 | Evolution | `evolution/` | TypeScript | core/types, adapters (claude, maranello, dashboard) |
 | Scripts | `scripts/` | Bash | mesh(12), platform(5) |
 | Data | `data/dashboard.db` | SQLite WAL | plans, tasks, waves, KB, heartbeats |
