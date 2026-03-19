@@ -2,6 +2,7 @@ use super::api_agents;
 use super::api_chat;
 use super::api_coordinator;
 use super::api_dashboard;
+use super::api_evolution;
 use super::api_github;
 use super::api_heartbeat;
 use super::api_ideas;
@@ -106,6 +107,10 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/coordinator/events",
     "/api/workers",
     "/api/workers/status",
+    "/api/evolution/proposals",
+    "/api/evolution/experiments",
+    "/api/evolution/roi",
+    "/api/evolution/audit/:id",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -146,6 +151,8 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/mesh/exec",
     "/api/mesh/delegate",
     "/api/workers/launch",
+    "/api/evolution/proposals/:id/approve",
+    "/api/evolution/proposals/:id/reject",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",
@@ -229,6 +236,7 @@ pub fn build_router_with_db(
         .merge(api_plan_db_import::router())
         .merge(api_plan_db_ops::router())
         .merge(api_workers::router())
+        .merge(api_evolution::router())
         .route("/api/chat/stream/:sid", get(sse::chat_stream_sse))
         .route("/api/mesh/action/stream", get(sse::mesh_action_sse))
         .route("/api/mesh/fullsync", get(sse::mesh_action_sse))
@@ -250,11 +258,13 @@ pub fn build_router_with_db(
             Duration::from_secs(30),
         ))
         .layer(server_mw::cors_layer())
-        .layer(tower_http::compression::CompressionLayer::new()
-            .gzip(true)
-            .no_br()
-            .no_deflate()
-            .no_zstd())
+        .layer(
+            tower_http::compression::CompressionLayer::new()
+                .gzip(true)
+                .no_br()
+                .no_deflate()
+                .no_zstd(),
+        )
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
         .fallback_service(get_service(static_files))

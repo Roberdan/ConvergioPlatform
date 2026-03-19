@@ -2,6 +2,7 @@ pub mod api_agents;
 pub mod api_chat;
 pub mod api_coordinator;
 pub mod api_dashboard;
+pub mod api_evolution;
 pub mod api_github;
 pub mod api_heartbeat;
 pub mod api_ideas;
