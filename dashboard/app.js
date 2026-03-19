@@ -7,9 +7,11 @@ import { connectDashboardWS } from './lib/ws.js';
 import { initBrainStrip } from './lib/brain-strip.js';
 import { initDrawerChat } from './widgets/drawer-chat.js';
 import { createDrawer } from './widgets/drawer-bottom.js';
+import { getQueryParams, applyEmbeddedMode, isEmbedded } from './lib/embed.js';
 
 const REFRESH_INTERVAL_MS = 16000;
 const DEFAULT_VIEW = 'overview';
+// Supported query params: ?mode=embedded (adds .mode-embedded), ?tab=, ?brain_mode=embedded
 
 // View factories — lazy-loaded via dynamic import
 const VIEW_MODULES = {
@@ -114,24 +116,12 @@ function bindSidebarNav() {
 function bindCommandPalette(drawerToggle) {
   const palette = document.getElementById('cmd-palette');
   if (!palette) return;
-
-  const navItems = Object.keys(VIEW_MODULES).map((id) => ({
-    text: viewTitle(id),
-    group: 'Navigation',
-  }));
-
-  const cmdItems = [
-    { text: 'Toggle Terminal', group: 'Panels', shortcut: 'Ctrl+`' },
-  ];
-
+  const navItems = Object.keys(VIEW_MODULES).map((id) => ({ text: viewTitle(id), group: 'Navigation' }));
+  const cmdItems = [{ text: 'Toggle Terminal', group: 'Panels', shortcut: 'Ctrl+`' }];
   palette.items = JSON.stringify([...navItems, ...cmdItems]);
-
   palette.addEventListener('mn-select', (e) => {
     const label = e.detail.item.text;
-    if (label === 'Toggle Terminal' && drawerToggle) {
-      drawerToggle();
-      return;
-    }
+    if (label === 'Toggle Terminal' && drawerToggle) { drawerToggle(); return; }
     const viewId = label.toLowerCase();
     if (VIEW_MODULES[viewId]) activateView(viewId);
   });
@@ -141,26 +131,14 @@ function bindCommandPalette(drawerToggle) {
 
 async function refreshAll() {
   const t0 = performance.now();
-
   const [overview, mesh, tasks] = await Promise.allSettled([
-    api.fetchOverview(),
-    api.fetchMesh(),
-    api.fetchTasksDistribution(),
+    api.fetchOverview(), api.fetchMesh(), api.fetchTasksDistribution(),
   ]);
-
-  if (overview.status === 'fulfilled' && !(overview.value instanceof Error)) {
-    store.set('overview', overview.value);
-  }
-  if (mesh.status === 'fulfilled' && !(mesh.value instanceof Error)) {
-    store.set('mesh', mesh.value);
-  }
-  if (tasks.status === 'fulfilled' && !(tasks.value instanceof Error)) {
-    store.set('tasks', tasks.value);
-  }
-
-  const elapsed = Math.round(performance.now() - t0);
-  store.set('lastRefresh', { ts: Date.now(), elapsed });
-
+  const ok = (r) => r.status === 'fulfilled' && !(r.value instanceof Error);
+  if (ok(overview)) store.set('overview', overview.value);
+  if (ok(mesh)) store.set('mesh', mesh.value);
+  if (ok(tasks)) store.set('tasks', tasks.value);
+  store.set('lastRefresh', { ts: Date.now(), elapsed: Math.round(performance.now() - t0) });
   const badge = document.getElementById('last-update');
   if (badge) badge.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
 }
@@ -169,16 +147,8 @@ async function refreshAll() {
 
 function handleWsMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
-
-  if (msg.type === 'refresh') {
-    refreshAll();
-    return;
-  }
-
-  // Forward domain-specific events into the store so views can react
-  if (msg.type && msg.data !== undefined) {
-    store.set(`ws:${msg.type}`, msg.data);
-  }
+  if (msg.type === 'refresh') { refreshAll(); return; }
+  if (msg.type && msg.data !== undefined) store.set(`ws:${msg.type}`, msg.data);
 }
 
 // ── Keyboard shortcuts ──────────────────────────────────────────────
@@ -211,6 +181,16 @@ function bindThemePersistence() {
 // ── Init ────────────────────────────────────────────────────────────
 
 async function init() {
+  const qp = getQueryParams();
+
+  // Apply embedded mode before any DOM wiring — hides sidebar/command strip
+  if (qp.mode === 'embedded') applyEmbeddedMode();
+
+  // Expose brain_mode param so brain/canvas.js can read it
+  if (qp.brainMode === 'embedded') {
+    window.__convergioBrainModeForced = 'embedded';
+  }
+
   const registry = Maranello.ViewRegistry.getInstance();
   const nav = new Maranello.NavigationModel();
   orch = new Maranello.PanelOrchestrator(registry, nav);
@@ -218,13 +198,13 @@ async function init() {
   registerViews(registry);
   bindSidebarNav();
 
-  // Bottom terminal drawer (Ctrl+` to toggle)
-  const termDrawer = createDrawer();
+  // Bottom terminal drawer (Ctrl+` to toggle) — skip in embedded mode
+  const termDrawer = isEmbedded() ? null : createDrawer();
 
-  bindCommandPalette(termDrawer.toggle);
+  if (termDrawer) bindCommandPalette(termDrawer.toggle);
   bindKeyboard();
   bindThemePersistence();
-  initBrainStrip();
+  if (!isEmbedded()) initBrainStrip();
   initDrawerChat();
 
   // Mobile sidebar toggle
@@ -241,8 +221,11 @@ async function init() {
   // Initial data load
   await refreshAll();
 
-  // Open view from URL hash or fall back to default
-  const initial = viewFromHash() || DEFAULT_VIEW;
+  // ?tab= param overrides hash, then hash, then default
+  const tabParam = qp.tab;
+  const initial = (tabParam && VIEW_MODULES[tabParam])
+    ? tabParam
+    : viewFromHash() || DEFAULT_VIEW;
   activateView(initial);
 
   // Periodic refresh

@@ -155,6 +155,23 @@
   color: var(--mn-text);
 }
 
+/* ── Embedded mode (WKWebView menu bar) ─────────────────────────── */
+
+.mode-embedded .mn-sidebar,
+.mode-embedded .cr-command-strip,
+.mode-embedded .cr-brain-strip {
+  display: none !important;
+}
+
+.mode-embedded .cr-layout {
+  grid-template-rows: 1fr;
+}
+
+.mode-embedded .cr-main {
+  padding: 0;
+  height: 100vh;
+}
+
 /* ── Mobile responsive ───────────────────────────────────────────── */
 
 @media (max-width: 640px) {

@@ -8,7 +8,7 @@ import { setupInteraction, drawTooltip } from './interact.js';
 
 const S = { container: null, canvas: null, ctx: null, w: 0, h: 0, dpr: 1, raf: 0, running: true, lastTs: 0, _prevTs: 0, _skipNext: false, webglRenderer: null, ro: null, pollT: 0, ws: null, wsRetry: 0, wsT: 0, neurons: new Map(), synapses: [], sessions: [], agents: [], brainData: null, forceTick: 0, frameCount: 0, sweepFrame: { v: 0 }, hover: null, mouse: { x: -1, y: -1 }, interactionTeardown: null, getBrainMode: null };
 
-function getBrainMode() { const c = document.getElementById('brain-canvas-container') || S.container; return (!c || c.offsetWidth <= 500) ? BRAIN_EMBEDDED : BRAIN_IMMERSIVE; }
+function getBrainMode() { if (window.__convergioBrainModeForced === 'embedded') return BRAIN_EMBEDDED; const c = document.getElementById('brain-canvas-container') || S.container; return (!c || c.offsetWidth <= 500) ? BRAIN_EMBEDDED : BRAIN_IMMERSIVE; }
 S.getBrainMode = getBrainMode;
 function applyBrainMode(mode) {
   if (!S.container) return;
