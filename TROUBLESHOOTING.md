@@ -1,0 +1,90 @@
+# Troubleshooting
+
+## Problem: setup.sh fails with "claude-config not found"
+
+**Symptom:** Running `./setup.sh` exits with "ERROR: claude-config not found"
+**Cause:** ConvergioPlatform not cloned correctly or script run from wrong directory
+**Fix:**
+```bash
+cd ~/GitHub/ConvergioPlatform  # or wherever you cloned
+ls claude-config/              # must exist
+./setup.sh
+```
+
+## Problem: Agent not registering in IPC
+
+**Symptom:** `agent-bridge.sh --register` warns "daemon not reachable" to stderr
+**Cause:** Daemon not running on port 8420
+**Fix:**
+```bash
+# Check daemon status
+curl -s http://localhost:8420/api/ipc/status
+# If not running, start it
+./daemon/start.sh
+# Retry registration
+scripts/platform/agent-bridge.sh --register --name test --type claude
+# Verify
+curl -s http://localhost:8420/api/ipc/agents | jq '.agents'
+```
+
+## Problem: Hooks not firing (EnterPlanMode not blocked)
+
+**Symptom:** Can use EnterPlanMode without getting blocked by guard-plan-mode hook
+**Cause:** `.claude/settings.json` missing from project root or not loaded
+**Fix:**
+```bash
+# Check project-level settings
+test -f .claude/settings.json && echo "exists" || echo "MISSING"
+# If missing, run setup
+./setup.sh
+# Verify hooks
+jq '.hooks.PreToolUse | length' .claude/settings.json
+# Should be >= 8
+```
+
+## Problem: Skill sync shows 0 skills
+
+**Symptom:** `agent-skills-sync.sh` runs but reports "Synced 0 skills"
+**Cause:** claude-core binary not on PATH, or DB not accessible, or commands/ dir not found
+**Fix:**
+```bash
+# Check claude-core
+which claude-core || echo "NOT ON PATH"
+# Check commands dir
+ls claude-config/commands/*.md | wc -l  # should be >= 8
+# Check DB
+echo $DASHBOARD_DB
+sqlite3 "$DASHBOARD_DB" "SELECT count(*) FROM ipc_agent_skills;" 2>/dev/null
+# Re-run with explicit path
+scripts/platform/agent-skills-sync.sh --platform-dir "$(pwd)"
+```
+
+## Problem: Agent heartbeat missing / stale
+
+**Symptom:** Agent shows old `last_heartbeat` in GET /api/ipc/agents
+**Cause:** Heartbeat script not running, or daemon was down during heartbeat
+**Fix:**
+```bash
+# Manual heartbeat
+scripts/platform/agent-heartbeat.sh --name <agent-name> --task idle
+# Check result
+curl -s http://localhost:8420/api/ipc/agents | jq '.agents[] | select(.agent_id=="<agent-name>") | .last_heartbeat'
+# For persistent heartbeat, set up cron:
+# */1 * * * * /path/to/scripts/platform/agent-heartbeat.sh --name myagent
+```
+
+## Problem: Copilot agent not visible in /api/ipc/agents
+
+**Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty
+**Cause:** Script may be using old /api/ipc/send path instead of /api/ipc/agents/register
+**Fix:**
+```bash
+# Verify which endpoint is being called
+bash -x scripts/platform/copilot-bridge.sh --register --name test-copilot 2>&1 | grep curl
+# Should show: /api/ipc/agents/register
+# Manual test
+curl -X POST http://localhost:8420/api/ipc/agents/register \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_id":"test-copilot","host":"'$(hostname)'"}'
+curl -s http://localhost:8420/api/ipc/agents | jq '.agents'
+```

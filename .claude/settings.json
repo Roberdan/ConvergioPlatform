@@ -1,0 +1,117 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'BLOCKED: Use /planner skill instead of EnterPlanMode' >&2; exit 2"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'plan-db\\.sh\\s+update-task.*done'; then echo 'BLOCKED: Use plan-db-safe.sh for marking tasks done' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if echo \"$FILE\" | grep -qE '(plan-specs|plans)/.*\\.(yaml|yml|md)$'; then echo 'BLOCKED: Only task-executor may edit plan spec files' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'git\\s+(checkout|branch|switch)'; then BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$BRANCH\" = 'main' ] || [ \"$BRANCH\" = 'master' ]; then echo 'BLOCKED: Never create branches on main — use worktree-create.sh' >&2; exit 2; fi; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'npm\\s+run\\s+(lint|test|build|typecheck)'; then echo 'BLOCKED: Use digest scripts instead (test-digest.sh, build-digest.sh)' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\\|\\s*(tail|head|grep|cat)\\b'; then echo 'WARNING: Avoid piping to tail/head/grep/cat — use Read/Grep tools' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if echo \"$FILE\" | grep -qE '\\.claude/settings\\.json$'; then echo 'BLOCKED: settings.json is protected' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'gh\\s+run\\s+view\\s+--log'; then echo 'BLOCKED: Use ci-digest.sh instead of gh run view --log' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'gh\\s+pr\\s+(view|checks)'; then echo 'BLOCKED: Use pr-ops.sh or ci-digest.sh checks' >&2; exit 2; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"WARNING: $FILE has $LINES lines (max 250). Split this file.\" >&2; fi; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"WARNING: $FILE has $LINES lines (max 250). Split this file.\" >&2; fi; fi"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null); if [ -n \"$ROOT\" ] && [ -x \"$ROOT/scripts/platform/agent-bridge.sh\" ]; then \"$ROOT/scripts/platform/agent-bridge.sh\" --register 2>/dev/null; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
