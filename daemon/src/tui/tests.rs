@@ -40,7 +40,7 @@ fn render_to_text(data: &TuiData, view: MainView) -> String {
     let mut terminal = Terminal::new(backend).expect("terminal");
     terminal
         .draw(|frame| {
-            views::render_view(frame, frame.area(), view, data);
+            views::render_view(frame, frame.area(), view, data, 0);
         })
         .expect("draw");
     let mut all = String::new();
@@ -79,8 +79,8 @@ fn sample_data() -> TuiData {
         mesh_nodes: vec![MeshNode {
             name: "node-a".to_string(),
             online: true,
-            active_tasks: 2,
-            cpu_load: 41,
+            role: "coordinator".to_string(),
+            cpu_percent: 41.0,
         }],
         agents: vec![AgentOrgNode {
             name: "Thor".to_string(),

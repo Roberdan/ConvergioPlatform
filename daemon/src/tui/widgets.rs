@@ -31,25 +31,19 @@ fn selected_style() -> Style {
 
 pub fn kpi_strip(data: &TuiData) -> Paragraph<'static> {
     let k = &data.kpis;
-    let task_pct = if k.tasks_total > 0 {
-        (k.tasks_done * 100) / k.tasks_total
-    } else {
-        0
-    };
-    let mesh_ratio = format!("{}", k.nodes_online);
-    let pct_color = if task_pct >= 80 { OK } else if task_pct >= 40 { WARN } else { FAIL };
+    let cost_str = format!("{:.2}", k.daily_cost);
+    let token_k = k.daily_tokens / 1000;
 
     let spans = vec![
-        Span::styled(format!(" Plans:{} ", k.plans_total), Style::default().fg(ACCENT).bold()),
+        Span::styled(format!(" Plans:{} ", k.plans_active), Style::default().fg(ACCENT).bold()),
         Span::raw("| "),
-        Span::styled(format!("Agents:{} ", k.agents_active), Style::default().fg(OK)),
+        Span::styled(format!("Agents:{} ", k.agents_running), Style::default().fg(OK)),
         Span::raw("| "),
-        Span::styled(
-            format!("Tasks:{}/{}({}%) ", k.tasks_done, k.tasks_total, task_pct),
-            Style::default().fg(pct_color),
-        ),
+        Span::styled(format!("Tokens:{}k ", token_k), Style::default().fg(WARN)),
         Span::raw("| "),
-        Span::styled(format!("Mesh:{} ", mesh_ratio), Style::default().fg(ACCENT)),
+        Span::styled(format!("Cost:${} ", cost_str), Style::default().fg(WARN)),
+        Span::raw("| "),
+        Span::styled(format!("Mesh:{} ", k.mesh_online), Style::default().fg(ACCENT)),
     ];
     Paragraph::new(Line::from(spans))
         .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(MUTED)))
@@ -149,13 +143,14 @@ pub fn mesh_status(data: &TuiData, selected: usize) -> Paragraph<'static> {
     ];
     for (i, node) in data.mesh_nodes.iter().enumerate() {
         let (status, color) = if node.online { ("ONLINE", OK) } else { ("OFFLINE", FAIL) };
-        let cpu_bar = spark(node.cpu_load);
+        let cpu_int = node.cpu_percent as i64;
+        let cpu_bar = spark(cpu_int);
         let base = Style::default().fg(color);
         let style = if i == selected { base.reversed() } else { base };
         lines.push(
             Line::from(format!(
-                "{:<16} {:<8} tasks:{:<3} cpu:{:<3}% {}",
-                node.name, status, node.active_tasks, node.cpu_load, cpu_bar
+                "{:<16} {:<8} {:<10} cpu:{:<3}% {}",
+                node.name, status, node.role, cpu_int, cpu_bar
             ))
             .style(style),
         );

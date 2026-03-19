@@ -30,12 +30,12 @@ pub struct TaskPipelineItem {
     pub agent: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MeshNode {
     pub name: String,
     pub online: bool,
-    pub active_tasks: i64,
-    pub cpu_load: i64,
+    pub role: String,
+    pub cpu_percent: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,16 +46,16 @@ pub struct AgentOrgNode {
     pub active_task: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct KpiData {
-    pub plans_total: i64,
-    pub tasks_total: i64,
-    pub tasks_done: i64,
-    pub nodes_online: i64,
-    pub agents_active: i64,
+    pub plans_active: i64,
+    pub agents_running: i64,
+    pub daily_tokens: i64,
+    pub daily_cost: f64,
+    pub mesh_online: i64,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TuiData {
     pub plans: Vec<PlanCard>,
     pub pipeline: Vec<TaskPipelineItem>,
@@ -186,7 +186,7 @@ impl TuiApp {
         let (kpis, plans, tasks, mesh, agents) = tokio::join!(
             api::fetch_overview(&self.client),
             api::fetch_plans(&self.client),
-            api::fetch_tasks(&self.client),
+            api::fetch_all_tasks(&self.client),
             api::fetch_mesh(&self.client),
             api::fetch_agents(&self.client),
         );
