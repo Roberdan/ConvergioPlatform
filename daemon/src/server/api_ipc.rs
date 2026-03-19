@@ -8,9 +8,8 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
-// --- Plan 634: Coordination schema (inline fallback) ---
+// --- IPC schema aligned with actual DB (Plan 633 schema.rs + CRDT) ---
 
-// Schema matches daemon/src/ipc/schema.rs (Plan 633) — ipc_agents uses (name, host) PK
 const IPC_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS ipc_agents (
     name        TEXT NOT NULL,
@@ -23,16 +22,21 @@ CREATE TABLE IF NOT EXISTS ipc_agents (
     PRIMARY KEY (name, host)
 );
 CREATE TABLE IF NOT EXISTS ipc_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    channel TEXT NOT NULL DEFAULT 'general',
-    sender TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    id TEXT PRIMARY KEY NOT NULL,
+    from_agent TEXT NOT NULL DEFAULT '',
+    to_agent TEXT,
+    channel TEXT,
+    content TEXT NOT NULL DEFAULT '',
+    msg_type TEXT NOT NULL DEFAULT 'text',
+    priority INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    read_at TEXT
 );
 CREATE TABLE IF NOT EXISTS ipc_channels (
-    name TEXT PRIMARY KEY,
+    name TEXT PRIMARY KEY NOT NULL,
     description TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now'))
 );
 CREATE TABLE IF NOT EXISTS ipc_context (
     key TEXT PRIMARY KEY,
@@ -41,29 +45,48 @@ CREATE TABLE IF NOT EXISTS ipc_context (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS ipc_file_locks (
-    file_pattern TEXT NOT NULL,
-    agent TEXT NOT NULL,
-    host TEXT NOT NULL,
-    pid INTEGER NOT NULL,
-    locked_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (file_pattern, agent, host)
+    file_path TEXT PRIMARY KEY NOT NULL,
+    locked_by TEXT NOT NULL DEFAULT '',
+    lock_type TEXT NOT NULL DEFAULT 'exclusive',
+    acquired_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    expires_at TEXT
 );
 CREATE TABLE IF NOT EXISTS ipc_worktrees (
-    agent TEXT NOT NULL,
-    host TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    path TEXT NOT NULL,
-    registered_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (agent, host)
+    path TEXT PRIMARY KEY NOT NULL,
+    plan_id INTEGER,
+    branch TEXT,
+    owner_agent TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ipc_messages_channel ON ipc_messages(channel, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_ipc_file_locks_pattern ON ipc_file_locks(file_pattern);
 ";
 
 fn ensure_ipc_schema(state: &ServerState) -> Result<(), ApiError> {
     let conn = state.get_conn()?;
     conn.execute_batch(IPC_SCHEMA)
         .map_err(|err| ApiError::internal(format!("ipc schema init failed: {err}")))?;
+    // Drop CRDT triggers on IPC tables — IPC is local-only, not replicated
+    let _ = conn.execute_batch(
+        "DROP TRIGGER IF EXISTS ipc_agents__crsql_itrig;
+         DROP TRIGGER IF EXISTS ipc_agents__crsql_utrig;
+         DROP TRIGGER IF EXISTS ipc_agents__crsql_dtrig;
+         DROP TRIGGER IF EXISTS ipc_messages__crsql_itrig;
+         DROP TRIGGER IF EXISTS ipc_messages__crsql_utrig;
+         DROP TRIGGER IF EXISTS ipc_messages__crsql_dtrig;
+         DROP TRIGGER IF EXISTS ipc_context__crsql_itrig;
+         DROP TRIGGER IF EXISTS ipc_context__crsql_utrig;
+         DROP TRIGGER IF EXISTS ipc_context__crsql_dtrig;
+         DROP TRIGGER IF EXISTS ipc_channels__crsql_itrig;
+         DROP TRIGGER IF EXISTS ipc_channels__crsql_utrig;
+         DROP TRIGGER IF EXISTS ipc_channels__crsql_dtrig;
+         DROP TRIGGER IF EXISTS ipc_file_locks__crsql_itrig;
+         DROP TRIGGER IF EXISTS ipc_file_locks__crsql_utrig;
+         DROP TRIGGER IF EXISTS ipc_file_locks__crsql_dtrig;
+         DROP TRIGGER IF EXISTS ipc_worktrees__crsql_itrig;
+         DROP TRIGGER IF EXISTS ipc_worktrees__crsql_utrig;
+         DROP TRIGGER IF EXISTS ipc_worktrees__crsql_dtrig;",
+    );
     Ok(())
 }
 
@@ -163,14 +186,14 @@ async fn api_ipc_messages(
     let rows = if channel.is_empty() {
         query_rows(
             &conn,
-            "SELECT id, channel, sender, content, created_at
+            "SELECT id, channel, from_agent, content, created_at
              FROM ipc_messages ORDER BY created_at DESC LIMIT ?1",
             [limit],
         )?
     } else {
         query_rows(
             &conn,
-            "SELECT id, channel, sender, content, created_at
+            "SELECT id, channel, from_agent, content, created_at
              FROM ipc_messages WHERE channel = ?1
              ORDER BY created_at DESC LIMIT ?2",
             rusqlite::params![channel, limit],
@@ -184,7 +207,7 @@ async fn api_ipc_channels(State(state): State<ServerState>) -> Result<Json<Value
     let conn = state.get_conn()?;
     let rows = query_rows(
         &conn,
-        "SELECT name, description, created_at FROM ipc_channels ORDER BY name",
+        "SELECT name, description, created_by, created_at FROM ipc_channels ORDER BY name",
         [],
     )?;
     Ok(Json(json!({ "ok": true, "channels": rows })))
@@ -206,8 +229,8 @@ async fn api_ipc_locks(State(state): State<ServerState>) -> Result<Json<Value>, 
     let conn = state.get_conn()?;
     let rows = query_rows(
         &conn,
-        "SELECT file_pattern, agent, host, pid, locked_at
-         FROM ipc_file_locks ORDER BY locked_at DESC",
+        "SELECT file_path, locked_by, lock_type, acquired_at, expires_at
+         FROM ipc_file_locks ORDER BY acquired_at DESC",
         [],
     )?;
     Ok(Json(json!({ "ok": true, "locks": rows })))
@@ -218,8 +241,8 @@ async fn api_ipc_worktrees(State(state): State<ServerState>) -> Result<Json<Valu
     let conn = state.get_conn()?;
     let rows = query_rows(
         &conn,
-        "SELECT agent, host, branch, path, registered_at
-         FROM ipc_worktrees ORDER BY registered_at DESC",
+        "SELECT path, plan_id, branch, owner_agent, status, created_at
+         FROM ipc_worktrees ORDER BY created_at DESC",
         [],
     )?;
     Ok(Json(json!({ "ok": true, "worktrees": rows })))
@@ -230,12 +253,10 @@ async fn api_ipc_conflicts(State(state): State<ServerState>) -> Result<Json<Valu
     let conn = state.get_conn()?;
     let rows = query_rows(
         &conn,
-        "SELECT file_pattern, GROUP_CONCAT(DISTINCT agent) as agents,
-                COUNT(DISTINCT agent) as agent_count
+        "SELECT file_path, locked_by, lock_type
          FROM ipc_file_locks
-         GROUP BY file_pattern
-         HAVING agent_count > 1
-         ORDER BY agent_count DESC",
+         WHERE expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%f','now')
+         ORDER BY acquired_at DESC",
         [],
     )?;
     Ok(Json(json!({ "ok": true, "conflicts": rows })))
@@ -268,8 +289,8 @@ async fn api_ipc_status(State(state): State<ServerState>) -> Result<Json<Value>,
     let conflict_count = query_rows(
         conn,
         "SELECT COUNT(*) as c FROM (
-            SELECT file_pattern FROM ipc_file_locks
-            GROUP BY file_pattern HAVING COUNT(DISTINCT agent) > 1
+            SELECT file_path FROM ipc_file_locks
+            GROUP BY file_path HAVING COUNT(DISTINCT locked_by) > 1
         )",
         [],
     )?
@@ -337,7 +358,9 @@ async fn api_ipc_send(
     .map_err(|e| ApiError::internal(format!("channel upsert failed: {e}")))?;
 
     conn.execute(
-        "INSERT INTO ipc_messages(channel, sender, content) VALUES (?1, ?2, ?3)",
+        "INSERT INTO ipc_messages(id, channel, from_agent, content) VALUES (
+             lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
+             ?1, ?2, ?3)",
         rusqlite::params![channel, body.sender_name, body.content],
     )
     .map_err(|e| ApiError::internal(format!("message insert failed: {e}")))?;

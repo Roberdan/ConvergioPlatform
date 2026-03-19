@@ -19,7 +19,7 @@ agent_register() {
   local type="${2:-claude}"
   local pid="${3:-$$}"
   local body
-  body=$(printf '{"agent_id":"%s","type":"%s","host":"%s","pid":%d,"status":"active"}' \
+  body=$(printf '{"agent_id":"%s","agent_type":"%s","host":"%s","pid":%d}' \
     "$name" "$type" "$(hostname)" "$pid")
   if _post "/api/ipc/agents/register" "$body" >/dev/null; then
     echo "Registered agent: $name (type=$type, pid=$pid)" >&2
@@ -97,8 +97,8 @@ _parse_hook_stdin() {
 }
 
 main() {
-  # Hook mode: stdin is not a terminal, read JSON
-  if [[ ! -t 0 ]]; then
+  # Hook mode: no args AND stdin is not a terminal → read JSON from hook
+  if [[ $# -eq 0 ]] && [[ ! -t 0 ]]; then
     _parse_hook_stdin
     return 0
   fi
