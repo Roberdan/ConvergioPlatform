@@ -122,6 +122,25 @@ async fn handle_process_events(State(state): State<ServerState>) -> Result<Json<
                 actions.push(format!("agent_lifecycle: {etype}"));
                 processed += 1;
             }
+            "delegate_complete" => {
+                let payload = event
+                    .get("payload")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                // Parse payload string if it was stored as JSON text
+                let parsed = if let Some(s) = payload.as_str() {
+                    serde_json::from_str(s).unwrap_or(payload)
+                } else {
+                    payload
+                };
+                match crate::mesh::delegate_monitor::handle_delegate_complete(
+                    &state, &parsed,
+                ) {
+                    Ok(action) => actions.push(action),
+                    Err(e) => actions.push(format!("delegate_complete error: {e}")),
+                }
+                processed += 1;
+            }
             _ => {
                 processed += 1;
             }
