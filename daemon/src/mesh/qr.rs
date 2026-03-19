@@ -10,8 +10,8 @@ pub enum QrError {
 
 /// Generate QR code as unicode string (for terminal display)
 pub fn generate_qr_terminal(data: &str) -> Result<String, QrError> {
-    let code = QrCode::new(data.as_bytes())
-        .map_err(|e| QrError::GenerationFailed(e.to_string()))?;
+    let code =
+        QrCode::new(data.as_bytes()).map_err(|e| QrError::GenerationFailed(e.to_string()))?;
     let string = code
         .render::<unicode::Dense1x2>()
         .dark_color(unicode::Dense1x2::Light)
@@ -22,12 +22,9 @@ pub fn generate_qr_terminal(data: &str) -> Result<String, QrError> {
 
 /// Generate QR code as PNG bytes (for GUI display)
 pub fn generate_qr_png(data: &str, size: u32) -> Result<Vec<u8>, QrError> {
-    let code = QrCode::new(data.as_bytes())
-        .map_err(|e| QrError::GenerationFailed(e.to_string()))?;
-    let image = code
-        .render::<Luma<u8>>()
-        .min_dimensions(size, size)
-        .build();
+    let code =
+        QrCode::new(data.as_bytes()).map_err(|e| QrError::GenerationFailed(e.to_string()))?;
+    let image = code.render::<Luma<u8>>().min_dimensions(size, size).build();
     let dynamic = DynamicImage::ImageLuma8(image);
     let mut bytes = Vec::new();
     dynamic

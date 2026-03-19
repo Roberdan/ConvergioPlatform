@@ -64,13 +64,13 @@ pub fn generate_token(
         expires_at: Utc::now() + Duration::minutes(ttl_minutes),
     };
 
-    let payload_json = serde_json::to_string(&payload)
-        .map_err(|e| TokenError::DatabaseError(e.to_string()))?;
+    let payload_json =
+        serde_json::to_string(&payload).map_err(|e| TokenError::DatabaseError(e.to_string()))?;
 
     let payload_b64 = URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
 
-    let mut mac = HmacSha256::new_from_slice(secret)
-        .map_err(|e| TokenError::DatabaseError(e.to_string()))?;
+    let mut mac =
+        HmacSha256::new_from_slice(secret).map_err(|e| TokenError::DatabaseError(e.to_string()))?;
     mac.update(payload_b64.as_bytes());
     let signature = mac.finalize().into_bytes();
     let signature_b64 = URL_SAFE_NO_PAD.encode(signature);
@@ -101,8 +101,7 @@ pub fn validate_token(
         .decode(signature_b64)
         .map_err(|_| TokenError::MalformedToken)?;
 
-    let mut mac =
-        HmacSha256::new_from_slice(secret).map_err(|_| TokenError::MalformedToken)?;
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| TokenError::MalformedToken)?;
     mac.update(payload_b64.as_bytes());
     mac.verify_slice(&expected_sig)
         .map_err(|_| TokenError::InvalidSignature)?;
@@ -190,8 +189,12 @@ mod tests {
         assert!(token.contains('.'), "token must contain '.' separator");
         let parts: Vec<&str> = token.splitn(2, '.').collect();
         assert_eq!(parts.len(), 2);
-        URL_SAFE_NO_PAD.decode(parts[0]).expect("payload valid base64url");
-        URL_SAFE_NO_PAD.decode(parts[1]).expect("signature valid base64url");
+        URL_SAFE_NO_PAD
+            .decode(parts[0])
+            .expect("payload valid base64url");
+        URL_SAFE_NO_PAD
+            .decode(parts[1])
+            .expect("signature valid base64url");
     }
 
     #[test]
@@ -217,8 +220,7 @@ mod tests {
     fn wrong_secret_is_rejected() {
         let db = setup_db();
         let (token, _) = make_token(&db);
-        let err =
-            validate_token(&token, b"wrong-secret", &db).expect_err("wrong secret must fail");
+        let err = validate_token(&token, b"wrong-secret", &db).expect_err("wrong secret must fail");
         assert!(matches!(err, TokenError::InvalidSignature));
     }
 
@@ -251,8 +253,7 @@ mod tests {
     #[test]
     fn malformed_token_is_rejected() {
         let db = setup_db();
-        let err =
-            validate_token("notavalidtoken", SECRET, &db).expect_err("malformed must fail");
+        let err = validate_token("notavalidtoken", SECRET, &db).expect_err("malformed must fail");
         assert!(matches!(
             err,
             TokenError::MalformedToken | TokenError::InvalidSignature
@@ -264,8 +265,7 @@ mod tests {
         let db = setup_db();
         let (token, _) = make_token(&db);
         let parts: Vec<&str> = token.splitn(2, '.').collect();
-        let fake =
-            r#"{"role":"admin","capabilities":[],"coordinator_ip":"1.1.1.1","nonce":"fake","expires_at":"2099-01-01T00:00:00Z"}"#;
+        let fake = r#"{"role":"admin","capabilities":[],"coordinator_ip":"1.1.1.1","nonce":"fake","expires_at":"2099-01-01T00:00:00Z"}"#;
         let fake_b64 = URL_SAFE_NO_PAD.encode(fake.as_bytes());
         let tampered = format!("{}.{}", fake_b64, parts[1]);
         let err = validate_token(&tampered, SECRET, &db).expect_err("tamper must fail");

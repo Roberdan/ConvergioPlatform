@@ -15,7 +15,10 @@ pub fn router() -> Router<ServerState> {
         .route("/api/mesh/traffic", get(api_mesh_traffic))
         .route("/api/mesh/init", post(api_mesh_init))
         .route("/api/mesh/action", get(handle_mesh_action))
-        .route("/api/mesh/delegate/:id/cancel", post(handle_delegate_cancel))
+        .route(
+            "/api/mesh/delegate/:id/cancel",
+            post(handle_delegate_cancel),
+        )
 }
 
 /// POST /api/mesh/delegate/:id/cancel — cancel an active delegation.

@@ -90,10 +90,7 @@ fn test_invite_join_flow() {
     // Step 4: validate again — single-use enforcement
     let err = validate_token(&token, SECRET, &db).expect_err("second validation must fail");
     assert!(
-        matches!(
-            err,
-            claude_core::mesh::token::TokenError::AlreadyUsed
-        ),
+        matches!(err, claude_core::mesh::token::TokenError::AlreadyUsed),
         "expected AlreadyUsed, got: {err:?}"
     );
 }
@@ -137,7 +134,10 @@ fn test_auth_wrong_password_rejected() {
     let encrypted = encrypt_bundle(&bundle, "tok", "correct-password").expect("encrypt");
     let result = decrypt_bundle(&encrypted, "tok", "wrong-password");
     assert!(
-        matches!(result, Err(claude_core::mesh::auth::AuthError::DecryptionFailed)),
+        matches!(
+            result,
+            Err(claude_core::mesh::auth::AuthError::DecryptionFailed)
+        ),
         "expected DecryptionFailed, got: {result:?}"
     );
 }
@@ -150,7 +150,10 @@ fn test_auth_wrong_token_rejected() {
     let encrypted = encrypt_bundle(&bundle, "correct-token", "password").expect("encrypt");
     let result = decrypt_bundle(&encrypted, "wrong-token", "password");
     assert!(
-        matches!(result, Err(claude_core::mesh::auth::AuthError::DecryptionFailed)),
+        matches!(
+            result,
+            Err(claude_core::mesh::auth::AuthError::DecryptionFailed)
+        ),
         "expected DecryptionFailed, got: {result:?}"
     );
 }
@@ -160,8 +163,8 @@ fn test_auth_wrong_token_rejected() {
 #[test]
 fn test_token_security_expired() {
     let db = setup_db();
-    let token = generate_token(SECRET, "worker", vec![], "100.64.0.2", -1)
-        .expect("generate expired token");
+    let token =
+        generate_token(SECRET, "worker", vec![], "100.64.0.2", -1).expect("generate expired token");
     let err = validate_token(&token, SECRET, &db).expect_err("expired token must fail");
     assert!(
         matches!(err, claude_core::mesh::token::TokenError::Expired),
@@ -174,8 +177,8 @@ fn test_token_security_expired() {
 #[test]
 fn test_token_security_replay() {
     let db = setup_db();
-    let token = generate_token(SECRET, "coordinator", vec![], "100.64.0.1", 60)
-        .expect("generate_token");
+    let token =
+        generate_token(SECRET, "coordinator", vec![], "100.64.0.1", 60).expect("generate_token");
 
     // First use — must succeed
     validate_token(&token, SECRET, &db).expect("first use must succeed");
@@ -405,7 +408,10 @@ fn test_peers_registry_mutations() {
 
     // update_role
     reg.update_role("alpha", "worker").expect("update_role");
-    assert!(reg.get_coordinator().is_none(), "no coordinator after update");
+    assert!(
+        reg.get_coordinator().is_none(),
+        "no coordinator after update"
+    );
 
     // remove_peer
     let removed = reg.remove_peer("beta").expect("removed beta");

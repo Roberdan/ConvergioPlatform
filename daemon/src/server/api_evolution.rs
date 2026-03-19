@@ -57,18 +57,13 @@ pub fn router() -> Router<ServerState> {
             "/api/evolution/proposals/:id/approve",
             post(approve_proposal),
         )
-        .route(
-            "/api/evolution/proposals/:id/reject",
-            post(reject_proposal),
-        )
+        .route("/api/evolution/proposals/:id/reject", post(reject_proposal))
         .route("/api/evolution/experiments", get(list_experiments))
         .route("/api/evolution/roi", get(get_roi))
         .route("/api/evolution/audit/:id", get(get_audit_trail))
 }
 
-async fn list_proposals(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+async fn list_proposals(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     ensure_tables(&conn)?;
     let rows = query_rows(
@@ -153,9 +148,7 @@ async fn reject_proposal(
     Ok(Json(json!({ "ok": true, "id": id, "status": "rejected" })))
 }
 
-async fn list_experiments(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+async fn list_experiments(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     ensure_tables(&conn)?;
     let rows = query_rows(
@@ -169,9 +162,7 @@ async fn list_experiments(
     Ok(Json(json!({ "experiments": rows })))
 }
 
-async fn get_roi(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+async fn get_roi(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     ensure_tables(&conn)?;
     let total = query_rows(

@@ -133,9 +133,7 @@ async fn handle_process_events(State(state): State<ServerState>) -> Result<Json<
                 } else {
                     payload
                 };
-                match crate::mesh::delegate_monitor::handle_delegate_complete(
-                    &state, &parsed,
-                ) {
+                match crate::mesh::delegate_monitor::handle_delegate_complete(&state, &parsed) {
                     Ok(action) => actions.push(action),
                     Err(e) => actions.push(format!("delegate_complete error: {e}")),
                 }

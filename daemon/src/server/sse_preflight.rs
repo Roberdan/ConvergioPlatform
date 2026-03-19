@@ -216,7 +216,7 @@ pub fn build_preflight_events(conn: &Conn, plan_id: &str, target: &str) -> Vec<S
             .iter()
             .filter(|e| {
                 e.as_ref()
-                    .map_or(false, |ev| format!("{ev:?}").contains(r#""status":"fail""#))
+                    .is_ok_and(|ev| format!("{ev:?}").contains(r#""status":"fail""#))
             })
             .count()
     };

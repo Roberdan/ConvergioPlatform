@@ -97,12 +97,12 @@ pub async fn migrate_coordinator(
     save_migration_state(&state)?;
 
     // ── Step 3: Update roles in local registry ────────────────────────────────
-    registry.update_role(from, "worker").map_err(|_| {
-        CoordinatorError::PeerNotFound(from.to_owned())
-    })?;
-    registry.update_role(to, "coordinator").map_err(|_| {
-        CoordinatorError::PeerNotFound(to.to_owned())
-    })?;
+    registry
+        .update_role(from, "worker")
+        .map_err(|_| CoordinatorError::PeerNotFound(from.to_owned()))?;
+    registry
+        .update_role(to, "coordinator")
+        .map_err(|_| CoordinatorError::PeerNotFound(to.to_owned()))?;
 
     // ── Step 4: Copy DB from old coordinator to new ───────────────────────────
     let old_ssh = registry.peers[from].ssh_alias.clone();
@@ -177,10 +177,7 @@ pub fn load_migration_state() -> Result<MigrationState, CoordinatorError> {
 
 fn ssh_read_peers_conf(ssh_alias: &str) -> Result<String, String> {
     let out = std::process::Command::new("ssh")
-        .args([
-            ssh_alias,
-            "cat ~/.claude/config/peers.conf",
-        ])
+        .args([ssh_alias, "cat ~/.claude/config/peers.conf"])
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -198,16 +195,15 @@ fn ssh_write_peers_conf(ssh_alias: &str, content: &str) -> Result<(), String> {
     use std::io::Write;
 
     let mut child = std::process::Command::new("ssh")
-        .args([
-            ssh_alias,
-            "cat > ~/.claude/config/peers.conf",
-        ])
+        .args([ssh_alias, "cat > ~/.claude/config/peers.conf"])
         .stdin(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())?;
 
     if let Some(stdin) = child.stdin.as_mut() {
-        stdin.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
+        stdin
+            .write_all(content.as_bytes())
+            .map_err(|e| e.to_string())?;
     }
     let status = child.wait().map_err(|e| e.to_string())?;
     if !status.success() {
@@ -328,7 +324,10 @@ mod tests {
 
     fn make_registry() -> PeersRegistry {
         let mut peers = BTreeMap::new();
-        peers.insert("old-coord".to_owned(), make_peer("coordinator", "old-coord-ssh"));
+        peers.insert(
+            "old-coord".to_owned(),
+            make_peer("coordinator", "old-coord-ssh"),
+        );
         peers.insert("new-coord".to_owned(), make_peer("worker", "new-coord-ssh"));
         peers.insert("worker1".to_owned(), make_peer("worker", "worker1-ssh"));
         PeersRegistry {
@@ -401,8 +400,10 @@ mod tests {
         match result {
             Err(CoordinatorError::Rollback(msg)) => {
                 // Both peers should be mentioned in the aggregated error
-                assert!(msg.contains("alpha") || msg.contains("beta"),
-                    "error message should reference peer names: {msg}");
+                assert!(
+                    msg.contains("alpha") || msg.contains("beta"),
+                    "error message should reference peer names: {msg}"
+                );
             }
             // If ssh binary doesn't exist at all, error kind changes — still an error
             Err(_) => {}

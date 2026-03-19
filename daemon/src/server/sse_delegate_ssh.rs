@@ -11,7 +11,11 @@ pub fn ssh_connect(dest: &str) -> Option<Session> {
         Some((u, rest)) => (u.to_string(), rest.to_string()),
         None => (String::new(), dest.to_string()),
     };
-    let addr = if host_port.contains(':') { host_port } else { format!("{host_port}:22") };
+    let addr = if host_port.contains(':') {
+        host_port
+    } else {
+        format!("{host_port}:22")
+    };
     let tcp = TcpStream::connect_timeout(&addr.parse().ok()?, Duration::from_secs(10)).ok()?;
     let _ = tcp.set_read_timeout(Some(Duration::from_secs(30)));
     let _ = tcp.set_write_timeout(Some(Duration::from_secs(30)));

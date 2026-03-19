@@ -1,6 +1,3 @@
-// LLM client: Claude API direct + LiteLLM proxy (OpenAI-compatible).
-// Unified streaming chat interface for both providers.
-
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -92,8 +89,8 @@ async fn stream_claude(
     model: &str,
     messages: &[ChatMessage],
 ) -> Result<(), String> {
-    let api_key = std::env::var("ANTHROPIC_API_KEY")
-        .map_err(|_| "ANTHROPIC_API_KEY not set".to_string())?;
+    let api_key =
+        std::env::var("ANTHROPIC_API_KEY").map_err(|_| "ANTHROPIC_API_KEY not set".to_string())?;
     let body = json!({"model": model, "max_tokens": 4096, "stream": true, "messages": messages});
     let resp = Client::new()
         .post("https://api.anthropic.com/v1/messages")
@@ -107,7 +104,10 @@ async fn stream_claude(
         .map_err(|e| format!("Claude API request failed: {e}"))?;
     if !resp.status().is_success() {
         let s = resp.status();
-        return Err(format!("Claude API {s}: {}", resp.text().await.unwrap_or_default()));
+        return Err(format!(
+            "Claude API {s}: {}",
+            resp.text().await.unwrap_or_default()
+        ));
     }
     consume_sse(tx, resp, parse_claude_sse).await
 }
@@ -135,8 +135,11 @@ fn parse_claude_sse(block: &str) -> Option<StreamChunk> {
             }))
         }
         "error" => {
-            let msg = parsed.get("error").and_then(|e| e.get("message"))
-                .and_then(Value::as_str).unwrap_or("unknown error");
+            let msg = parsed
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown error");
             warn!("Claude SSE error: {msg}");
             Some(StreamChunk::Error(msg.to_string()))
         }
@@ -161,10 +164,16 @@ async fn stream_litellm(
     if !api_key.is_empty() {
         req = req.header("authorization", format!("Bearer {api_key}"));
     }
-    let resp = req.send().await.map_err(|e| format!("LiteLLM request failed: {e}"))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("LiteLLM request failed: {e}"))?;
     if !resp.status().is_success() {
         let s = resp.status();
-        return Err(format!("LiteLLM {s}: {}", resp.text().await.unwrap_or_default()));
+        return Err(format!(
+            "LiteLLM {s}: {}",
+            resp.text().await.unwrap_or_default()
+        ));
     }
     consume_sse(tx, resp, parse_openai_sse).await
 }
@@ -178,13 +187,26 @@ fn parse_openai_sse(block: &str) -> Option<StreamChunk> {
     let parsed: Value = serde_json::from_str(data).ok()?;
     if let Some(u) = parsed.get("usage") {
         let inp = u.get("prompt_tokens").and_then(Value::as_u64).unwrap_or(0);
-        let out = u.get("completion_tokens").and_then(Value::as_u64).unwrap_or(0);
+        let out = u
+            .get("completion_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         if inp > 0 || out > 0 {
-            return Some(StreamChunk::Usage(TokenUsage { input_tokens: inp, output_tokens: out }));
+            return Some(StreamChunk::Usage(TokenUsage {
+                input_tokens: inp,
+                output_tokens: out,
+            }));
         }
     }
-    let content = parsed.get("choices")?.get(0)?.get("delta")?.get("content")?.as_str()?;
-    if content.is_empty() { return None; }
+    let content = parsed
+        .get("choices")?
+        .get(0)?
+        .get("delta")?
+        .get("content")?
+        .as_str()?;
+    if content.is_empty() {
+        return None;
+    }
     Some(StreamChunk::Text(content.to_string()))
 }
 
@@ -201,7 +223,9 @@ mod tests {
     #[test]
     fn parse_claude_message_start_usage() {
         let block = "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":42,\"output_tokens\":0}}}";
-        assert!(matches!(parse_claude_sse(block), Some(StreamChunk::Usage(u)) if u.input_tokens == 42));
+        assert!(
+            matches!(parse_claude_sse(block), Some(StreamChunk::Usage(u)) if u.input_tokens == 42)
+        );
     }
 
     #[test]
@@ -218,6 +242,8 @@ mod tests {
     #[test]
     fn parse_openai_usage_chunk() {
         let block = "data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}";
-        assert!(matches!(parse_openai_sse(block), Some(StreamChunk::Usage(u)) if u.input_tokens == 10 && u.output_tokens == 20));
+        assert!(
+            matches!(parse_openai_sse(block), Some(StreamChunk::Usage(u)) if u.input_tokens == 10 && u.output_tokens == 20)
+        );
     }
 }

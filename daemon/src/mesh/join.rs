@@ -120,7 +120,12 @@ pub async fn join(
     log.push(p);
 
     // ── Step 2: Admin gate ────────────────────────────────────────────────────
-    let mut p = make_step(2, TOTAL, "Verify admin credentials (sudo -v)", StepStatus::Running);
+    let mut p = make_step(
+        2,
+        TOTAL,
+        "Verify admin credentials (sudo -v)",
+        StepStatus::Running,
+    );
     emit_if_interactive(&config, &p);
     run_sudo_keepalive().map_err(|e| JoinError::Network(e.to_string()))?;
     p.status = StepStatus::Done;
@@ -133,7 +138,12 @@ pub async fn join(
     } else {
         StepStatus::Skipped
     };
-    let mut p = make_step(3, TOTAL, "Network setup (Tailscale, SSH, Screen Sharing)", step_status.clone());
+    let mut p = make_step(
+        3,
+        TOTAL,
+        "Network setup (Tailscale, SSH, Screen Sharing)",
+        step_status.clone(),
+    );
     emit_if_interactive(&config, &p);
     if config.selections.network {
         network_setup().map_err(|e| JoinError::Network(e))?;
@@ -143,7 +153,12 @@ pub async fn join(
     log.push(p);
 
     // ── Step 4: Download bundles ──────────────────────────────────────────────
-    let mut p = make_step(4, TOTAL, "Download bundles from coordinator", StepStatus::Running);
+    let mut p = make_step(
+        4,
+        TOTAL,
+        "Download bundles from coordinator",
+        StepStatus::Running,
+    );
     emit_if_interactive(&config, &p);
     let coordinator_ip = _payload.coordinator_ip.clone();
     let bundle_dir = download_bundles(&coordinator_ip, &config.token).await?;
@@ -157,7 +172,12 @@ pub async fn join(
     } else {
         StepStatus::Skipped
     };
-    let mut p = make_step(5, TOTAL, "Import auth (decrypt + keychain)", step_status.clone());
+    let mut p = make_step(
+        5,
+        TOTAL,
+        "Import auth (decrypt + keychain)",
+        step_status.clone(),
+    );
     emit_if_interactive(&config, &p);
     if config.selections.auth {
         import_auth(&bundle_dir).map_err(|e| JoinError::AuthImport(e))?;
@@ -167,7 +187,12 @@ pub async fn join(
     log.push(p);
 
     // ── Step 6: Import env ────────────────────────────────────────────────────
-    let mut p = make_step(6, TOTAL, "Import environment (brew/repos/shell/macos)", StepStatus::Running);
+    let mut p = make_step(
+        6,
+        TOTAL,
+        "Import environment (brew/repos/shell/macos)",
+        StepStatus::Running,
+    );
     emit_if_interactive(&config, &p);
     import_env(&bundle_dir, &config.selections).map_err(|e| JoinError::Network(e))?;
     p.status = StepStatus::Done;
@@ -190,9 +215,16 @@ pub async fn join(
     log.push(p);
 
     // ── Step 8: Register self in peers.conf ───────────────────────────────────
-    let mut p = make_step(8, TOTAL, "Register node in peers.conf on all nodes", StepStatus::Running);
+    let mut p = make_step(
+        8,
+        TOTAL,
+        "Register node in peers.conf on all nodes",
+        StepStatus::Running,
+    );
     emit_if_interactive(&config, &p);
-    register_self_in_peers(&coordinator_ip).await.map_err(|e| JoinError::Network(e))?;
+    register_self_in_peers(&coordinator_ip)
+        .await
+        .map_err(|e| JoinError::Network(e))?;
     p.status = StepStatus::Done;
     emit_if_interactive(&config, &p);
     log.push(p);
@@ -243,8 +275,7 @@ pub async fn serve_bundles(
         .map_err(|e| JoinError::Network(e.to_string()))?;
     mac.update(b"download");
     let expected_sig = mac.finalize().into_bytes();
-    let expected_bearer = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(&expected_sig);
+    let expected_bearer = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&expected_sig);
 
     struct ServerState {
         auth_bytes: Vec<u8>,
@@ -342,9 +373,7 @@ fn emit_if_interactive(config: &JoinConfig, progress: &JoinProgress) {
 }
 
 fn run_sudo_keepalive() -> std::io::Result<()> {
-    let status = std::process::Command::new("sudo")
-        .arg("-v")
-        .status()?;
+    let status = std::process::Command::new("sudo").arg("-v").status()?;
     if status.success() {
         Ok(())
     } else {
@@ -373,7 +402,10 @@ fn network_setup() -> Result<(), String> {
 
 /// Download auth.enc and env-bundle/ from the coordinator.
 /// Returns the local directory where files were saved.
-async fn download_bundles(coordinator_ip: &str, invite_token: &str) -> Result<std::path::PathBuf, JoinError> {
+async fn download_bundles(
+    coordinator_ip: &str,
+    invite_token: &str,
+) -> Result<std::path::PathBuf, JoinError> {
     use base64::Engine;
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
@@ -404,7 +436,9 @@ async fn download_bundles(coordinator_ip: &str, invite_token: &str) -> Result<st
     // Save bundle to a temp directory
     let bundle_dir = std::env::temp_dir().join("convergio-join-bundle");
     tokio::fs::create_dir_all(&bundle_dir).await?;
-    let bundle_bytes = resp.bytes().await
+    let bundle_bytes = resp
+        .bytes()
+        .await
         .map_err(|e| JoinError::BundleDownload(e.to_string()))?;
     tokio::fs::write(bundle_dir.join("bundle.bin"), &bundle_bytes).await?;
 
@@ -420,7 +454,12 @@ fn import_auth(_bundle_dir: &std::path::Path) -> Result<(), String> {
 fn import_env(_bundle_dir: &std::path::Path, selections: &JoinSelections) -> Result<(), String> {
     // Drive brew, repos, shell, macos-tweaks based on selections.
     // Each sub-step is a shell script invocation; stubbed for testability.
-    let _ = (selections.brew, selections.repos, selections.shell, selections.macos_tweaks);
+    let _ = (
+        selections.brew,
+        selections.repos,
+        selections.shell,
+        selections.macos_tweaks,
+    );
     Ok(())
 }
 

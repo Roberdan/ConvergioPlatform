@@ -102,7 +102,9 @@ fn ts_name_matches_hostname() {
     ).unwrap();
     // "mac-worker-1" can't fuzzy-match "workermac1" — that's expected.
     // Real resolution uses peers.conf tailscale_ip → ts_node_matches, not ts_name_matches.
-    let normalized = "mac-worker-1".to_lowercase().replace(['-', '_', ' ', '\''], "");
+    let normalized = "mac-worker-1"
+        .to_lowercase()
+        .replace(['-', '_', ' ', '\''], "");
     assert!(
         !super::ws_pty::ts_name_matches(&node, &normalized),
         "fuzzy alone won't match mac-worker-1"
@@ -134,12 +136,8 @@ fn ts_name_no_match() {
 #[test]
 fn ts_first_ip_extracts_ipv4() {
     let node: serde_json::Value =
-        serde_json::from_str(r#"{"TailscaleIPs":["100.64.0.1","fd7a:115c:a1e0::3"]}"#)
-            .unwrap();
-    assert_eq!(
-        super::ws_pty::ts_first_ip(&node),
-        Some("100.64.0.1".into())
-    );
+        serde_json::from_str(r#"{"TailscaleIPs":["100.64.0.1","fd7a:115c:a1e0::3"]}"#).unwrap();
+    assert_eq!(super::ws_pty::ts_first_ip(&node), Some("100.64.0.1".into()));
 }
 
 #[test]

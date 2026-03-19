@@ -2,6 +2,7 @@ pub mod auth;
 pub mod daemon;
 pub mod delegate;
 pub mod delegate_monitor;
+mod delegate_types;
 pub mod handoff;
 pub mod http_api;
 pub mod intelligence;

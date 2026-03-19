@@ -16,8 +16,12 @@ pub enum BrewError {
 
 pub type Result<T> = std::result::Result<T, BrewError>;
 
-const ESSENTIAL: &[&str] = &["git", "curl", "jq", "sqlite3", "node", "rust", "wget", "openssl"];
-const DEV: &[&str] = &["bat", "fd", "fzf", "gh", "lazygit", "delta", "ripgrep", "eza", "zoxide", "starship"];
+const ESSENTIAL: &[&str] = &[
+    "git", "curl", "jq", "sqlite3", "node", "rust", "wget", "openssl",
+];
+const DEV: &[&str] = &[
+    "bat", "fd", "fzf", "gh", "lazygit", "delta", "ripgrep", "eza", "zoxide", "starship",
+];
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BrewEntry {
@@ -112,7 +116,11 @@ fn parse_brewfile_output(content: &str) -> Result<Brewfile> {
         }
     }
 
-    Ok(Brewfile { taps, formulae, casks })
+    Ok(Brewfile {
+        taps,
+        formulae,
+        casks,
+    })
 }
 
 /// Installs selected brew entries.
@@ -121,10 +129,15 @@ pub fn install_brewfile(brewfile: &Brewfile, selected: &[String]) -> Result<()> 
         if brewfile.formulae.contains_key(name.as_str()) {
             let status = Command::new("brew").args(["install", name]).status()?;
             if !status.success() {
-                return Err(BrewError::CommandFailed(format!("brew install {} failed", name)));
+                return Err(BrewError::CommandFailed(format!(
+                    "brew install {} failed",
+                    name
+                )));
             }
         } else if brewfile.casks.contains(name) {
-            let status = Command::new("brew").args(["install", "--cask", name]).status()?;
+            let status = Command::new("brew")
+                .args(["install", "--cask", name])
+                .status()?;
             if !status.success() {
                 return Err(BrewError::CommandFailed(format!(
                     "brew install --cask {} failed",

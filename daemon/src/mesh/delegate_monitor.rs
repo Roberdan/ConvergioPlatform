@@ -1,7 +1,3 @@
-// Delegation monitoring: polls remote daemon APIs for delegated task status,
-// updates local DB, broadcasts WS events. Completion callback via coordinator
-// event "delegate_complete". Fallback: polling detects completion if callback fails.
-
 use crate::server::state::ServerState;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -31,7 +27,10 @@ pub struct DelegateCompletePayload {
 /// Spawn background poller: every 30s queries remote daemons for active delegations.
 pub fn spawn_monitor(state: ServerState) {
     tokio::spawn(async move {
-        info!("delegate_monitor: started (poll every {}s)", POLL_INTERVAL.as_secs());
+        info!(
+            "delegate_monitor: started (poll every {}s)",
+            POLL_INTERVAL.as_secs()
+        );
         let client = reqwest::Client::builder()
             .timeout(HTTP_TIMEOUT)
             .build()
@@ -45,15 +44,15 @@ pub fn spawn_monitor(state: ServerState) {
     });
 }
 
-async fn poll_delegated_tasks(
-    state: &ServerState,
-    client: &reqwest::Client,
-) -> Result<(), String> {
+async fn poll_delegated_tasks(state: &ServerState, client: &reqwest::Client) -> Result<(), String> {
     let delegations = load_active_delegations(state)?;
     if delegations.is_empty() {
         return Ok(());
     }
-    info!("delegate_monitor: polling {} active delegations", delegations.len());
+    info!(
+        "delegate_monitor: polling {} active delegations",
+        delegations.len()
+    );
     for d in &delegations {
         match query_remote_agents(client, d).await {
             Ok(remote_status) if remote_status != d.status => {
@@ -63,7 +62,10 @@ async fn poll_delegated_tasks(
                     info!("delegate_monitor: task {} completed via polling", d.task_id);
                 }
             }
-            Err(e) => warn!("delegate_monitor: poll {} for {}: {e}", d.peer_name, d.task_id),
+            Err(e) => warn!(
+                "delegate_monitor: poll {} for {}: {e}",
+                d.peer_name, d.task_id
+            ),
             _ => {}
         }
     }
@@ -96,8 +98,14 @@ pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<
         "result": parsed.result,
         "output": parsed.output,
     }));
-    info!("delegate_monitor: callback for task {} ({})", parsed.task_id, new_status);
-    Ok(format!("delegate_complete: task {} -> {new_status}", parsed.task_id))
+    info!(
+        "delegate_monitor: callback for task {} ({})",
+        parsed.task_id, new_status
+    );
+    Ok(format!(
+        "delegate_complete: task {} -> {new_status}",
+        parsed.task_id
+    ))
 }
 
 fn load_active_delegations(state: &ServerState) -> Result<Vec<Delegation>, String> {
@@ -144,12 +152,20 @@ async fn query_remote_agents(
     delegation: &Delegation,
 ) -> Result<String, String> {
     let url = format!("{}/api/ipc/agents", delegation.peer_addr);
-    let resp = client.get(&url).send().await.map_err(|e| format!("GET {url}: {e}"))?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET {url}: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("HTTP {}: {url}", resp.status()));
     }
     let body: Value = resp.json().await.map_err(|e| format!("JSON: {e}"))?;
-    let agents = body.get("agents").and_then(Value::as_array).cloned().unwrap_or_default();
+    let agents = body
+        .get("agents")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     for agent in &agents {
         let meta = agent.get("metadata").and_then(Value::as_str).unwrap_or("");
         if meta.contains(&delegation.task_id) {
@@ -170,7 +186,11 @@ fn update_delegation_status(
     new_status: &str,
 ) -> Result<(), String> {
     let conn = state.get_conn().map_err(|e| format!("db: {e:?}"))?;
-    let task_status = if is_terminal(new_status) { new_status } else { "in_progress" };
+    let task_status = if is_terminal(new_status) {
+        new_status
+    } else {
+        "in_progress"
+    };
     conn.execute(
         "UPDATE tasks SET status = ?1 WHERE id = ?2",
         rusqlite::params![task_status, delegation.task_id],

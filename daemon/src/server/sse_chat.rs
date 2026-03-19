@@ -67,10 +67,7 @@ pub async fn chat_stream_sse(
 }
 
 /// Read model preference from session metadata_json, fallback to default.
-fn read_session_model(
-    conn: &rusqlite::Connection,
-    session_id: &str,
-) -> Result<String, ApiError> {
+fn read_session_model(conn: &rusqlite::Connection, session_id: &str) -> Result<String, ApiError> {
     let meta: Option<String> = conn
         .query_row(
             "SELECT metadata_json FROM chat_sessions WHERE id=?1",

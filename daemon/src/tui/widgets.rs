@@ -35,18 +35,30 @@ pub fn kpi_strip(data: &TuiData) -> Paragraph<'static> {
     let token_k = k.daily_tokens / 1000;
 
     let spans = vec![
-        Span::styled(format!(" Plans:{} ", k.plans_active), Style::default().fg(ACCENT).bold()),
+        Span::styled(
+            format!(" Plans:{} ", k.plans_active),
+            Style::default().fg(ACCENT).bold(),
+        ),
         Span::raw("| "),
-        Span::styled(format!("Agents:{} ", k.agents_running), Style::default().fg(OK)),
+        Span::styled(
+            format!("Agents:{} ", k.agents_running),
+            Style::default().fg(OK),
+        ),
         Span::raw("| "),
         Span::styled(format!("Tokens:{}k ", token_k), Style::default().fg(WARN)),
         Span::raw("| "),
         Span::styled(format!("Cost:${} ", cost_str), Style::default().fg(WARN)),
         Span::raw("| "),
-        Span::styled(format!("Mesh:{} ", k.mesh_online), Style::default().fg(ACCENT)),
+        Span::styled(
+            format!("Mesh:{} ", k.mesh_online),
+            Style::default().fg(ACCENT),
+        ),
     ];
-    Paragraph::new(Line::from(spans))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(MUTED)))
+    Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(MUTED)),
+    )
 }
 
 pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
@@ -88,7 +100,11 @@ pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
                 lines.push("  -".fg(MUTED).into());
             } else {
                 for (idx, text) in items {
-                    let style = if *idx == selected { selected_style() } else { Style::default() };
+                    let style = if *idx == selected {
+                        selected_style()
+                    } else {
+                        Style::default()
+                    };
                     lines.push(Line::from(format!("  {}", text)).style(style));
                 }
             }
@@ -137,12 +153,20 @@ pub fn mesh_status(data: &TuiData, selected: usize) -> Paragraph<'static> {
     let online = data.mesh_nodes.iter().filter(|n| n.online).count();
     let mut lines: Vec<Line<'static>> = vec![
         "MESH STATUS".bold().fg(ACCENT).into(),
-        Line::from(format!("Online nodes: {}/{}", online, data.mesh_nodes.len()))
-            .style(Style::default().fg(OK)),
+        Line::from(format!(
+            "Online nodes: {}/{}",
+            online,
+            data.mesh_nodes.len()
+        ))
+        .style(Style::default().fg(OK)),
         "".into(),
     ];
     for (i, node) in data.mesh_nodes.iter().enumerate() {
-        let (status, color) = if node.online { ("ONLINE", OK) } else { ("OFFLINE", FAIL) };
+        let (status, color) = if node.online {
+            ("ONLINE", OK)
+        } else {
+            ("OFFLINE", FAIL)
+        };
         let cpu_int = node.cpu_percent as i64;
         let cpu_bar = spark(cpu_int);
         let base = Style::default().fg(color);
@@ -169,14 +193,24 @@ pub fn agent_org_chart(data: &TuiData, selected: usize) -> Paragraph<'static> {
         "ControlRoom".fg(WARN).into(),
     ];
     for (i, agent) in data.agents.iter().enumerate() {
-        let branch = if i + 1 == data.agents.len() { "└──" } else { "├──" };
-        let task = agent.active_task.clone().unwrap_or_else(|| "idle".to_string());
+        let branch = if i + 1 == data.agents.len() {
+            "└──"
+        } else {
+            "├──"
+        };
+        let task = agent
+            .active_task
+            .clone()
+            .unwrap_or_else(|| "idle".to_string());
         let task_color = if task == "idle" { MUTED } else { OK };
         let base = Style::default().fg(task_color);
         let style = if i == selected { base.reversed() } else { base };
         lines.push(
-            Line::from(format!("{} {} ({}) @{} [{}]", branch, agent.name, agent.role, agent.host, task))
-                .style(style),
+            Line::from(format!(
+                "{} {} ({}) @{} [{}]",
+                branch, agent.name, agent.role, agent.host, task
+            ))
+            .style(style),
         );
     }
     if data.agents.is_empty() {

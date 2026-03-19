@@ -71,10 +71,20 @@ pub fn configure_dock() -> Result<()> {
 
 /// Configures Finder: show extensions, path bar, status bar.
 pub fn configure_finder() -> Result<()> {
-    defaults_write("com.apple.finder", "AppleShowAllExtensions", "-bool", "true")?;
+    defaults_write(
+        "com.apple.finder",
+        "AppleShowAllExtensions",
+        "-bool",
+        "true",
+    )?;
     defaults_write("com.apple.finder", "ShowPathbar", "-bool", "true")?;
     defaults_write("com.apple.finder", "ShowStatusBar", "-bool", "true")?;
-    defaults_write("com.apple.finder", "FXPreferredViewStyle", "-string", "Nlsv")?;
+    defaults_write(
+        "com.apple.finder",
+        "FXPreferredViewStyle",
+        "-string",
+        "Nlsv",
+    )?;
     defaults_write(
         "com.apple.finder",
         "FXDefaultSearchScope",

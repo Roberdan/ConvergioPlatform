@@ -128,9 +128,7 @@ pub async fn fetch_tasks(client: &Client, plan_id: i64) -> Vec<TaskPipelineItem>
                 .and_then(Value::as_array)
                 .map(|arr| {
                     arr.iter()
-                        .filter_map(|t| {
-                            serde_json::from_value::<TaskRow>(t.clone()).ok()
-                        })
+                        .filter_map(|t| serde_json::from_value::<TaskRow>(t.clone()).ok())
                         .map(|t| TaskPipelineItem {
                             task_id: t.task_id.unwrap_or_default(),
                             title: t.title.unwrap_or_default(),

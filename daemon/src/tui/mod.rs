@@ -232,4 +232,3 @@ impl Drop for TuiApp {
 
 #[cfg(test)]
 mod tests;
-

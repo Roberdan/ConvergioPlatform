@@ -1,11 +1,8 @@
 use super::state::ServerState;
-use super::ws_brain::broadcast_brain_task_update;
 use super::ws_pty::peer_ssh_alias;
 use crate::mesh::delegate::DelegateEngine;
-use axum::response::sse::Event;
 use serde_json::json;
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -13,7 +10,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 mod ssh;
 use ssh::{ssh_connect, ssh_exec, ssh_git_sync};
 
-type Events = Vec<Result<Event, Infallible>>;
+#[path = "sse_delegate_util.rs"]
+pub(super) mod util;
+use util::{broadcast_ws, build_agent_command, push, stage, update_task_status, Events};
 
 struct ActiveDelegation {
     cancelled: Arc<AtomicBool>,
@@ -64,16 +63,29 @@ pub async fn delegate(
     let del_id = generate_delegation_id(plan_id, target);
     let cancelled = Arc::new(AtomicBool::new(false));
     if let Ok(mut map) = active_delegations().lock() {
-        map.insert(del_id.clone(), ActiveDelegation { cancelled: Arc::clone(&cancelled) });
+        map.insert(
+            del_id.clone(),
+            ActiveDelegation {
+                cancelled: Arc::clone(&cancelled),
+            },
+        );
     }
 
     let mut ev = Vec::new();
     push(&mut ev, "delegation_id", &json!({"id": del_id}));
-    push(&mut ev, "stage", &stage("connecting", target, "Resolving peer"));
+    push(
+        &mut ev,
+        "stage",
+        &stage("connecting", target, "Resolving peer"),
+    );
 
     // DelegateEngine provides peer resolution; SSE flow uses it for validation
-    let conf = state.db_path.parent().and_then(|d| d.parent())
-        .map(|b| b.join("config/peers.conf")).unwrap_or_default();
+    let conf = state
+        .db_path
+        .parent()
+        .and_then(|d| d.parent())
+        .map(|b| b.join("config/peers.conf"))
+        .unwrap_or_default();
     let _engine = DelegateEngine::new(conf);
     let ssh_dest = match peer_ssh_alias(state, target) {
         Some(d) => d,
@@ -83,7 +95,11 @@ pub async fn delegate(
         return cancel_events(ev, state, qs, &del_id);
     }
 
-    push(&mut ev, "stage", &stage("connecting", target, "SSH handshake"));
+    push(
+        &mut ev,
+        "stage",
+        &stage("connecting", target, "SSH handshake"),
+    );
     let session = match ssh_connect(&ssh_dest) {
         Some(s) => s,
         None => return do_fail(ev, state, qs, &del_id, &format!("SSH to {ssh_dest} failed")),
@@ -92,31 +108,57 @@ pub async fn delegate(
         return cancel_events(ev, state, qs, &del_id);
     }
 
-    push(&mut ev, "stage", &stage("cloning", target, "git fetch + checkout"));
+    push(
+        &mut ev,
+        "stage",
+        &stage("cloning", target, "git fetch + checkout"),
+    );
     if let Err(e) = ssh_git_sync(&session, plan_id) {
         return do_fail(ev, state, qs, &del_id, &e);
     }
-    push(&mut ev, "progress", &json!({"percent": 30, "output": "Repository synced"}));
+    push(
+        &mut ev,
+        "progress",
+        &json!({"percent": 30, "output": "Repository synced"}),
+    );
     if cancelled.load(Ordering::Acquire) {
         return cancel_events(ev, state, qs, &del_id);
     }
 
-    push(&mut ev, "stage", &stage("spawning", target, &format!("Launching {cli}")));
+    push(
+        &mut ev,
+        "stage",
+        &stage("spawning", target, &format!("Launching {cli}")),
+    );
     let agent_cmd = build_agent_command(cli, plan_id, qs);
-    push(&mut ev, "stage", &stage("running", target, "Agent executing"));
+    push(
+        &mut ev,
+        "stage",
+        &stage("running", target, "Agent executing"),
+    );
 
     match ssh_exec(&session, &agent_cmd) {
         Ok((0, output, _)) => {
             emit_progress(&mut ev, &output);
-            push(&mut ev, "done", &json!({
-                "result": "completed", "plan_id": plan_id,
-                "target": target, "peer": target, "delegation_id": del_id
-            }));
+            push(
+                &mut ev,
+                "done",
+                &json!({
+                    "result": "completed", "plan_id": plan_id,
+                    "target": target, "peer": target, "delegation_id": del_id
+                }),
+            );
             update_task_status(state, qs, "done");
             broadcast_ws(state, qs, "done");
         }
         Ok((code, _, stderr)) => {
-            return do_fail(ev, state, qs, &del_id, &format!("agent exited {code}: {stderr}"));
+            return do_fail(
+                ev,
+                state,
+                qs,
+                &del_id,
+                &format!("agent exited {code}: {stderr}"),
+            );
         }
         Err(e) => return do_fail(ev, state, qs, &del_id, &e),
     }
@@ -125,7 +167,10 @@ pub async fn delegate(
 }
 
 fn cancel_events(
-    mut ev: Events, state: &ServerState, qs: &HashMap<String, String>, del_id: &str,
+    mut ev: Events,
+    state: &ServerState,
+    qs: &HashMap<String, String>,
+    del_id: &str,
 ) -> Events {
     push(&mut ev, "error", &json!({"result": "cancelled"}));
     update_task_status(state, qs, "cancelled");
@@ -135,8 +180,11 @@ fn cancel_events(
 }
 
 fn do_fail(
-    mut ev: Events, state: &ServerState, qs: &HashMap<String, String>,
-    del_id: &str, msg: &str,
+    mut ev: Events,
+    state: &ServerState,
+    qs: &HashMap<String, String>,
+    del_id: &str,
+    msg: &str,
 ) -> Events {
     push(&mut ev, "error", &json!({"result": msg}));
     update_task_status(state, qs, "failed");
@@ -146,7 +194,9 @@ fn do_fail(
 }
 
 fn remove_delegation(del_id: &str) {
-    if let Ok(mut map) = active_delegations().lock() { map.remove(del_id); }
+    if let Ok(mut map) = active_delegations().lock() {
+        map.remove(del_id);
+    }
 }
 
 fn emit_progress(ev: &mut Events, output: &str) {
@@ -157,93 +207,6 @@ fn emit_progress(ev: &mut Events, output: &str) {
     }
 }
 
-fn broadcast_ws(state: &ServerState, qs: &HashMap<String, String>, status: &str) {
-    if let Some(tid) = qs.get("task_id").filter(|v| !v.is_empty()) {
-        if let Ok(id) = tid.parse::<i64>() {
-            broadcast_brain_task_update(state, id, status);
-        }
-    }
-}
-
-fn build_agent_command(cli: &str, plan_id: &str, qs: &HashMap<String, String>) -> String {
-    let task_id = qs.get("task_id").cloned().unwrap_or_default();
-    let wave_id = qs.get("wave_id").cloned().unwrap_or_default();
-    let dir = "~/GitHub/ConvergioPlatform";
-    match cli {
-        "claude" | "copilot" => {
-            let mut cmd = format!(
-                "cd {dir} && claude --dangerously-skip-permissions -p 'Execute plan {plan_id}"
-            );
-            if !task_id.is_empty() { cmd.push_str(&format!(" task {task_id}")); }
-            if !wave_id.is_empty() { cmd.push_str(&format!(" wave {wave_id}")); }
-            cmd.push('\'');
-            cmd
-        }
-        _ => format!("cd {dir} && {cli} --plan {plan_id}"),
-    }
-}
-
-fn stage(s: &str, peer: &str, detail: &str) -> serde_json::Value {
-    json!({"type": "stage", "stage": s, "peer": peer, "detail": detail})
-}
-
-fn push(events: &mut Events, event_type: &str, data: &serde_json::Value) {
-    events.push(Ok(Event::default().event(event_type).data(data.to_string())));
-}
-
-fn update_task_status(state: &ServerState, qs: &HashMap<String, String>, status: &str) {
-    let task_id = match qs.get("task_id").filter(|v| !v.is_empty()) {
-        Some(id) => id, None => return,
-    };
-    let plan_id = match qs.get("plan_id").filter(|v| !v.is_empty()) {
-        Some(id) => id, None => return,
-    };
-    if let Ok(conn) = state.get_conn() {
-        if let Err(e) = conn.execute(
-            "UPDATE tasks SET status=?1 WHERE plan_id=?2 AND id=?3",
-            rusqlite::params![status, plan_id, task_id],
-        ) {
-            tracing::warn!("delegate task status update failed: {e}");
-        }
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn agent_cmd_claude_with_params() {
-        let mut qs = HashMap::new();
-        qs.insert("task_id".into(), "T1-02".into());
-        qs.insert("wave_id".into(), "W1".into());
-        let cmd = build_agent_command("claude", "671", &qs);
-        assert!(cmd.contains("plan 671") && cmd.contains("task T1-02"));
-    }
-
-    #[test]
-    fn agent_cmd_custom_cli() {
-        let cmd = build_agent_command("my-agent", "42", &HashMap::new());
-        assert!(cmd.contains("my-agent --plan 42"));
-    }
-
-    #[test]
-    fn stage_event_fields() {
-        let ev = stage("connecting", "worker-1", "SSH handshake");
-        assert_eq!(ev["stage"], "connecting");
-        assert_eq!(ev["peer"], "worker-1");
-    }
-
-    #[test]
-    fn cancel_delegation_lifecycle() {
-        let del_id = generate_delegation_id("999", "test-peer");
-        assert!(!cancel_delegation(&del_id));
-        let cancelled = Arc::new(AtomicBool::new(false));
-        active_delegations().lock().unwrap().insert(
-            del_id.clone(), ActiveDelegation { cancelled: Arc::clone(&cancelled) },
-        );
-        assert!(cancel_delegation(&del_id));
-        assert!(cancelled.load(Ordering::Acquire));
-        assert!(list_active_delegations().is_empty());
-    }
-}
+#[path = "sse_delegate_tests.rs"]
+mod tests;
