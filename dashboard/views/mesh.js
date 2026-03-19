@@ -141,6 +141,56 @@ async function handleAction(btn, api, action, reloadView) {
   }
 }
 
+// -- Tab 4: Topology --
+
+/**
+ * Render topology map tab. Uses mn-map if available, otherwise mn-placeholder.
+ * Builds a network graph of peers from mesh data.
+ */
+function renderTopologyTab(tab, api) {
+  const mapAvailable = !!customElements.get('mn-map');
+
+  if (!mapAvailable) {
+    console.warn('[mesh] mn-map not registered — showing topology placeholder');
+    const placeholder = document.createElement('mn-placeholder');
+    placeholder.setAttribute('label', 'Mesh topology map — awaiting MLD delivery');
+    tab.appendChild(placeholder);
+    return;
+  }
+
+  tab.innerHTML = '<div class="mn-mesh-loading">Loading topology...</div>';
+
+  api.fetchMesh().then(peers => {
+    tab.innerHTML = '';
+    if (!Array.isArray(peers) || peers.length === 0) {
+      tab.innerHTML = '<p style="color:var(--mn-text-muted)">No peers for topology.</p>';
+      return;
+    }
+    const map = document.createElement('mn-map');
+    const nodes = peers.map(p => ({
+      id: p.peer_id || p.name,
+      label: p.name || p.peer_id,
+      status: p.status || 'unknown',
+      role: p.role || 'worker',
+    }));
+    // WHY: coordinator connects to all workers; workers connect only to coordinator
+    const edges = [];
+    const coordinator = nodes.find(n => n.role === 'coordinator');
+    if (coordinator) {
+      for (const node of nodes) {
+        if (node.id !== coordinator.id) {
+          edges.push({ from: coordinator.id, to: node.id });
+        }
+      }
+    }
+    map.setAttribute('nodes', JSON.stringify(nodes));
+    map.setAttribute('edges', JSON.stringify(edges));
+    tab.appendChild(map);
+  }).catch(err => {
+    tab.innerHTML = `<div class="mn-mesh-error">Topology load failed: ${esc(err.message)}</div>`;
+  });
+}
+
 // -- Main view --
 
 /**
@@ -176,7 +226,12 @@ export default function mesh(container, { api, store }) {
 
   renderActionsTab(actionsTab, api, store, reloadView);
 
-  tabs.append(statusTab, networkTab, actionsTab);
+  // Tab 4: Topology
+  const topologyTab = document.createElement('mn-tab');
+  topologyTab.setAttribute('label', 'Topology');
+  renderTopologyTab(topologyTab, api);
+
+  tabs.append(statusTab, networkTab, actionsTab, topologyTab);
   container.appendChild(tabs);
 
   // Cleanup
