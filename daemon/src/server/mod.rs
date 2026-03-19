@@ -6,6 +6,7 @@ pub mod api_evolution;
 pub mod api_github;
 pub mod api_heartbeat;
 pub mod api_ideas;
+pub mod llm_client;
 pub mod api_ipc;
 pub mod api_mesh;
 pub mod api_notify;
