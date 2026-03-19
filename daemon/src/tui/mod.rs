@@ -175,8 +175,9 @@ impl TuiApp {
     fn render(&mut self) -> io::Result<()> {
         let view = self.active_view;
         let data = &self.data;
+        let selected = self.selected_index;
         self.terminal.draw(|frame| {
-            views::render_view(frame, frame.area(), view, data);
+            views::render_view(frame, frame.area(), view, data, selected);
         })?;
         Ok(())
     }
