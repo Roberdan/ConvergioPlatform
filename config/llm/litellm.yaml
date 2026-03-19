@@ -65,4 +65,4 @@ litellm_settings:
   disable_key_check: true
 
 general_settings:
-  master_key: "REDACTED_KEY"
+  master_key: "os.environ/LITELLM_MASTER_KEY"

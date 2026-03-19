@@ -191,7 +191,7 @@ case "$CMD" in
     activate_venv
     echo "Testing LiteLLM proxy..."
     curl -s "http://localhost:$LITELLM_PORT/v1/chat/completions" \
-      -H "Authorization: Bearer REDACTED_KEY" \
+      -H "Authorization: Bearer ${LITELLM_MASTER_KEY:-sk-local}" \
       -H "Content-Type: application/json" \
       -d '{"model":"claude-sonnet","messages":[{"role":"user","content":"Say hello in 5 words"}],"max_tokens":20}' \
       | python3 -m json.tool
@@ -205,7 +205,7 @@ case "$CMD" in
     echo ""
     echo "=== Proxy Models (LiteLLM) ==="
     curl -s "http://localhost:$LITELLM_PORT/v1/models" \
-      -H "Authorization: Bearer REDACTED_KEY" 2>/dev/null \
+      -H "Authorization: Bearer ${LITELLM_MASTER_KEY:-sk-local}" 2>/dev/null \
       | python3 -c "import sys,json; [print(f'  {m[\"id\"]}') for m in json.load(sys.stdin).get('data',[])]" \
       2>/dev/null || echo "  (LiteLLM not running)"
     ;;

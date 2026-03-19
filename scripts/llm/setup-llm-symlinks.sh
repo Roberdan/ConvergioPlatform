@@ -71,7 +71,7 @@ else
 alias convergio-llm="$HOME/GitHub/ConvergioPlatform/scripts/llm/convergio-llm.sh"
 claude-local() {
   ANTHROPIC_BASE_URL=http://localhost:4000 \
-  ANTHROPIC_AUTH_TOKEN=REDACTED_KEY \
+  ANTHROPIC_AUTH_TOKEN=\${LITELLM_MASTER_KEY:-sk-local} \
   claude "$@"
 }
 SHELLBLOCK
