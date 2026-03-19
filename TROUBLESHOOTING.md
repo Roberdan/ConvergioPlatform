@@ -88,6 +88,47 @@ grep -q 'ConvergioPlatform' scripts/mesh/mesh-provision-node.sh && echo "OK" || 
 # The canonical repo is ConvergioPlatform — update any bookmarks or CI configs
 ```
 
+## Problem: Menu Bar not showing in system tray
+
+**Symptom:** ConvergioMissionControl app runs but no menu bar icon appears
+**Cause:** App not built as LSUIElement (agent app) or daemon not running on :8420
+**Fix:**
+```bash
+# Verify daemon is running
+curl -s http://localhost:8420/api/ipc/status | jq .
+# Rebuild menu bar app
+cd gui/ConvergioMissionControl && xcodebuild -scheme ConvergioMissionControl build
+# Check Info.plist has LSUIElement = YES
+defaults read gui/ConvergioMissionControl/Info.plist LSUIElement
+```
+
+## Problem: TUI fails to start or renders incorrectly
+
+**Symptom:** `cargo run -- tui` exits immediately or shows garbled output
+**Cause:** Terminal does not support alternate screen, or daemon binary not built
+**Fix:**
+```bash
+# Ensure release build exists
+cd daemon && cargo build --release
+# Run TUI with explicit terminal
+TERM=xterm-256color cargo run -- tui
+# If still broken, check ratatui version
+grep ratatui Cargo.toml
+```
+
+## Problem: Evolution proposals not loading in dashboard
+
+**Symptom:** Evolution section shows empty or spinner, console shows 500 error
+**Cause:** `evolution_proposals` table not yet created (auto-created on first API call) or DB path wrong
+**Fix:**
+```bash
+# Trigger table creation
+curl -s http://localhost:8420/api/evolution/proposals | jq .
+# Check DB has the table
+sqlite3 "$DASHBOARD_DB" ".tables" | grep evolution
+# If missing, the GET call above creates it; retry dashboard
+```
+
 ## Problem: Copilot agent not visible in /api/ipc/agents
 
 **Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty
