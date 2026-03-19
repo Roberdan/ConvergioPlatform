@@ -1,8 +1,10 @@
 // app.js — Convergio Control Room orchestrator
 // Wires Maranello runtime, API clients, reactive store, and view modules.
+// 3-zone layout: command strip + main + brain strip.
 import * as api from './lib/api-core.js';
 import * as store from './lib/store.js';
 import { connectDashboardWS } from './lib/ws.js';
+import { initBrainStrip } from './lib/brain-strip.js';
 
 const REFRESH_INTERVAL_MS = 16000;
 const DEFAULT_VIEW = 'overview';
@@ -13,10 +15,9 @@ const VIEW_MODULES = {
   plans: () => import('./views/plans.js'),
   mesh: () => import('./views/mesh.js'),
   brain: () => import('./views/brain.js'),
-  ideas: () => import('./views/ideas.js'),
-  ipc: () => import('./views/ipc.js'),
+  agents: () => import('./views/agents.js'),
+  evolution: () => import('./views/evolution.js'),
   admin: () => import('./views/admin.js'),
-  terminal: () => import('./views/terminal.js'),
 };
 
 // Capitalise view id for display
@@ -60,7 +61,10 @@ function activateView(viewId) {
 
 function highlightNavLink(viewId) {
   document.querySelectorAll('[data-view]').forEach((link) => {
-    link.classList.toggle('mn-sidebar__link--active', link.dataset.view === viewId);
+    link.classList.toggle(
+      'mn-sidebar__link--active',
+      link.dataset.view === viewId
+    );
   });
 }
 
@@ -188,7 +192,8 @@ function bindThemePersistence() {
   };
   document.addEventListener('mn-theme-change', persist);
   new MutationObserver(persist).observe(document.documentElement, {
-    attributes: true, attributeFilter: ['data-theme'],
+    attributes: true,
+    attributeFilter: ['data-theme'],
   });
 }
 
@@ -204,6 +209,7 @@ async function init() {
   bindCommandPalette();
   bindKeyboard();
   bindThemePersistence();
+  initBrainStrip();
 
   // Mobile sidebar toggle
   if (typeof Maranello.initSidebarToggleAuto === 'function') {

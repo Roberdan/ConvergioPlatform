@@ -7,8 +7,6 @@
   <!-- Maranello Luce Design System -->
   <link rel="stylesheet" href="node_modules/maranello-luce-design-business/dist/css/index.css">
   <link rel="stylesheet" href="node_modules/maranello-luce-design-business/dist/css/integration.css">
-  <!-- Vendor: xterm.js (terminal view) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
   <!-- App styles (tokens only) -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -39,22 +37,40 @@
          data-view="mesh" data-icon="mesh">Mesh</a>
       <a href="#brain" class="mn-sidebar__link"
          data-view="brain" data-icon="brain">Brain</a>
-      <a href="#ideas" class="mn-sidebar__link"
-         data-view="ideas" data-icon="bulb">Ideas</a>
-      <a href="#ipc" class="mn-sidebar__link"
-         data-view="ipc" data-icon="router">IPC</a>
+      <a href="#agents" class="mn-sidebar__link"
+         data-view="agents" data-icon="router">Agents</a>
+      <a href="#evolution" class="mn-sidebar__link"
+         data-view="evolution" data-icon="trending-up">Evolution</a>
       <a href="#admin" class="mn-sidebar__link"
          data-view="admin" data-icon="settings">Admin</a>
-      <a href="#terminal" class="mn-sidebar__link"
-         data-view="terminal" data-icon="terminal">Terminal</a>
     </nav>
 
-    <header slot="toolbar" class="mn-toolbar">
-      <h1 class="mn-toolbar__title">Convergio Control Room</h1>
-      <mn-theme-rotary></mn-theme-rotary>
-    </header>
+    <div slot="main" class="cr-layout">
+      <!-- Zone 1: Command Strip (KPI bar, always visible) -->
+      <header class="cr-command-strip" role="banner">
+        <h1 class="mn-toolbar__title">Convergio Control Room</h1>
+        <div class="cr-command-strip__kpi" id="command-strip-kpi"></div>
+        <mn-theme-rotary></mn-theme-rotary>
+      </header>
 
-    <main slot="main" id="view-container"></main>
+      <!-- Zone 2: Main Area (view container) -->
+      <main class="cr-main" id="view-container"></main>
+
+      <!-- Zone 3: Brain Strip (collapsible) -->
+      <section class="cr-brain-strip" id="brain-strip"
+               data-brain-strip="expanded" aria-label="Brain strip">
+        <div class="cr-brain-strip__handle" id="brain-strip-handle"
+             role="separator" aria-orientation="horizontal"
+             aria-label="Resize brain strip" tabindex="0">
+          <button class="cr-brain-strip__toggle" id="brain-strip-toggle"
+                  aria-expanded="true" aria-controls="brain-strip-content"
+                  title="Toggle brain strip">
+            <span class="cr-brain-strip__toggle-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="cr-brain-strip__content" id="brain-strip-content"></div>
+      </section>
+    </div>
   </mn-app-shell>
 
   <mn-command-palette id="cmd-palette"></mn-command-palette>
@@ -62,10 +78,6 @@
 
   <!-- Maranello JS bundle (IIFE) -->
   <script src="node_modules/maranello-luce-design-business/dist/iife/maranello.min.js"></script>
-  <!-- Vendor: xterm.js (terminal view) -->
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
   <!-- App -->
   <script type="module" src="app.js"></script>
 </body>

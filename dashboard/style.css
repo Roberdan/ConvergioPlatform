@@ -1,20 +1,132 @@
 /* Convergio Control Room — app-level styles
-   All colors from Maranello semantic tokens. */
+   All colors from Maranello semantic tokens.
+   3-zone layout: command strip + main + brain strip */
 
-/* Sidebar active link */
-.mn-sidebar__link--active {
-  background: var(--mn-surface-raised);
-  color: var(--mn-accent);
-  border-left: 3px solid var(--mn-accent);
+/* ── 3-Zone Grid Layout ──────────────────────────────────────────── */
+
+.cr-layout {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+  overflow: hidden;
 }
 
-/* Sidebar link hover */
-.mn-sidebar__link:hover {
+/* ── Zone 1: Command Strip ───────────────────────────────────────── */
+
+.cr-command-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1.5rem;
+  height: 3.5rem;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface);
+}
+
+.cr-command-strip__kpi {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex: 1;
+  justify-content: center;
+}
+
+.mn-toolbar__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--mn-text);
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* ── Zone 2: Main Area ───────────────────────────────────────────── */
+
+.cr-main {
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+/* ── Zone 3: Brain Strip ─────────────────────────────────────────── */
+
+.cr-brain-strip {
+  border-top: 1px solid var(--mn-border);
+  background: var(--mn-surface);
+  display: flex;
+  flex-direction: column;
+  height: 200px;
+  min-height: 3rem;
+  max-height: 50vh;
+  transition: height 0.2s ease;
+}
+
+.cr-brain-strip[data-brain-strip="collapsed"] {
+  height: 3rem;
+  min-height: 3rem;
+}
+
+.cr-brain-strip[data-brain-strip="collapsed"] .cr-brain-strip__content {
+  display: none;
+}
+
+/* Drag handle for resizing */
+.cr-brain-strip__handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  cursor: row-resize;
   background: var(--mn-surface-raised);
+  border-bottom: 1px solid var(--mn-border);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.cr-brain-strip__handle:hover {
+  background: var(--mn-surface-hover, var(--mn-surface-raised));
+}
+
+/* Collapse/expand toggle button */
+.cr-brain-strip__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 1.25rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--mn-text-muted);
+  padding: 0;
+}
+
+.cr-brain-strip__toggle:hover {
   color: var(--mn-text);
 }
 
-/* Sidebar layout */
+/* Chevron icon via CSS — points down when expanded, up when collapsed */
+.cr-brain-strip__toggle-icon {
+  display: block;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+[data-brain-strip="collapsed"] .cr-brain-strip__toggle-icon {
+  transform: rotate(-135deg);
+}
+
+.cr-brain-strip__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem 1.5rem;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+
 .mn-sidebar {
   display: flex;
   flex-direction: column;
@@ -32,31 +144,19 @@
   transition: background 0.15s, color 0.15s;
 }
 
-/* View container transitions */
-#view-container {
-  min-height: 100%;
-  padding: 1.5rem;
+.mn-sidebar__link--active {
+  background: var(--mn-surface-raised);
+  color: var(--mn-accent);
+  border-left: 3px solid var(--mn-accent);
 }
 
-/* Toolbar layout */
-.mn-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1.5rem;
-  height: 3.5rem;
-  border-bottom: 1px solid var(--mn-border);
-  background: var(--mn-surface);
-}
-
-.mn-toolbar__title {
-  font-size: 1.125rem;
-  font-weight: 600;
+.mn-sidebar__link:hover {
+  background: var(--mn-surface-raised);
   color: var(--mn-text);
-  margin: 0;
 }
 
-/* Mobile responsive */
+/* ── Mobile responsive ───────────────────────────────────────────── */
+
 @media (max-width: 640px) {
   .mn-sidebar {
     display: none;
@@ -70,13 +170,16 @@
     width: 16rem;
     z-index: 100;
     background: var(--mn-surface);
-    box-shadow: 2px 0 8px rgba(0,0,0,0.2);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
   }
-  #view-container {
+  .cr-main {
     padding: 1rem;
   }
   .mn-toolbar__title {
     font-size: 1rem;
+  }
+  .cr-brain-strip {
+    height: 150px;
   }
   mn-data-table {
     overflow-x: auto;
