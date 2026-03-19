@@ -73,6 +73,21 @@ curl -s http://localhost:8420/api/ipc/agents | jq '.agents[] | select(.agent_id=
 # */1 * * * * /path/to/scripts/platform/agent-heartbeat.sh --name myagent
 ```
 
+## Problem: MyConvergio references after migration to ConvergioPlatform
+
+**Symptom:** Scripts, configs, or docs still reference `MyConvergio`, `sync-to-myconvergio-ops.sh`, or old repo paths after the Plan #671 consolidation.
+**Cause:** MyConvergio was merged into ConvergioPlatform; stale references were not fully cleaned up.
+**Fix:**
+```bash
+# Search for remaining references
+grep -ri 'myconvergio' scripts/ daemon/ dashboard/ claude-config/ || echo "Clean"
+# Verify sync script is gone
+test -f claude-config/scripts/lib/sync-to-myconvergio-ops.sh && echo "DELETE IT" || echo "Already removed"
+# Verify provisioning uses ConvergioPlatform paths
+grep -q 'ConvergioPlatform' scripts/mesh/mesh-provision-node.sh && echo "OK" || echo "Update paths"
+# The canonical repo is ConvergioPlatform — update any bookmarks or CI configs
+```
+
 ## Problem: Copilot agent not visible in /api/ipc/agents
 
 **Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty
