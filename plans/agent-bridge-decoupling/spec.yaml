@@ -1,0 +1,834 @@
+plan:
+  name: "Agent Bridge & Platform Decoupling"
+  project: convergio
+  model: claude-opus-4-6
+  version: "2.0.0"
+  description: |
+    Make ConvergioPlatform a self-contained, clone-and-run repo.
+    Wire existing IPC daemon (Plans 633-635) so Claude Code and Copilot agents
+    register as named agents and communicate through it.
+    Clean separation: ~/.claude/ stays thin config layer, ConvergioPlatform owns everything.
+    Full agent-optimized documentation, API reference with examples, and E2E test suite.
+
+  context:
+    existing_ipc: |
+      daemon/src/ipc/ — full protocol (Register, Send, Broadcast, Receive, Skills, Budget, Router)
+      daemon/src/main.rs — CLI already wired: Commands::Ipc + Commands::IpcIntel
+      daemon/src/server/api_ipc.rs — 17 HTTP endpoints (agents, messages, skills, budget, models, etc.)
+      IPC tables: ipc_agents, ipc_messages, ipc_channels, ipc_context, ipc_file_locks, ipc_worktrees
+      Intelligence tables: ipc_agent_skills, ipc_model_registry, ipc_subscriptions, ipc_budget_log
+    existing_scripts: |
+      scripts/platform/setup-claude-symlinks.sh — symlinks ~/.claude/ → claude-config/
+      scripts/platform/bootstrap-m5-master.sh — machine bootstrap
+      daemon/start.sh — daemon runner
+    existing_docs: |
+      docs/guides/migration-symlinks.md — symlink strategy
+      docs/adr/0001-platform-consolidation.md — Plan 664 ADR
+      claude-config/reference/operational/enforcement-hooks.md — 19 hooks documented
+      claude-config/reference/operational/copilot-alignment.md — Copilot parity matrix
+
+  requirements:
+    - id: F-01
+      title: "Master setup.sh at repo root"
+      description: "Single entry point: git clone → ./setup.sh → everything works. Calls setup-claude-symlinks.sh, generates .claude/settings.json, validates daemon, sets env."
+    - id: F-02
+      title: "Project .claude/settings.json with enforcement hooks"
+      description: "All 15 portable hooks from enforcement-hooks.md configured. PreToolUse matchers for guard-plan-mode, enforce-plan-db-safe, worktree-guard, etc."
+    - id: F-03
+      title: ".github/copilot-instructions.md"
+      description: "Copilot instructions derived from same source of truth (CLAUDE.md + code-standards + compliance). Includes agent naming, workflow routing, hook enforcement."
+    - id: F-04
+      title: "Agent bridge script (SubagentStart hook)"
+      description: "scripts/platform/agent-bridge.sh — called on SubagentStart, registers agent in daemon IPC via HTTP POST. Extracts agent name/type from hook event JSON."
+    - id: F-05
+      title: "Agent lifecycle hooks"
+      description: "SubagentStart → register in IPC. Session end → unregister. PreCompact → checkpoint agent state to IPC context."
+    - id: F-06
+      title: "Agent heartbeat"
+      description: "scripts/platform/agent-heartbeat.sh — updates agent last_seen via HTTP, reports current task and worktree."
+    - id: F-07
+      title: "Skill sync script"
+      description: "scripts/platform/agent-skills-sync.sh — reads claude-config/commands/*.md, registers each as a skill in IPC skill pool with confidence scores."
+    - id: F-08
+      title: "Copilot bridge script"
+      description: "scripts/platform/copilot-bridge.sh — registers Copilot agents in IPC. Called from .github hooks or manually."
+    - id: F-09
+      title: "E2E integration test suite"
+      description: "Complete E2E test covering: daemon startup, agent registration/unregistration, messaging, skill sync, heartbeat, hook firing, setup.sh idempotency, copilot bridge, multi-agent communication."
+    - id: F-10
+      title: "ADR: Agent Bridge architecture decision"
+      description: "ADR 0002 documenting: decision to use IPC daemon as agent backbone, alternatives considered, consequences, enforcement rules. Agent-optimized format (tables, commands, no prose)."
+    - id: F-11
+      title: "API Reference documentation"
+      description: "docs/api/ipc-agents.md — complete reference for all agent IPC endpoints. Each endpoint: method, path, request body schema, response schema, curl example, error cases. Agent-optimized (machine-parseable tables, copy-paste examples)."
+    - id: F-12
+      title: "Agent onboarding guide"
+      description: "docs/guides/agent-onboarding.md — step-by-step guide for new agents (Claude or Copilot) to register, discover skills, send messages, handle lifecycle. Includes worked examples with real curl commands."
+    - id: F-13
+      title: "TROUBLESHOOTING.md agent entries"
+      description: "Add troubleshooting entries for: setup.sh failures, agent registration failures, hook not firing, daemon not running, skill sync empty, heartbeat missing."
+
+  non_functional:
+    - "setup.sh must be idempotent (safe to re-run)"
+    - "All scripts must follow bash standards: set -euo pipefail, local vars, trap cleanup"
+    - "HTTP calls use curl with timeout and error handling"
+    - "No hardcoded paths — use env vars and defaults"
+    - "Max 250 lines per file"
+    - "Docs optimized for agent consumption: tables > prose, commands > descriptions, examples > explanations"
+    - "Every API endpoint has a curl example that can be copy-pasted"
+    - "E2E tests must be runnable in CI (no manual steps)"
+
+waves:
+  - id: W0
+    name: "Daemon API Gap"
+    parallel: false
+    tasks:
+      - id: T0
+        title: "Add POST /api/ipc/agents endpoint (register/unregister/heartbeat)"
+        requirements: [F-04, F-05, F-06]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - daemon/src/server/api_ipc.rs
+        description: |
+          The existing daemon HTTP API has NO write path for ipc_agents table.
+          All agent visibility depends on ipc_messages only.
+
+          Add three endpoints to daemon/src/server/api_ipc.rs:
+
+          1. POST /api/ipc/agents/register
+             Body: { "agent_id": "planner", "host": "mac-m5", "pid": 1234, "worktree": "/path", "branch": "main", "current_task": "T1" }
+             Action: INSERT OR REPLACE INTO ipc_agents. Also broadcast on ws_tx.
+             Response: { "ok": true, "agent_id": "planner" }
+
+          2. POST /api/ipc/agents/unregister
+             Body: { "agent_id": "planner", "host": "mac-m5" }
+             Action: DELETE FROM ipc_agents WHERE agent_id=? AND host=?
+             Response: { "ok": true }
+
+          3. POST /api/ipc/agents/heartbeat
+             Body: { "agent_id": "planner", "host": "mac-m5", "current_task": "T3" }
+             Action: UPDATE ipc_agents SET last_heartbeat=datetime('now'), current_task=? WHERE agent_id=? AND host=?
+             Response: { "ok": true }
+
+          Wire new routes in the router() function.
+          Follow existing pattern from api_ipc_send for error handling and schema init.
+          Add Deserialize structs for each request body.
+        verify:
+          - "POST /api/ipc/agents/register returns 200 with valid body"
+          - "GET /api/ipc/agents shows registered agent after register"
+          - "POST /api/ipc/agents/unregister removes agent from GET list"
+          - "POST /api/ipc/agents/heartbeat updates last_heartbeat timestamp"
+          - "cargo check passes with no warnings"
+          - "cargo test passes (existing tests not broken)"
+        test_criteria: |
+          curl -X POST localhost:8420/api/ipc/agents/register \
+            -H 'Content-Type: application/json' \
+            -d '{"agent_id":"test","host":"test-host","pid":1234}' → {"ok":true,"agent_id":"test"}.
+          curl localhost:8420/api/ipc/agents → agents array contains "test".
+          curl -X POST localhost:8420/api/ipc/agents/heartbeat \
+            -d '{"agent_id":"test","host":"test-host","current_task":"T1"}' → {"ok":true}.
+          curl -X POST localhost:8420/api/ipc/agents/unregister \
+            -d '{"agent_id":"test","host":"test-host"}' → {"ok":true}.
+          curl localhost:8420/api/ipc/agents → agents array empty.
+          cargo check && cargo test both pass.
+
+  - id: W1
+    name: "Bootstrap & Config"
+    parallel: true
+    tasks:
+      - id: T1
+        title: "Create root setup.sh"
+        requirements: [F-01]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - setup.sh
+        description: |
+          Create setup.sh at repo root that:
+          1. Detects platform (macOS/Linux)
+          2. Calls scripts/platform/setup-claude-symlinks.sh
+          3. Copies .claude/settings.json into project dir (file created by T2)
+          4. Sets DASHBOARD_DB in shell profile if not set
+          5. Checks if daemon binary exists, suggests build if not
+          6. Prints status summary with checklist of what was set up
+          7. Validates: symlinks correct, settings.json valid, DB accessible
+
+          Must be idempotent. Must not overwrite machine-local config (peers.conf).
+          Does NOT call agent-skills-sync.sh (that runs separately after W2).
+          Exit 0 on success, exit 1 on failure with clear error message.
+        verify:
+          - "setup.sh exists at repo root and is executable"
+          - "Running twice produces same result (idempotent)"
+          - "shellcheck setup.sh passes"
+          - "Exit codes: 0 on success, 1 on failure"
+        test_criteria: |
+          Run setup.sh. Verify:
+          - ~/.claude/CLAUDE.md is symlink → claude-config/CLAUDE.md
+          - .claude/settings.json exists in project with hooks
+          - DASHBOARD_DB env is set
+          - Run again: no errors, same state
+
+      - id: T2
+        title: "Create .claude/settings.json with hooks"
+        requirements: [F-02]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - .claude/settings.json
+        description: |
+          Create project-level .claude/settings.json with all enforcement hooks.
+          Reference: claude-config/reference/operational/enforcement-hooks.md
+
+          PreToolUse hooks (as Bash matchers):
+          - guard-plan-mode: block EnterPlanMode
+          - enforce-plan-db-safe: block raw plan-db.sh update-task done
+          - enforce-plan-edit: block direct edit of plan spec files
+          - worktree-guard: warn on git checkout/branch on main
+          - prefer-ci-summary: block raw npm run lint/test/build
+          - warn-bash-antipatterns: warn on pipe to tail/head/grep/cat
+          - session-file-lock: lock files on Edit/Write
+          - guard-settings: block settings.json edit
+
+          SubagentStart hook: call scripts/platform/agent-bridge.sh --register
+          PostToolUse hooks: enforce-line-limit (warn > 250 lines)
+
+          Each hook must call the daemon binary or a script in scripts/platform/.
+          Use CONVERGIO_PLATFORM_DIR env or auto-detect from git root.
+          Include inline comments in JSON for each hook explaining what it does.
+        verify:
+          - ".claude/settings.json is valid JSON (jq . passes)"
+          - "All 15 portable hooks from enforcement-hooks.md are present"
+          - "SubagentStart hook calls agent-bridge.sh"
+          - "PostToolUse enforce-line-limit is present"
+        test_criteria: |
+          jq . .claude/settings.json succeeds.
+          jq '[.hooks[] | .name] | length' >= 15.
+          grep -q 'agent-bridge.sh' .claude/settings.json.
+
+      - id: T3
+        title: "Create .github/copilot-instructions.md"
+        requirements: [F-03]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - .github/copilot-instructions.md
+        description: |
+          Create Copilot instructions derived from:
+          - CLAUDE.md (architecture, conventions, commands)
+          - claude-config/rules/code-standards.md
+          - claude-config/rules/compliance.md
+          - claude-config/reference/operational/copilot-alignment.md
+
+          Must include these sections:
+          1. Architecture table (daemon, dashboard, evolution, scripts)
+          2. Agent naming convention: each agent has a unique name (planner, executor, reviewer, etc.)
+          3. Workflow routing: @planner, @execute, @validate with examples
+          4. IPC registration: agents MUST register via agent-bridge.sh on start
+          5. Code standards: ESLint, Prettier, 250 line limit, semicolons, single quotes
+          6. Hook enforcement equivalents for Copilot
+          7. Available commands table (same as Claude Code skills)
+          8. Key paths table (daemon, dashboard, evolution, data, scripts)
+
+          Keep under 4000 tokens. Copilot format: no @-references, inline everything.
+          Tables > prose. Commands > descriptions. Examples where useful.
+        verify:
+          - ".github/copilot-instructions.md exists"
+          - "Contains: Architecture, Agent Naming, Workflow, IPC Registration, Code Standards, Hooks, Commands, Paths sections"
+          - "Under 4000 tokens (wc -w < 3000)"
+        test_criteria: |
+          File exists.
+          All 8 sections present (grep for headers).
+          wc -w < 3000.
+
+  - id: W2
+    name: "Agent Bridge & Lifecycle"
+    parallel: true
+    tasks:
+      - id: T4
+        title: "Create agent-bridge.sh"
+        requirements: [F-04, F-05]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - scripts/platform/agent-bridge.sh
+        description: |
+          Create agent-bridge.sh that:
+          1. Reads SubagentStart hook event JSON from stdin or args
+          2. Extracts agent name (from subagent_type or description), PID, type
+          3. Registers agent via HTTP POST to daemon:
+             curl -s http://localhost:8420/api/ipc/agents/register \
+               -H 'Content-Type: application/json' \
+               -d '{"agent_id":"planner","host":"$(hostname)","pid":$$}'
+          4. On --unregister: POST /api/ipc/agents/unregister
+          5. On --checkpoint: saves agent context to IPC context store via /api/ipc/send
+          6. Exports common functions (agent_register, agent_unregister, agent_heartbeat)
+             in a sourceable library section so copilot-bridge.sh can reuse them
+
+          Must handle daemon not running gracefully (warn to stderr, exit 0 — don't block agent start).
+          Use CONVERGIO_DAEMON_URL env or default to http://localhost:8420.
+          Shared default port in a single variable at top of script.
+
+          Library functions pattern:
+          ```
+          # When sourced, only define functions. When executed, parse args and dispatch.
+          if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+            main "$@"
+          fi
+          ```
+        verify:
+          - "agent-bridge.sh exists and is executable"
+          - "Handles --register, --unregister, --checkpoint modes"
+          - "Graceful fallback when daemon is not running (exit 0, warn to stderr)"
+          - "Library functions are sourceable (source agent-bridge.sh; agent_register works)"
+          - "shellcheck passes"
+        test_criteria: |
+          1. agent-bridge.sh --register --name test-agent --type claude → exit 0
+          2. curl localhost:8420/api/ipc/agents → shows test-agent
+          3. agent-bridge.sh --unregister --name test-agent → exit 0
+          4. curl localhost:8420/api/ipc/agents → test-agent gone
+          5. Stop daemon, run --register → exit 0, stderr warning
+          6. source agent-bridge.sh; agent_register test2 claude → function works
+
+      - id: T5
+        title: "Create agent-heartbeat.sh"
+        requirements: [F-06]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: S
+        files:
+          - scripts/platform/agent-heartbeat.sh
+        description: |
+          Create agent-heartbeat.sh that:
+          1. Reads AGENT_IPC_NAME env or takes --name arg
+          2. POSTs heartbeat to daemon API:
+             POST /api/ipc/agents/heartbeat
+             Body: { "agent_id": "$name", "host": "$(hostname)", "current_task": "$task" }
+          3. Collects current state:
+             - current task from plan-db.sh (if available, otherwise "idle")
+             - current worktree/branch from git
+             - CPU/memory from ps
+          4. Also sends info message on "heartbeat" channel for dashboard visibility
+          5. Designed to be called periodically (e.g., every 60s)
+
+          Must handle daemon not running gracefully (warn, exit 0).
+        verify:
+          - "agent-heartbeat.sh exists and is executable"
+          - "Uses POST /api/ipc/agents/heartbeat (not just /api/ipc/send)"
+          - "Sends agent name, host, current task, system info"
+          - "shellcheck passes"
+        test_criteria: |
+          1. Register agent via bridge first
+          2. agent-heartbeat.sh --name test-agent → exit 0
+          3. curl localhost:8420/api/ipc/agents → last_heartbeat updated
+          4. curl localhost:8420/api/ipc/messages?channel=heartbeat → heartbeat message present
+
+      - id: T6
+        title: "Create agent-skills-sync.sh"
+        requirements: [F-07]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - scripts/platform/agent-skills-sync.sh
+        description: |
+          Create agent-skills-sync.sh that:
+          1. Scans claude-config/commands/*.md for skill definitions
+          2. Extracts skill name from filename (e.g., planner.md → "planner")
+          3. Registers each skill in daemon IPC via CLI:
+             claude-core ipc-intel request-skill <skill> --payload '{"source":"sync","agent":"<default_agent>"}'
+             (NOTE: no POST /api/ipc/skills endpoint exists — use CLI only)
+          4. Maps skills to default agents with confidence scores:
+             - planner → claude-opus (0.95)
+             - execute → copilot-codex (0.90), claude-sonnet (0.85)
+             - check → claude-sonnet (0.90)
+             - prompt → claude-opus (0.95)
+             - research → claude-haiku (0.80)
+             - release → claude-sonnet (0.85)
+             - prepare → claude-opus (0.90)
+             - optimize-instructions → claude-sonnet (0.85)
+          5. Also scans claude-config/agents/ for agent definitions
+          6. Registers agent capabilities from agent frontmatter
+          7. Prints summary table: skill → agent → confidence
+
+          This runs during setup.sh and can be re-run to refresh.
+        verify:
+          - "agent-skills-sync.sh exists and is executable"
+          - "Registers all 8 skills from commands/"
+          - "Maps each skill to at least one agent with confidence"
+          - "Prints summary table"
+          - "shellcheck passes"
+        test_criteria: |
+          1. agent-skills-sync.sh → exit 0
+          2. claude-core ipc-intel skills → shows at least 8 skills
+          3. Output includes summary table with skill/agent/confidence
+          4. Re-run → same result (idempotent)
+
+  - id: W3
+    name: "Copilot Bridge & E2E Tests"
+    parallel: true
+    tasks:
+      - id: T7
+        title: "Create copilot-bridge.sh"
+        requirements: [F-08]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: S
+        files:
+          - scripts/platform/copilot-bridge.sh
+        description: |
+          Create copilot-bridge.sh that:
+          1. Sources agent-bridge.sh library functions (agent_register, agent_unregister)
+          2. Registers a Copilot agent in daemon IPC with type "copilot"
+          3. Takes --name (default: "copilot"), --type (default: "copilot")
+          4. Can be called from Copilot hooks or manually
+          5. Also accepts --heartbeat to delegate to agent-heartbeat.sh
+
+          Keep it simple — thin wrapper that sources agent-bridge.sh and calls with Copilot defaults.
+          Must be < 50 lines.
+        verify:
+          - "copilot-bridge.sh exists and is executable"
+          - "Sources agent-bridge.sh (grep source or .)"
+          - "Registers agent with type 'copilot' by default"
+          - "Under 50 lines (wc -l < 50)"
+          - "shellcheck passes"
+        test_criteria: |
+          1. copilot-bridge.sh --register → exit 0
+          2. curl localhost:8420/api/ipc/agents → shows agent with type copilot
+          3. copilot-bridge.sh --unregister → exit 0
+          4. wc -l copilot-bridge.sh < 50
+
+      - id: T8
+        title: "Create comprehensive E2E test suite"
+        requirements: [F-09]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: L
+        files:
+          - scripts/platform/test-agent-ipc.sh
+          - scripts/platform/test-setup-e2e.sh
+        description: |
+          Create TWO test scripts:
+
+          ## test-agent-ipc.sh — Agent IPC E2E test
+          Tests the full agent communication lifecycle:
+          1. PRE: Check daemon running, start if not (with timeout)
+          2. TEST: Agent registration
+             - Register "e2e-claude" (type: claude) via agent-bridge.sh
+             - Register "e2e-copilot" (type: copilot) via copilot-bridge.sh
+             - Verify both visible in GET /api/ipc/agents
+          3. TEST: Agent messaging
+             - Send message from e2e-claude to e2e-copilot via /api/ipc/send
+             - Verify message in GET /api/ipc/messages
+             - Send broadcast on "planning" channel
+             - Verify broadcast received
+          4. TEST: Skill sync
+             - Run agent-skills-sync.sh
+             - Verify skills registered via claude-core ipc-intel skills
+             - Verify skill count >= 8
+          5. TEST: Heartbeat
+             - Run agent-heartbeat.sh --name e2e-claude
+             - Verify last_heartbeat updated in /api/ipc/agents
+             - Verify heartbeat message in /api/ipc/messages?channel=heartbeat
+          6. TEST: Agent unregistration
+             - Unregister e2e-claude via agent-bridge.sh --unregister
+             - Unregister e2e-copilot via copilot-bridge.sh --unregister
+             - Verify both gone from GET /api/ipc/agents
+          7. TEST: Daemon-down resilience
+             - Stop daemon (if we started it)
+             - Run agent-bridge.sh --register → must exit 0 with warning
+             - Run agent-heartbeat.sh → must exit 0 with warning
+          8. CLEANUP: Unregister all test agents, delete test messages
+          9. REPORT: Print TAP-format results (ok/not ok per test)
+
+          Exit 0 if all pass, exit 1 if any fail.
+          Each test must be independent (setup/teardown per test where needed).
+          Use trap for cleanup on failure.
+
+          ## test-setup-e2e.sh — Setup idempotency E2E test
+          Tests the full setup flow:
+          1. Record current state (symlinks, settings.json, env)
+          2. Run setup.sh → verify exit 0
+          3. Verify all symlinks point to claude-config/
+          4. Verify .claude/settings.json exists and is valid JSON
+          5. Verify hook count >= 15
+          6. Verify DASHBOARD_DB env is set
+          7. Run setup.sh again → verify exit 0 (idempotent)
+          8. Verify state unchanged after second run
+          9. Verify daemon binary exists (or warning printed)
+          10. REPORT: TAP-format results
+        verify:
+          - "test-agent-ipc.sh exists, executable, TAP output"
+          - "test-setup-e2e.sh exists, executable, TAP output"
+          - "All tests pass with daemon running"
+          - "Daemon-down resilience test passes"
+          - "Setup idempotency test passes"
+          - "shellcheck passes on both"
+        test_criteria: |
+          1. Start daemon
+          2. ./scripts/platform/test-agent-ipc.sh → all ok, exit 0
+          3. ./scripts/platform/test-setup-e2e.sh → all ok, exit 0
+          4. Both output TAP format ("ok N description" or "not ok N description")
+          5. Verify >= 7 test cases in agent-ipc, >= 8 in setup-e2e
+
+  - id: W4
+    name: "Documentation"
+    parallel: true
+    tasks:
+      - id: T9
+        title: "Create ADR 0002: Agent Bridge architecture"
+        requirements: [F-10]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - docs/adr/0002-agent-bridge-decoupling.md
+        description: |
+          Create ADR 0002 following the established format from ADR 0001.
+          Optimized for agent consumption (tables, commands, no prose).
+
+          Sections:
+          1. Status: Accepted | Date: 19 Mar 2026 | Plan: 666
+          2. Context:
+             - Plans 633-635 built IPC layer but no bridge to Claude Code/Copilot
+             - Plan 664 consolidated repo but ~/.claude/ still tightly coupled
+             - Agents had no way to discover or communicate with each other
+          3. Decision:
+             - Table: "What → How" mapping for each component
+             - Daemon IPC HTTP API is the communication backbone
+             - Named agents register on start, unregister on stop
+             - Skills are synced from claude-config/commands/ to IPC skill pool
+             - setup.sh is single entry point for new installations
+          4. Alternatives Considered:
+             - Table: Alternative → Pro → Con → Why rejected
+             - File-based IPC (too slow, no real-time)
+             - Direct agent-to-agent TCP (complex, no registry)
+             - Shared SQLite without daemon (no WebSocket broadcast)
+          5. Consequences:
+             - Positive: agent discoverability, cross-platform, skill routing
+             - Negative: daemon must be running, HTTP overhead
+          6. Enforcement:
+             - Table of rules with check commands
+             - "Every agent MUST register via agent-bridge.sh"
+             - "setup.sh MUST be run after clone"
+          7. API Quick Reference:
+             - Table: Method | Path | Purpose | Example
+             - All 20+ IPC endpoints listed
+
+          Max 250 lines. Tables > prose everywhere.
+        verify:
+          - "docs/adr/0002-agent-bridge-decoupling.md exists"
+          - "Contains all 7 sections"
+          - "Alternatives table has >= 3 alternatives"
+          - "API Quick Reference table has >= 15 endpoints"
+          - "Under 250 lines"
+        test_criteria: |
+          File exists.
+          grep -c '^|' docs/adr/0002-agent-bridge-decoupling.md >= 30 (table rows).
+          wc -l < 250.
+          All 7 section headers present.
+
+      - id: T10
+        title: "Create IPC Agent API reference"
+        requirements: [F-11]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - docs/api/ipc-agents.md
+        description: |
+          Create complete API reference for all agent-related IPC endpoints.
+          Agent-optimized: every endpoint has a copy-paste curl example.
+
+          Format per endpoint:
+          ```
+          ## POST /api/ipc/agents/register
+
+          Register an agent in the IPC system.
+
+          | Field | Type | Required | Default | Description |
+          |-------|------|----------|---------|-------------|
+          | agent_id | string | yes | — | Unique agent name |
+          | host | string | yes | — | Hostname |
+          | pid | integer | no | null | Process ID |
+          | ...
+
+          **Request:**
+          ```bash
+          curl -X POST http://localhost:8420/api/ipc/agents/register \
+            -H 'Content-Type: application/json' \
+            -d '{"agent_id":"planner","host":"mac-m5","pid":1234,"current_task":"T1"}'
+          ```
+
+          **Response (200):**
+          ```json
+          {"ok": true, "agent_id": "planner"}
+          ```
+
+          **Errors:**
+          | Status | Body | Cause |
+          |--------|------|-------|
+          | 500 | {"error": "..."} | DB write failed |
+          ```
+
+          Cover ALL endpoints:
+          1. POST /api/ipc/agents/register (new in W0)
+          2. POST /api/ipc/agents/unregister (new in W0)
+          3. POST /api/ipc/agents/heartbeat (new in W0)
+          4. GET /api/ipc/agents
+          5. GET /api/ipc/status
+          6. POST /api/ipc/send
+          7. GET /api/ipc/messages
+          8. GET /api/ipc/channels
+          9. GET /api/ipc/context
+          10. GET /api/ipc/locks
+          11. GET /api/ipc/worktrees
+          12. GET /api/ipc/conflicts
+          13. GET /api/ipc/skills
+          14. GET /api/ipc/models
+          15. GET /api/ipc/budget
+          16. GET /api/ipc/auth-status
+          17. GET /api/ipc/route-history
+          18. GET /api/ipc/metrics
+          19. GET /api/ipc/logs
+
+          Split into sections: Agent Lifecycle, Messaging, Coordination, Intelligence.
+          Include "Common patterns" section with multi-step examples:
+          - Register → Send → Receive flow
+          - Register → Sync skills → Route task flow
+        verify:
+          - "docs/api/ipc-agents.md exists"
+          - "All 19 endpoints documented"
+          - "Every endpoint has curl example"
+          - "Every endpoint has request/response schema"
+          - "Common patterns section with >= 2 multi-step examples"
+        test_criteria: |
+          File exists.
+          grep -c 'curl' docs/api/ipc-agents.md >= 19.
+          grep -c '^## ' docs/api/ipc-agents.md >= 19 (one heading per endpoint).
+          Contains "Common Patterns" section.
+
+      - id: T11
+        title: "Create agent onboarding guide"
+        requirements: [F-12]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: M
+        files:
+          - docs/guides/agent-onboarding.md
+        description: |
+          Create step-by-step guide for agents (Claude Code or Copilot) to integrate
+          with the ConvergioPlatform IPC system.
+
+          Sections:
+          1. Prerequisites
+             - Table: What → How to check → How to fix
+             - daemon running, DASHBOARD_DB set, setup.sh run
+          2. Agent Registration (with curl + script examples)
+             - Register via agent-bridge.sh
+             - Register via direct HTTP
+             - Register via CLI (claude-core ipc register)
+             - Verify registration
+          3. Skill Discovery
+             - How to list available skills
+             - How to request a skill from another agent
+             - How to register your own skills
+             - Worked example: "planner" requests "execute" skill
+          4. Messaging
+             - Send point-to-point message
+             - Broadcast on channel
+             - Receive messages (with filters)
+             - Create named channel
+             - Worked example: multi-agent planning conversation
+          5. Lifecycle Management
+             - Heartbeat (why, how often, what data)
+             - Checkpoint state before compaction
+             - Clean unregistration
+          6. Troubleshooting Quick Reference
+             - Table: Symptom → Cause → Fix (one-liner)
+          7. Agent Name Registry
+             - Table of all known agent names, their types, and default skills
+             - planner, executor, reviewer (thor), explorer, prompt, researcher, etc.
+
+          Every section has a working curl or bash example.
+          Agent-optimized: an AI agent should be able to read this and immediately integrate.
+        verify:
+          - "docs/guides/agent-onboarding.md exists"
+          - "All 7 sections present"
+          - "Every section has >= 1 curl or bash example"
+          - "Agent Name Registry table has >= 6 agents"
+          - "Under 250 lines"
+        test_criteria: |
+          File exists.
+          grep -c 'curl\|bash' docs/guides/agent-onboarding.md >= 10.
+          All 7 section headers present.
+          wc -l < 250.
+
+      - id: T12
+        title: "Update TROUBLESHOOTING.md with agent entries"
+        requirements: [F-13]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: S
+        files:
+          - TROUBLESHOOTING.md
+        description: |
+          Add agent-specific troubleshooting entries to TROUBLESHOOTING.md.
+          Follow existing format: ## Problem: → **Symptom/Cause/Fix:**
+
+          New entries:
+          1. ## Problem: setup.sh fails
+             Symptom: "ERROR: claude-config not found"
+             Cause: ConvergioPlatform not cloned or wrong path
+             Fix: git clone + verify path
+
+          2. ## Problem: Agent not registering in IPC
+             Symptom: agent-bridge.sh warns "daemon not reachable"
+             Cause: daemon not running on port 8420
+             Fix: ./daemon/start.sh, verify curl localhost:8420/api/ipc/status
+
+          3. ## Problem: Hooks not firing
+             Symptom: can use EnterPlanMode without block
+             Cause: .claude/settings.json missing or not in project root
+             Fix: run setup.sh, verify .claude/settings.json exists
+
+          4. ## Problem: Skill sync shows 0 skills
+             Symptom: agent-skills-sync.sh runs but no skills registered
+             Cause: claude-core binary not on PATH or DB not accessible
+             Fix: check which claude-core, check DASHBOARD_DB
+
+          5. ## Problem: Agent heartbeat missing
+             Symptom: agent shows stale last_heartbeat
+             Cause: heartbeat script not running or daemon down
+             Fix: check agent-heartbeat.sh manually, check daemon
+
+          6. ## Problem: Copilot agent not visible
+             Symptom: copilot-bridge.sh succeeds but GET /api/ipc/agents empty
+             Cause: using /api/ipc/send instead of /api/ipc/agents/register
+             Fix: ensure copilot-bridge.sh uses POST /api/ipc/agents/register
+
+          If TROUBLESHOOTING.md doesn't exist, create it with header.
+        verify:
+          - "TROUBLESHOOTING.md exists"
+          - "Contains all 6 new problem entries"
+          - "Each entry has Symptom, Cause, Fix"
+        test_criteria: |
+          grep -c '^## Problem:' TROUBLESHOOTING.md >= 6.
+          grep -c 'Symptom\|Cause\|Fix' TROUBLESHOOTING.md >= 18.
+
+  - id: WF
+    name: "Closure"
+    parallel: false
+    tasks:
+      - id: TF-readme
+        title: "Update README.md setup section"
+        requirements: [F-01, F-10]
+        executor: copilot
+        model: claude-opus-4-6
+        effort: S
+        files:
+          - README.md
+        description: |
+          Update README.md to add/update:
+          1. Quick Start section:
+             ```
+             git clone <repo>
+             cd ConvergioPlatform
+             ./setup.sh
+             ./daemon/start.sh
+             ```
+          2. Agent Communication section:
+             - Brief description of IPC system
+             - Link to docs/api/ipc-agents.md
+             - Link to docs/guides/agent-onboarding.md
+          3. Testing section:
+             - How to run E2E tests
+             - scripts/platform/test-agent-ipc.sh
+             - scripts/platform/test-setup-e2e.sh
+          4. Architecture section update:
+             - Add "Agent IPC" row to architecture table
+             - Reference daemon/src/ipc/ and scripts/platform/
+
+          Do NOT remove existing content. Only add/update sections.
+        verify:
+          - "README.md has Quick Start section"
+          - "README.md has Agent Communication section"
+          - "README.md has Testing section"
+          - "Links to API docs and onboarding guide"
+        test_criteria: |
+          grep -q 'setup.sh' README.md.
+          grep -q 'ipc-agents.md' README.md.
+          grep -q 'agent-onboarding.md' README.md.
+          grep -q 'test-agent-ipc.sh' README.md.
+
+      - id: TF-tests
+        title: "Run full E2E test suite"
+        requirements: [F-09]
+        executor: coordinator
+        model: claude-sonnet-4-6
+        effort: S
+        files: []
+        description: |
+          Run the complete test suite:
+          1. cargo check (daemon compiles)
+          2. cargo test (daemon tests pass)
+          3. Start daemon
+          4. scripts/platform/test-setup-e2e.sh (setup tests)
+          5. scripts/platform/test-agent-ipc.sh (agent IPC tests)
+          6. Verify all TAP output shows "ok"
+          7. Stop daemon
+          Fix any failures before proceeding.
+        verify:
+          - "cargo check passes"
+          - "cargo test passes"
+          - "test-setup-e2e.sh all ok"
+          - "test-agent-ipc.sh all ok"
+        test_criteria: |
+          All test scripts exit 0. No "not ok" in TAP output.
+
+      - id: TF-pr
+        title: "PR creation"
+        requirements: []
+        executor: coordinator
+        model: claude-sonnet-4-6
+        effort: S
+        files: []
+        description: |
+          Create PR with all changes.
+          Title: 'feat: Agent Bridge & Platform Decoupling (Plan 666)'
+          Body must include:
+          - Summary of what was built (setup.sh, hooks, bridges, tests, docs)
+          - Link to ADR 0002
+          - E2E test results (paste TAP output)
+          - References to Plans 633-635, 664
+        verify:
+          - "PR created with all files"
+          - "CI passes"
+          - "E2E test results in PR body"
+        test_criteria: "PR URL returned, checks green, body references ADR and test results."
+
+      - id: TF-deploy-verify
+        title: "Verify setup works on clean state"
+        requirements: [F-01]
+        executor: coordinator
+        model: claude-sonnet-4-6
+        effort: S
+        files: []
+        description: |
+          Verify the full setup flow works:
+          1. Run setup.sh from repo root
+          2. Start daemon
+          3. Run test-agent-ipc.sh → all pass
+          4. Run test-setup-e2e.sh → all pass
+          5. Verify agent-bridge.sh registers agent successfully
+          6. Verify .claude/settings.json hooks are active
+        verify:
+          - "setup.sh exits 0"
+          - "Both E2E tests pass"
+          - "Agent visible in /api/ipc/agents"
+        test_criteria: "All verification steps pass."
