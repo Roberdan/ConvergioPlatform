@@ -182,26 +182,13 @@ function bindKeyboard() {
 // ── Theme persistence ────────────────────────────────────────────────
 
 function bindThemePersistence() {
-  // Listen for theme changes from <mn-theme-rotary> custom event
-  document.addEventListener('mn-theme-change', (e) => {
-    localStorage.setItem(
-      'mn-theme',
-      e.detail?.theme || document.documentElement.getAttribute('data-theme'),
-    );
-  });
-
-  // Fallback: MutationObserver on data-theme in case rotary doesn't fire events
-  const observer = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      if (m.attributeName === 'data-theme') {
-        const theme = document.documentElement.getAttribute('data-theme');
-        if (theme) localStorage.setItem('mn-theme', theme);
-      }
-    }
-  });
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
+  const persist = () => {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t) localStorage.setItem('mn-theme', t);
+  };
+  document.addEventListener('mn-theme-change', persist);
+  new MutationObserver(persist).observe(document.documentElement, {
+    attributes: true, attributeFilter: ['data-theme'],
   });
 }
 
