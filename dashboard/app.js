@@ -5,6 +5,8 @@ import * as api from './lib/api-core.js';
 import * as store from './lib/store.js';
 import { connectDashboardWS } from './lib/ws.js';
 import { initBrainStrip } from './lib/brain-strip.js';
+import { initDrawerChat } from './widgets/drawer-chat.js';
+import { createDrawer } from './widgets/drawer-bottom.js';
 
 const REFRESH_INTERVAL_MS = 16000;
 const DEFAULT_VIEW = 'overview';
@@ -109,19 +111,28 @@ function bindSidebarNav() {
 
 // ── Command palette ─────────────────────────────────────────────────
 
-function bindCommandPalette() {
+function bindCommandPalette(drawerToggle) {
   const palette = document.getElementById('cmd-palette');
   if (!palette) return;
 
-  palette.items = JSON.stringify(
-    Object.keys(VIEW_MODULES).map((id) => ({
-      text: viewTitle(id),
-      group: 'Navigation',
-    }))
-  );
+  const navItems = Object.keys(VIEW_MODULES).map((id) => ({
+    text: viewTitle(id),
+    group: 'Navigation',
+  }));
+
+  const cmdItems = [
+    { text: 'Toggle Terminal', group: 'Panels', shortcut: 'Ctrl+`' },
+  ];
+
+  palette.items = JSON.stringify([...navItems, ...cmdItems]);
 
   palette.addEventListener('mn-select', (e) => {
-    const viewId = e.detail.item.text.toLowerCase();
+    const label = e.detail.item.text;
+    if (label === 'Toggle Terminal' && drawerToggle) {
+      drawerToggle();
+      return;
+    }
+    const viewId = label.toLowerCase();
     if (VIEW_MODULES[viewId]) activateView(viewId);
   });
 }
@@ -206,10 +217,15 @@ async function init() {
 
   registerViews(registry);
   bindSidebarNav();
-  bindCommandPalette();
+
+  // Bottom terminal drawer (Ctrl+` to toggle)
+  const termDrawer = createDrawer();
+
+  bindCommandPalette(termDrawer.toggle);
   bindKeyboard();
   bindThemePersistence();
   initBrainStrip();
+  initDrawerChat();
 
   // Mobile sidebar toggle
   if (typeof Maranello.initSidebarToggleAuto === 'function') {
