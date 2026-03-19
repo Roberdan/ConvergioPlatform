@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.1.0] - 2026-03-19
+
+### Changed
+- Complete dashboard rebuild using MaranelloLuceDesign v4.17.0 Presentation Runtime
+- Replaced ~14K LOC vanilla JS with modular ES modules architecture
+- All views use Maranello Web Components (mn-chart, mn-data-table, mn-gauge, mn-gantt, mn-modal, mn-tabs)
+- Brain neural visualization refactored into 6 modules (max 250 LOC each)
+- 4-theme support (Editorial, Nero, Avorio, Colorblind) via mn-theme-rotary
+- WCAG 2.2 AA accessibility via mn-a11y FAB
+- Mobile responsive with collapsible sidebar
+
+### Removed
+- Legacy dashboard JS files (63 files)
+- Legacy CSS files (30 files)
+- GridStack dependency
+
 ## [3.0.0] - 2026-03-18
 
 ### Added — Evolution Engine v3

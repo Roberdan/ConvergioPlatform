@@ -1,5 +1,0 @@
-/* Idea Jar — extends shared widget system */
-#ideajar-widget { order: 999; }
-.idea-hover-actions { display:inline-flex; gap:4px; opacity:0; transition:opacity .15s; }
-.idea-item:hover .idea-hover-actions { opacity:1; }
-#idea-list .mission-plan { margin-bottom:2px; padding:8px 12px; }
