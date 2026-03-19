@@ -48,7 +48,18 @@ cmd_validate_wave() {
 		"
 	fi
 
-	echo -e "${YELLOW}Wave $wave_id: all tasks resolved — proceeding to wave validation${NC}"
+	# Thor gate: verify all done tasks have been validated
+	local unvalidated
+	unvalidated=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'done' AND validated_at IS NULL;")
+	if [[ "$unvalidated" -gt 0 ]]; then
+		log_error "Wave $wave_id has $unvalidated done tasks without Thor validation — cannot close wave"
+		sqlite3 "$DB_FILE" "SELECT task_id, title FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'done' AND validated_at IS NULL;" | while IFS='|' read -r tid title; do
+			echo "  - $tid: $title (missing validation)"
+		done
+		return 1
+	fi
+
+	echo -e "${YELLOW}Wave $wave_id: all tasks resolved + Thor-validated — closing wave${NC}"
 	sqlite3 "$DB_FILE" "UPDATE waves SET status = 'done', completed_at = COALESCE(completed_at, datetime('now')) WHERE id = $wave_db_id;"
 	return 0
 }

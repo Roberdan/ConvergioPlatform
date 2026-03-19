@@ -235,7 +235,10 @@ if [[ "$COMMAND" == "update-task" && "$STATUS" == "done" ]]; then
 			if [[ "$all_done" -eq 0 ]]; then
 				# All tasks are done (Thor-validated) — safe for wave completion
 				echo "[plan-db-safe] Wave $wave_id: all tasks done + Thor-validated" >&2
-				"$SCRIPT_DIR/plan-db.sh" validate-wave "$wave_db_id" "thor" 2>/dev/null || true
+				"$SCRIPT_DIR/plan-db.sh" validate-wave "$wave_db_id" "thor" 2>/dev/null || {
+				echo "ERROR: Thor wave validation FAILED for wave $wave_id — cannot advance. Run validate-wave manually." >&2
+				return 1
+			}
 
 				# Wave-per-worktree: trigger merge
 				if [[ -x "$SCRIPT_DIR/wave-worktree.sh" ]]; then

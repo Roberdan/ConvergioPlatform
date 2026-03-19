@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\\|\\s*(tail|head|grep|cat)\\b'; then echo 'WARNING: Avoid piping to tail/head/grep/cat — use Read/Grep tools' >&2; exit 2; fi"
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\\|\\s*(tail|head|grep|cat)\\b'; then echo 'WARNING: Avoid piping to tail/head/grep/cat — use Read/Grep tools' >&2; fi"
           }
         ]
       },
@@ -88,6 +88,15 @@
           {
             "type": "command",
             "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'gh\\s+pr\\s+(view|checks)'; then echo 'BLOCKED: Use pr-ops.sh or ci-digest.sh checks' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE \"UPDATE\\s+waves\\s+SET\\s+status\\s*=\\s*'done'\"; then echo 'BLOCKED: Never set wave status=done directly — use validate-wave (requires Thor)' >&2; exit 2; fi"
           }
         ]
       }

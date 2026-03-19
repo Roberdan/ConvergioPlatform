@@ -186,6 +186,14 @@ cmd_batch() {
 		log_info "Wave ${wave_db_id} clean — nothing to commit"
 	fi
 
+	# Thor gate: verify all tasks validated before marking wave done
+	local unvalidated
+	unvalidated=$(db_query "SELECT COUNT(*) FROM tasks WHERE wave_id_fk = ${wave_db_id} AND status = 'done' AND validated_at IS NULL;" 2>/dev/null || echo "0")
+	if [[ "$unvalidated" -gt 0 ]]; then
+		log_error "Wave ${wave_db_id} has $unvalidated done tasks without Thor validation — run validate-wave first"
+		exit 1
+	fi
+
 	# Mark wave done but keep worktree (next wave in theme will reuse it)
 	db_query "UPDATE waves SET status='done', merge_mode='batch', completed_at=datetime('now') WHERE id=${wave_db_id};" 2>/dev/null || true
 	log_info "Wave ${wave_db_id} -> done (batch, worktree kept for theme)"
