@@ -2,6 +2,10 @@
 
 Convergio unified control plane: mesh daemon, dashboard, and evolution engine.
 
+## Evolution Engine
+
+Evolution Engine v3 turns Convergio into a hypothesis-driven self-optimisation loop: telemetry collection, multi-domain evaluation, proposal generation, controlled experiments, and automated guardrails. It also integrates AutoPilot views, ROI tracking, and non-functional validation for release confidence. See architecture details in [`docs/evolution/architecture.md`](docs/evolution/architecture.md).
+
 ## Architecture
 
 | Layer | Path | Purpose |

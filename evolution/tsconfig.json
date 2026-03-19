@@ -12,6 +12,15 @@
     "sourceMap": true,
     "skipLibCheck": true
   },
-  "include": ["core/**/*.ts", "adapters/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "core/**/*.ts",
+    "adapters/**/*.ts",
+    "telemetry/**/*.ts",
+    "agents/**/*.ts",
+    "integrations/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
