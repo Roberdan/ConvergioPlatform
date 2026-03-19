@@ -1,559 +1,72 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="editorial">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Convergio Control Room</title>
-<!-- evolution telemetry panel entrypoint -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js?v=1773732144"></script>
-<script src="https://cdn.jsdelivr.net/npm/hammerjs@2/hammer.min.js?v=1773732144"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js?v=1773732144"></script>
-<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js?v=1773732144"></script>
-<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js?v=1773732144"></script>
-<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js?v=1773732144"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- GridStack.js — drag & resize dashboard grid (local) -->
-<link rel="stylesheet" href="node_modules/gridstack/dist/gridstack.min.css">
-<script src="node_modules/gridstack/dist/gridstack-all.js"></script>
-<!-- Orbitron + JetBrains Mono for legacy themes; Outfit/Inter/Barlow loaded by Maranello DS -->
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
-<!-- Maranello Luce Design System (CDN @main — auto-updates with repo) -->
-<link rel="stylesheet" href="node_modules/maranello-luce-design-business/dist/css/index.css" id="mn-ds-css">
-<link rel="stylesheet" href="node_modules/maranello-luce-design-business/dist/css/integration.css" id="mn-ds-integration-css">
-<link rel="stylesheet" href="style.css?v=1773732137">
-<link rel="stylesheet" href="themes.css?v=1773732144">
-<link rel="stylesheet" href="brain-styles.css?v=1773732144">
-<link rel="stylesheet" href="kanban-styles.css?v=1773732144">
-<link rel="stylesheet" href="styles-mission.css?v=1773732144">
-<link rel="stylesheet" href="css/idea-jar.css">
-<link rel="stylesheet" href="css/optimize.css">
-<link rel="stylesheet" href="css/admin.css">
-<link rel="stylesheet" href="css/ipc.css">
-<style>
-button,select{background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer}
-button{-webkit-appearance:none;appearance:none}
-input,textarea,select{background:var(--bg-input, var(--bg-deep,#0a0a0a));border:1px solid var(--border,#2a2a2a);border-radius:var(--radius-sm,6px);color:var(--text-bright, var(--mn-text,#fafafa));font:12px/1.5 var(--font-mono);padding:6px 10px;box-sizing:border-box;outline:none}
-input:focus,textarea:focus,select:focus{border-color:var(--accent,#FFC72C);box-shadow:0 0 0 2px rgba(255,199,44,0.15)}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Convergio Control Room</title>
+  <!-- Maranello Luce Design System -->
+  <link rel="stylesheet" href="node_modules/maranello-luce-design-business/dist/css/index.css">
+  <link rel="stylesheet" href="node_modules/maranello-luce-design-business/dist/css/integration.css">
+  <!-- Vendor: xterm.js (terminal view) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+  <!-- App styles (tokens only) -->
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<!-- A11y early restore: apply saved settings before first paint (prevent flash) -->
-<script>try{const s=JSON.parse(localStorage.getItem('mn-a11y')||'{}');if(s.fontSize)document.documentElement.style.setProperty('--mn-a11y-font-scale',{sm:'0.875',md:'1',lg:'1.125',xl:'1.25'}[s.fontSize]||'1');if(s.highContrast)document.documentElement.classList.add('mn-high-contrast');if(s.reducedMotion)document.documentElement.classList.add('mn-reduced-motion');if(s.dyslexiaFont)document.body.classList.add('mn-a11y-dyslexia-font');}catch(e){}</script>
-<!-- Debug: visible error overlay for JS errors -->
-<script>
-window.__dbgErrors=[];
-window.onerror=function(m,s,l,c,e){if(m&&m.indexOf('ResizeObserver')!==-1)return true;window.__dbgErrors.push(m+' @ '+s+':'+l);var d=document.getElementById('dbg-errors');if(d)d.innerHTML='<b>JS ERRORS:</b><br>'+window.__dbgErrors.join('<br>');};
-</script>
-<div id="dbg-errors" style="position:fixed;bottom:0;left:0;right:0;z-index:9999;background:rgba(220,0,0,0.95);color:#fff;font:11px/1.4 monospace;padding:6px 12px;display:none;max-height:120px;overflow-y:auto"></div>
-<script>
-window.addEventListener('error',function(){var d=document.getElementById('dbg-errors');if(d&&window.__dbgErrors.length)d.style.display='block';});
-</script>
+  <!-- NaSra early-restore: prevent flash of wrong theme/font -->
+  <script>
+    (function() {
+      var t = localStorage.getItem('mn-theme');
+      if (t) document.documentElement.setAttribute('data-theme', t);
+      var fs = localStorage.getItem('mn-font-size');
+      if (fs) document.documentElement.style.fontSize = fs;
+      var a11y = null;
+      try { a11y = JSON.parse(localStorage.getItem('mn-a11y') || '{}'); } catch (e) { /* noop */ }
+      if (a11y) {
+        if (a11y.highContrast) document.documentElement.classList.add('mn-high-contrast');
+        if (a11y.reducedMotion) document.documentElement.classList.add('mn-reduced-motion');
+      }
+    })();
+  </script>
 
-<!-- Accessibility FAB: auto-mounted by Maranello DS v4.13.2+ (no manual tag needed) -->
-
-<div class="header">
-  <div class="header-left">
-    <nav id="dashboard-nav" class="mn-convergio-toolbar" aria-label="Dashboard views">
-      <button class="mn-convergio-pill active" data-section="dashboard-main-section" type="button">
-        <span class="header-icon" data-icon="dashboard"></span>
-        Overview
-      </button>
-      <button class="mn-convergio-pill" data-section="dashboard-admin-section" type="button">
-        <span class="header-icon" data-icon="star"></span>
-        Admin
-      </button>
-      <button class="mn-convergio-pill" data-section="dashboard-chat-section" type="button">
-        <span class="header-icon" data-icon="chat"></span>
-        Planner
-      </button>
-      <button class="mn-convergio-pill" data-section="dashboard-brain-section" type="button">
-        <span class="header-icon" data-icon="brain"></span>
-        Brain
-      </button>
-      <button class="mn-convergio-pill" data-section="dashboard-ideajar-section" type="button">
-        <span class="header-icon" data-icon="bulb"></span>
-        Idea Jar
-      </button>
-      <button class="mn-convergio-pill" data-section="dashboard-ipc-section" type="button">
-        <span class="header-icon" data-icon="mesh"></span>
-        IPC
-      </button>
+  <mn-app-shell id="shell" layout="side-detail">
+    <nav slot="nav" class="mn-sidebar" aria-label="Main navigation">
+      <a href="#overview" class="mn-sidebar__link mn-sidebar__link--active"
+         data-view="overview" data-icon="dashboard">Overview</a>
+      <a href="#plans" class="mn-sidebar__link"
+         data-view="plans" data-icon="kanban">Plans</a>
+      <a href="#mesh" class="mn-sidebar__link"
+         data-view="mesh" data-icon="mesh">Mesh</a>
+      <a href="#brain" class="mn-sidebar__link"
+         data-view="brain" data-icon="brain">Brain</a>
+      <a href="#ideas" class="mn-sidebar__link"
+         data-view="ideas" data-icon="bulb">Ideas</a>
+      <a href="#ipc" class="mn-sidebar__link"
+         data-view="ipc" data-icon="router">IPC</a>
+      <a href="#admin" class="mn-sidebar__link"
+         data-view="admin" data-icon="settings">Admin</a>
+      <a href="#terminal" class="mn-sidebar__link"
+         data-view="terminal" data-icon="terminal">Terminal</a>
     </nav>
-    <button class="header-term-btn mn-btn mn-btn--ghost mn-btn--sm" onclick="openAllTerminals()" title="Open terminals on all online mesh nodes"><span class="header-icon" data-icon="terminal"></span></button>
-  </div>
-  <h1 class="mn-gradient-text">Convergio</h1>
-  <div class="header-right">
-    <mn-system-status id="header-system-status" poll-interval="15000" services='[{"name":"API","url":"/api/health"},{"name":"Mesh","url":"/api/mesh/traffic"}]'></mn-system-status>
-    <button class="header-optimize-btn mn-btn-accent" onclick="openOptimizeModal()" title="Optimize .claude — session learning signals">
-      <span class="header-icon" data-icon="settings"></span>
-      Optimize
-      <span class="optimize-badge" id="optimize-badge" style="display:none">0</span>
-    </button>
-    <div class="header-status">
-      <span class="status-dot mn-status-dot mn-status-dot--success"></span>
-      <span id="clock"></span>
-    </div>
-    <div class="header-controls">
-      <div class="refresh-stepper">
-        <button class="stepper-btn refresh-manual-btn" onclick="refreshAll()" title="Refresh now">⟳</button>
-        <button class="stepper-btn" onclick="changeRefresh(-1)" title="Slower / Manual">◀</button>
-        <span id="refresh-label" class="refresh-label-manual">Manual</span>
-        <button class="stepper-btn" onclick="changeRefresh(1)" title="Faster / Auto">▶</button>
-      </div>
-      <button class="header-ctrl-btn" onclick="dashZoom(-1)" title="Zoom out">−</button>
-      <span class="zoom-level" id="zoom-level">100%</span>
-      <button class="header-ctrl-btn" onclick="dashZoom(1)" title="Zoom in">+</button>
-      <button class="header-ctrl-btn" onclick="dashZoom(0)" title="Reset zoom">R</button>
-      <button class="header-ctrl-btn reset-dash-btn" onclick="resetWidgetLayout()" title="Reset to default dashboard">⟲</button>
-      <button class="header-ctrl-btn catalog-btn" onclick="toggleWidgetCatalog()" title="Widget Catalog">
-        <span style="font-size:14px">+</span>
-        <span class="catalog-badge" id="catalog-badge" style="display:none">0</span>
-      </button>
-      <button class="header-ctrl-btn" onclick="toggleDashboardHelp()" title="Help">?</button>
-      <div class="theme-switcher">
-        <button class="header-ctrl-btn" id="theme-toggle" onclick="toggleThemeDropdown()" title="Theme" aria-label="Toggle theme menu" aria-controls="theme-dropdown" aria-expanded="false" aria-haspopup="menu"><span class="header-icon" data-icon="sun"></span></button>
-        <div class="theme-dropdown" id="theme-dropdown" role="menu" aria-label="Theme options"></div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<div class="mn-strip" id="kpi-bar">
-  <div class="mn-strip__inner" id="kpi-inner">
-    <!-- KPI stats rendered by kpi.js via renderKpi() -->
-  </div>
-</div>
+    <header slot="toolbar" class="mn-toolbar">
+      <h1 class="mn-toolbar__title">Convergio Control Room</h1>
+      <mn-theme-rotary></mn-theme-rotary>
+    </header>
 
-<section id="dashboard-main-section" class="dashboard-section">
-<div class="grid-stack" id="dashboard-grid">
+    <main slot="main" id="view-container"></main>
+  </mn-app-shell>
 
-  <!-- Ops Zone: left sidebar -->
-  <div class="grid-stack-item" gs-id="ops-zone-widget" gs-x="0" gs-y="0" gs-w="3" gs-h="5" gs-min-w="2" gs-min-h="3">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="ops-zone-widget">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Ops Zone</span>
-        </div>
-        <div class="mn-widget__body" style="padding:0">
-          <div class="ops-tabs" id="ops-tabs">
-            <button class="ops-tab active" data-tab="active">Active</button>
-            <button class="ops-tab" data-tab="recent">Recent</button>
-            <button class="ops-tab" data-tab="log">Log</button>
-          </div>
-          <div class="ops-tab-content" id="ops-tab-active">
-            <div id="mission-content"><span class="mn-loading-placeholder">Loading…</span></div>
-          </div>
-          <div class="ops-tab-content" id="ops-tab-recent" hidden>
-            <div id="last-missions-content"><span class="mn-loading-placeholder">Loading…</span></div>
-          </div>
-          <div class="ops-tab-content" id="ops-tab-log" hidden>
-            <div id="history-list"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <mn-command-palette id="cmd-palette"></mn-command-palette>
+  <mn-a11y></mn-a11y>
 
-  <!-- Mesh Hub: center top -->
-  <div class="grid-stack-item" gs-id="mesh-panel" gs-x="3" gs-y="0" gs-w="5" gs-h="2" gs-min-w="3" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="mesh-panel">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Mesh Hub</span>
-          <div class="mn-widget__header-legend">
-            <span class="legend-item"><span class="mn-mesh-status mn-mesh-status--on"></span>On</span>
-            <span class="legend-item"><span class="mn-mesh-status mn-mesh-status--off"></span>Off</span>
-            <span class="legend-item"><span class="mn-mesh-status mn-mesh-status--sync"></span>Sync</span>
-            <span class="legend-item"><span class="mn-mesh-status mn-mesh-status--drift"></span>Drift</span>
-            <button class="mn-mesh-network__action" onclick="showPeerForm('create')" title="Add Peer">+ Add</button>
-            <button class="mn-mesh-network__action" onclick="showDiscoverOverlay()" title="Discover">Disc</button>
-            <button class="mn-mesh-network__action" onclick="meshAction('fullsync','__all__')" title="Full Sync">⟳</button>
-            <button class="mn-mesh-network__action" onclick="meshAction('sync','__all__')" title="Push">↑</button>
-            <span class="mesh-count" id="mesh-online-count"></span>
-          </div>
-        </div>
-        <div class="mn-widget__body mesh-strip" id="mesh-strip"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Augmented Brain: center, below mesh -->
-  <div class="grid-stack-item" gs-id="brain-widget" gs-x="3" gs-y="2" gs-w="5" gs-h="3" gs-min-w="3" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mesh-brain-joined mn-fade-in" id="brain-widget">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Augmented Brain</span>
-          <div class="brain-controls" id="brain-controls">
-            <button class="mn-btn mn-btn--ghost mn-btn--sm" id="brain-rewind-btn" onclick="rewindBrain()" title="Reset layout">⟲</button>
-            <button class="mn-btn mn-btn--accent mn-btn--sm" id="brain-pause-btn" onclick="toggleBrainFreeze()" title="Pause/Play">❚❚</button>
-            <label class="mn-micro" for="brain-activity-slider" style="display:flex;gap:6px;align-items:center;color:var(--text-dim)">Activity <input id="brain-activity-slider" type="range" min="0" max="100" value="55" style="width:60px;accent-color:var(--accent,#FFC72C)"></label>
-            <button class="mn-btn mn-btn--ghost mn-btn--sm" id="brain-expand-btn" onclick="expandBrain()" title="Fullscreen">⤢</button>
-          </div>
-          <div class="brain-stats" id="brain-stats"></div>
-        </div>
-        <div id="brain-canvas-container" class="brain-embedded" role="region" aria-label="Neural network visualization"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Activity Feed: right top -->
-  <div class="grid-stack-item" gs-id="activity-feed-widget" gs-x="8" gs-y="0" gs-w="4" gs-h="3" gs-min-w="2" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="activity-feed-widget">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Activity</span>
-          <div class="activity-filter-tabs">
-            <button class="activity-filter-btn active" data-filter="all">All</button>
-            <button class="activity-filter-btn" data-filter="github">GitHub</button>
-            <button class="activity-filter-btn" data-filter="system">System</button>
-          </div>
-        </div>
-        <div class="mn-widget__body" id="activity-feed-content"></div>
-        <div id="event-feed-content" hidden></div>
-        <div id="nightly-jobs-content" hidden><span class="mn-loading-placeholder">Loading…</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Mesh Latency: right, below activity -->
-  <div class="grid-stack-item" gs-id="mesh-latency-widget" gs-x="8" gs-y="3" gs-w="4" gs-h="2" gs-min-w="2" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="mesh-latency-widget">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Mesh Latency</span>
-          <span class="mn-micro" style="color:var(--text-dim)">live · 4s</span>
-        </div>
-        <div class="mn-widget__body" id="mesh-latency-container" style="display:flex;justify-content:center;gap:16px;padding:12px;flex-wrap:wrap;">
-          <span class="mn-loading-placeholder">Measuring…</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Task Pipeline: bottom left -->
-  <div class="grid-stack-item" gs-id="task-pipeline-widget" gs-x="0" gs-y="5" gs-w="4" gs-h="5" gs-min-w="3" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="task-pipeline-widget">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Task Pipeline</span>
-          <div class="mn-widget__header-legend">
-            <span class="legend-item"><span class="dot-done"></span>Done</span>
-            <span class="legend-item"><span class="dot-active"></span>Run</span>
-            <span class="legend-item"><span class="dot-submitted"></span>Sub</span>
-            <span class="legend-item"><span class="dot-blocked"></span>Blk</span>
-            <span class="legend-item"><span class="dot-pending"></span>Pnd</span>
-          </div>
-          <div class="widget-actions">
-            <span id="task-filter-label" class="task-filter-label"></span>
-            <button class="mn-widget__action" id="task-filter-clear" style="display:none" onclick="filterTasks(null)">Show All</button>
-          </div>
-        </div>
-        <div class="mn-widget__body" style="padding:0">
-          <table class="task-table" id="task-table">
-            <thead><tr><th style="width:70px">ID</th><th>Task</th><th style="width:70px">Status</th><th style="width:80px">Agent</th><th style="width:70px">Tokens</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Plan Status: bottom center -->
-  <div class="grid-stack-item" gs-id="plan-status-widget" gs-x="4" gs-y="5" gs-w="4" gs-h="5" gs-min-w="3" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="plan-status-widget">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Plan Status</span>
-          <div class="plan-status-controls">
-            <button class="plan-view-toggle active" data-view="timeline" id="plan-view-timeline">Timeline</button>
-            <button class="plan-view-toggle" data-view="kanban" id="plan-view-kanban">Kanban</button>
-          </div>
-        </div>
-        <div class="mn-widget__body" style="padding:4px 8px">
-          <div id="plan-timeline-container" class="plan-status-view"><span class="mn-loading-placeholder">Loading timeline…</span></div>
-          <div id="kanban-board" class="kanban-board plan-status-view" hidden>
-            <div class="kanban-col" data-status="todo" role="list" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="kanbanDrop(event,'todo')">
-              <div class="kanban-col-header"><span class="kanban-dot todo"></span>Pipeline</div>
-              <div class="kanban-cards" id="kanban-todo"></div>
-            </div>
-            <div class="kanban-col" data-status="doing" role="list" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="kanbanDrop(event,'doing')">
-              <div class="kanban-col-header"><span class="kanban-dot doing"></span>In Progress</div>
-              <div class="kanban-cards" id="kanban-doing"></div>
-            </div>
-            <div class="kanban-col" data-status="done" role="list" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="kanbanDrop(event,'done')">
-              <div class="kanban-col-header"><span class="kanban-dot done"></span>Completed</div>
-              <div class="kanban-cards" id="kanban-done"></div>
-            </div>
-            <div class="kanban-col cancelled" data-status="cancelled" role="list" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="kanbanDrop(event,'cancelled')">
-              <div class="kanban-col-header"><span class="kanban-dot cancelled"></span>Withdrawn</div>
-              <div class="kanban-cards" id="kanban-cancelled"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Analytics: bottom right -->
-  <div class="grid-stack-item" gs-id="analytics-triptych" gs-x="8" gs-y="5" gs-w="4" gs-h="5" gs-min-w="2" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in analytics-triptych" id="analytics-triptych">
-        <div class="mn-widget__header">
-          <span class="mn-widget__title">Analytics</span>
-          <div class="analytics-range-tabs">
-            <button class="analytics-range-btn active" data-range="24h">24h</button>
-            <button class="analytics-range-btn" data-range="7d">7d</button>
-            <button class="analytics-range-btn" data-range="30d">30d</button>
-          </div>
-        </div>
-        <div class="mn-widget__body" style="padding:8px">
-          <div class="triptych-grid">
-            <div class="triptych-chart">
-              <div class="triptych-label">Task Distribution</div>
-              <div class="chart-container chart-container-sm"><canvas id="dist-chart"></canvas></div>
-            </div>
-            <div class="triptych-chart">
-              <div class="triptych-label">Cost by Model</div>
-              <div class="chart-container chart-container-sm"><canvas id="model-chart"></canvas></div>
-            </div>
-            <div class="triptych-chart">
-              <div class="triptych-label">Token Burn</div>
-              <div class="chart-container chart-container-sm"><canvas id="token-chart"></canvas></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- IPC Budget -->
-  <div class="grid-stack-item" gs-id="ipc-budget-widget" gs-x="0" gs-y="12" gs-w="3" gs-h="4" gs-min-w="2" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="ipc-budget-widget">
-        <div class="mn-widget__header"><span class="mn-widget__title">Budget Intelligence</span></div>
-        <div class="mn-widget__body" id="ipc-budget-container"><span class="mn-loading-placeholder">Loading…</span></div>
-      </div>
-    </div>
-  </div>
-  <!-- IPC Router -->
-  <div class="grid-stack-item" gs-id="ipc-router-widget" gs-x="3" gs-y="12" gs-w="3" gs-h="4" gs-min-w="2" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="ipc-router-widget">
-        <div class="mn-widget__header"><span class="mn-widget__title">Task Router</span></div>
-        <div class="mn-widget__body" id="ipc-router-container"><span class="mn-loading-placeholder">Loading…</span></div>
-      </div>
-    </div>
-  </div>
-  <!-- IPC Skills -->
-  <div class="grid-stack-item" gs-id="ipc-skills-widget" gs-x="6" gs-y="12" gs-w="3" gs-h="4" gs-min-w="2" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="ipc-skills-widget">
-        <div class="mn-widget__header"><span class="mn-widget__title">Skills Matrix</span></div>
-        <div class="mn-widget__body" id="ipc-skills-container"><span class="mn-loading-placeholder">Loading…</span></div>
-      </div>
-    </div>
-  </div>
-  <!-- IPC Models -->
-  <div class="grid-stack-item" gs-id="ipc-models-widget" gs-x="9" gs-y="12" gs-w="3" gs-h="4" gs-min-w="2" gs-min-h="2">
-    <div class="grid-stack-item-content">
-      <div class="mn-widget mn-fade-in" id="ipc-models-widget">
-        <div class="mn-widget__header"><span class="mn-widget__title">Model Registry</span></div>
-        <div class="mn-widget__body" id="ipc-models-container"><span class="mn-loading-placeholder">Loading…</span></div>
-      </div>
-    </div>
-  </div>
-
-</div>
-</section>
-
-<section id="dashboard-admin-section" class="dashboard-section" hidden>
-  <div class="admin-layout">
-    <div class="mn-widget admin-widget mn-fade-in" style="animation-delay:650ms">
-      <div class="mn-widget__header">
-        <span class="mn-widget__title">Node Management</span>
-        <span class="admin-meta" id="admin-node-summary">Loading...</span>
-      </div>
-      <div class="mn-widget__body" id="admin-node-content">
-        <span class="mn-loading-placeholder">Loading nodes…</span>
-      </div>
-    </div>
-    <div class="mn-widget admin-widget mn-fade-in" style="animation-delay:700ms">
-      <div class="mn-widget__header">
-        <span class="mn-widget__title">Telemetry Deck</span>
-      </div>
-      <div class="mn-widget__body">
-        <div class="admin-metrics-grid" id="admin-metrics-grid"></div>
-        <div class="mn-signal-panel" id="admin-signal-panel" style="margin-top:16px;padding:16px">
-          <p class="mn-micro" style="color:var(--accent);letter-spacing:0.1em;margin-bottom:8px">SIGNAL PANEL</p>
-          <h4 class="mn-label" style="margin-bottom:12px">Service Readiness</h4>
-          <div id="admin-service-signals"></div>
-        </div>
-      </div>
-    </div>
-    <div class="mn-widget admin-widget mn-fade-in" style="animation-delay:750ms">
-      <div class="mn-widget__header">
-        <span class="mn-widget__title">Distributed Tracing</span>
-      </div>
-      <div class="mn-widget__body" id="admin-tracing-content">
-        <span class="mn-loading-placeholder">Loading sync stats…</span>
-      </div>
-    </div>
-    <div class="mn-widget admin-widget admin-logs-widget mn-fade-in" style="animation-delay:800ms">
-      <div class="mn-widget__header">
-        <span class="mn-widget__title">Log Viewer</span>
-        <div class="widget-actions">
-          <label class="admin-filter-label" for="admin-log-level">Level</label>
-          <select id="admin-log-level">
-            <option value="ALL">ALL</option>
-            <option value="INFO">INFO</option>
-            <option value="WARN">WARN</option>
-            <option value="ERROR">ERROR</option>
-          </select>
-        </div>
-      </div>
-      <div class="mn-widget__body admin-logs-body" id="admin-logs-content">
-        <span class="mn-loading-placeholder">Loading logs…</span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="dashboard-chat-section" class="dashboard-section" hidden>
-  <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;padding:0 24px 16px;align-items:start">
-    <div class="mn-widget mn-fade-in" id="project-list-widget" style="animation-delay:850ms">
-      <div class="mn-widget__header">
-        <span class="mn-widget__title">Projects</span>
-        <button class="mn-widget__action" onclick="openNewProjectModal()" title="New project">
-          <span class="header-icon" data-icon="plus"></span>
-        </button>
-      </div>
-      <div class="mn-widget__body" id="project-list-content" style="padding:8px;max-height:calc(100vh - 220px);overflow-y:auto">
-        <span class="mn-loading-placeholder mn-micro">Loading projects…</span>
-      </div>
-    </div>
-    <div class="mn-widget mn-fade-in" id="chat-widget" style="animation-delay:900ms">
-      <div class="mn-widget__header">
-        <span class="mn-widget__title">Planner Chat</span>
-      </div>
-      <div class="mn-widget__body">
-        <div id="chat-panel-root"></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="dashboard-ideajar-section" class="dashboard-section" hidden>
-  <div style="padding:0 24px 16px">
-    <div class="mn-widget mn-fade-in" id="ideajar-main-widget" style="animation-delay:950ms">
-      <div class="mn-widget__header">
-        <span class="mn-widget__title">Idea Jar</span>
-        <div class="widget-actions" id="ideajar-header-actions"></div>
-      </div>
-      <div class="mn-widget__body" id="ideajar-content" style="padding:0">
-        <span class="mn-loading-placeholder" style="padding:16px;display:block">Loading…</span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- IPC Coordination Section -->
-<section id="dashboard-ipc-section" class="dashboard-section" hidden>
-  <div id="ipc-panel-root" class="ipc-panel-root"></div>
-</section>
-
-<!-- Brain Section — fullscreen brain-canvas reuse -->
-<section id="dashboard-brain-section" class="dashboard-section" hidden>
-  <div style="width:100%;height:calc(100vh - 80px);position:relative;overflow:hidden;background:radial-gradient(circle at center, color-mix(in srgb, var(--info, #4EA8DE) 8%, transparent), var(--bg-deep, #0a0a0a) 70%);border-radius:var(--radius-lg, 16px);">
-    <div id="brain-canvas-fullscreen" style="width:100%;height:100%;"></div>
-  </div>
-</section>
-
-<!-- Plan Detail Sidebar -->
-<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
-<div class="sidebar" id="sidebar">
-  <div class="sb-header">
-    <span class="sb-title" id="sb-title">Plan Detail</span>
-    <span class="sb-close" onclick="closeSidebar()">&#x2715;</span>
-  </div>
-  <div class="sb-body" id="sb-body"></div>
-</div>
-
-<div class="footer">
-  <span>Convergio Control Room v4.0</span>
-  <span id="last-update"></span>
-</div>
-
-<script src="dashlog.js?v=1773732144"></script>
-<script src="icons.js?v=1773732144"></script>
-<script src="node_modules/maranello-luce-design-business/dist/iife/maranello.min.js" id="mn-ds-js"></script>
-<script src="mn-wc-loader.js?v=1773732144"></script>
-<script src="mn-charts.js?v=1773732144"></script>
-<script src="mn-kpi.js?v=1773732144"></script>
-<script src="mn-viz.js?v=1773732144"></script>
-<script src="maranello-enhancer.js?v=1773732144"></script>
-<script src="theme-switcher.js?v=1773732144"></script>
-<script src="utils.js?v=1773732144"></script>
-<script src="formatters.js?v=1773732144"></script>
-<script src="kpi.js?v=1773732144"></script>
-<script src="mission.js?v=1773732144"></script>
-<script src="mission-details.js?v=1773732144"></script>
-<script src="task-pipeline.js?v=1773732144"></script>
-<script src="plan-kanban.js?v=1773732144"></script>
-<script src="charts.js?v=1773732144"></script>
-<script src="activity.js?v=1773732144"></script>
-<script src="github-activity.js?v=1773732144"></script>
-<script src="nightly-jobs-detail.js?v=1773732144"></script>
-<script src="nightly-jobs.js?v=1773732144"></script>
-<script src="kpi-modals.js?v=1773732144"></script>
-<!-- PixiJS + WebGL brain disabled: PixiJS v8 API incompatible, needs rewrite -->
-<!-- <script src="node_modules/pixi.js/dist/pixi.min.js"></script> -->
-<!-- <script src="brain-webgl.js?v=1773732144"></script> -->
-<script src="brain-physics-bridge.js?v=1773732144"></script>
-<script src="brain-canvas.js?v=1773732144"></script>
-<script src="scheduler.js?v=1773732144"></script>
-<script src="websocket.js?v=1773732144"></script>
-<script src="brain-regions.js?v=1773732144"></script>
-<script src="brain-organism.js?v=1773732144"></script>
-<script src="brain-sessions.js?v=1773732144"></script>
-<script src="brain-consciousness.js?v=1773732144"></script>
-<script src="brain-effects.js?v=1773732144"></script>
-<script src="brain-layout.js?v=1773732144"></script>
-<script src="brain-interact.js?v=1773732144"></script>
-<script src="plan-timeline.js?v=1773732144"></script>
-<script src="mesh-latency.js?v=1773732144"></script>
-<script src="activity-feed.js?v=1773732144"></script>
-<script src="ipc-panel.js?v=1773732144"></script>
-<script src="ipc-agents.js?v=1773732144"></script>
-<script src="ipc-messages.js?v=1773732144"></script>
-<script src="ipc-locks.js?v=1773732144"></script>
-<script src="ipc-budget.js?v=1773732144"></script>
-<script src="ipc-router.js?v=1773732144"></script>
-<script src="ipc-skills.js?v=1773732144"></script>
-<script src="ipc-models.js?v=1773732144"></script>
-<script src="app.js?v=1773732144"></script>
-<script src="convergio-layout.js?v=1773732144"></script>
-<!-- mesh.js + mesh-animation.js removed — card strip from websocket.js is the only mesh viz -->
-<script src="mesh-actions.js?v=1773732144"></script>
-<script src="mesh-delegate.js?v=1773732144"></script>
-<script src="mesh-preflight.js?v=1773732144"></script>
-<script src="mesh-plan-ops.js?v=1773732144"></script>
-<script src="peer-crud.js?v=1773732144"></script>
-<script src="admin.js?v=1773732144"></script>
-<script src="widget-drag.js?v=1773732144"></script>
-<script src="widget-catalog.js?v=1773732144"></script>
-<script src="dashboard-help.js?v=1773732144"></script>
-<script src="terminal.js?v=1773732144"></script>
-<script src="chat-tabs.js?v=1773732144"></script>
-<script src="chat-panel.js?v=1773732144"></script>
-<script src="repo-selector.js?v=1773732144"></script>
-<script src="chat-context.js?v=1773732144"></script>
-<script src="chat-monitor.js?v=1773732144"></script>
-<script src="github-panel.js?v=1773732144"></script>
-<script src="idea-jar-physics.js?v=1773732144"></script>
-<script src="idea-jar-canvas.js?v=1773732144"></script>
-<script src="idea-jar.js?v=1773732144"></script>
-<script src="optimize.js?v=1773732144"></script>
+  <!-- Maranello JS bundle (IIFE) -->
+  <script src="node_modules/maranello-luce-design-business/dist/iife/maranello.min.js"></script>
+  <!-- Vendor: xterm.js (terminal view) -->
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+  <!-- App -->
+  <script type="module" src="app.js"></script>
 </body>
 </html>

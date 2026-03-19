@@ -1,29 +1,85 @@
-@import url('css/base.css?v=35');
-@import url('css/layout.css?v=35');
-@import url('css/components.css?v=35');
-@import url('css/components-2.css?v=35');
-@import url('css/components-3.css?v=35');
-@import url('css/mesh.css?v=35');
-@import url('css/mesh-2.css?v=35');
-@import url('css/mesh-3.css?v=35');
-@import url('css/modals.css?v=35');
-@import url('css/mesh-4.css?v=35');
-@import url('css/layout-2.css?v=35');
-@import url('css/terminal.css?v=35');
-@import url('css/themes.css?v=35');
-@import url('css/components-4.css?v=35');
-@import url('css/components-5.css?v=35');
-@import url('css/chat.css?v=35');
-@import url('css/chat-tabs.css?v=35');
-@import url('css/chat-context.css?v=35');
-@import url('css/chat-monitor.css?v=35');
-@import url('css/repo-selector.css?v=35');
-@import url('css/github-panel.css?v=35');
-@import url('css/github-activity.css?v=35');
-@import url('css/nightly-jobs.css?v=35');
-@import url('css/animations.css?v=35');
-@import url('css/peer-crud.css?v=35');
-@import url('styles-mission.css?v=35');
-@import url('brain-styles.css?v=35');
-@import url('kanban-styles.css?v=35');
-@import url('css/maranello-bridge.css?v=35');
+/* Convergio Control Room — app-level styles
+   All colors from Maranello semantic tokens. */
+
+/* Sidebar active link */
+.mn-sidebar__link--active {
+  background: var(--mn-surface-raised);
+  color: var(--mn-accent);
+  border-left: 3px solid var(--mn-accent);
+}
+
+/* Sidebar link hover */
+.mn-sidebar__link:hover {
+  background: var(--mn-surface-raised);
+  color: var(--mn-text);
+}
+
+/* Sidebar layout */
+.mn-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem 0;
+}
+
+.mn-sidebar__link {
+  display: block;
+  padding: 0.75rem 1.25rem;
+  color: var(--mn-text-muted);
+  text-decoration: none;
+  font-size: 0.875rem;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, color 0.15s;
+}
+
+/* View container transitions */
+#view-container {
+  min-height: 100%;
+  padding: 1.5rem;
+}
+
+/* Toolbar layout */
+.mn-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  height: 3.5rem;
+  border-bottom: 1px solid var(--mn-border);
+  background: var(--mn-surface);
+}
+
+.mn-toolbar__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--mn-text);
+  margin: 0;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .mn-sidebar {
+    display: none;
+  }
+  .mn-sidebar--open {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 16rem;
+    z-index: 100;
+    background: var(--mn-surface);
+    box-shadow: 2px 0 8px rgba(0,0,0,0.2);
+  }
+  #view-container {
+    padding: 1rem;
+  }
+  .mn-toolbar__title {
+    font-size: 1rem;
+  }
+  mn-data-table {
+    overflow-x: auto;
+    display: block;
+  }
+}
