@@ -27,7 +27,7 @@ gh auth switch --user "$_GH_DEFAULT" 2>/dev/null || true
 PLANS=(
 	"265|mirrorbuddy|MirrorBuddy|${HOME}/GitHub/MirrorBuddy|$MAIN_TOKEN"
 	"266|virtualbpm|VirtualBPM|${HOME}/GitHub/VirtualBPM|$VBPM_TOKEN"
-	"267|myconvergio|MyConvergio|${HOME}/GitHub/MyConvergio|$MAIN_TOKEN"
+	"267|convergio-platform|ConvergioPlatform|${HOME}/GitHub/ConvergioPlatform|$MAIN_TOKEN"
 	"268|claude-global|Claude-Global|${CLAUDE_HOME}|$MAIN_TOKEN"
 )
 
@@ -59,7 +59,7 @@ tmux select-window -t "$SESSION:1"
 echo "Tmux session '$SESSION' created with 5 windows (ALL COPILOT):"
 echo "  1: MirrorBuddy   (Plan #265) — GH: $_GH_DEFAULT"
 echo "  2: VirtualBPM    (Plan #266) — GH: $_GH_MICROSOFT"
-echo "  3: MyConvergio   (Plan #267) — GH: $_GH_DEFAULT"
+echo "  3: ConvergioPlatform (Plan #267) — GH: $_GH_DEFAULT"
 echo "  4: Claude-Global (Plan #268) — GH: $_GH_DEFAULT"
 echo "  5: Monitor       (pianits terminal dashboard)"
 echo ""

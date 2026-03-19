@@ -55,7 +55,7 @@ done < <(sqlite3 -cmd ".timeout 3000" "$DB_FILE" \
 	"SELECT id, name, worktree_path, status FROM plans WHERE status = 'doing';" 2>/dev/null)
 
 # Check non-plan repos with known paths for dirty state
-for repo_path in "$HOME/GitHub/MirrorBuddy" "$HOME/dev/myconvergio"; do
+for repo_path in "$HOME/GitHub/MirrorBuddy"; do
 	[[ ! -d "$repo_path/.git" ]] && continue
 	dirty=$(git -C "$repo_path" status --porcelain 2>/dev/null | head -1)
 	stashes=$(git -C "$repo_path" stash list 2>/dev/null | grep -c "" || echo "0")

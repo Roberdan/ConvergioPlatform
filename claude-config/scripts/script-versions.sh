@@ -9,8 +9,6 @@ set -euo pipefail
 # Resolve scripts directory (supports ~/.claude, npm global install, local clone)
 if [[ -d "${HOME}/.claude/scripts" ]]; then
 	SCRIPTS_DIR="${HOME}/.claude/scripts"
-elif [[ -d "$(npm root -g 2>/dev/null)/myconvergio/scripts" ]]; then
-	SCRIPTS_DIR="$(npm root -g)/myconvergio/scripts"
 else
 	SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi

@@ -1,7 +1,7 @@
 #!/bin/bash
 # common.sh - Shared utility functions for scripts
 # Version: 1.0.0
-# Used by: execute-plan.sh, sync-dashboard-db.sh, pr-ops.sh, sync-to-myconvergio.sh
+# Used by: execute-plan.sh, sync-dashboard-db.sh, pr-ops.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./sql-utils.sh

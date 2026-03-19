@@ -23,7 +23,6 @@ _GH_MS="${GH_MICROSOFT_ACCOUNT}"
 REPOS=(
 	"MirrorBuddy|https://github.com/FightTheStroke/MirrorBuddy.git|main"
 	"VirtualBPM|https://github.com/${_GH_MS}/VirtualBPM.git|main"
-	"MyConvergio|https://github.com/${_GH}/MyConvergio.git|master"
 	"Convergio|https://github.com/${_GH}/Convergio.git|master"
 )
 

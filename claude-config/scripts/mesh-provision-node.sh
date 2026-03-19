@@ -34,7 +34,7 @@ _ssh() { ssh -n -o ConnectTimeout=10 "$TARGET" "export PATH=/opt/homebrew/bin:/u
 
 # 1. Git sync
 info "Step 1/8: Git sync"
-_ssh "cd ~/.claude && git fetch myconvergio main && git reset --hard myconvergio/main" && ok "Git synced" || fail "Git sync failed"
+_ssh "cd ~/.claude && git fetch origin main && git reset --hard origin/main" && ok "Git synced" || fail "Git sync failed"
 
 # 2. Build binary (unless skipped)
 if ! $SKIP_BUILD; then

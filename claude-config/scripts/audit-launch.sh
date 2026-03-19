@@ -31,8 +31,8 @@ scp "${REPO_ROOT}/.claude/plans/mirrorbuddy-audit-remediation-spec.yaml" \
 	"${REMOTE}:~/GitHub/MirrorBuddy/.claude/plans/"
 scp "$HOME/GitHub/VirtualBPM/.claude/plans/virtualbpm-audit-remediation-spec.yaml" \
 	"${REMOTE}:~/GitHub/VirtualBPM/.claude/plans/"
-scp "$HOME/GitHub/MyConvergio/.claude/plans/myconvergio-audit-remediation-spec.yaml" \
-	"${REMOTE}:~/GitHub/MyConvergio/.claude/plans/"
+scp "$HOME/GitHub/ConvergioPlatform/.claude/plans/convergio-platform-audit-remediation-spec.yaml" \
+	"${REMOTE}:~/GitHub/ConvergioPlatform/.claude/plans/"
 scp "$HOME/.claude/plans/claude-global-audit-remediation-spec.yaml" \
 	"${REMOTE}:~/.claude/plans/"
 echo "  Specs synced."
@@ -43,8 +43,8 @@ scp "${REPO_ROOT}/.claude/prompts/audit-remediation-2026-02-28.md" \
 	"${REMOTE}:~/GitHub/MirrorBuddy/.claude/prompts/"
 scp "$HOME/GitHub/VirtualBPM/.claude/prompts/audit-remediation-2026-02-28.md" \
 	"${REMOTE}:~/GitHub/VirtualBPM/.claude/prompts/"
-scp "$HOME/GitHub/MyConvergio/.claude/prompts/audit-remediation-2026-02-28.md" \
-	"${REMOTE}:~/GitHub/MyConvergio/.claude/prompts/"
+scp "$HOME/GitHub/ConvergioPlatform/.claude/prompts/audit-remediation-2026-02-28.md" \
+	"${REMOTE}:~/GitHub/ConvergioPlatform/.claude/prompts/"
 scp "$HOME/.claude/prompts/audit-remediation-2026-02-28.md" \
 	"${REMOTE}:~/.claude/prompts/"
 echo "  Prompts synced."
@@ -71,6 +71,6 @@ echo ""
 echo "Tmux navigation (dopo attach):"
 echo "  Ctrl+B 0  → MirrorBuddy  (#265)"
 echo "  Ctrl+B 1  → VirtualBPM   (#266)"
-echo "  Ctrl+B 2  → MyConvergio  (#267)"
+echo "  Ctrl+B 2  → ConvergioPlatform (#267)"
 echo "  Ctrl+B 3  → Claude-Global(#268)"
 echo "  Ctrl+B 4  → Monitor"
