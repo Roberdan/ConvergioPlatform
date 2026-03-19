@@ -23,6 +23,7 @@ pub mod mesh_provision;
 pub mod middleware;
 pub mod routes;
 pub mod sse;
+pub mod sse_chat;
 pub mod sse_delegate;
 pub mod sse_preflight;
 pub mod state;

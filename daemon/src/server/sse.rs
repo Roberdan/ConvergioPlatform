@@ -1,21 +1,15 @@
+// Chat streaming: real LLM via llm_client::stream_chat + agent_activity tracking.
+// Implementation in sse_chat.rs (split for 250-line limit).
+pub use super::sse_chat::chat_stream_sse;
+
 use super::sse_delegate;
 use super::state::{ApiError, ServerState};
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::sse::{Event, Sse};
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use tokio_stream::iter;
-
-pub async fn chat_stream_sse(
-    Path(session_id): Path<String>,
-) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
-    let payload = json!({"ok": true, "sid": session_id});
-    let events = iter([Ok::<Event, Infallible>(
-        Event::default().event("chat").data(payload.to_string()),
-    )]);
-    Sse::new(events)
-}
 
 pub async fn mesh_action_sse(
     Query(qs): Query<HashMap<String, String>>,
