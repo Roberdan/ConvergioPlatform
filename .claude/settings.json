@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'git\\s+(checkout|branch|switch)'; then BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$BRANCH\" = 'main' ] || [ \"$BRANCH\" = 'master' ]; then echo 'BLOCKED: Never create branches on main — use worktree-create.sh' >&2; exit 2; fi; fi"
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'git\\s+(checkout|switch)' || (echo \"$INPUT\" | grep -qE 'git\\s+branch' && ! echo \"$INPUT\" | grep -qE 'git\\s+branch\\s+(-d|-D|--delete|--list|-a|-r)'); then BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$BRANCH\" = 'main' ] || [ \"$BRANCH\" = 'master' ]; then echo 'BLOCKED: Never create branches on main — use worktree-create.sh' >&2; exit 2; fi; fi"
           }
         ]
       },
