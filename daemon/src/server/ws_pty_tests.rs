@@ -116,7 +116,7 @@ fn ts_name_matches_hostname() {
 }
 
 #[test]
-fn ts_name_matches_linux-worker() {
+fn ts_name_matches_linux_worker() {
     let node: serde_json::Value = serde_json::from_str(
         r#"{"HostName":"linux-worker","DNSName":"linux_worker.example.ts.net.","TailscaleIPs":["100.64.0.2"],"Online":true}"#
     ).unwrap();

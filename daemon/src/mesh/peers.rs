@@ -298,7 +298,7 @@ gh_account=Roberdan
         let (name, peer) = reg.get_coordinator().unwrap();
         assert_eq!(name, "mac-worker-2");
         assert_eq!(peer.role, "coordinator");
-        assert_eq!(peer.tailscale_ip, "100.64.0.3");
+        assert_eq!(peer.tailscale_ip, "100.64.0.10");
     }
 
     #[test]
