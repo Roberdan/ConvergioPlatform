@@ -5,36 +5,87 @@ import SwiftUI
 
 /// Six-tab navigation for the mission control panel.
 /// Each tab maps to a daemon subsystem: Brain, Mesh, Plans, Agents, Chat, Terminal.
+/// Tab views use WebViewBridge to load embedded dashboard views from the daemon.
 struct ContentView: View {
     @State private var selectedTab: Tab = .brain
+    @State private var showCommandPalette: Bool = false
+    @StateObject private var actionRegistry = ActionRegistry()
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            BrainTab()
-                .tabItem { Label("Brain", systemImage: "brain") }
-                .tag(Tab.brain)
+        ZStack {
+            TabView(selection: $selectedTab) {
+                BrainTab()
+                    .tabItem { Label("Brain", systemImage: "brain") }
+                    .tag(Tab.brain)
 
-            MeshTab()
-                .tabItem { Label("Mesh", systemImage: "network") }
-                .tag(Tab.mesh)
+                MeshTab()
+                    .tabItem { Label("Mesh", systemImage: "network") }
+                    .tag(Tab.mesh)
 
-            PlansTab()
-                .tabItem { Label("Plans", systemImage: "list.clipboard") }
-                .tag(Tab.plans)
+                PlansTab()
+                    .tabItem { Label("Plans", systemImage: "list.clipboard") }
+                    .tag(Tab.plans)
 
-            AgentsTab()
-                .tabItem { Label("Agents", systemImage: "person.3") }
-                .tag(Tab.agents)
+                AgentsTab()
+                    .tabItem { Label("Agents", systemImage: "person.3") }
+                    .tag(Tab.agents)
 
-            ChatTab()
-                .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
-                .tag(Tab.chat)
+                ChatTab()
+                    .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
+                    .tag(Tab.chat)
 
-            TerminalTab()
-                .tabItem { Label("Terminal", systemImage: "terminal") }
-                .tag(Tab.terminal)
+                TerminalTab()
+                    .tabItem { Label("Terminal", systemImage: "terminal") }
+                    .tag(Tab.terminal)
+            }
+            .padding(8)
+
+            if showCommandPalette {
+                CommandPalette(isPresented: $showCommandPalette, registry: actionRegistry)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
         }
-        .padding(8)
+        .animation(.easeOut(duration: 0.15), value: showCommandPalette)
+        .onAppear { registerDefaultActions() }
+        .background {
+            // Invisible button to capture Cmd+K globally
+            Button("") { showCommandPalette.toggle() }
+                .keyboardShortcut("k", modifiers: .command)
+                .hidden()
+        }
+    }
+
+    /// Populate the action registry with platform-wide actions.
+    private func registerDefaultActions() {
+        actionRegistry.clearActions()
+
+        // Mesh actions
+        actionRegistry.registerAction(category: .mesh, label: "Sync All Nodes", icon: "arrow.triangle.2.circlepath", shortcut: "Cmd+Shift+S") {}
+        actionRegistry.registerAction(category: .mesh, label: "Heartbeat Check", icon: "heart.fill") {}
+        actionRegistry.registerAction(category: .mesh, label: "Delegate Task", icon: "paperplane") {}
+        actionRegistry.registerAction(category: .mesh, label: "Provision Node", icon: "plus.circle") {}
+
+        // Plan actions
+        actionRegistry.registerAction(category: .plans, label: "View Plans", icon: "list.clipboard") {
+            selectedTab = .plans
+        }
+        actionRegistry.registerAction(category: .plans, label: "Start Plan", icon: "play.fill") {}
+        actionRegistry.registerAction(category: .plans, label: "Cancel Plan", icon: "xmark.circle") {}
+
+        // Navigation actions
+        for tab in Tab.allCases {
+            actionRegistry.registerAction(
+                category: .navigation,
+                label: "Go to \(tab.rawValue.capitalized)",
+                icon: tab.icon
+            ) { selectedTab = tab }
+        }
+
+        // System actions
+        actionRegistry.registerAction(category: .system, label: "Open Dashboard", icon: "globe", shortcut: "Cmd+D") {}
+        actionRegistry.registerAction(category: .system, label: "Quit", icon: "power", shortcut: "Cmd+Q") {
+            NSApplication.shared.terminate(nil)
+        }
     }
 }
 
@@ -42,90 +93,15 @@ struct ContentView: View {
 
 enum Tab: String, CaseIterable {
     case brain, mesh, plans, agents, chat, terminal
-}
 
-// MARK: - Tab Views
-
-/// Neural visualization and daemon health overview.
-struct BrainTab: View {
-    var body: some View {
-        VStack {
-            Text("Brain")
-                .font(.title2.bold())
-            Text("Neural visualization and daemon health.")
-                .foregroundStyle(.secondary)
-            Spacer()
+    var icon: String {
+        switch self {
+        case .brain: return "brain"
+        case .mesh: return "network"
+        case .plans: return "list.clipboard"
+        case .agents: return "person.3"
+        case .chat: return "bubble.left.and.bubble.right"
+        case .terminal: return "terminal"
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Mesh topology and node status.
-struct MeshTab: View {
-    var body: some View {
-        VStack {
-            Text("Mesh")
-                .font(.title2.bold())
-            Text("P2P mesh topology and node status.")
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Plan list, execution tree, and task kanban.
-struct PlansTab: View {
-    var body: some View {
-        VStack {
-            Text("Plans")
-                .font(.title2.bold())
-            Text("Plan list, execution tree, and task board.")
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Agent roster and activity feed.
-struct AgentsTab: View {
-    var body: some View {
-        VStack {
-            Text("Agents")
-                .font(.title2.bold())
-            Text("Agent roster and activity feed.")
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Multi-agent chat interface.
-struct ChatTab: View {
-    var body: some View {
-        VStack {
-            Text("Chat")
-                .font(.title2.bold())
-            Text("Multi-agent chat interface.")
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Embedded terminal for daemon interaction.
-struct TerminalTab: View {
-    var body: some View {
-        VStack {
-            Text("Terminal")
-                .font(.title2.bold())
-            Text("Embedded terminal for daemon interaction.")
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
