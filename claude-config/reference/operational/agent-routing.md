@@ -2,7 +2,7 @@
 
 # Agent Routing
 
-Route: `$MYCONVERGIO_HOME/agents/` first, fallback `~/.claude/agents/`.
+Route: `claude-config/agents/` first, fallback `~/.claude/agents/`.
 
 ## Skill Routing (NON-NEGOTIABLE)
 
