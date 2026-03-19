@@ -1,4 +1,5 @@
 use super::state::{query_one, query_rows, ApiError, ServerState};
+use super::ws_brain::broadcast_brain_task_update;
 use axum::extract::{Path, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -140,6 +141,9 @@ async fn handle_task_update(
         )
         .map_err(|e| ApiError::internal(format!("notes update failed: {e}")))?;
     }
+
+    // Push task status change to brain viz via WS
+    broadcast_brain_task_update(&state, task_id, status);
 
     Ok(Json(json!({
         "ok": true,
