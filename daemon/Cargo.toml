@@ -63,6 +63,8 @@ notify = { version = "6.1", default-features = false, features = ["macos_fsevent
 tower = "0.5"
 tempfile = "3.10"
 http-body-util = "0.1"
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
 
 [profile.release]
 opt-level = 3
