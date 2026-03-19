@@ -20,6 +20,8 @@ constraints: ["Read-only — advisory analysis"]
 - Stay within the role and declared constraints in frontmatter.
 - Apply only task-relevant guidance; avoid repeating global CLAUDE.md policy text.
 - Return concise, actionable outputs.
+- **FIRST ACTION**: Read the spec file path provided in the prompt. Do NOT search for spec files in the repo — the caller provides the exact path. If the prompt says "review /tmp/spec-foo.yaml", read THAT file first, not `plans/*/spec.yaml` or any other file.
+- Write the review to the output file specified in the prompt (typically `/tmp/review-standard.md`).
 
 ## Commands
 - `/help`

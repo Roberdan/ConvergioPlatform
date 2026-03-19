@@ -38,8 +38,8 @@ After generating the spec YAML, you MUST complete ALL steps before presenting to
 
 ```
 1. planner-create.sh reset
-2. Launch 1 review agent:
-   Agent(subagent_type="plan-reviewer") → /tmp/review-standard.md
+2. Launch 1 review agent — MUST pass the EXACT spec file path in the prompt:
+   Agent(subagent_type="plan-reviewer", prompt="Review the spec at <EXACT_PATH>. FIRST ACTION: Read <EXACT_PATH>. Do NOT search for other spec files. Write review to /tmp/review-standard.md.")
 3. Wait for review to complete
 4. planner-create.sh register-review standard /tmp/review-standard.md
 5. planner-create.sh check-reviews  ← MUST pass
