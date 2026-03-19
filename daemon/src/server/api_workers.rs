@@ -157,10 +157,17 @@ async fn handle_delegate(
         ],
     );
 
+    // Return stream URL for SSE progress monitoring
+    let stream_url = format!(
+        "/api/plan/delegate?plan_id={}&target={}&cli=copilot",
+        plan_id, peer
+    );
+
     Ok(Json(json!({
         "ok": true,
         "plan_id": plan_id,
         "delegated_to": peer,
+        "stream_url": stream_url,
     })))
 }
 

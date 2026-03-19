@@ -150,6 +150,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/coordinator/process",
     "/api/mesh/exec",
     "/api/mesh/delegate",
+    "/api/mesh/delegate/:id/cancel",
     "/api/workers/launch",
     "/api/evolution/proposals/:id/approve",
     "/api/evolution/proposals/:id/reject",
