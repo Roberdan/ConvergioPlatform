@@ -54,6 +54,12 @@ enum Commands {
         #[command(subcommand)]
         command: IpcCommands,
     },
+    /// Launch the TUI dashboard (connects to daemon HTTP API)
+    Tui {
+        /// Daemon API base URL (default: http://localhost:8420)
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -342,6 +348,21 @@ async fn main() {
             }
             Commands::IpcIntel { command } => {
                 handle_ipc(command).await;
+            }
+            Commands::Tui { api_url } => {
+                env::set_var("CONVERGIO_API_URL", &api_url);
+                match claude_core::tui::TuiApp::new() {
+                    Ok(mut app) => {
+                        if let Err(err) = app.run().await {
+                            eprintln!("TUI error: {err}");
+                            std::process::exit(2);
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("TUI init failed: {err}");
+                        std::process::exit(2);
+                    }
+                }
             }
         }
         return;

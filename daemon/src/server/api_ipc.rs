@@ -1,4 +1,5 @@
 use super::state::{query_rows, ApiError, ServerState};
+use super::ws_brain::{broadcast_brain_agent_update, broadcast_brain_session_update};
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -145,7 +146,10 @@ pub fn router() -> Router<ServerState> {
         .route("/api/ipc/send", post(api_ipc_send))
         // Plan 668: Agent write endpoints
         .route("/api/ipc/agents/register", post(api_ipc_agents_register))
-        .route("/api/ipc/agents/unregister", post(api_ipc_agents_unregister))
+        .route(
+            "/api/ipc/agents/unregister",
+            post(api_ipc_agents_unregister),
+        )
         .route("/api/ipc/agents/heartbeat", post(api_ipc_agents_heartbeat))
         // Plan 635: Intelligence endpoints
         .route("/api/ipc/budget", get(api_ipc_budget))
@@ -267,15 +271,11 @@ async fn api_ipc_status(State(state): State<ServerState>) -> Result<Json<Value>,
     let conn = state.get_conn()?;
     let conn = &conn;
 
-    let agent_count = query_rows(
-        conn,
-        "SELECT COUNT(*) as c FROM ipc_agents",
-        [],
-    )?
-    .first()
-    .and_then(|v| v.get("c"))
-    .and_then(Value::as_i64)
-    .unwrap_or(0);
+    let agent_count = query_rows(conn, "SELECT COUNT(*) as c FROM ipc_agents", [])?
+        .first()
+        .and_then(|v| v.get("c"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
     let lock_count = query_rows(conn, "SELECT COUNT(*) as c FROM ipc_file_locks", [])?
         .first()
         .and_then(|v| v.get("c"))
@@ -390,7 +390,11 @@ async fn api_ipc_agents_register(
                  strftime('%Y-%m-%dT%H:%M:%f','now'),
                  strftime('%Y-%m-%dT%H:%M:%f','now'))",
         rusqlite::params![
-            body.agent_id, body.host, body.agent_type, body.pid, body.metadata
+            body.agent_id,
+            body.host,
+            body.agent_type,
+            body.pid,
+            body.metadata
         ],
     )
     .map_err(|e| ApiError::internal(format!("agent register failed: {e}")))?;
@@ -400,6 +404,10 @@ async fn api_ipc_agents_register(
         "agent_id": body.agent_id,
         "host": body.host,
     }));
+
+    // Push live agent list + session state to brain viz
+    broadcast_brain_agent_update(&state);
+    broadcast_brain_session_update(&state);
 
     Ok(Json(json!({ "ok": true, "agent_id": body.agent_id })))
 }
@@ -422,6 +430,10 @@ async fn api_ipc_agents_unregister(
         "host": body.host,
     }));
 
+    // Push updated agent list + session state to brain viz
+    broadcast_brain_agent_update(&state);
+    broadcast_brain_session_update(&state);
+
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -432,9 +444,10 @@ async fn api_ipc_agents_heartbeat(
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
     // Update last_seen timestamp; store current_task in metadata JSON
-    let metadata = body.current_task.as_deref().map(|t| {
-        serde_json::json!({"current_task": t}).to_string()
-    });
+    let metadata = body
+        .current_task
+        .as_deref()
+        .map(|t| serde_json::json!({"current_task": t}).to_string());
     conn.execute(
         "UPDATE ipc_agents SET last_seen = strftime('%Y-%m-%dT%H:%M:%f','now'),
          metadata = COALESCE(?3, metadata)

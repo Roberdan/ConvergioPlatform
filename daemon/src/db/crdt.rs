@@ -238,8 +238,10 @@ fn rebuild_crr_compatible(conn: &Connection, table: &str) -> rusqlite::Result<()
     // Get column info
     let mut cols: Vec<(String, String, bool, Option<String>, bool)> = Vec::new();
     {
-        let mut stmt =
-            conn.prepare(&format!("SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('{}')", table.replace('\'', "''")))?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('{}')",
+            table.replace('\'', "''")
+        ))?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,

@@ -194,7 +194,9 @@ fn ts_node_matches(
 }
 
 pub(crate) fn ts_name_matches(node: &serde_json::Value, normalized_peer: &str) -> bool {
-    let peer_norm = normalized_peer.to_lowercase().replace(['-', '_', ' ', '\'', '.'], "");
+    let peer_norm = normalized_peer
+        .to_lowercase()
+        .replace(['-', '_', ' ', '\'', '.'], "");
     for field in ["HostName", "DNSName"] {
         if let Some(val) = node.get(field).and_then(|v| v.as_str()) {
             let norm = val.to_lowercase().replace(['-', '_', ' ', '\'', '.'], "");

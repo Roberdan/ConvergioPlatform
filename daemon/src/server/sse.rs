@@ -1,20 +1,15 @@
+// Chat streaming: real LLM via llm_client::stream_chat + agent_activity tracking.
+// Implementation in sse_chat.rs (split for 250-line limit).
+pub use super::sse_chat::chat_stream_sse;
+
+use super::sse_delegate;
 use super::state::{ApiError, ServerState};
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::sse::{Event, Sse};
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use tokio_stream::iter;
-
-pub async fn chat_stream_sse(
-    Path(session_id): Path<String>,
-) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
-    let payload = json!({"ok": true, "sid": session_id});
-    let events = iter([Ok::<Event, Infallible>(
-        Event::default().event("chat").data(payload.to_string()),
-    )]);
-    Sse::new(events)
-}
 
 pub async fn mesh_action_sse(
     Query(qs): Query<HashMap<String, String>>,
@@ -150,48 +145,12 @@ pub async fn plan_preflight_sse(
     let plan_id = required(&qs, "plan_id")?;
     let target = required(&qs, "target")?;
     let conn = state.get_conn()?;
-    let mut stmt = conn
-        .prepare("SELECT status FROM plans WHERE id=?1")
-        .map_err(|err| ApiError::internal(format!("plan query failed: {err}")))?;
-    let status: Option<String> = stmt
-        .query_row(rusqlite::params![plan_id], |row| row.get(0))
-        .ok();
-
-    let active = status
-        .as_deref()
-        .map(|v| matches!(v, "todo" | "doing"))
-        .unwrap_or(false);
-    let plan_detail = status
-        .map(|v| format!("#{plan_id} is '{v}'"))
-        .unwrap_or_else(|| "Not found in DB".to_string());
-
-    let events = vec![
-        Event::default()
-            .event("start")
-            .data(json!({"plan_id": plan_id, "target": target, "total_checks": 9}).to_string()),
-        Event::default()
-            .event("checking")
-            .data(json!({"name": "SSH reachable"}).to_string()),
-        Event::default().event("check").data(
-            json!({"name":"SSH reachable","ok":true,"detail":"simulated via axum","blocking":true})
-                .to_string(),
-        ),
-        Event::default()
-            .event("checking")
-            .data(json!({"name": "Plan status"}).to_string()),
-        Event::default().event("check").data(
-            json!({"name":"Plan status","ok":active,"detail":plan_detail,"blocking":true})
-                .to_string(),
-        ),
-        Event::default()
-            .event("done")
-            .data(json!({"ok": active}).to_string()),
-    ];
-    let stream = iter(events.into_iter().map(Ok::<Event, Infallible>));
-    Ok(Sse::new(stream))
+    let events = super::sse_preflight::build_preflight_events(&conn, &plan_id, &target);
+    Ok(Sse::new(iter(events)))
 }
 
 pub async fn plan_delegate_sse(
+    State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let plan_id = required(&qs, "plan_id")?;
@@ -201,20 +160,8 @@ pub async fn plan_delegate_sse(
         .cloned()
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| "copilot".to_string());
-    let events = vec![
-        Event::default().event("phase").data(json!({"name":"handoff"}).to_string()),
-        Event::default()
-            .event("log")
-            .data(format!("--- HANDOFF: Plan #{plan_id} -> {target} ---")),
-        Event::default().event("log").data(format!("cli={cli}")),
-        Event::default().event("done").data(
-            json!({"ok": true, "plan_id": plan_id, "target": target, "message": "delegation simulated"})
-                .to_string(),
-        ),
-    ];
-    Ok(Sse::new(iter(
-        events.into_iter().map(Ok::<Event, Infallible>),
-    )))
+    let events = sse_delegate::delegate(&state, &qs, &plan_id, &target, &cli).await;
+    Ok(Sse::new(iter(events)))
 }
 
 pub async fn plan_start_sse(

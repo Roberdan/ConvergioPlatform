@@ -189,8 +189,17 @@ export function planDetail(container, data, { api }) {
   ganttTab.setAttribute('label', 'Timeline');
   tabs.appendChild(ganttTab);
 
-  const gantt = document.createElement('mn-gantt');
-  ganttTab.appendChild(gantt);
+  const ganttAvailable = !!customElements.get('mn-gantt');
+  let ganttEl;
+  if (ganttAvailable) {
+    ganttEl = document.createElement('mn-gantt');
+    ganttTab.appendChild(ganttEl);
+  } else {
+    console.warn('[plan-detail] mn-gantt not registered — showing placeholder');
+    ganttEl = document.createElement('mn-placeholder');
+    ganttEl.setAttribute('label', 'Gantt timeline — awaiting MLD delivery');
+    ganttTab.appendChild(ganttEl);
+  }
 
   async function refresh() {
     scaffold.state = 'loading';
@@ -218,13 +227,15 @@ export function planDetail(container, data, { api }) {
     // Wave tree
     treeTab.innerHTML = header + tree.map(waveHtml).join('');
 
-    // Gantt timeline
-    const ganttItems = buildGanttTasks(tree);
-    if (ganttItems.length > 0) {
-      gantt.setAttribute('tasks', JSON.stringify(ganttItems));
-    } else {
-      ganttTab.innerHTML = '<p class="mn-text--secondary">No task timeline data available.</p>';
-      ganttTab.appendChild(gantt);
+    // Gantt timeline — only populate if mn-gantt is available
+    if (ganttAvailable) {
+      const ganttItems = buildGanttTasks(tree);
+      if (ganttItems.length > 0) {
+        ganttEl.setAttribute('tasks', JSON.stringify(ganttItems));
+      } else {
+        ganttTab.innerHTML = '<p class="mn-text--secondary">No task timeline data available.</p>';
+        ganttTab.appendChild(ganttEl);
+      }
     }
 
     scaffold.state = 'ready';

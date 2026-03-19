@@ -521,7 +521,9 @@ fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Connecti
             Ok(()) => {}
             Err(e) => {
                 eprintln!("[warn] crsqlite failed (SQLite {ext} vs system mismatch?): {e}");
-                eprintln!("[warn] daemon running WITHOUT CRDT replication — heartbeat/sync still active");
+                eprintln!(
+                    "[warn] daemon running WITHOUT CRDT replication — heartbeat/sync still active"
+                );
             }
         }
     }

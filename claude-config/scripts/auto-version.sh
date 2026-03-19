@@ -7,7 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN=false
-REPO_PATH="${HOME}/GitHub/MyConvergio"
+REPO_PATH="${HOME}/GitHub/ConvergioPlatform"
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in

@@ -1,5 +1,17 @@
+pub mod api;
 pub mod views;
 pub mod widgets;
+
+use std::io;
+use std::time::{Duration, Instant};
+
+use crossterm::event::{Event, EventStream, KeyCode, KeyModifiers};
+use futures_util::StreamExt;
+use ratatui::{backend::CrosstermBackend, Terminal};
+use reqwest::Client;
+use tokio::time::interval;
+
+// --- Data structs (preserved from prior implementation) ---
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlanCard {
@@ -18,12 +30,12 @@ pub struct TaskPipelineItem {
     pub agent: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MeshNode {
     pub name: String,
     pub online: bool,
-    pub active_tasks: i64,
-    pub cpu_load: i64,
+    pub role: String,
+    pub cpu_percent: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,12 +46,22 @@ pub struct AgentOrgNode {
     pub active_task: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct KpiData {
+    pub plans_active: i64,
+    pub agents_running: i64,
+    pub daily_tokens: i64,
+    pub daily_cost: f64,
+    pub mesh_online: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TuiData {
     pub plans: Vec<PlanCard>,
     pub pipeline: Vec<TaskPipelineItem>,
     pub mesh_nodes: Vec<MeshNode>,
     pub agents: Vec<AgentOrgNode>,
+    pub kpis: KpiData,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -51,14 +73,133 @@ pub enum MainView {
     AgentOrgChart,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+// --- TuiApp ---
+
 pub struct TuiApp {
     pub data: TuiData,
     pub active_view: MainView,
+    pub selected_index: usize,
+    pub last_fetch: Instant,
+    terminal: Terminal<CrosstermBackend<io::Stdout>>,
+    client: Client,
 }
 
 impl TuiApp {
+    pub fn new() -> io::Result<Self> {
+        crossterm::terminal::enable_raw_mode()?;
+        crossterm::execute!(
+            io::stdout(),
+            crossterm::terminal::EnterAlternateScreen,
+            crossterm::event::EnableMouseCapture
+        )?;
+        let backend = CrosstermBackend::new(io::stdout());
+        let terminal = Terminal::new(backend)?;
+        Ok(Self {
+            data: TuiData::default(),
+            active_view: MainView::default(),
+            selected_index: 0,
+            last_fetch: Instant::now() - Duration::from_secs(10),
+            terminal,
+            client: Client::new(),
+        })
+    }
+
+    /// Main async event loop using tokio::select! on three channels.
+    pub async fn run(&mut self) -> io::Result<()> {
+        let mut events = EventStream::new();
+        let mut poll_tick = interval(Duration::from_secs(5));
+        let mut render_tick = interval(Duration::from_millis(100));
+
+        // Initial data fetch before first render
+        self.refresh_data().await;
+
+        loop {
+            tokio::select! {
+                _ = poll_tick.tick() => {
+                    self.refresh_data().await;
+                }
+                _ = render_tick.tick() => {
+                    self.render()?;
+                }
+                maybe_event = events.next() => {
+                    match maybe_event {
+                        Some(Ok(Event::Key(key))) => {
+                            if self.handle_key(key.code, key.modifiers) {
+                                return Ok(());
+                            }
+                        }
+                        Some(Err(_)) => return Ok(()),
+                        None => return Ok(()),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    /// Returns true if the app should quit.
+    fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        match code {
+            KeyCode::Char('q') => return true,
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+            KeyCode::Char('1') => self.active_view = MainView::PlanKanban,
+            KeyCode::Char('2') => self.active_view = MainView::TaskPipeline,
+            KeyCode::Char('3') => self.active_view = MainView::MeshStatus,
+            KeyCode::Char('4') => self.active_view = MainView::AgentOrgChart,
+            KeyCode::Tab => self.next_view(),
+            KeyCode::BackTab => self.prev_view(),
+            KeyCode::Up => {
+                self.selected_index = self.selected_index.saturating_sub(1);
+            }
+            KeyCode::Down => {
+                let max = self.list_len().saturating_sub(1);
+                if self.selected_index < max {
+                    self.selected_index += 1;
+                }
+            }
+            KeyCode::Enter => {} // reserved for future drill-down
+            _ => {}
+        }
+        false
+    }
+
+    fn list_len(&self) -> usize {
+        match self.active_view {
+            MainView::PlanKanban => self.data.plans.len(),
+            MainView::TaskPipeline => self.data.pipeline.len(),
+            MainView::MeshStatus => self.data.mesh_nodes.len(),
+            MainView::AgentOrgChart => self.data.agents.len(),
+        }
+    }
+
+    fn render(&mut self) -> io::Result<()> {
+        let view = self.active_view;
+        let data = &self.data;
+        let selected = self.selected_index;
+        self.terminal.draw(|frame| {
+            views::render_view(frame, frame.area(), view, data, selected);
+        })?;
+        Ok(())
+    }
+
+    async fn refresh_data(&mut self) {
+        let (kpis, plans, tasks, mesh, agents) = tokio::join!(
+            api::fetch_overview(&self.client),
+            api::fetch_plans(&self.client),
+            api::fetch_all_tasks(&self.client),
+            api::fetch_mesh(&self.client),
+            api::fetch_agents(&self.client),
+        );
+        self.data.kpis = kpis;
+        self.data.plans = plans;
+        self.data.pipeline = tasks;
+        self.data.mesh_nodes = mesh;
+        self.data.agents = agents;
+        self.last_fetch = Instant::now();
+    }
+
     pub fn next_view(&mut self) {
+        self.selected_index = 0;
         self.active_view = match self.active_view {
             MainView::PlanKanban => MainView::TaskPipeline,
             MainView::TaskPipeline => MainView::MeshStatus,
@@ -68,6 +209,7 @@ impl TuiApp {
     }
 
     pub fn prev_view(&mut self) {
+        self.selected_index = 0;
         self.active_view = match self.active_view {
             MainView::PlanKanban => MainView::AgentOrgChart,
             MainView::TaskPipeline => MainView::PlanKanban,
@@ -77,108 +219,16 @@ impl TuiApp {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        views, AgentOrgNode, MainView, MeshNode, PlanCard, TaskPipelineItem, TuiApp, TuiData,
-    };
-    use ratatui::{backend::TestBackend, Terminal};
-
-    #[test]
-    fn renders_plan_kanban_view() {
-        let data = sample_data();
-        let rendered = render_to_text(&data, MainView::PlanKanban);
-        assert!(rendered.contains("PLAN KANBAN"));
-        assert!(rendered.contains("Stabilize Mesh"));
-    }
-
-    #[test]
-    fn renders_task_pipeline_view() {
-        let data = sample_data();
-        let rendered = render_to_text(&data, MainView::TaskPipeline);
-        assert!(rendered.contains("TASK PIPELINE"));
-        assert!(rendered.contains("T13-01"));
-    }
-
-    #[test]
-    fn renders_mesh_status_view() {
-        let data = sample_data();
-        let rendered = render_to_text(&data, MainView::MeshStatus);
-        assert!(rendered.contains("MESH STATUS"));
-        assert!(rendered.contains("node-a"));
-    }
-
-    #[test]
-    fn renders_agent_org_chart_view() {
-        let data = sample_data();
-        let rendered = render_to_text(&data, MainView::AgentOrgChart);
-        assert!(rendered.contains("AGENT ORG CHART"));
-        assert!(rendered.contains("Thor"));
-    }
-
-    fn render_to_text(data: &TuiData, view: MainView) -> String {
-        let backend = TestBackend::new(120, 30);
-        let mut terminal = Terminal::new(backend).expect("terminal");
-        terminal
-            .draw(|frame| {
-                views::render_view(frame, frame.area(), view, data);
-            })
-            .expect("draw");
-        let mut all = String::new();
-        for row in terminal.backend().buffer().content.chunks(120) {
-            let line = row.iter().map(|cell| cell.symbol()).collect::<String>();
-            all.push_str(&line);
-            all.push('\n');
-        }
-        all
-    }
-
-    fn sample_data() -> TuiData {
-        TuiData {
-            plans: vec![
-                PlanCard {
-                    id: 100025,
-                    name: "Stabilize Mesh".to_string(),
-                    status: "doing".to_string(),
-                    tasks_done: 12,
-                    tasks_total: 18,
-                },
-                PlanCard {
-                    id: 100026,
-                    name: "Rust TUI Port".to_string(),
-                    status: "todo".to_string(),
-                    tasks_done: 0,
-                    tasks_total: 8,
-                },
-            ],
-            pipeline: vec![TaskPipelineItem {
-                task_id: "T13-01".to_string(),
-                title: "Implement Rust TUI".to_string(),
-                status: "in_progress".to_string(),
-                agent: "copilot".to_string(),
-            }],
-            mesh_nodes: vec![MeshNode {
-                name: "node-a".to_string(),
-                online: true,
-                active_tasks: 2,
-                cpu_load: 41,
-            }],
-            agents: vec![AgentOrgNode {
-                name: "Thor".to_string(),
-                role: "validator".to_string(),
-                host: "node-a".to_string(),
-                active_task: Some("T13-01".to_string()),
-            }],
-        }
-    }
-
-    #[test]
-    fn cycles_views_forward_and_backward() {
-        let mut app = TuiApp::default();
-        assert_eq!(app.active_view, MainView::PlanKanban);
-        app.next_view();
-        assert_eq!(app.active_view, MainView::TaskPipeline);
-        app.prev_view();
-        assert_eq!(app.active_view, MainView::PlanKanban);
+impl Drop for TuiApp {
+    fn drop(&mut self) {
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = crossterm::execute!(
+            io::stdout(),
+            crossterm::terminal::LeaveAlternateScreen,
+            crossterm::event::DisableMouseCapture
+        );
     }
 }
+
+#[cfg(test)]
+mod tests;

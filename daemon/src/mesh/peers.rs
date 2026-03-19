@@ -48,11 +48,7 @@ pub struct PeersRegistry {
 
 // ── Parsing helpers ──────────────────────────────────────────────────────────
 
-fn require(
-    map: &BTreeMap<String, String>,
-    key: &str,
-    peer: &str,
-) -> Result<String, PeersError> {
+fn require(map: &BTreeMap<String, String>, key: &str, peer: &str) -> Result<String, PeersError> {
     map.get(key)
         .cloned()
         .ok_or_else(|| PeersError::MissingField {
@@ -77,12 +73,13 @@ fn build_peer(name: &str, kv: &BTreeMap<String, String>) -> Result<PeerConfig, P
         dns_name: require(kv, "dns_name", name)?,
         capabilities: parse_capabilities(&require(kv, "capabilities", name)?),
         role: require(kv, "role", name)?,
-        status: kv.get("status").cloned().unwrap_or_else(|| "active".to_owned()),
+        status: kv
+            .get("status")
+            .cloned()
+            .unwrap_or_else(|| "active".to_owned()),
         mac_address: kv.get("mac_address").cloned(),
         gh_account: kv.get("gh_account").cloned(),
-        runners: kv
-            .get("runners")
-            .and_then(|v| v.parse::<u32>().ok()),
+        runners: kv.get("runners").and_then(|v| v.parse::<u32>().ok()),
         runner_paths: kv.get("runner_paths").cloned(),
     })
 }
@@ -120,7 +117,12 @@ fn parse_ini(text: &str) -> Result<(String, BTreeMap<String, PeerConfig>), Peers
             continue;
         }
         if line.starts_with('[') && line.ends_with(']') {
-            flush_section(&current_section, &current_kv, &mut shared_secret, &mut peers)?;
+            flush_section(
+                &current_section,
+                &current_kv,
+                &mut shared_secret,
+                &mut peers,
+            )?;
             current_section = Some(line[1..line.len() - 1].to_owned());
             current_kv = BTreeMap::new();
         } else if let Some(eq) = line.find('=') {
@@ -134,7 +136,12 @@ fn parse_ini(text: &str) -> Result<(String, BTreeMap<String, PeerConfig>), Peers
             });
         }
     }
-    flush_section(&current_section, &current_kv, &mut shared_secret, &mut peers)?;
+    flush_section(
+        &current_section,
+        &current_kv,
+        &mut shared_secret,
+        &mut peers,
+    )?;
     Ok((shared_secret, peers))
 }
 
@@ -177,7 +184,10 @@ impl PeersRegistry {
     pub fn load(path: &Path) -> Result<Self, PeersError> {
         let text = std::fs::read_to_string(path)?;
         let (shared_secret, peers) = parse_ini(&text)?;
-        Ok(Self { shared_secret, peers })
+        Ok(Self {
+            shared_secret,
+            peers,
+        })
     }
 
     pub fn save(&self, path: &Path) -> Result<(), PeersError> {
@@ -305,14 +315,20 @@ gh_account=Roberdan
     fn parse_capabilities_split() {
         let reg = load_from_str(PEERS_INI);
         let mac_worker_2 = reg.peers.get("mac-worker-2").unwrap();
-        assert_eq!(mac_worker_2.capabilities, vec!["claude", "copilot", "ollama"]);
+        assert_eq!(
+            mac_worker_2.capabilities,
+            vec!["claude", "copilot", "ollama"]
+        );
     }
 
     #[test]
     fn parse_optional_fields() {
         let reg = load_from_str(PEERS_INI);
         let mac_worker_1 = reg.peers.get("mac-worker-1").unwrap();
-        assert_eq!(mac_worker_1.mac_address.as_deref(), Some("AA:BB:CC:DD:EE:FF"));
+        assert_eq!(
+            mac_worker_1.mac_address.as_deref(),
+            Some("AA:BB:CC:DD:EE:FF")
+        );
         assert_eq!(mac_worker_1.runners, Some(3));
         assert_eq!(
             mac_worker_1.runner_paths.as_deref(),

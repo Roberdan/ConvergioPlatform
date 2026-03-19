@@ -1,11 +1,17 @@
 // app.js — Convergio Control Room orchestrator
 // Wires Maranello runtime, API clients, reactive store, and view modules.
+// 3-zone layout: command strip + main + brain strip.
 import * as api from './lib/api-core.js';
 import * as store from './lib/store.js';
 import { connectDashboardWS } from './lib/ws.js';
+import { initBrainStrip } from './lib/brain-strip.js';
+import { initDrawerChat } from './widgets/drawer-chat.js';
+import { createDrawer } from './widgets/drawer-bottom.js';
+import { getQueryParams, applyEmbeddedMode, isEmbedded } from './lib/embed.js';
 
 const REFRESH_INTERVAL_MS = 16000;
 const DEFAULT_VIEW = 'overview';
+// Supported query params: ?mode=embedded (adds .mode-embedded), ?tab=, ?brain_mode=embedded
 
 // View factories — lazy-loaded via dynamic import
 const VIEW_MODULES = {
@@ -13,10 +19,9 @@ const VIEW_MODULES = {
   plans: () => import('./views/plans.js'),
   mesh: () => import('./views/mesh.js'),
   brain: () => import('./views/brain.js'),
-  ideas: () => import('./views/ideas.js'),
-  ipc: () => import('./views/ipc.js'),
+  agents: () => import('./views/agents.js'),
+  evolution: () => import('./views/evolution.js'),
   admin: () => import('./views/admin.js'),
-  terminal: () => import('./views/terminal.js'),
 };
 
 // Capitalise view id for display
@@ -60,7 +65,10 @@ function activateView(viewId) {
 
 function highlightNavLink(viewId) {
   document.querySelectorAll('[data-view]').forEach((link) => {
-    link.classList.toggle('mn-sidebar__link--active', link.dataset.view === viewId);
+    link.classList.toggle(
+      'mn-sidebar__link--active',
+      link.dataset.view === viewId
+    );
   });
 }
 
@@ -105,19 +113,16 @@ function bindSidebarNav() {
 
 // ── Command palette ─────────────────────────────────────────────────
 
-function bindCommandPalette() {
+function bindCommandPalette(drawerToggle) {
   const palette = document.getElementById('cmd-palette');
   if (!palette) return;
-
-  palette.items = JSON.stringify(
-    Object.keys(VIEW_MODULES).map((id) => ({
-      text: viewTitle(id),
-      group: 'Navigation',
-    }))
-  );
-
+  const navItems = Object.keys(VIEW_MODULES).map((id) => ({ text: viewTitle(id), group: 'Navigation' }));
+  const cmdItems = [{ text: 'Toggle Terminal', group: 'Panels', shortcut: 'Ctrl+`' }];
+  palette.items = JSON.stringify([...navItems, ...cmdItems]);
   palette.addEventListener('mn-select', (e) => {
-    const viewId = e.detail.item.text.toLowerCase();
+    const label = e.detail.item.text;
+    if (label === 'Toggle Terminal' && drawerToggle) { drawerToggle(); return; }
+    const viewId = label.toLowerCase();
     if (VIEW_MODULES[viewId]) activateView(viewId);
   });
 }
@@ -126,26 +131,14 @@ function bindCommandPalette() {
 
 async function refreshAll() {
   const t0 = performance.now();
-
   const [overview, mesh, tasks] = await Promise.allSettled([
-    api.fetchOverview(),
-    api.fetchMesh(),
-    api.fetchTasksDistribution(),
+    api.fetchOverview(), api.fetchMesh(), api.fetchTasksDistribution(),
   ]);
-
-  if (overview.status === 'fulfilled' && !(overview.value instanceof Error)) {
-    store.set('overview', overview.value);
-  }
-  if (mesh.status === 'fulfilled' && !(mesh.value instanceof Error)) {
-    store.set('mesh', mesh.value);
-  }
-  if (tasks.status === 'fulfilled' && !(tasks.value instanceof Error)) {
-    store.set('tasks', tasks.value);
-  }
-
-  const elapsed = Math.round(performance.now() - t0);
-  store.set('lastRefresh', { ts: Date.now(), elapsed });
-
+  const ok = (r) => r.status === 'fulfilled' && !(r.value instanceof Error);
+  if (ok(overview)) store.set('overview', overview.value);
+  if (ok(mesh)) store.set('mesh', mesh.value);
+  if (ok(tasks)) store.set('tasks', tasks.value);
+  store.set('lastRefresh', { ts: Date.now(), elapsed: Math.round(performance.now() - t0) });
   const badge = document.getElementById('last-update');
   if (badge) badge.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
 }
@@ -154,16 +147,8 @@ async function refreshAll() {
 
 function handleWsMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
-
-  if (msg.type === 'refresh') {
-    refreshAll();
-    return;
-  }
-
-  // Forward domain-specific events into the store so views can react
-  if (msg.type && msg.data !== undefined) {
-    store.set(`ws:${msg.type}`, msg.data);
-  }
+  if (msg.type === 'refresh') { refreshAll(); return; }
+  if (msg.type && msg.data !== undefined) store.set(`ws:${msg.type}`, msg.data);
 }
 
 // ── Keyboard shortcuts ──────────────────────────────────────────────
@@ -188,22 +173,39 @@ function bindThemePersistence() {
   };
   document.addEventListener('mn-theme-change', persist);
   new MutationObserver(persist).observe(document.documentElement, {
-    attributes: true, attributeFilter: ['data-theme'],
+    attributes: true,
+    attributeFilter: ['data-theme'],
   });
 }
 
 // ── Init ────────────────────────────────────────────────────────────
 
 async function init() {
+  const qp = getQueryParams();
+
+  // Apply embedded mode before any DOM wiring — hides sidebar/command strip
+  if (qp.mode === 'embedded') applyEmbeddedMode();
+
+  // Expose brain_mode param so brain/canvas.js can read it
+  if (qp.brainMode === 'embedded') {
+    window.__convergioBrainModeForced = 'embedded';
+  }
+
   const registry = Maranello.ViewRegistry.getInstance();
   const nav = new Maranello.NavigationModel();
   orch = new Maranello.PanelOrchestrator(registry, nav);
 
   registerViews(registry);
   bindSidebarNav();
-  bindCommandPalette();
+
+  // Bottom terminal drawer (Ctrl+` to toggle) — skip in embedded mode
+  const termDrawer = isEmbedded() ? null : createDrawer();
+
+  if (termDrawer) bindCommandPalette(termDrawer.toggle);
   bindKeyboard();
   bindThemePersistence();
+  if (!isEmbedded()) initBrainStrip();
+  initDrawerChat();
 
   // Mobile sidebar toggle
   if (typeof Maranello.initSidebarToggleAuto === 'function') {
@@ -219,8 +221,11 @@ async function init() {
   // Initial data load
   await refreshAll();
 
-  // Open view from URL hash or fall back to default
-  const initial = viewFromHash() || DEFAULT_VIEW;
+  // ?tab= param overrides hash, then hash, then default
+  const tabParam = qp.tab;
+  const initial = (tabParam && VIEW_MODULES[tabParam])
+    ? tabParam
+    : viewFromHash() || DEFAULT_VIEW;
   activateView(initial);
 
   // Periodic refresh

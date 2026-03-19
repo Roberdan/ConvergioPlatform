@@ -23,7 +23,7 @@ if [[ ${#PATHS[@]} -eq 0 ]]; then
 	PATHS=(
 		"$HOME/.claude"
 		"$HOME/GitHub/VirtualBPM"
-		"$HOME/GitHub/MyConvergio"
+		"$HOME/GitHub/ConvergioPlatform"
 		"$HOME/GitHub/MirrorBuddy"
 	)
 fi

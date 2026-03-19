@@ -60,7 +60,7 @@ EnterPlanMode = no DB registration = VIOLATION. _Why: Plan 225._
 | `Task` tool (parallel) | N/A              | Specialized/background agents | Use wrappers for plan-db discipline |
 | preCompact hook        | N/A              | Auto-compact at 95%      |
 
-`/plan` in Copilot CLI is a built-in generic planner, not the MyConvergio planner agent. For plan-db discipline use `@planner`, `/agent` → `planner`, or `cplanner`.
+`/plan` in Copilot CLI is a built-in generic planner, not the ConvergioPlatform planner agent. For plan-db discipline use `@planner`, `/agent` → `planner`, or `cplanner`.
 
 Universal orchestration contract: `reference/operational/universal-orchestration.md`
 

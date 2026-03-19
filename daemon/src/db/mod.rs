@@ -31,18 +31,20 @@ impl PlanDb {
         let extension = crsqlite_extension.unwrap_or_else(|| "crsqlite".to_string());
         let mut loaded_ext = None;
         match crdt::load_crsqlite(&conn, &extension) {
-            Ok(()) => {
-                match crdt::mark_required_tables(&conn) {
-                    Ok(()) => { loaded_ext = Some(extension); }
-                    Err(e) => {
-                        eprintln!("[warn] crsqlite loaded but CRR setup failed (SQLite version mismatch?): {e}");
-                        eprintln!("[warn] daemon running WITHOUT CRDT replication — heartbeat/sync still active");
-                    }
+            Ok(()) => match crdt::mark_required_tables(&conn) {
+                Ok(()) => {
+                    loaded_ext = Some(extension);
                 }
-            }
+                Err(e) => {
+                    eprintln!("[warn] crsqlite loaded but CRR setup failed (SQLite version mismatch?): {e}");
+                    eprintln!("[warn] daemon running WITHOUT CRDT replication — heartbeat/sync still active");
+                }
+            },
             Err(e) => {
                 eprintln!("[warn] crsqlite extension failed to load: {e}");
-                eprintln!("[warn] daemon running WITHOUT CRDT replication — heartbeat/sync still active");
+                eprintln!(
+                    "[warn] daemon running WITHOUT CRDT replication — heartbeat/sync still active"
+                );
             }
         }
         // Apply standard pragmas even without crsqlite

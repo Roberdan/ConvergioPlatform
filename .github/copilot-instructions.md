@@ -7,7 +7,7 @@ Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
 | Daemon | `daemon/` | Rust | Mesh P2P, HTTP/WS/SSE API, TUI, IPC, hooks, SQLite DB |
-| Dashboard | `dashboard/` | Python+JS | Control Room web UI (Maranello DS) |
+| Dashboard | `dashboard/` | JS (Maranello DS) | Control Room web UI served by daemon |
 | Evolution | `evolution/` | TypeScript | Self-improving optimization engine (core + adapters) |
 | Scripts | `scripts/` | Bash | Mesh ops (12), platform tooling (5) |
 | Data | `data/dashboard.db` | SQLite WAL | Plans, tasks, waves, KB, heartbeats |
@@ -20,7 +20,7 @@ Every agent has a unique name. Cross-platform agents share the same plan-db and 
 
 | Name | Type | Default Model | Primary Skill |
 |---|---|---|---|
-| planner | claude | claude-opus-4.6 | Plan creation (spec.json + DB registration) |
+| planner | claude | claude-opus-4.6 | Plan creation (spec.yaml + gated DB via planner-create.sh) |
 | executor | copilot | gpt-5.3-codex | TDD task execution (one task at a time) |
 | reviewer (thor) | claude | claude-opus-4.6 | Quality validation (9 gates, per-wave) |
 | explorer | claude | claude-haiku-4.5 | Codebase exploration and analysis |
@@ -39,7 +39,9 @@ Every agent has a unique name. Cross-platform agents share the same plan-db and 
 
 EnterPlanMode bypasses DB registration and is a VIOLATION. Always use `@planner` for plans.
 
-Workflow sequence: `@prompt` (requirements) -> `@planner` (spec + DB) -> review -> `@execute {id}` (TDD) -> `@validate` (Thor per-wave) -> merge -> done.
+Workflow sequence: `@prompt` (requirements) -> `@planner` (spec.yaml + review gate + `planner-create.sh` gated DB) -> `@execute {id}` (TDD) -> `@validate` (Thor per-wave) -> merge -> done.
+
+Plan creation is gated: `planner-create.sh reset` -> plan-reviewer -> `planner-create.sh register-review` -> `planner-create.sh create` -> `planner-create.sh import`. NEVER use `plan-db.sh create/import` directly.
 
 ## IPC Registration
 
@@ -131,8 +133,7 @@ Non-portable hooks (Claude Code only, no Copilot event): secret-scanner, env-vau
 |---|---|
 | `daemon/` | Rust daemon: mesh(40), server(32), ipc(15), db(7), hooks(3), tui(3) |
 | `daemon/Cargo.toml` | Rust deps (axum, rusqlite, tokio, ssh2, ratatui) |
-| `dashboard/` | Python api_server + vanilla JS + Maranello DS |
-| `dashboard/api_server.py` | HTTP server, daemon proxy |
+| `dashboard/` | Vanilla JS + Maranello DS (served by daemon on :8420) |
 | `evolution/` | TypeScript core/types + adapters (claude, maranello, dashboard) |
 | `scripts/mesh/` | 12 mesh operation scripts |
 | `scripts/platform/` | Platform tooling (bootstrap, agent-bridge) |

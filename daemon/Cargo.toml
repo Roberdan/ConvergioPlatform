@@ -1,6 +1,6 @@
 [package]
 name = "convergio-platform-daemon"
-version = "11.5.0"
+version = "11.6.0"
 edition = "2021"
 
 [lib]
@@ -53,16 +53,20 @@ serde_bytes = "0.11.19"
 hmac = "0.12.1"
 sha2 = "0.10.9"
 rand = "0.10.0"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 serde_yaml = "0.9"
 chacha20poly1305 = "0.10"
 hkdf = "0.12"
 notify = { version = "6.1", default-features = false, features = ["macos_fsevent"] }
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures-util = "0.3"
 
 [dev-dependencies]
 tower = "0.5"
 tempfile = "3.10"
 http-body-util = "0.1"
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
 
 [profile.release]
 opt-level = 3

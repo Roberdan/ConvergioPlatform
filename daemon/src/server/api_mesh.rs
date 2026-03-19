@@ -15,6 +15,25 @@ pub fn router() -> Router<ServerState> {
         .route("/api/mesh/traffic", get(api_mesh_traffic))
         .route("/api/mesh/init", post(api_mesh_init))
         .route("/api/mesh/action", get(handle_mesh_action))
+        .route(
+            "/api/mesh/delegate/:id/cancel",
+            post(handle_delegate_cancel),
+        )
+}
+
+/// POST /api/mesh/delegate/:id/cancel — cancel an active delegation.
+async fn handle_delegate_cancel(
+    axum::extract::Path(delegation_id): axum::extract::Path<String>,
+) -> Json<Value> {
+    let cancelled = super::sse_delegate::cancel_delegation(&delegation_id);
+    if cancelled {
+        Json(json!({"ok": true, "delegation_id": delegation_id, "status": "cancelled"}))
+    } else {
+        Json(json!({
+            "ok": false, "delegation_id": delegation_id,
+            "error": "delegation not found or already completed"
+        }))
+    }
 }
 
 async fn proxy_daemon_get(endpoint: &str) -> Result<Json<Value>, ApiError> {
@@ -43,9 +62,7 @@ async fn api_mesh_metrics() -> Result<Json<Value>, ApiError> {
     proxy_daemon_get("metrics").await
 }
 
-async fn api_mesh_sync_stats(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+async fn api_mesh_sync_stats(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     // Try daemon proxy first, fallback to direct DB query
     if let Ok(result) = proxy_daemon_get("sync-stats").await {
         return Ok(result);

@@ -238,7 +238,11 @@ mod tests {
     fn parse_tailscale_peer_online_flags() {
         let status = parse_tailscale_json(TAILSCALE_JSON.as_bytes()).unwrap();
 
-        let linux_worker = status.peers.iter().find(|p| p.hostname == "linux-worker").unwrap();
+        let linux_worker = status
+            .peers
+            .iter()
+            .find(|p| p.hostname == "linux-worker")
+            .unwrap();
         assert!(linux_worker.online);
         assert_eq!(linux_worker.ip, "100.64.0.2");
         assert_eq!(linux_worker.os, "linux");

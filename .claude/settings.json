@@ -20,6 +20,15 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE 'plan-db\\.sh\\s+(create|import)'; then echo 'BLOCKED: Use planner-create.sh instead of plan-db.sh create/import (enforces review gate)' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
         "matcher": "Edit",
         "hooks": [
           {

@@ -22,7 +22,7 @@ tools:
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
 | Daemon | `daemon/` | Rust | Mesh P2P, HTTP/WS/SSE API, TUI, IPC, hooks, DB |
-| Dashboard | `dashboard/` | Python+JS | Control Room web UI (Maranello DS) |
+| Dashboard | `dashboard/` | JS (Maranello DS) | Control Room web UI (served by daemon on :8420) |
 | Evolution | `evolution/` | TypeScript | Self-improving optimization (core + adapters) |
 | Scripts | `scripts/` | Bash | Mesh ops, platform tooling |
 | Data | `data/` | SQLite | `dashboard.db` — plans, tasks, agents, learnings |
@@ -54,11 +54,10 @@ API (22 modules): agents · chat · coordinator · dashboard · github · heartb
 
 ## Dashboard
 
-Python `api_server.py` + vanilla JS + Maranello DS.
+Vanilla JS + Maranello DS, served by Rust daemon on :8420.
 
 | File | Purpose |
 |---|---|
-| `api_server.py` | HTTP server, daemon proxy |
 | `index.html` | Control Room shell |
 | `app.js` | Orchestrator |
 | `maranello-enhancer.js` | Maranello WC bridge |

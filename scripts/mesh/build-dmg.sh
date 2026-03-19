@@ -16,54 +16,40 @@ cargo build --release
 CLI_BIN="$PROJECT_ROOT/target/release/convergiomesh-cli"
 [ -f "$CLI_BIN" ] || { echo "ERROR: CLI binary not found"; exit 1; }
 
-# 2. Build SwiftUI app (release)
-echo "[2/6] Building SwiftUI app..."
-cd "$PROJECT_ROOT/gui/ConvergioMesh"
-swift build -c release
-SWIFT_BIN="$PROJECT_ROOT/gui/ConvergioMesh/.build/release/ConvergioMesh"
-[ -f "$SWIFT_BIN" ] || { echo "ERROR: Swift binary not found"; exit 1; }
+# 2. Build SwiftUI menu bar app (release)
+echo "[2/6] Building ConvergioMissionControl menu bar app..."
+MISSION_CONTROL_DIR="$PROJECT_ROOT/gui/ConvergioMissionControl"
+"$MISSION_CONTROL_DIR/build.sh"
+SWIFT_BIN="$MISSION_CONTROL_DIR/build/ConvergioMissionControl.app/Contents/MacOS/ConvergioMissionControl"
+[ -f "$SWIFT_BIN" ] || { echo "ERROR: MissionControl binary not found"; exit 1; }
 
-# 3. Create .app bundle manually (since SPM doesn't create .app)
-echo "[3/6] Creating app bundle..."
+# 3. Assemble DMG contents from MissionControl app + CLI
+echo "[3/6] Assembling DMG contents..."
 mkdir -p "$BUILD_DIR"
-APP_DIR="$BUILD_DIR/$APP_NAME.app/Contents/MacOS"
-RESOURCES_DIR="$BUILD_DIR/$APP_NAME.app/Contents/Resources"
-mkdir -p "$APP_DIR" "$RESOURCES_DIR"
+MCAPP_SRC="$MISSION_CONTROL_DIR/build/ConvergioMissionControl.app"
+cp -R "$MCAPP_SRC" "$BUILD_DIR/$APP_NAME.app"
 
-# Copy binaries
-cp "$SWIFT_BIN" "$APP_DIR/$APP_NAME"
+# Embed CLI binary alongside menu bar app
+APP_DIR="$BUILD_DIR/$APP_NAME.app/Contents/MacOS"
 cp "$CLI_BIN" "$APP_DIR/convergiomesh-cli"
 
-# Copy app icon
+# Copy app icon into bundle resources
+RESOURCES_DIR="$BUILD_DIR/$APP_NAME.app/Contents/Resources"
 ICON_SRC="$PROJECT_ROOT/resources/AppIcon.icns"
 if [[ -f "$ICON_SRC" ]]; then
     cp "$ICON_SRC" "$RESOURCES_DIR/AppIcon.icns"
     echo "  App icon copied"
 fi
 
-# Create Info.plist
-cat > "$BUILD_DIR/$APP_NAME.app/Contents/Info.plist" << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key><string>ConvergioMesh</string>
-    <key>CFBundleIdentifier</key><string>io.convergio.mesh</string>
-    <key>CFBundleName</key><string>ConvergioMesh</string>
-    <key>CFBundleVersion</key><string>0.1.0</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>LSMinimumSystemVersion</key><string>14.0</string>
-    <key>CFBundleIconFile</key><string>AppIcon</string>
-    <key>NSHighResolutionCapable</key><true/>
-    <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
-</dict>
-</plist>
-PLIST
-
-# 4. Ad-hoc code sign
+# 4. Re-sign after embedding CLI
 echo "[4/6] Code signing..."
-codesign --deep --force -s - "$BUILD_DIR/$APP_NAME.app"
+ENTITLEMENTS="$MISSION_CONTROL_DIR/ConvergioMissionControl.entitlements"
+if [[ -f "$ENTITLEMENTS" ]]; then
+    codesign --deep --force --entitlements "$ENTITLEMENTS" \
+        -s - "$BUILD_DIR/$APP_NAME.app"
+else
+    codesign --deep --force -s - "$BUILD_DIR/$APP_NAME.app"
+fi
 
 # 5. Create DMG
 echo "[5/6] Creating DMG..."

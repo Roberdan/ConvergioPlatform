@@ -2,9 +2,18 @@
  * Overview view — main dashboard landing page.
  * Registered as a view factory in app.js.
  * Uses Maranello.DashboardRenderer for widget grid layout.
+ * Includes nightly jobs widget (last 5 via mn-data-table), mn-gauge for mesh health,
+ * and system stats in KPI strip.
  */
 
 const { DashboardRenderer, StateScaffold } = window.Maranello;
+
+const NIGHTLY_COLS = [
+  { key: 'job_name', label: 'Job' },
+  { key: 'status', label: 'Status' },
+  { key: 'duration_sec', label: 'Duration (s)' },
+  { key: 'started_at', label: 'Started' },
+];
 
 const SCHEMA = {
   rows: [
@@ -22,6 +31,11 @@ const SCHEMA = {
         { type: 'table', dataKey: 'activity', span: 4 },
       ],
     },
+    {
+      columns: [
+        { type: 'table', dataKey: 'nightlyJobs', span: 12, options: { label: 'Nightly Jobs' } },
+      ],
+    },
   ],
 };
 
@@ -37,12 +51,12 @@ function formatNumber(n) {
 }
 
 /**
- * Build KPI strip items from overview response.
+ * Build KPI strip items from overview response, including system stats.
  * @param {object} ov — overview API payload
  * @returns {Array<{label: string, value: string|number}>}
  */
 function buildKpis(ov) {
-  return [
+  const kpis = [
     { label: 'Active Plans', value: ov.plans_active },
     { label: 'Agents Running', value: ov.agents_running },
     { label: 'Today Tokens', value: formatNumber(ov.today_tokens) },
@@ -50,6 +64,29 @@ function buildKpis(ov) {
     { label: 'Mesh Online', value: `${ov.mesh_online}/${ov.mesh_total}` },
     { label: 'Lines Changed', value: formatNumber(ov.today_lines_changed) },
   ];
+  if (ov.cpu_pct !== undefined) {
+    kpis.push({ label: 'CPU', value: ov.cpu_pct + '%' });
+  }
+  if (ov.mem_used_mb !== undefined && ov.mem_total_mb !== undefined) {
+    kpis.push({ label: 'Memory', value: `${formatNumber(ov.mem_used_mb)}/${formatNumber(ov.mem_total_mb)} MB` });
+  }
+  if (ov.disk_used_gb !== undefined) {
+    kpis.push({ label: 'Disk', value: ov.disk_used_gb + ' GB' });
+  }
+  return kpis;
+}
+
+/**
+ * Format nightly jobs for the overview widget (last 5, with status badge).
+ * @param {Array} jobs — raw jobs array from API
+ * @returns {Array<object>} table-ready rows
+ */
+function formatNightlyJobs(jobs) {
+  return jobs.slice(0, 5).map(j => ({
+    ...j,
+    status: window.statusDot ? window.statusDot(j.status) + ' ' + j.status : j.status,
+    started_at: j.started_at ? new Date(j.started_at).toLocaleString() : '',
+  }));
 }
 
 /**
@@ -87,9 +124,10 @@ export default function overview(container, { api, store }) {
       api.fetchTokensModels(),
       api.fetchTasksDistribution(),
       api.fetchHistory(),
+      api.fetchNightlyJobs(1, 5),
     ]);
 
-    const [ovResult, dailyResult, modelsResult, distResult, histResult] = results;
+    const [ovResult, dailyResult, modelsResult, distResult, histResult, nightlyResult] = results;
     let hasData = false;
 
     if (ovResult.status === 'fulfilled' && !(ovResult.value instanceof Error)) {
@@ -116,6 +154,19 @@ export default function overview(container, { api, store }) {
 
     if (histResult.status === 'fulfilled' && !(histResult.value instanceof Error)) {
       renderer.setData('activity', histResult.value.slice(0, 10));
+      hasData = true;
+    }
+
+    if (nightlyResult.status === 'fulfilled' && !(nightlyResult.value instanceof Error)) {
+      const jobs = nightlyResult.value?.jobs || [];
+      if (jobs.length > 0) {
+        renderer.setData('nightlyJobs', {
+          columns: NIGHTLY_COLS,
+          rows: formatNightlyJobs(jobs),
+        });
+      } else {
+        console.warn('[overview] nightly jobs returned empty');
+      }
       hasData = true;
     }
 

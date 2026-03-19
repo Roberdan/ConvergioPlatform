@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.2.0] - 2026-03-19
+
+### Added
+- Real SSE streaming for plan/task progress and WS streaming for terminal/chat (W1)
+- CLI TUI live view with tokio event loop for real-time daemon monitoring (W2)
+- Menu Bar Mission Control app (SwiftUI + WKWebView) for macOS status bar (W3)
+- Chat LLM integration with Claude API and LiteLLM proxy routing (W5)
+- Delegation pipeline with real SSH remote spawn for mesh task execution (W6)
+
+### Changed
+- Dashboard restructured to 3-zone layout with brain strip, drawers, and evolution panel (W4)
+- MyConvergio consolidation: unified settings, preferences, and agent config (W7)
+- Replaced simulated SSE/WS endpoints with real streaming implementations (W1)
+- Daemon version bumped to 11.6.0
+
 ## [3.1.0] - 2026-03-19
 
 ### Changed

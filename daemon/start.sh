@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Start the ConvergioPlatform daemon
+# Start the ConvergioPlatform daemon (or TUI dashboard)
+# Usage:
+#   ./daemon/start.sh              — start daemon (default: serve)
+#   ./daemon/start.sh tui          — launch TUI dashboard
+#   ./daemon/start.sh tui --api-url http://host:8420
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"

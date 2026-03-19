@@ -1,4 +1,5 @@
 use super::state::{query_rows, ApiError, ServerState};
+use super::ws_brain::broadcast_brain_session_update;
 use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
@@ -96,6 +97,8 @@ async fn api_sessions(State(state): State<ServerState>) -> Result<Json<Value>, A
 /// Consolidated endpoint for the neural graph: sessions + sub-agents + plans + tasks
 async fn api_brain(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     refresh_live_sessions(&state);
+    // Push session snapshot to brain WS clients on each poll cycle
+    broadcast_brain_session_update(&state);
     let conn = state.get_conn()?;
 
     // Running sessions with full metadata

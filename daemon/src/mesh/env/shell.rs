@@ -20,7 +20,7 @@ pub struct ShellConfig {
     pub ghostty_config: Option<String>,
     pub claude_config_dir: Option<Vec<(String, String)>>, // (filename, content)
     // App configs (themes + keybindings)
-    pub warp_themes: Option<Vec<(String, Vec<u8>)>>,      // (filename, bytes) — yaml + png
+    pub warp_themes: Option<Vec<(String, Vec<u8>)>>, // (filename, bytes) — yaml + png
     pub warp_keybindings: Option<String>,
     pub zed_settings: Option<String>,
     pub zed_keymap: Option<String>,
@@ -63,15 +63,22 @@ pub fn export_shell_config_from(home: &Path) -> Result<ShellConfig> {
     let warp_keybindings = read_file_opt(&home.join(".warp/keybindings.yaml"));
     let zed_settings = read_file_opt(&home.join(".config/zed/settings.json"));
     let zed_keymap = read_file_opt(&home.join(".config/zed/keymap.json"));
-    let vscode_settings = read_file_opt(&home.join("Library/Application Support/Code/User/settings.json"));
-    let vscode_keybindings = read_file_opt(&home.join("Library/Application Support/Code/User/keybindings.json"));
+    let vscode_settings =
+        read_file_opt(&home.join("Library/Application Support/Code/User/settings.json"));
+    let vscode_keybindings =
+        read_file_opt(&home.join("Library/Application Support/Code/User/keybindings.json"));
 
     // VSCode extensions list
     let vscode_extensions = std::process::Command::new("code")
         .args(["--list-extensions"])
         .output()
         .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(|l| l.to_string())
+                .collect()
+        })
         .unwrap_or_default();
 
     // Warp themes (yaml + png files)
@@ -88,15 +95,29 @@ pub fn export_shell_config_from(home: &Path) -> Result<ShellConfig> {
     let symbolic_hotkeys_plist = export_plist("com.apple.symbolichotkeys");
 
     Ok(ShellConfig {
-        zshrc, starship_toml, aliases, shell_aliases_sh, ghostty_config, claude_config_dir,
-        warp_themes, warp_keybindings, zed_settings, zed_keymap,
-        vscode_settings, vscode_keybindings, vscode_extensions,
-        fonts_tar_gz, screenshot_plist, symbolic_hotkeys_plist,
+        zshrc,
+        starship_toml,
+        aliases,
+        shell_aliases_sh,
+        ghostty_config,
+        claude_config_dir,
+        warp_themes,
+        warp_keybindings,
+        zed_settings,
+        zed_keymap,
+        vscode_settings,
+        vscode_keybindings,
+        vscode_extensions,
+        fonts_tar_gz,
+        screenshot_plist,
+        symbolic_hotkeys_plist,
     })
 }
 
 fn read_dir_binary(dir: &Path) -> Option<Vec<(String, Vec<u8>)>> {
-    if !dir.is_dir() { return None; }
+    if !dir.is_dir() {
+        return None;
+    }
     let mut files = Vec::new();
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         let p = entry.path();
@@ -109,16 +130,25 @@ fn read_dir_binary(dir: &Path) -> Option<Vec<(String, Vec<u8>)>> {
             }
         }
     }
-    if files.is_empty() { None } else { Some(files) }
+    if files.is_empty() {
+        None
+    } else {
+        Some(files)
+    }
 }
 
 fn read_claude_config(dir: &Path) -> Option<Vec<(String, String)>> {
-    if !dir.is_dir() { return None; }
+    if !dir.is_dir() {
+        return None;
+    }
     let mut files = Vec::new();
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         let p = entry.path();
         if p.is_file() {
-            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let name = p
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
             // Skip credential/secret files
             if name.contains("credential") || name.contains("secret") || name.contains(".db") {
                 continue;
@@ -128,11 +158,17 @@ fn read_claude_config(dir: &Path) -> Option<Vec<(String, String)>> {
             }
         }
     }
-    if files.is_empty() { None } else { Some(files) }
+    if files.is_empty() {
+        None
+    } else {
+        Some(files)
+    }
 }
 
 fn create_tar_gz(dir: &Path) -> Option<Vec<u8>> {
-    if !dir.is_dir() { return None; }
+    if !dir.is_dir() {
+        return None;
+    }
     std::process::Command::new("tar")
         .args(["czf", "-", "-C", &dir.to_string_lossy(), "."])
         .output()

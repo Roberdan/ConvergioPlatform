@@ -55,7 +55,13 @@ pub fn scan_github_dir(path: &Path) -> Vec<RepoInfo> {
         let branch = get_current_branch(&entry_path);
         let has_changes = check_has_changes(&entry_path);
 
-        repos.push(RepoInfo { name, path: entry_path, remote_url, branch, has_changes });
+        repos.push(RepoInfo {
+            name,
+            path: entry_path,
+            remote_url,
+            branch,
+            has_changes,
+        });
     }
 
     repos
@@ -111,7 +117,9 @@ pub fn clone_repos(repos: &[RepoInfo], target: &Path) -> Result<()> {
     std::fs::create_dir_all(target)?;
 
     for repo in repos {
-        let Some(ref url) = repo.remote_url else { continue };
+        let Some(ref url) = repo.remote_url else {
+            continue;
+        };
         let dest = target.join(&repo.name);
         if dest.exists() {
             eprintln!("Skipping {}: already exists", repo.name);
@@ -123,7 +131,10 @@ pub fn clone_repos(repos: &[RepoInfo], target: &Path) -> Result<()> {
             .status()?;
 
         if !status.success() {
-            return Err(ReposError::CommandFailed(format!("git clone {} failed", url)));
+            return Err(ReposError::CommandFailed(format!(
+                "git clone {} failed",
+                url
+            )));
         }
     }
     Ok(())

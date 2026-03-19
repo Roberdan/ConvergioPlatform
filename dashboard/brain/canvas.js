@@ -8,7 +8,7 @@ import { setupInteraction, drawTooltip } from './interact.js';
 
 const S = { container: null, canvas: null, ctx: null, w: 0, h: 0, dpr: 1, raf: 0, running: true, lastTs: 0, _prevTs: 0, _skipNext: false, webglRenderer: null, ro: null, pollT: 0, ws: null, wsRetry: 0, wsT: 0, neurons: new Map(), synapses: [], sessions: [], agents: [], brainData: null, forceTick: 0, frameCount: 0, sweepFrame: { v: 0 }, hover: null, mouse: { x: -1, y: -1 }, interactionTeardown: null, getBrainMode: null };
 
-function getBrainMode() { const c = document.getElementById('brain-canvas-container') || S.container; return (!c || c.offsetWidth <= 500) ? BRAIN_EMBEDDED : BRAIN_IMMERSIVE; }
+function getBrainMode() { if (window.__convergioBrainModeForced === 'embedded') return BRAIN_EMBEDDED; const c = document.getElementById('brain-canvas-container') || S.container; return (!c || c.offsetWidth <= 500) ? BRAIN_EMBEDDED : BRAIN_IMMERSIVE; }
 S.getBrainMode = getBrainMode;
 function applyBrainMode(mode) {
   if (!S.container) return;
@@ -141,7 +141,23 @@ function render(ts) {
 function resize() { if (!S.container || !S.canvas) return; applyBrainMode(getBrainMode()); S.dpr = window.devicePixelRatio || 1; S.w = Math.max(BRAIN_CONFIG.CANVAS_MIN_SIZE, S.container.clientWidth); S.h = Math.max(BRAIN_CONFIG.CANVAS_MIN_SIZE, S.container.clientHeight); S.canvas.width = Math.floor(S.w * S.dpr); S.canvas.height = Math.floor(S.h * S.dpr); S.canvas.style.width = S.w + 'px'; S.canvas.style.height = S.h + 'px'; S.ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); if (S.webglRenderer) S.webglRenderer.resize(S.w, S.h); }
 
 const wsUrl = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/brain`;
-function connectWs() { try { S.ws = new WebSocket(wsUrl()); } catch { S.ws = null; } if (!S.ws) return; S.ws.onopen = () => { S.wsRetry = 0; }; S.ws.onmessage = () => pollData(); S.ws.onerror = () => S.ws?.close(); S.ws.onclose = () => { clearTimeout(S.wsT); S.wsT = setTimeout(connectWs, Math.min(BRAIN_CONFIG.WS_RETRY_MAX_MS, BRAIN_CONFIG.WS_RETRY_BASE_MS * Math.pow(BRAIN_CONFIG.WS_RETRY_EXP_BASE, S.wsRetry++))); }; }
+function handleBrainPush(evt) {
+  let msg; try { msg = JSON.parse(evt.data); } catch { return; }
+  if (msg.kind !== 'brain_event') { pollData(); return; }
+  const { event_type, payload } = msg;
+  if (event_type === 'agent_update' && payload?.agents) {
+    S.agents = payload.agents;
+    syncGraph(); scheduleFrame();
+  } else if (event_type === 'task_update' && payload?.task_id != null) {
+    const tid = `task-${payload.task_id}`, n = S.neurons.get(tid);
+    if (n) { n.meta = { ...n.meta, status: payload.status, _prevStatus: n.meta?.status }; if (n.meta._prevStatus !== payload.status) { n.fire(); fireSynapsesFor(tid); } syncGraph(); scheduleFrame(); }
+    else pollData();
+  } else if (event_type === 'session_update' && payload?.sessions) {
+    S.sessions = payload.sessions.map(s => ({ session_id: s.agent_id, type: s.type || 'claude-cli', status: s.status, metadata: s.metadata, description: s.description, started_at: s.started_at, tokens_total: s.tokens_total, cost_usd: s.cost_usd, model: s.model, children: [] }));
+    syncGraph(); scheduleFrame();
+  } else { pollData(); }
+}
+function connectWs() { try { S.ws = new WebSocket(wsUrl()); } catch { S.ws = null; } if (!S.ws) return; S.ws.onopen = () => { S.wsRetry = 0; }; S.ws.onmessage = handleBrainPush; S.ws.onerror = () => S.ws?.close(); S.ws.onclose = () => { clearTimeout(S.wsT); S.wsT = setTimeout(connectWs, Math.min(BRAIN_CONFIG.WS_RETRY_MAX_MS, BRAIN_CONFIG.WS_RETRY_BASE_MS * Math.pow(BRAIN_CONFIG.WS_RETRY_EXP_BASE, S.wsRetry++))); }; }
 function onVis() { S.running = !document.hidden; if (document.hidden) { if (S.pollT) { clearInterval(S.pollT); S.pollT = 0; } } else if (!S.pollT) S.pollT = setInterval(pollData, BRAIN_CONFIG.POLL_INTERVAL_MS); if (S.running) scheduleFrame(); if (!S.running && S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; } }
 
 function addHelpButton() {

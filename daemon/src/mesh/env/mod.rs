@@ -32,7 +32,14 @@ pub struct Selections {
 
 impl Selections {
     pub fn all() -> Self {
-        Self { brew: true, vscode: true, repos: true, shell: true, macos: true, runners: true }
+        Self {
+            brew: true,
+            vscode: true,
+            repos: true,
+            shell: true,
+            macos: true,
+            runners: true,
+        }
     }
 }
 
@@ -53,12 +60,23 @@ pub fn export_all(github_dir: &Path, runner_paths: &[String]) -> EnvBundle {
 
     let runners = if !runner_paths.is_empty() {
         let found = runners::scan_runners(runner_paths);
-        if found.is_empty() { None } else { Some(found) }
+        if found.is_empty() {
+            None
+        } else {
+            Some(found)
+        }
     } else {
         None
     };
 
-    EnvBundle { brewfile, vscode_extensions, vscode_settings, repos, shell, runners }
+    EnvBundle {
+        brewfile,
+        vscode_extensions,
+        vscode_settings,
+        repos,
+        shell,
+        runners,
+    }
 }
 
 /// Applies selected parts of an `EnvBundle` to the current machine.

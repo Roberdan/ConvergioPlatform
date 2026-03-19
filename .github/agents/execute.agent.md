@@ -28,7 +28,7 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 | codex / gpt-5          | gpt-5              |
 | claude-opus-4.6 / claude-opus-4.6 | claude-opus-4.6    |
 | claude-opus-4.6-1m                | claude-opus-4.6-1m |
-| claude-sonnet-4.6                 | claude-claude-sonnet-4.6-4.5  |
+| claude-sonnet-4.6                 | claude-sonnet-4.6  |
 | claude-haiku-4.5                  | claude-haiku-4.5   |
 | codex-mini             | gpt-5-mini         |
 

@@ -3,12 +3,12 @@ import { test, expect } from './fixtures';
 const MOCK_IDEAS = [
   { id: 1, title: 'Add dark mode', description: 'Support system-level dark mode', status: 'active', priority: 'P0', project: 'VirtualBPM', project_id: 'proj-1', tags: 'ui,theme', created_at: '2026-03-01T10:00:00Z', updated_at: '2026-03-01T10:00:00Z' },
   { id: 2, title: 'API rate limiting', description: 'Prevent abuse on public endpoints', status: 'draft', priority: 'P1', project: '', project_id: '', tags: 'security', created_at: '2026-03-02T10:00:00Z', updated_at: '2026-03-02T10:00:00Z' },
-  { id: 3, title: 'Mobile responsive', description: 'Make dashboard work on tablets', status: 'active', priority: 'P2', project: 'MyConvergio', project_id: 'proj-2', tags: 'ui', created_at: '2026-03-03T10:00:00Z', updated_at: '2026-03-03T10:00:00Z' },
+  { id: 3, title: 'Mobile responsive', description: 'Make dashboard work on tablets', status: 'active', priority: 'P2', project: 'ConvergioPlatform', project_id: 'proj-2', tags: 'ui', created_at: '2026-03-03T10:00:00Z', updated_at: '2026-03-03T10:00:00Z' },
 ];
 
 const MOCK_PROJECTS = [
   { id: 'proj-1', name: 'VirtualBPM' },
-  { id: 'proj-2', name: 'MyConvergio' },
+  { id: 'proj-2', name: 'ConvergioPlatform' },
 ];
 
 function filterMockIdeas(url: URL) {

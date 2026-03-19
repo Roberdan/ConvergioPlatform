@@ -2,6 +2,7 @@ pub mod api_agents;
 pub mod api_chat;
 pub mod api_coordinator;
 pub mod api_dashboard;
+pub mod api_evolution;
 pub mod api_github;
 pub mod api_heartbeat;
 pub mod api_ideas;
@@ -17,12 +18,17 @@ pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
 pub mod api_plans;
 pub mod api_workers;
+pub mod llm_client;
 pub mod mesh_provision;
 pub mod middleware;
 pub mod routes;
 pub mod sse;
+pub mod sse_chat;
+pub mod sse_delegate;
+pub mod sse_preflight;
 pub mod state;
 pub mod ws;
+pub mod ws_brain;
 pub mod ws_pty;
 
 #[cfg(test)]
