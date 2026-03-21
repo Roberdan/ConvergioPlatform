@@ -73,6 +73,42 @@ curl -s http://localhost:8420/api/ipc/agents | jq '.agents[] | select(.agent_id=
 # */1 * * * * /path/to/scripts/platform/agent-heartbeat.sh --name myagent
 ```
 
+## Problem: pdftotext not found (PDF ingestion fails)
+
+**Symptom:** `convergio-ingest.sh report.pdf` warns "pdftotext not found — skipping PDF"
+**Cause:** `poppler` not installed; `pdftotext` is its CLI tool
+**Fix:**
+```bash
+brew install poppler     # macOS
+# or: apt install poppler-utils  # Ubuntu/Debian
+pdftotext --version      # verify
+convergio-ingest.sh report.pdf ./ingested/
+```
+
+## Problem: pandoc not found (DOCX/PPTX ingestion fails)
+
+**Symptom:** `convergio-ingest.sh report.docx` warns "pandoc not found — skipping DOCX"
+**Cause:** `pandoc` not installed
+**Fix:**
+```bash
+brew install pandoc      # macOS
+# or: apt install pandoc  # Ubuntu/Debian
+pandoc --version         # verify
+convergio-ingest.sh report.docx ./ingested/
+```
+
+## Problem: trafilatura not found (URL ingestion fails)
+
+**Symptom:** `convergio-ingest.sh https://example.com/page` warns "trafilatura not found — skipping URL"
+**Cause:** Python package `trafilatura` not installed
+**Fix:**
+```bash
+pip install trafilatura  # or pip3
+trafilatura --version    # verify
+convergio-ingest.sh https://example.com/page ./ingested/
+# Fallback (no trafilatura): uses curl + basic strip, lower quality
+```
+
 ## Problem: MyConvergio references after migration to ConvergioPlatform
 
 **Symptom:** Scripts, configs, or docs still reference `MyConvergio`, `sync-to-myconvergio-ops.sh`, or old repo paths after the Plan #671 consolidation.

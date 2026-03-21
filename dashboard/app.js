@@ -21,6 +21,7 @@ const VIEW_MODULES = {
   brain: () => import('./views/brain.js'),
   agents: () => import('./views/agents.js'),
   evolution: () => import('./views/evolution.js'),
+  approvals: () => import('./views/approvals.js'),
   admin: () => import('./views/admin.js'),
 };
 

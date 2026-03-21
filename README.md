@@ -41,6 +41,7 @@ User → convergio solve → Ali (orchestrator)
 | **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI |
 | **Dashboard** | `dashboard/` | JS | Control Room on [MaranelloLuceDesign](https://github.com/Roberdan/MaranelloLuceDesign) |
 | **Evolution** | `evolution/` | TS | Self-improvement: telemetry → proposals → experiments |
+| **Ingestion** | `scripts/platform/` | Bash | Document ingestion: PDF/DOCX/XLSX/URL/folder → markdown |
 | **Config** | `claude-config/` | MD | 89 agents, 8 commands, 8 rules, 27 validation gates |
 | **Scripts** | `scripts/` | Bash | 10 CLI scripts, mesh ops, plan DB, digests |
 
@@ -56,67 +57,32 @@ convergio daemon menubar           # status icon in menu bar (◉/◎)
 convergio solve "your goal"        # Ali takes over
 ```
 
-After setup, the daemon runs automatically. The menu bar icon shows status (◉ running / ◎ stopped), active agent count, and quick actions (start/stop/dashboard).
-
 Disable anytime: `convergioOff`. Re-enable: `convergioOn`. Full revert: `revert-claude-symlinks.sh --env`.
 
 ## Convergio CLI
 
 ```bash
-# Virtual Organization
 convergio solve "problem"               # Ali assembles team and solves
 convergio solve "problem" --autonomous   # no approval needed
 convergio solve "problem" --approve-each # approve every step
+convergio solve "problem" --context doc.pdf  # attach document context
 convergio stop [run_id]                  # abort execution
 
-# Named Agents (any model, any tool)
 convergio planner                        # launch as planner (Claude Opus)
 convergio executor pippo --tool copilot  # "pippo" on Copilot (GPT Codex)
-convergio as mario --tool opencode       # custom name on OpenCode
-convergio as amy --tool local            # local LLM via LiteLLM
-convergio menu                           # interactive selection
 convergio list                           # all 89 agents
 
-# Communication (daemon IPC — like Slack for agents)
 convergio who                            # active agents (all machines)
 convergio msg pippo pluto "review auth"  # direct message
-convergio read pluto                     # read inbox
-convergio broadcast pippo "standup"      # message all
-convergio watch-agents                   # real-time activity stream (WebSocket)
+convergio watch-agents                   # real-time activity stream
 
-# Cross-Repo Coordination
-convergio sync request virtualbpm maranello "Need VoiceOrb component"
-convergio sync pending                   # show pending requests
-convergio sync auto-dispatch             # Ali handles cross-repo requests
-
-# Organizational Telemetry
-convergio org live                       # last N agent interactions
-convergio org matrix                     # who talks to whom
-convergio org teams                      # active teams per run
-convergio org flow <run_id>              # timeline of a run
-convergio org stats                      # overall statistics
-
-# Workflow
 convergio plans                          # active plans
-convergio session                        # git + plans + PRs
 convergio autopilot watch                # auto execute→Thor→merge loop
-convergio auto-update                    # analyze learnings, propose improvements
-
-# Telemetry & Learning
-convergio models                         # available models (cloud + local)
-convergio metrics                        # system metrics
-convergio skills                         # agent skill pool
-convergio alerts                         # pending notifications
 convergio learnings analyze              # find recurring patterns
-convergio learnings promote              # auto-promote to knowledge/skills
-convergio collect-metrics                # snapshot system telemetry
+convergio org stats                      # organizational statistics
 
-# Toggle & Setup
-convergio on                             # enable in ALL repos
-convergio off                            # clean Claude/Copilot
+convergio on / convergio off             # enable/disable overlay
 convergio status                         # overlay + daemon state
-convergio sync-agents                    # regenerate tool-specific agent files
-convergio import-agents <path>           # import agents from external repo
 ```
 
 ## Agent Catalog (89 agents, 12 domains)
@@ -135,6 +101,41 @@ convergio import-agents <path>           # import agents from external repo
 | Reference | 5 | Playbooks (Dario debugger, Otto performance) | — |
 
 All agents support: Claude Code, Copilot CLI, OpenCode, local LLMs. Model and tool selected per-task by Ali or planner.
+
+## Document Ingestion
+
+Feed external knowledge into any execution run with `--context`:
+
+```bash
+convergio solve "Analyze this contract" --context contract.pdf
+convergio solve "Summarize report" --context https://example.com/report
+convergio solve "Review specs" --context ./specs-folder/
+```
+
+`convergio-ingest.sh` converts any source to structured markdown before the run starts:
+
+| Format | Tool required | Fallback |
+|---|---|---|
+| PDF | `pdftotext` (poppler) | warning, skip |
+| DOCX / PPTX | `pandoc` | warning, skip |
+| XLSX / CSV | `python3` + `openpyxl` | warning, skip |
+| URL | `trafilatura` | `curl` + basic strip |
+| Images | `tesseract` | warning, skip |
+| Markdown / text | — | always works |
+
+Install all tools: `brew install poppler pandoc tesseract && pip install trafilatura openpyxl`
+
+## Approvals Dashboard
+
+The **Approvals** view in the Control Room lets operators review pending plans before execution proceeds:
+
+| Action | What it does |
+|---|---|
+| Approve | Marks plan active, execution continues |
+| Cancel | Aborts plan, notifies all agents |
+| Pause | Suspends execution, preserves state |
+
+Access: `http://localhost:8420` → sidebar → Approvals (only plans with `approval_required=true` appear).
 
 ## Validation System (5 validators, 27 gates)
 
@@ -207,37 +208,18 @@ Supports non-code workstreams: research, strategy, design, legal, marketing, ana
 
 | Control | How |
 |---|---|
-| Autonomy levels | `--autonomous`, `--approve-plan`, `--approve-each` |
-| Budget cap | `$CONVERGIO_MAX_BUDGET` (default $10/day) — autopilot pauses on exceed |
-| Secret scanner | Pre-commit hook blocks API keys, tokens, passwords, hardcoded URLs |
-| Agent health | Zombie detection (10 min timeout), auto-prune |
-| Retry backoff | Exponential (30s, 60s, 120s), escalate after 3 failures |
-| Abort | `convergio stop [run_id]` — broadcast ABORT to all agents |
-| Values | Security (OWASP), Accessibility (WCAG 2.1 AA), Responsibility (GDPR), Compliance |
-| Toggle | `convergioOff` removes all overlay — instant clean state |
-| Revert | `revert-claude-symlinks.sh --env` — full rollback including env vars |
+| Autonomy | `--autonomous` / `--approve-plan` / `--approve-each` |
+| Budget cap | `$CONVERGIO_MAX_BUDGET` (default $10/day) |
+| Abort | `convergio stop [run_id]` — broadcast ABORT |
+| Toggle | `convergioOff` / `convergioOn` |
 
 ## Daemon API (76+ endpoints)
 
-| Category | Key Endpoints |
-|---|---|
-| IPC | `agents`, `send`, `messages`, `channels`, `context`, `locks`, `conflicts` |
-| Plans | `list`, `execution-tree`, `start`, `complete`, `validate-wave` |
-| Mesh | `peers`, `topology`, `metrics`, `delegate`, `heartbeat` |
-| Evolution | `proposals`, `approve`, `reject`, `experiments`, `roi` |
-| Dashboard | `overview`, `tokens/daily`, `notifications` |
-| Real-time | `WS /ws/dashboard`, `WS /ws/brain`, `WS /ws/pty` |
-| Streaming | `SSE /api/chat/stream`, `SSE /api/plan/preflight` |
+IPC: `agents`, `send`, `messages`, `channels`, `context`, `locks` | Plans: `list`, `execution-tree`, `validate-wave` | Mesh: `peers`, `topology`, `delegate` | Evolution: `proposals`, `approve`, `experiments` | Real-time: `WS /ws/dashboard`, `SSE /api/chat/stream`
 
 ## Mesh Network
 
-Tailscale P2P mesh with HMAC-SHA256. One coordinator + N workers. CRDT-enabled DB sync.
-
-```bash
-convergio heartbeat                     # check all nodes
-convergio sync register-repo vbpm ~/GitHub/VirtualBPM
-convergio sync request vbpm maranello "Need component X"
-```
+Tailscale P2P, HMAC-SHA256, CRDT DB sync. `convergio heartbeat` to check all nodes.
 
 ## Testing
 

@@ -1,0 +1,327 @@
+# Plan: Convergio Ingestion + Remaining Gaps
+# Completes virtual organization vision: document input, run lifecycle, dashboard approvals
+# Project: convergio | Priority: P0-P1
+# Dependencies: None (all P0 gaps already closed by prior work)
+
+name: "Convergio Ingestion + Remaining Gaps"
+description: >
+  Add document ingestion (--context flag for PDF/DOCX/XLSX/URL/folder),
+  run lifecycle management (stop/pause/resume), execution_runs integration,
+  per-run metrics, and dashboard approval widget. Closes all remaining gaps
+  for the virtual organization vision.
+
+waves:
+  - id: W1
+    name: "Foundation — DB schema + ingest engine"
+    tasks:
+      - id: T1-01
+        do: >
+          Migrate execution_runs table. The current table has a CHECK constraint
+          (status IN running,completed,failed,cancelled) that does NOT include
+          'paused'. SQLite cannot ALTER CHECK constraints — must recreate table.
+          Create scripts/platform/convergio-db-migrate.sh that:
+          1. Creates execution_runs_new with added columns (context_path TEXT,
+             paused_at TEXT, paused_context TEXT) AND updated CHECK constraint
+             (status IN running,completed,failed,cancelled,paused))
+          2. INSERT INTO execution_runs_new SELECT ... FROM execution_runs
+          3. DROP TABLE execution_runs
+          4. ALTER TABLE execution_runs_new RENAME TO execution_runs
+          5. Recreate indexes if any
+          All wrapped in a transaction. Idempotent (check if context_path
+          column already exists, skip if so). Create data/runs/ directory.
+        type: config
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "sqlite3 data/dashboard.db 'PRAGMA table_info(execution_runs);' | grep context_path"
+          - "sqlite3 data/dashboard.db 'PRAGMA table_info(execution_runs);' | grep paused_at"
+          - "sqlite3 data/dashboard.db \"INSERT INTO execution_runs (goal, status) VALUES ('test-paused', 'paused');\" && sqlite3 data/dashboard.db \"DELETE FROM execution_runs WHERE goal='test-paused';\""
+          - "test -d data/runs"
+
+      - id: T1-02
+        do: >
+          Create scripts/platform/convergio-ingest.sh — document ingestion engine.
+          Accepts: single file, folder (recursive), URL. Outputs structured markdown
+          to a target directory. Supported formats:
+          - PDF: pdftotext (poppler) with fallback to python3 pymupdf
+          - DOCX: pandoc with fallback to python3-docx
+          - XLSX/CSV: python3 openpyxl (sheet→CSV + summary) with fallback to csvkit
+          - PPTX: python3 python-pptx (slide→markdown)
+          - Images (PNG/JPG): copy as-is (Claude vision handles them)
+          - URL: python3 trafilatura with fallback to curl + basic html2text
+          - Markdown/text: copy as-is
+          - Folder: recurse, process each file
+          Usage: convergio-ingest.sh <source> <output_dir>
+          Each tool is optional — graceful fallback with warning if not installed.
+          Max 250 lines — split helpers to convergio-ingest-helpers.sh if needed.
+          set -euo pipefail, quote vars, local, trap cleanup EXIT.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -x scripts/platform/convergio-ingest.sh"
+          - "bash scripts/platform/convergio-ingest.sh --help 2>&1 | grep -i usage"
+          - "wc -l scripts/platform/convergio-ingest.sh | awk '{if($1 > 250) exit 1}'"
+
+  - id: W2
+    name: "CLI integration — --context, stop, pause, resume, run lifecycle"
+    tasks:
+      - id: T2-01
+        do: >
+          Add --context flag to convergio solve in scripts/platform/convergio.
+          Multiple --context flags allowed. For each --context source:
+          1. Generate run_id (timestamp-based)
+          2. Create data/runs/<run_id>/{context,outputs,run.json}
+          3. Call convergio-ingest.sh <source> data/runs/<run_id>/context/
+          4. INSERT into execution_runs with context_path
+          5. Pass context_path to Ali prompt so Ali knows where docs are.
+          run.json schema: {id, goal, context_sources, autonomy, status, started_at}
+          Update cmd_solve to parse --context flags (can appear multiple times).
+          Update convergio help to show --context.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "grep 'context' scripts/platform/convergio | grep -c 'flag\\|parse\\|ingest'"
+          - "grep 'data/runs' scripts/platform/convergio"
+          - "grep 'context' scripts/platform/convergio | head -1"
+
+      - id: T2-02
+        do: >
+          The convergio CLI is 458 lines (over 250 limit). cmd_stop already exists
+          and works (commit d523c4f — full process tree cleanup). This task:
+          1. Extract into convergio-run-ops.sh: cmd_solve, cmd_stop, _cleanup_agent,
+             and all run-related helpers. Source it from main convergio script.
+          2. Add cmd_pause [run_id]: set execution_runs.status='paused',
+             paused_at=now, broadcast PAUSE via bus.
+          3. Add cmd_resume [run_id]: set status='running', clear paused_at,
+             broadcast RESUME via bus.
+          4. Route pause|resume in main convergio case statement.
+          5. Update convergio-autopilot.sh to skip runs with status='paused'.
+          6. Update help text to show pause/resume.
+          Goal: main convergio under 250 lines after extraction.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -f scripts/platform/convergio-run-ops.sh"
+          - "wc -l scripts/platform/convergio | awk '{if($1 > 250) exit 1}'"
+          - "grep 'pause\\|resume\\|stop' scripts/platform/convergio-run-ops.sh"
+          - "grep 'paused' scripts/platform/convergio-autopilot.sh"
+
+      - id: T2-03
+        do: >
+          Wire execution_runs population into convergio-autopilot.sh.
+          - When autopilot finds an actionable plan, check if an execution_run exists.
+            If not, INSERT one (goal from plan name, status running).
+          - On wave completion: update cost_usd (sum from delegation_log + token_usage),
+            agents_used (count distinct from task executor_agent).
+          - On plan completion: set status=completed, completed_at, duration_minutes,
+            result summary.
+          - On failure: set status=failed with result=error message.
+          Also update convergio solve to INSERT execution_run at start
+          (it may already do this via Ali prompt, but make it explicit in shell).
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "grep 'status.*paused' scripts/platform/convergio-autopilot.sh"
+          - "grep 'INSERT.*execution_runs' scripts/platform/convergio-run-ops.sh"
+          - "grep 'cost_usd\\|duration_minutes' scripts/platform/convergio-autopilot.sh"
+
+  - id: W3
+    name: "Ali context dispatch + per-run metrics"
+    tasks:
+      - id: T3-01
+        do: >
+          ali-orchestrator.md is already 307 lines (over 250 limit). FIRST: extract
+          reference/examples sections into claude-config/agents/reference/ali-context-protocol.md
+          and claude-config/agents/reference/ali-ipc-protocol.md, leaving @-references
+          in the main file. Then add context-aware dispatch protocol as
+          "Step 1.5: Ingest Context" in the main file:
+          - Read data/runs/<run_id>/context/ directory listing
+          - For each document, determine: domain, sensitivity, relevant agents
+          - Build context_map: {agent_name: [file_paths]} based on role
+          - Privacy check: if doc is sensitive (orchestrator.yaml by_privacy),
+            only route to opencode/local agents
+          - Dispatch prompt: "CONTEXT: Read these files before starting: <list>"
+          - Images: "CONTEXT: View these images (use Read tool): <list>"
+          - URLs: include both markdown and original URL
+          Main file MUST be under 250 lines after changes.
+        type: config
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "grep -c 'context' claude-config/agents/core_utility/ali-orchestrator.md"
+          - "grep 'privacy' claude-config/agents/core_utility/ali-orchestrator.md"
+          - "wc -l claude-config/agents/core_utility/ali-orchestrator.md | awk '{if($1 > 250) exit 1}'"
+          - "test -f claude-config/agents/reference/ali-context-protocol.md"
+
+      - id: T3-02
+        do: >
+          Add per-run metrics to convergio-metrics.sh. New command:
+          convergio-metrics.sh run <run_id>
+          Output: duration, total tokens (from token_usage where run context),
+          cost estimate (from delegation_log), agents used, tasks completed/total,
+          validation pass rate.
+          Also add: convergio-metrics.sh runs — list all execution_runs with
+          summary stats (id, goal truncated, status, duration, cost, agents).
+          Wire into convergio CLI: convergio metrics run <id> and convergio metrics runs.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "grep 'cmd_run\\|run)' scripts/platform/convergio-metrics.sh"
+          - "grep 'execution_runs' scripts/platform/convergio-metrics.sh"
+
+  - id: W4
+    name: "Dashboard approvals + closure"
+    tasks:
+      - id: T4-01
+        do: >
+          Create dashboard/views/approvals.js — approval widget for pending
+          plans/waves. Follow existing view pattern (evolution.js as reference):
+          - Default export function(container, {api, store})
+          - StateScaffold for loading/error/ready
+          - Fetch pending plans from /api/plan-db/list (existing endpoint, filter status=doing)
+          - Fetch execution_runs from /api/dashboard/overview (or direct DB query via existing endpoints)
+          - Render mn-data-table with columns: ID, Name, Wave, Status, Team, Actions
+          - Approve button: POST /api/plan-db/start with plan_id (existing endpoint)
+          - Cancel button: POST /api/plan-db/cancel with plan_id + reason (existing endpoint)
+          - Pause button: uses convergio-run-ops.sh pause via fetch to daemon
+            /api/coordinator/emit with event_type='pause_run'
+          - Use Maranello tokens: --signal-success, --signal-danger
+          - Return teardown callback
+          Register in app.js VIEW_MODULES and add sidebar link in index.html.
+          Max 250 lines. NaSra Maranello Design System tokens.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        advisor_agent: NaSra
+        verify:
+          - "test -f dashboard/views/approvals.js"
+          - "grep 'approvals' dashboard/app.js"
+          - "grep 'approvals' dashboard/index.html"
+          - "wc -l dashboard/views/approvals.js | awk '{if($1 > 250) exit 1}'"
+
+      - id: TF-tests
+        do: >
+          Test all new functionality:
+          - convergio-ingest.sh: create test files (small PDF via echo, text file,
+            CSV), run ingest, verify output exists and is non-empty
+          - convergio solve --context: dry-run verify context parsing
+          - convergio stop/pause/resume: verify DB state changes
+          - convergio-metrics.sh run: verify with test execution_run
+          - Dashboard: add to dashboard/tests/restructure.test.js
+            (verify approvals view mounts without error)
+          Write as scripts/platform/test-ingestion.sh (bash integration test).
+        type: test
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -x scripts/platform/test-ingestion.sh"
+          - "bash scripts/platform/test-ingestion.sh 2>&1 | tail -1 | grep -i pass"
+
+      - id: TF-doc
+        do: >
+          Update documentation:
+          - CHANGELOG.md: add entry for ingestion + remaining gaps
+          - TROUBLESHOOTING.md: add section for ingestion issues
+            (pdftotext not found, pandoc not found, trafilatura not found)
+          - docs/adr/0105-document-ingestion.md: ADR for ingestion design decisions
+          - README.md: add Document Ingestion section under Features
+          - Update convergio help text if not already done
+        type: doc
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "grep -i 'ingest' CHANGELOG.md"
+          - "grep -i 'ingest\\|pdftotext\\|pandoc' TROUBLESHOOTING.md"
+          - "test -f docs/adr/0105-document-ingestion.md"
+
+      - id: TF-pr
+        do: >
+          Final PR preparation:
+          - git status clean (no untracked files outside scope)
+          - All verify commands pass
+          - VERSION.md bumped (minor: new feature)
+          - CHANGELOG matches version
+          - Create PR with summary of all changes
+        type: chore
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "git status --short | wc -l | awk '{if($1 > 0) exit 1}'"
+
+features:
+  - id: F-01
+    title: "Document ingestion engine"
+    description: "convergio-ingest.sh converts PDF/DOCX/XLSX/URL/folder to markdown"
+    tasks: [T1-02]
+
+  - id: F-02
+    title: "--context flag for convergio solve"
+    description: "Multiple --context sources, creates run folder, passes to Ali"
+    tasks: [T2-01]
+
+  - id: F-03
+    title: "Run lifecycle management"
+    description: "convergio stop/pause/resume with DB state + bus broadcast"
+    tasks: [T1-01, T2-02, T2-03]
+
+  - id: F-04
+    title: "Ali context-aware dispatch"
+    description: "Ali reads ingested docs, routes per-agent by role+privacy"
+    tasks: [T3-01]
+
+  - id: F-05
+    title: "Per-run metrics"
+    description: "convergio metrics run <id> shows duration, cost, agents, tasks"
+    tasks: [T3-02]
+
+  - id: F-06
+    title: "Dashboard approvals"
+    description: "Web UI to approve/reject/pause pending plans and runs"
+    tasks: [T4-01]
+
+constraints:
+  - "Max 250 lines per file — split if exceeds"
+  - "Bash: set -euo pipefail, quote vars, local, trap cleanup EXIT"
+  - "Dashboard: vanilla JS + Maranello Design System"
+  - "Ingestion deps optional — graceful fallback with warning"
+  - "Privacy routing per orchestrator.yaml by_privacy rules"
+  - "No daemon Rust changes — scripts + config + dashboard only"
+  - "All new scripts registered in convergio CLI help"

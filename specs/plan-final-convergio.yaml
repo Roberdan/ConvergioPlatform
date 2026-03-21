@@ -1,0 +1,539 @@
+# Plan: Convergio Platform — Final Unified Plan (v2)
+# EVERYTHING. Zero debt. No leftovers. Maximum parallelism.
+# Project: convergio
+#
+# PARALLELISM STRATEGY:
+# W1 = foundation (must go first — DB schema + ingest script)
+# W2a, W2b, W2c = THREE PARALLEL WAVES (CLI/scripts, IPC+core Rust, mesh Rust)
+# W3 = server Rust splits (depends on W2b/W2c for cargo check stability)
+# W4 = features that depend on W1+W2a (--context, metrics, dashboard, pause bridge)
+# W5 = closure (depends on all)
+
+name: "Convergio Platform — Final Unified Plan"
+description: >
+  Single definitive plan. Covers: document ingestion, CLI splits,
+  48-file daemon constitution fix, evolution wiring, run lifecycle,
+  dashboard approvals, dead code cleanup, documentation.
+  Waves 2a/2b/2c run in PARALLEL for maximum speed.
+
+waves:
+  # ═══════════════════════════════════════════════════════════════════
+  # W1: Foundation (sequential — everything else depends on this)
+  # ═══════════════════════════════════════════════════════════════════
+  - id: W1
+    name: "Foundation — DB migration, ingestion engine, evolution verify"
+    parallel_mode: standard
+    tasks:
+      - id: T1-01
+        do: >
+          DB migration for execution_runs. Current CHECK constraint excludes
+          'paused'. SQLite requires table recreation. Create
+          scripts/platform/convergio-db-migrate.sh that:
+          (1) Creates execution_runs_new with columns: context_path TEXT,
+          paused_at TEXT, paused_context TEXT + updated CHECK
+          (status IN running,completed,failed,cancelled,paused)
+          (2) Copies data (3) Drops old (4) Renames new (5) Recreates indexes
+          All in transaction. Idempotent (skip if context_path exists).
+          Create data/runs/ directory. Max 250 lines.
+        type: config
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "sqlite3 data/dashboard.db 'PRAGMA table_info(execution_runs);' | grep context_path"
+          - "sqlite3 data/dashboard.db \"INSERT INTO execution_runs (goal, status) VALUES ('test-pause','paused');\" && sqlite3 data/dashboard.db \"DELETE FROM execution_runs WHERE goal='test-pause';\""
+          - "test -d data/runs"
+
+      - id: T1-02
+        do: >
+          Create scripts/platform/convergio-ingest.sh — document ingestion.
+          Converts files/URLs/folders to structured markdown.
+          PDF (pdftotext fallback pymupdf), DOCX (pandoc fallback python-docx),
+          XLSX/CSV (openpyxl fallback csvkit), PPTX (python-pptx),
+          images (copy as-is for Claude vision), URL (trafilatura fallback
+          curl+html2text), markdown/text (copy). Folders: recurse.
+          Usage: convergio-ingest.sh <source> <output_dir>
+          All tools optional — graceful fallback with warning if missing.
+          Split helpers to convergio-ingest-helpers.sh if >250 lines.
+          set -euo pipefail, quote vars, local, trap cleanup EXIT.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -x scripts/platform/convergio-ingest.sh"
+          - "bash scripts/platform/convergio-ingest.sh --help 2>&1 | grep -qi usage"
+          - "wc -l scripts/platform/convergio-ingest.sh | awk '{if($1 > 250) exit 1}'"
+
+      - id: T1-03
+        do: >
+          Verify evolution engine dashboard wiring. Engine: 126 TS files in
+          evolution/, compiles, 43 tests pass. Daemon: api_evolution.rs with
+          6 endpoints in routes.rs. Dashboard: 10 widgets in dashboard/evolution/.
+          VERIFY (not just grep — actually trace the import chain):
+          (1) In dashboard/app.js: find where evolution view is registered in
+          VIEW_MODULES. If missing, add it.
+          (2) In dashboard/views/evolution.js: verify it imports from
+          dashboard/evolution/*.js. If imports are broken, fix paths.
+          (3) In dashboard/index.html: verify evolution link in sidebar nav.
+          If missing, add <a href="#evolution" data-view="evolution">.
+          (4) In dashboard/evolution/*.js: verify API URLs match daemon endpoints
+          (/api/evolution/proposals, /api/evolution/experiments, etc).
+          (5) Run: start daemon, open dashboard, click Evolution tab — does it load?
+          If not testable headlessly, at minimum verify all import chains resolve.
+          Fix ONLY what's broken. Document findings in commit message.
+        type: fix
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "grep 'evolution.*import\\|evolution.*factory\\|evolution.*register' dashboard/app.js"
+          - "grep 'evolution' dashboard/index.html | grep -i 'href\\|data-view'"
+          - "test -f dashboard/views/evolution.js"
+          - "ls dashboard/evolution/*.js | wc -l | awk '{if($1 < 5) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # W2a: CLI + scripts splits (PARALLEL with W2b, W2c)
+  # Depends on W1 (needs DB schema for pause, needs ingest script)
+  # ═══════════════════════════════════════════════════════════════════
+  - id: W2a
+    name: "CLI + agent file splits (PARALLEL)"
+    parallel_mode: parallel_with_w2b_w2c
+    tasks:
+      - id: T2a-01
+        do: >
+          Split convergio CLI (458 lines) into modules:
+          (1) Extract cmd_solve, cmd_stop, _cleanup_agent → convergio-run-ops.sh
+          (2) Add cmd_pause: UPDATE execution_runs SET status='paused',
+          paused_at=datetime('now') WHERE id=$run_id; broadcast PAUSE via bus
+          (3) Add cmd_resume: UPDATE execution_runs SET status='running',
+          paused_at=NULL WHERE id=$run_id; broadcast RESUME via bus
+          (4) Extract cmd_daemon → convergio-daemon-ops.sh
+          (5) Main convergio sources both files, routes pause|resume|stop
+          (6) Update help text
+          Goal: main convergio <250 lines. Each extracted file <250.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "wc -l scripts/platform/convergio | awk '{if($1 > 250) exit 1}'"
+          - "test -f scripts/platform/convergio-run-ops.sh"
+          - "grep 'cmd_pause' scripts/platform/convergio-run-ops.sh"
+          - "grep 'cmd_resume' scripts/platform/convergio-run-ops.sh"
+          - "wc -l scripts/platform/convergio-run-ops.sh | awk '{if($1 > 250) exit 1}'"
+
+      - id: T2a-02
+        do: >
+          Split ali-orchestrator.md (307 lines) under 250:
+          (1) Extract Step 6.5-6.7 (IPC protocol, output passing, report schema)
+          → claude-config/agents/reference/ali-ipc-protocol.md
+          (2) Extract Step 9 (cross-repo coordination)
+          → claude-config/agents/reference/ali-cross-repo-protocol.md
+          (3) Add @-references in main file
+          (4) Add "Step 1.5: Ingest Context" — context-aware dispatch:
+          read data/runs/<run_id>/context/, build context_map per agent by role,
+          privacy check per orchestrator.yaml by_privacy, include file list
+          in dispatch prompt. Sensitive docs → only opencode/local agents.
+          Main file MUST be under 250 lines after all changes.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "wc -l claude-config/agents/core_utility/ali-orchestrator.md | awk '{if($1 > 250) exit 1}'"
+          - "test -f claude-config/agents/reference/ali-ipc-protocol.md"
+          - "test -f claude-config/agents/reference/ali-cross-repo-protocol.md"
+          - "grep 'context' claude-config/agents/core_utility/ali-orchestrator.md"
+
+      - id: T2a-03
+        do: >
+          Split convergio-autopilot.sh (324 lines) under 250:
+          Extract helpers (find_actionable_plan, wave state machine, trigger_*)
+          → convergio-autopilot-helpers.sh. Source from main.
+          Add pause-skip: in run_once(), after find_actionable_plan, check
+          execution_runs.status for that plan — if 'paused', log and return.
+          CRITICAL (B3 fix): Also add a bridge that reads coordinator_events
+          with event_type='pause_run' and flips execution_runs.status='paused'.
+          Check for pause_run events BEFORE checking plan state. This ensures
+          dashboard pause button (which emits coordinator events) actually works.
+          Wire execution_runs: INSERT on plan start, UPDATE cost/agents on
+          wave complete (join delegation_log by plan_id + timestamp window,
+          NOT by run_id FK which doesn't exist — see B4), SET completed on done.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "wc -l scripts/platform/convergio-autopilot.sh | awk '{if($1 > 250) exit 1}'"
+          - "test -f scripts/platform/convergio-autopilot-helpers.sh"
+          - "grep 'pause_run' scripts/platform/convergio-autopilot.sh"
+          - "grep 'execution_runs' scripts/platform/convergio-autopilot.sh"
+          - "grep 'delegation_log' scripts/platform/convergio-autopilot-helpers.sh"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # W2b: Daemon IPC + core splits (PARALLEL with W2a, W2c)
+  # No dependency on W1 — pure Rust refactor
+  # ═══════════════════════════════════════════════════════════════════
+  - id: W2b
+    name: "Daemon split — IPC + core (PARALLEL)"
+    parallel_mode: parallel_with_w2a_w2c
+    tasks:
+      - id: T2b-01
+        do: >
+          Split IPC module files >250 lines. 9 files:
+          engine.rs (1012), cli.rs (434), budget.rs (420), skills.rs (406),
+          auth_sync.rs (398), models.rs (368), router.rs (366),
+          protocol.rs (324), locks.rs (254).
+          engine.rs is 1012 lines — split into engine_core.rs (struct, new,
+          open_conn, helpers), engine_agents.rs (register/unregister/list),
+          engine_messages.rs (send/read/broadcast), engine_context.rs (context ops).
+          Other files: extract logical sections into submodules, re-export.
+          Keep mod.rs updated. DO NOT change public API.
+          Run cargo check after EACH file split, not just at the end.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 4
+        verify:
+          - "cd /Users/Roberdan/GitHub/ConvergioPlatform/daemon && cargo check 2>&1; echo exit:$?"
+          - "find daemon/src/ipc -name '*.rs' | xargs wc -l | awk '$1 > 250 && !/total/{found=1} END{exit found?1:0}'"
+
+      - id: T2b-02
+        do: >
+          Split core daemon files >250 lines. 6 files:
+          main.rs (820), cli/main.rs (562), db/crdt.rs (591), db/tests.rs (333),
+          hooks/checks.rs (256), hooks/checks_support.rs (255).
+          main.rs: extract server setup → server_setup.rs, mesh setup →
+          mesh_setup.rs, signal handling → signals.rs. Keep main() thin.
+          cli/main.rs: extract subcommand handlers into cli/commands.rs.
+          db/crdt.rs: split into crdt_merge.rs + crdt_sync.rs.
+          Run cargo check after EACH split.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd /Users/Roberdan/GitHub/ConvergioPlatform/daemon && cargo check 2>&1; echo exit:$?"
+          - "wc -l daemon/src/main.rs | awk '{if($1 > 250) exit 1}'"
+          - "wc -l daemon/src/db/crdt.rs | awk '{if($1 > 250) exit 1}'"
+          - "wc -l daemon/src/cli/main.rs | awk '{if($1 > 250) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # W2c: Daemon mesh splits (PARALLEL with W2a, W2b)
+  # No dependency on W1 — pure Rust refactor
+  # ═══════════════════════════════════════════════════════════════════
+  - id: W2c
+    name: "Daemon split — mesh modules (PARALLEL)"
+    parallel_mode: parallel_with_w2a_w2b
+    tasks:
+      - id: T2c-01
+        do: >
+          Split mesh files >250 lines. 13 files:
+          join.rs (607), daemon.rs (593), sync.rs (558), daemon_sync.rs (527),
+          coordinator.rs (469), peers.rs (395), intelligence.rs (339),
+          handoff.rs (318), token.rs (290), network.rs (289),
+          observability.rs (284), env/shell.rs (273), daemon_tests.rs (271).
+          Strategy per file: identify 2-3 logical sections (e.g. join.rs →
+          join_discovery.rs + join_protocol.rs + join_handlers.rs), extract,
+          re-export from parent. Keep mod.rs updated. Keep public API stable.
+          Run cargo check after EACH file split.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 4
+        verify:
+          - "cd /Users/Roberdan/GitHub/ConvergioPlatform/daemon && cargo check 2>&1; echo exit:$?"
+          - "find daemon/src/mesh -name '*.rs' | xargs wc -l | awk '$1 > 250 && !/total/{found=1} END{exit found?1:0}'"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # W3: Daemon server splits (depends on W2b/W2c for stable cargo check)
+  # ═══════════════════════════════════════════════════════════════════
+  - id: W3
+    name: "Daemon split — server modules"
+    tasks:
+      - id: T3-01
+        do: >
+          Split large server files (>350 lines). 8 files:
+          api_dashboard.rs (980), api_ipc.rs (609), api_mesh.rs (586),
+          api_tests.rs (573), ws_pty.rs (399), routes.rs (388),
+          api_workers.rs (357), api_plan_db_lifecycle.rs (365).
+          Strategy: extract route handlers by domain into submodules.
+          api_dashboard.rs (980 lines!) → api_dashboard_overview.rs,
+          api_dashboard_notifications.rs, api_dashboard_agents.rs.
+          Keep router() function in parent. Run cargo check after EACH.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd /Users/Roberdan/GitHub/ConvergioPlatform/daemon && cargo check 2>&1; echo exit:$?"
+          - "wc -l daemon/src/server/api_dashboard.rs | awk '{if($1 > 250) exit 1}'"
+          - "wc -l daemon/src/server/api_ipc.rs | awk '{if($1 > 250) exit 1}'"
+
+      - id: T3-02
+        do: >
+          Split medium server files (250-350 lines). 12 files:
+          ws_pty_tests.rs (337), sse.rs (335), api_heartbeat.rs (311),
+          state.rs (309), api_plan_db_import.rs (307),
+          api_plan_db_query.rs (299), api_github.rs (287),
+          api_ideas.rs (276), api_plan_db_ops.rs (274),
+          api_peers_ext.rs (274), api_notify.rs (261),
+          api_ideas_tests.rs (261).
+          Same strategy — extract into submodules by domain.
+          Run cargo check + cargo test after ALL splits complete.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd /Users/Roberdan/GitHub/ConvergioPlatform/daemon && cargo check 2>&1; echo exit:$?"
+          - "cd /Users/Roberdan/GitHub/ConvergioPlatform/daemon && cargo test 2>&1; echo exit:$?"
+          - "find daemon/src/server -name '*.rs' | xargs wc -l | awk '$1 > 250 && !/total/{found=1} END{exit found?1:0}'"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # W4: Features (depends on W1 DB + W2a CLI splits)
+  # ═══════════════════════════════════════════════════════════════════
+  - id: W4
+    name: "Features — --context, metrics, dashboard approvals"
+    tasks:
+      - id: T4-01
+        do: >
+          Add --context flag to convergio solve (in convergio-run-ops.sh,
+          created by T2a-01). Multiple --context flags allowed. For each:
+          (1) Generate run_id (timestamp: YYYYMMDD-HHMMSS)
+          (2) mkdir -p data/runs/<run_id>/{context,outputs}
+          (3) Write run.json: {id, goal, context_sources[], autonomy, status, started_at}
+          (4) Call convergio-ingest.sh <source> data/runs/<run_id>/context/
+          (5) INSERT INTO execution_runs (goal, status, context_path) VALUES (...)
+          (6) Add to Ali prompt: "CONTEXT_DIR: data/runs/<run_id>/context/"
+          Keep convergio-run-ops.sh under 250 lines.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "grep 'context' scripts/platform/convergio-run-ops.sh"
+          - "grep 'data/runs' scripts/platform/convergio-run-ops.sh"
+          - "grep 'ingest' scripts/platform/convergio-run-ops.sh"
+          - "wc -l scripts/platform/convergio-run-ops.sh | awk '{if($1 > 250) exit 1}'"
+
+      - id: T4-02
+        do: >
+          Per-run metrics in convergio-metrics.sh:
+          convergio-metrics.sh run <run_id> — duration, cost (from delegation_log
+          joined by plan_id + timestamp window between started_at and completed_at,
+          NOT by run_id FK which doesn't exist), agents used (distinct executor_agent
+          from tasks), tasks completed/total, validation pass rate.
+          convergio-metrics.sh runs — list execution_runs with summary stats.
+          Wire: convergio metrics run <id> and convergio metrics runs.
+          Keep convergio-metrics.sh under 250 lines. Split if needed.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "grep 'delegation_log' scripts/platform/convergio-metrics.sh"
+          - "bash scripts/platform/convergio-metrics.sh runs 2>&1 | head -1"
+          - "wc -l scripts/platform/convergio-metrics.sh | awk '{if($1 > 250) exit 1}'"
+
+      - id: T4-03
+        do: >
+          Create dashboard/views/approvals.js — approval widget for plans.
+          Follow evolution.js pattern (default export, StateScaffold, teardown).
+          Fetch plans: GET /api/plan-db/list then filter status='doing' client-side.
+          mn-data-table columns: ID, Name, Wave, Progress, Actions.
+          Approve: POST /api/plan-db/start/<plan_id> (path param required — B2 fix).
+          Cancel: POST /api/plan-db/cancel/<plan_id> with {reason} body.
+          Pause: POST /api/coordinator/emit with {event_type:'pause_run', payload:{plan_id}}.
+          Maranello tokens: --signal-success (approve), --signal-danger (cancel),
+          --signal-warning (pause). Return teardown callback.
+          Register in app.js VIEW_MODULES. Add sidebar link in index.html:
+          <a href="#approvals" data-view="approvals" data-icon="icon-shield">Approvals</a>
+          Max 250 lines. NaSra Maranello DS.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        advisor_agent: NaSra
+        verify:
+          - "test -f dashboard/views/approvals.js"
+          - "grep 'approvals' dashboard/app.js"
+          - "grep 'approvals' dashboard/index.html"
+          - "wc -l dashboard/views/approvals.js | awk '{if($1 > 250) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # W5: Closure (depends on ALL)
+  # ═══════════════════════════════════════════════════════════════════
+  - id: W5
+    name: "Cleanup + tests + docs + PR"
+    tasks:
+      - id: T5-01
+        do: >
+          Dead code cleanup. Archive scripts fully replaced by daemon APIs
+          to scripts/archive/. Concrete candidates to evaluate:
+          - scripts/mesh/mesh-env-setup.sh (daemon mesh/env/ modules)
+          - scripts/mesh/mesh-normalize-hosts.sh (daemon peers.rs)
+          - scripts/mesh/mesh-migrate-services.sh (daemon migration)
+          For EACH candidate: grep all convergio* scripts and setup.sh for
+          references. If referenced → DO NOT archive. If unreferenced → archive.
+          Create scripts/archive/README.md listing what was archived and why.
+          This is ONLY archival of genuinely dead code.
+        type: chore
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -f scripts/archive/README.md"
+          - "test -d scripts/archive"
+
+      - id: TF-tests
+        do: >
+          Integration tests for ALL new functionality. Write as
+          scripts/platform/test-final-plan.sh. Tests:
+          (1) convergio-ingest.sh: create /tmp/test-ingest.txt with content,
+          run ingest to /tmp/test-out/, verify output file exists and non-empty
+          (2) convergio --help: verify shows --context, pause, resume
+          (3) convergio-db-migrate.sh: verify idempotent (run twice, no error)
+          (4) convergio-metrics.sh runs: verify runs without error
+          (5) dashboard/views/approvals.js: verify file exists and <250 lines
+          (6) Daemon: cargo check in daemon/ exits 0
+          (7) Evolution: cd evolution && npx vitest run exits 0
+          (8) Constitution: find daemon/src -name '*.rs' | xargs wc -l |
+              verify 0 files >250 (exclude total line)
+          (9) All scripts <250 lines: check convergio, autopilot, metrics, run-ops
+          Test script itself must be <250 lines and exit 0 on all pass.
+        type: test
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -x scripts/platform/test-final-plan.sh"
+          - "bash scripts/platform/test-final-plan.sh; echo exit:$?"
+
+      - id: TF-doc
+        do: >
+          Update ALL documentation:
+          - CHANGELOG.md: entry for this plan (ingestion, constitution, approvals,
+            evolution wiring, run lifecycle, dead code cleanup)
+          - TROUBLESHOOTING.md: ingestion issues (pdftotext/pandoc/trafilatura
+            not found, how to install each)
+          - docs/adr/0105-document-ingestion.md: ADR for ingestion design
+          - docs/adr/0106-constitution-fix.md: ADR for 250-line splits approach
+          - README.md: add Document Ingestion section under Features,
+            update architecture table with ingestion layer,
+            add Approvals dashboard section
+          - Verify ALL existing ADRs (0100-0104) still accurate after changes
+        type: doc
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "grep -i 'ingest' CHANGELOG.md"
+          - "grep -i 'ingest\\|pdftotext\\|pandoc' TROUBLESHOOTING.md"
+          - "test -f docs/adr/0105-document-ingestion.md"
+          - "test -f docs/adr/0106-constitution-fix.md"
+
+      - id: TF-pr
+        do: >
+          Final PR preparation:
+          - VERSION.md bumped (minor: new features)
+          - CHANGELOG latest entry matches VERSION.md
+          - git status clean (no untracked outside scope)
+          - All verify commands from all tasks pass
+          - Constitution check: 0 Rust files >250 lines in daemon/src
+          - Constitution check: 0 scripts >250 lines in scripts/platform
+          - Constitution check: 0 agent files >250 lines in claude-config/agents
+          - Create PR with summary of all changes
+        type: chore
+        output_type: pr
+        model: claude-sonnet-4.6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "find daemon/src -name '*.rs' | xargs wc -l | awk '$1 > 250 && !/total/{found=1} END{exit found?1:0}'"
+          - "find scripts/platform -name '*.sh' | xargs wc -l | awk '$1 > 250 && !/total/{found=1} END{exit found?1:0}'"
+
+features:
+  - id: F-01
+    title: "Document ingestion engine"
+    description: "convergio-ingest.sh converts PDF/DOCX/XLSX/URL/folder to markdown"
+    tasks: [T1-02]
+  - id: F-02
+    title: "--context flag for convergio solve"
+    description: "Multiple --context sources with run folder and privacy routing"
+    tasks: [T4-01]
+  - id: F-03
+    title: "Run lifecycle management"
+    description: "stop/pause/resume + execution_runs + coordinator event bridge + per-run metrics"
+    tasks: [T2a-01, T2a-03, T4-02]
+  - id: F-04
+    title: "Ali context-aware dispatch"
+    description: "Privacy-aware context routing to agents based on role"
+    tasks: [T2a-02]
+  - id: F-05
+    title: "Dashboard approvals"
+    description: "Web UI to approve/cancel/pause plans with correct API paths"
+    tasks: [T4-03]
+  - id: F-06
+    title: "250-line constitution enforcement"
+    description: "ALL daemon Rust (48 files), CLI, scripts, agent files under 250 lines"
+    tasks: [T2a-01, T2a-02, T2a-03, T2b-01, T2b-02, T2c-01, T3-01, T3-02]
+  - id: F-07
+    title: "Evolution dashboard wiring"
+    description: "Verify and fix evolution engine integration with dashboard"
+    tasks: [T1-03]
+  - id: F-08
+    title: "Dead code cleanup"
+    description: "Archive obsolete scripts with reference check"
+    tasks: [T5-01]
+
+constraints:
+  - "Max 250 lines per file — the WHOLE POINT of this plan"
+  - "Bash: set -euo pipefail, quote vars, local, trap cleanup EXIT"
+  - "Rust: cargo check MUST pass after EACH file split, not just at end"
+  - "Dashboard: vanilla JS + Maranello Design System (NaSra)"
+  - "Ingestion deps optional — graceful fallback with warning"
+  - "Privacy routing per orchestrator.yaml by_privacy rules"
+  - "DO NOT change public Rust APIs during splits — only move code"
+  - "All new scripts registered in convergio CLI help"
+  - "Evolution: npx tsc --noEmit + npx vitest run must pass"
+  - "Per-run cost: join delegation_log by plan_id + timestamp window (no run_id FK)"
+  - "Dashboard approve: use /api/plan-db/start/:plan_id (path param required)"
+  - "Pause bridge: autopilot reads coordinator_events pause_run and flips execution_runs"
+  - "Verify commands MUST NOT pipe to tail/head/grep (PreToolUse hook blocks pipes)"
