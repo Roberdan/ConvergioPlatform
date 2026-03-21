@@ -63,13 +63,19 @@ CREATE TABLE IF NOT EXISTS delegation_log (
   privacy_level TEXT,
   created_at DATETIME DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY,
+  plan_id INTEGER,
+  status TEXT DEFAULT 'pending',
+  executor_agent TEXT
+);
 ";
 
 const SEED_DATA: &str = "
 INSERT INTO plans(id,name,status) VALUES(10,'Deploy Alpha','doing');
 
-INSERT INTO execution_runs(id,goal,status,plan_id,cost_usd,agents_used)
-  VALUES(1,'Fix login bug','running',10,0.5,2);
+INSERT INTO execution_runs(id,goal,status,plan_id,cost_usd,agents_used,started_at)
+  VALUES(1,'Fix login bug','running',10,0.5,2,datetime('now','-10 minutes'));
 INSERT INTO execution_runs(id,goal,status,plan_id)
   VALUES(2,'Add metrics endpoint','completed',NULL);
 
@@ -235,7 +241,7 @@ async fn create_run_returns_id() {
 }
 
 #[tokio::test]
-async fn create_run_missing_goal_returns_400() {
+async fn create_run_missing_goal_returns_422() {
     let app = test_router();
     let body = serde_json::json!({"plan_id": 10});
     let resp = app
@@ -250,7 +256,7 @@ async fn create_run_missing_goal_returns_400() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 // --- PUT /api/runs/:id -------------------------------------------------------
@@ -337,4 +343,70 @@ async fn resume_run_sets_status_running_clears_paused_at() {
     let json = body_json(resp.into_body()).await;
     assert_eq!(json["status"], "running");
     assert!(json["paused_at"].is_null(), "paused_at should be cleared");
+}
+
+// --- GET /api/metrics/summary ------------------------------------------------
+
+#[tokio::test]
+async fn metrics_summary_returns_valid_json() {
+    let app = test_router();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/metrics/summary")
+                .header("x-agent-token", "test")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp.into_body()).await;
+    assert_eq!(json["ok"], true, "summary ok field must be true");
+    assert!(
+        json["run_count"].as_i64().is_some(),
+        "run_count must be numeric"
+    );
+    assert!(
+        json["total_cost_usd"].as_f64().is_some(),
+        "total_cost_usd must be numeric"
+    );
+    assert!(
+        json["status_distribution"].is_array(),
+        "status_distribution must be array"
+    );
+    assert!(json["top_agents"].is_array(), "top_agents must be array");
+    // Seed data has 2 runs — verify count
+    assert_eq!(json["run_count"].as_i64().unwrap(), 2);
+}
+
+// --- GET /api/ingest/formats -------------------------------------------------
+
+#[tokio::test]
+async fn ingest_formats_returns_format_booleans() {
+    let app = test_router();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/ingest/formats")
+                .header("x-agent-token", "test")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp.into_body()).await;
+    // Each format key must be a boolean
+    for key in ["pdf", "docx", "url", "xlsx", "pptx", "images"] {
+        assert!(
+            json[key].is_boolean(),
+            "formats.{key} must be a boolean, got: {}",
+            json[key]
+        );
+    }
+    // images is always advertised as true regardless of tool availability
+    assert_eq!(json["images"], true, "images must always be true");
 }
