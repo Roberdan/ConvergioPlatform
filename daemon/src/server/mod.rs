@@ -14,6 +14,7 @@ pub mod api_peers;
 pub mod api_peers_ext;
 pub mod api_plan_db;
 pub mod api_plan_db_import;
+pub mod api_plan_db_import_parsers;
 pub mod api_plan_db_lifecycle;
 pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
