@@ -37,15 +37,23 @@ If readiness passes → proceed. If fails → fix errors, do NOT proceed.
 
 Run: `bash claude-config/scripts/plan-db.sh drift-check {plan_id}`
 
-If drift detected (main has new commits since worktree creation):
-```bash
-cd {worktree_path} && git rebase origin/main
-```
-This is NORMAL — the planner may commit config changes on main after creating the worktree.
-Rebase, then proceed. Do NOT abort because of drift.
+Drift check exits 1 for minor/major drift. Interpret the JSON:
 
-_Why: Plan 677 — worktree created, then 7 commits on main (planner/executor fixes).
-Drift check correctly detected overlap but executor treated it as blocking error._
+| `branch_behind` | `drift` | Action |
+|---|---|---|
+| 0 | minor | **PROCEED** — branch is up to date, overlap is informational |
+| >0 | minor | Rebase: `cd {worktree_path} && git rebase main` then proceed |
+| >0 | major | Rebase: `cd {worktree_path} && git rebase main` then proceed |
+| any | critical | STOP — ask user |
+
+`overlapping_files` is informational — it means main touched a file the plan MIGHT touch.
+This is expected (e.g. README.md, CHANGELOG.md always overlap). NOT a blocker.
+
+`main_commits_since` counts commits since plan creation, not since last rebase.
+If `branch_behind: 0`, the branch is already current — ignore `main_commits_since`.
+
+_Why: Plan 677 — drift check showed `minor` with `branch_behind: 0` but executor
+treated it as error and aborted. Branch was already rebased._
 
 ## Auto-Heal
 
