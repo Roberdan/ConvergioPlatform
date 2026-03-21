@@ -1,5 +1,7 @@
+mod conn;
 mod db_ops;
 mod frame_io;
+mod ops;
 mod types;
 
 #[path = "../sync_batch.rs"]
