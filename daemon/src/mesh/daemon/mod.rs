@@ -9,6 +9,7 @@ mod daemon_tests;
 
 mod events;
 mod net_utils;
+mod peer_loop;
 mod service;
 mod types;
 
