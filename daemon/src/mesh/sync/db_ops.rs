@@ -1,216 +1,9 @@
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::io::ErrorKind;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-#[path = "sync_batch.rs"]
-mod sync_batch;
-#[cfg(test)]
-#[path = "sync_frame_tests.rs"]
-mod sync_frame_tests;
-#[cfg(test)]
-#[path = "sync_tests.rs"]
-mod sync_tests;
-pub use sync_batch::{current_time_ms, SyncBatchWindow};
-const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
-const MAX_PENDING_PEER_BYTES: usize = 32 * 1024 * 1024;
-const MAX_PEER_NAME_LEN: usize = 256;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeltaChange {
-    pub table_name: String,
-    #[serde(with = "serde_bytes")]
-    pub pk: Vec<u8>,
-    pub cid: String,
-    pub val: Option<String>,
-    pub col_version: i64,
-    pub db_version: i64,
-    #[serde(with = "serde_bytes")]
-    pub site_id: Vec<u8>,
-    pub cl: i64,
-    pub seq: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MeshSyncFrame {
-    Heartbeat {
-        node: String,
-        ts: u64,
-    },
-    Delta {
-        node: String,
-        sent_at_ms: u64,
-        last_db_version: i64,
-        changes: Vec<DeltaChange>,
-    },
-    Ack {
-        node: String,
-        applied: usize,
-        latency_ms: u64,
-        last_db_version: i64,
-    },
-    /// T1-09: Authentication frames — challenge-response with HMAC-SHA256
-    AuthChallenge {
-        nonce: Vec<u8>,
-        node: String,
-    },
-    AuthResponse {
-        hmac: Vec<u8>,
-        node: String,
-    },
-    AuthResult {
-        ok: bool,
-        reason: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ApplySummary {
-    pub applied: usize,
-    pub latency_ms: u64,
-    pub last_db_version: i64,
-}
-
-pub async fn write_frame<W: AsyncWrite + Unpin>(
-    writer: &mut W,
-    frame: &MeshSyncFrame,
-) -> Result<(), String> {
-    let payload = rmp_serde::to_vec_named(frame).map_err(|e| e.to_string())?;
-    let len = u32::try_from(payload.len()).map_err(|_| "mesh frame too large".to_string())?;
-    writer
-        .write_all(&len.to_be_bytes())
-        .await
-        .map_err(|e| e.to_string())?;
-    writer.write_all(&payload).await.map_err(|e| e.to_string())
-}
-
-pub async fn read_frame<R: AsyncRead + Unpin>(
-    reader: &mut R,
-) -> Result<Option<MeshSyncFrame>, String> {
-    let mut quota = PeerQuota::new();
-    match read_frame_with_quota(reader, &mut quota).await? {
-        Some(framed) => {
-            quota.release(framed.payload_len as usize);
-            Ok(Some(framed.frame))
-        }
-        None => Ok(None),
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FramedMeshSyncFrame {
-    pub frame: MeshSyncFrame,
-    pub payload_len: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PeerQuota {
-    pending_bytes: usize,
-    max_pending_bytes: usize,
-}
-
-impl PeerQuota {
-    pub fn new() -> Self {
-        Self {
-            pending_bytes: 0,
-            max_pending_bytes: MAX_PENDING_PEER_BYTES,
-        }
-    }
-
-    pub fn with_limit(max_pending_bytes: usize) -> Self {
-        Self {
-            pending_bytes: 0,
-            max_pending_bytes,
-        }
-    }
-
-    pub fn pending_bytes(&self) -> usize {
-        self.pending_bytes
-    }
-
-    pub fn release(&mut self, bytes: usize) {
-        self.pending_bytes = self.pending_bytes.saturating_sub(bytes);
-    }
-
-    fn reserve(&mut self, bytes: usize) -> Result<(), String> {
-        let next = self
-            .pending_bytes
-            .checked_add(bytes)
-            .ok_or_else(|| "mesh peer pending bytes overflow".to_string())?;
-        if next > self.max_pending_bytes {
-            return Err(format!(
-                "mesh peer pending bytes exceeded: {next} > {}",
-                self.max_pending_bytes
-            ));
-        }
-        self.pending_bytes = next;
-        Ok(())
-    }
-}
-
-impl Default for PeerQuota {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub async fn read_frame_with_quota<R: AsyncRead + Unpin>(
-    reader: &mut R,
-    quota: &mut PeerQuota,
-) -> Result<Option<FramedMeshSyncFrame>, String> {
-    let mut len_buf = [0_u8; 4];
-    match reader.read_exact(&mut len_buf).await {
-        Ok(_) => {}
-        Err(err) if err.kind() == ErrorKind::UnexpectedEof => return Ok(None),
-        Err(err) => return Err(err.to_string()),
-    }
-    let payload_len = u32::from_be_bytes(len_buf);
-    if payload_len > MAX_FRAME_BYTES {
-        return Err(format!("mesh frame exceeds limit: {payload_len}"));
-    }
-    quota.reserve(payload_len as usize)?;
-    let payload = match read_payload_streaming(reader, payload_len as usize).await {
-        Ok(payload) => payload,
-        Err(err) => {
-            quota.release(payload_len as usize);
-            return Err(err);
-        }
-    };
-    let frame = match rmp_serde::from_slice::<MeshSyncFrame>(&payload) {
-        Ok(frame) => frame,
-        Err(err) => {
-            quota.release(payload_len as usize);
-            return Err(err.to_string());
-        }
-    };
-    Ok(Some(FramedMeshSyncFrame { frame, payload_len }))
-}
-
-async fn read_payload_streaming<R: AsyncRead + Unpin>(
-    reader: &mut R,
-    payload_len: usize,
-) -> Result<Vec<u8>, String> {
-    let mut payload = Vec::with_capacity(payload_len.min(64 * 1024));
-    let mut limited = reader.take(payload_len as u64);
-    let mut buffered = BufReader::new(&mut limited);
-    let mut chunk = [0_u8; 8 * 1024];
-    loop {
-        let read = buffered.read(&mut chunk).await.map_err(|e| e.to_string())?;
-        if read == 0 {
-            break;
-        }
-        payload.extend_from_slice(&chunk[..read]);
-    }
-    if payload.len() != payload_len {
-        return Err(format!(
-            "mesh frame truncated: read {} of {payload_len}",
-            payload.len()
-        ));
-    }
-    Ok(payload)
-}
+use super::types::{ApplySummary, DeltaChange, MAX_PEER_NAME_LEN};
 
 pub fn collect_changes_since(
     db_path: &Path,
@@ -486,6 +279,7 @@ pub fn record_sent_stats_with_conn(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
+
 pub fn current_db_version_with_conn(conn: &Connection) -> Result<i64, String> {
     conn.query_row(
         "SELECT COALESCE(MAX(db_version), 0) FROM crsql_changes",
@@ -495,6 +289,26 @@ pub fn current_db_version_with_conn(conn: &Connection) -> Result<i64, String> {
     .map_err(|e| e.to_string())
 }
 
+pub fn ensure_sync_schema_pub(conn: &Connection) -> rusqlite::Result<()> {
+    ensure_sync_schema(conn)
+}
+
+pub fn ensure_sync_schema(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS mesh_sync_stats (
+            peer_name TEXT PRIMARY KEY,
+            total_sent INTEGER NOT NULL DEFAULT 0,
+            total_received INTEGER NOT NULL DEFAULT 0,
+            total_applied INTEGER NOT NULL DEFAULT 0,
+            last_sent_at INTEGER,
+            last_sync_at INTEGER,
+            last_latency_ms INTEGER,
+            last_db_version INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT
+        );",
+    )
+}
+
 fn validate_peer_name(peer_name: &str) -> Result<(), String> {
     if peer_name.is_empty() || peer_name.len() > MAX_PEER_NAME_LEN {
         return Err(format!("invalid peer name length: {}", peer_name.len()));
@@ -502,7 +316,7 @@ fn validate_peer_name(peer_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Connection, String> {
+pub fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Connection, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
@@ -530,27 +344,7 @@ fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Connecti
     Ok(conn)
 }
 
-pub fn ensure_sync_schema_pub(conn: &Connection) -> rusqlite::Result<()> {
-    ensure_sync_schema(conn)
-}
-
-fn ensure_sync_schema(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS mesh_sync_stats (
-            peer_name TEXT PRIMARY KEY,
-            total_sent INTEGER NOT NULL DEFAULT 0,
-            total_received INTEGER NOT NULL DEFAULT 0,
-            total_applied INTEGER NOT NULL DEFAULT 0,
-            last_sent_at INTEGER,
-            last_sync_at INTEGER,
-            last_latency_ms INTEGER,
-            last_db_version INTEGER NOT NULL DEFAULT 0,
-            last_error TEXT
-        );",
-    )
-}
-
-fn now_ms() -> u64 {
+pub fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
