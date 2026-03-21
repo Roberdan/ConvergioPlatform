@@ -2,9 +2,11 @@
 
 ## Per-Wave Validation (Thor)
 
-After ALL tasks in a wave are `submitted`:
+After ALL tasks in a wave are `submitted` (MANDATORY — coordinator MUST call this before proceeding to next wave):
 
-1. Invoke Thor: `bash claude-config/scripts/validate-wave.sh {wave_db_id} {plan_id}`
+1. Invoke Thor: `bash claude-config/scripts/plan-db.sh validate-wave {wave_db_id}`
+   - This batch-promotes `submitted` → `done` and closes the wave
+   - _Why: Plan 677 — coordinator skipped Thor validation, leaving all tasks in submitted limbo_
 2. Thor reads `test_criteria.verify[]` for EACH task and runs them
 3. Thor reads `validator_agent` — uses domain-specific gates:
    - `output_type: pr` → Thor 10 code gates

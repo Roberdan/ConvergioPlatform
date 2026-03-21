@@ -32,11 +32,13 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 1. Initialize + auto-heal plan/worktree metadata.
 2. Run readiness checks and stop on critical warnings.
 3. Run drift check (MANDATORY before first task).
-4. Dispatch pending tasks via selected executor.
-5. Track agent lifecycle + task substatus transitions.
-6. Per-wave Thor validation (NOT per-task).
-7. Apply wave merge mode (`sync`/`batch`/`none`).
-8. Validate and complete plan in DB.
+4. **Per-wave loop** (repeat for each wave):
+   a. Dispatch pending tasks via selected executor.
+   b. Wait for ALL tasks in wave to reach `submitted`.
+   c. **MANDATORY Thor gate**: `bash claude-config/scripts/plan-db.sh validate-wave {wave_db_id}` — promotes submitted→done, closes wave. NEVER skip. NEVER proceed to next wave without this.
+   d. Apply wave merge mode (`sync`/`batch`/`none`).
+   e. Output: `--- Wave WX --- Thor: PASS`
+5. After ALL waves done: validate and complete plan in DB.
 
 ## CRITICAL: Script Paths
 
