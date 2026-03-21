@@ -2,7 +2,7 @@
 use super::peer_conf::{detect_local_identity, is_local_peer_conf, parse_peers_conf};
 use super::super::state::{query_rows, ApiError, ServerState};
 use axum::extract::{Query, State};
-use axum::{Json, Router};
+use axum::Json;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 

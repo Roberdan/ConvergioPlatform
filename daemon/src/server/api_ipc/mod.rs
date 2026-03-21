@@ -6,8 +6,6 @@ mod routes;
 use super::state::ServerState;
 use axum::routing::{get, post};
 use axum::Router;
-use rusqlite::Connection;
-use serde_json::Value;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 

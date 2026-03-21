@@ -1,8 +1,8 @@
 //! Mesh sync status, traffic, and proxy handlers.
 use super::super::state::{query_rows, ApiError, ServerState};
-use super::peer_conf::{build_ip_name_map, detect_local_identity, detect_local_node};
+use super::peer_conf::{build_ip_name_map, detect_local_node};
 use axum::extract::State;
-use axum::{Json, Router};
+use axum::Json;
 use serde_json::{json, Value};
 
 pub(super) async fn proxy_daemon_get(endpoint: &str) -> Result<Json<Value>, ApiError> {

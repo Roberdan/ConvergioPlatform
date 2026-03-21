@@ -4,7 +4,6 @@ pub mod handlers;
 mod tests;
 
 use super::state::ServerState;
-use axum::routing::post;
 use axum::Router;
 
 pub fn router() -> Router<ServerState> {

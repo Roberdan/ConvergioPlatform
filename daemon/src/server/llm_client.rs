@@ -89,7 +89,7 @@ fn sse_data(block: &str) -> Option<&str> {
 // API keys are NOT allowed in Convergio.
 
 async fn stream_claude(
-    tx: &mpsc::Sender<StreamChunk>,
+    _tx: &mpsc::Sender<StreamChunk>,
     model: &str,
     _messages: &[ChatMessage],
 ) -> Result<(), String> {

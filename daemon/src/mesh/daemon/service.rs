@@ -1,12 +1,12 @@
 // Daemon service: run_service, WS handler
 
-use super::events::{now_ts, publish_event, relay_agent_activity_changes, relay_ipc_changes};
+use super::events::{now_ts, publish_event};
 use super::net_utils::{
-    collect_system_stats, is_ws_brain_request, load_peer_addrs, resolve_local_node_name,
+    collect_system_stats, load_peer_addrs, resolve_local_node_name,
     websocket_key,
 };
 use super::peer_loop::{connect_peer_loop, validate_config};
-use super::types::{DaemonConfig, DaemonState, InboundConnectionRateLimiter, MeshEvent};
+use super::types::{DaemonConfig, DaemonState, InboundConnectionRateLimiter};
 use crate::mesh::net::apply_socket_tuning;
 use crate::mesh::ws::{text_frame, websocket_accept};
 use serde_json::json;

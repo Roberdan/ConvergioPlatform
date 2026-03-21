@@ -1,5 +1,5 @@
 // plans_detail: tasks, projects, notifications, plan status update handlers
-use super::super::state::{query_one, query_rows, ApiError, ServerState};
+use super::super::state::{query_rows, ApiError, ServerState};
 use axum::extract::State;
 use axum::Json;
 use serde::Deserialize;

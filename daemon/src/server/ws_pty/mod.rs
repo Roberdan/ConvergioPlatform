@@ -4,8 +4,7 @@ pub mod session;
 
 use super::state::ServerState;
 pub(crate) use session::{
-    is_local_peer, peer_ssh_alias, peer_ssh_user, resolve_peer, tailscale_resolve, ts_first_ip,
-    ts_name_matches, validate_peer, ResolvedPeer,
+    is_local_peer, peer_ssh_alias, peer_ssh_user, tailscale_resolve, validate_peer,
 };
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
