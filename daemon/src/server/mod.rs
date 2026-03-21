@@ -29,6 +29,7 @@ pub mod sse_delegate;
 pub mod sse_preflight;
 pub mod sse_stream;
 pub mod state;
+pub mod state_init;
 pub mod ws;
 pub mod ws_brain;
 pub mod ws_pty;
