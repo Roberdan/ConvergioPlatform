@@ -19,10 +19,32 @@ ORDER BY task_id;
 
 ## Dispatch
 
-For `task-executor` (claude): use `Task(subagent_type="task-executor")` or `/execute` delegation.
-For `task-executor-copilot`: use Copilot CLI via `convergio` CLI or direct `gh copilot`.
+### Claude tasks (`executor_agent = task-executor`)
+Use `Task(subagent_type="task-executor")` with full prompt including task description,
+worktree path, verify commands, and constraints.
 
-Every dispatch prompt MUST include:
+### Copilot tasks (`executor_agent = task-executor-copilot`)
+Use the copilot worker script — it handles prompt generation, launch, monitoring, and cleanup:
+```bash
+# Launch copilot worker for a task (pass the DB task ID, not task_id string)
+bash claude-config/scripts/copilot-worker.sh {db_task_id} --model gpt-5
+```
+The worker script:
+1. Generates prompt via `copilot-task-prompt.sh` (reads task from DB, loads context)
+2. Launches `gh copilot` with the prompt in the correct worktree
+3. Monitors completion and tracks agent lifecycle in DB
+4. On success: marks task `submitted` automatically
+5. On failure: logs error, leaves task `in_progress` for retry
+
+To get the DB task ID from task_id string:
+```sql
+SELECT id FROM tasks WHERE plan_id = {plan_id} AND task_id = '{task_id}';
+```
+
+Copilot reference: `@reference/operational/copilot-alignment.md`
+Copilot scripts: `claude-config/scripts/copilot-worker.sh`, `copilot-task-prompt.sh`
+
+### Every dispatch prompt MUST include:
 1. Task description (from `title` or `description`)
 2. Worktree path (from wave `worktree_path`)
 3. Verify commands (from `test_criteria.verify[]`)
