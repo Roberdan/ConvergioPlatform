@@ -48,7 +48,7 @@ _daemon_ok() { curl -sf --connect-timeout 1 "$DAEMON_URL/api/ipc/status" > /dev/
 cmd_help() {
   echo -e "${B}convergio${N} — Swarm CLI v2.1.0\n"
   echo -e "${B}Solve (virtual organization):${N}"
-  echo -e "  convergio ${C}solve \"problem\"${N}            Ali assembles a team and solves it"
+  echo -e "  convergio ${C}solve \"problem\" [--context <src>]${N}  Ali assembles a team and solves it"
   echo -e "\n${B}Agents (any model/tool):${N}"
   echo -e "  convergio ${C}<agent> [name] [--tool T]${N}  Launch (tools: claude|copilot|opencode|local)"
   echo -e "  convergio ${C}as <name> [--tool T]${N}       Custom name"
