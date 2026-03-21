@@ -146,6 +146,9 @@ async fn main() {
                 static_dir,
                 crsqlite_path,
             } => {
+                // Spawn background pause bridge before blocking on the server.
+                let db_path = ipc_handler::default_db_path();
+                tokio::spawn(claude_core::background::run_pause_bridge(db_path));
                 ipc_handler::run_serve(bind, static_dir, crsqlite_path).await;
             }
             Commands::Daemon { command } => match command {
