@@ -1,5 +1,7 @@
 // api_dashboard: dashboard API routes — overview, plans, nightly jobs, optimize
 mod nightly;
+mod nightly_data;
+mod nightly_handlers;
 mod overview;
 mod plans;
 
