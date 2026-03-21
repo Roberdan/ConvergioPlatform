@@ -1,4 +1,5 @@
 mod migration;
+pub(crate) mod migration_helpers;
 mod sync;
 
 #[cfg(test)]

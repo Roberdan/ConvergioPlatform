@@ -1,6 +1,7 @@
 // Coordinator: mesh orchestration and task routing.
 
 mod migration;
+pub(super) mod migration_helpers;
 mod types;
 
 pub use migration::{migrate_coordinator, rollback};
