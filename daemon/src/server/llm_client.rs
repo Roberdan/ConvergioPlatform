@@ -130,6 +130,34 @@ async fn stream_litellm(
     consume_sse(tx, resp, parse_openai_sse).await
 }
 
+/// Parse Anthropic native SSE: content_block_delta text and message_start usage.
+fn parse_claude_sse(block: &str) -> Option<StreamChunk> {
+    let data = sse_data(block)?;
+    let parsed: Value = serde_json::from_str(data).ok()?;
+    let event_type = parsed.get("type").and_then(Value::as_str).unwrap_or("");
+    if event_type == "content_block_delta" {
+        let text = parsed
+            .get("delta")?
+            .get("text")?
+            .as_str()
+            .filter(|s| !s.is_empty())?;
+        return Some(StreamChunk::Text(text.to_string()));
+    }
+    if event_type == "message_start" {
+        if let Some(usage) = parsed.get("message").and_then(|m| m.get("usage")) {
+            let inp = usage.get("input_tokens").and_then(Value::as_u64).unwrap_or(0);
+            let out = usage.get("output_tokens").and_then(Value::as_u64).unwrap_or(0);
+            if inp > 0 || out > 0 {
+                return Some(StreamChunk::Usage(TokenUsage {
+                    input_tokens: inp,
+                    output_tokens: out,
+                }));
+            }
+        }
+    }
+    None
+}
+
 /// Parse choices[0].delta.content and usage from OpenAI-compatible SSE.
 fn parse_openai_sse(block: &str) -> Option<StreamChunk> {
     let data = sse_data(block)?;

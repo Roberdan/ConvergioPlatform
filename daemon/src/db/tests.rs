@@ -1,5 +1,6 @@
 use super::{PlanDb, TaskStatus, UpdateTaskArgs};
 
+#[path = "tests_crud.rs"]
 mod tests_crud;
 
 fn seed_schema(db: &PlanDb) {

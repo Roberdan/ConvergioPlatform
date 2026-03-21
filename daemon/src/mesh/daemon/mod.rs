@@ -15,5 +15,6 @@ mod types;
 
 pub use events::{now_ts, publish_event, relay_agent_activity_changes, relay_ipc_changes};
 pub use net_utils::{detect_tailscale_ip, is_ws_brain_request, parse_peers_conf, websocket_key};
+pub use peer_loop::validate_config;
 pub use service::{handle_ws_client, run_service};
 pub use types::{DaemonConfig, DaemonState, InboundConnectionRateLimiter, MeshEvent};

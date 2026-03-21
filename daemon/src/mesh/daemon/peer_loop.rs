@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 
 /// T1-07: Validate daemon config — fail fast with clear errors
-pub(super) fn validate_config(config: &DaemonConfig) -> Result<(), String> {
+pub fn validate_config(config: &DaemonConfig) -> Result<(), String> {
     // bind_ip must be a Tailscale IP (100.x.x.x) or localhost for security
     if !config.bind_ip.starts_with("100.")
         && config.bind_ip != "127.0.0.1"

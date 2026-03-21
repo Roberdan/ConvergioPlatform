@@ -1,4 +1,4 @@
-use super::{PlanDb, ValidateTaskArgs};
+use crate::db::{PlanDb, ValidateTaskArgs};
 
 // seed_schema is defined in the parent module (tests.rs)
 use super::seed_schema;
@@ -74,7 +74,7 @@ fn db_execution_tree_contains_waves_and_tasks() {
 
 #[test]
 fn db_crdt_required_tables_are_declared() {
-    let tables = super::crdt::required_crdt_tables();
+    let tables = crate::db::crdt::required_crdt_tables();
     assert_eq!(
         tables,
         vec![

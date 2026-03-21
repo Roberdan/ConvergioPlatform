@@ -170,4 +170,5 @@ pub fn map_lock_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IpcFileLock> {
 }
 
 #[cfg(test)]
+#[path = "manager_tests.rs"]
 mod manager_tests;

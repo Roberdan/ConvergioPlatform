@@ -64,7 +64,7 @@ pub(super) fn read_local_changes_since(
     rows.collect::<rusqlite::Result<Vec<_>>>()
 }
 
-pub(super) fn apply_changes_to_conn(
+pub(crate) fn apply_changes_to_conn(
     conn: &Connection,
     changes: &[DeltaChange],
 ) -> rusqlite::Result<usize> {
@@ -116,7 +116,7 @@ pub(super) fn apply_changes_to_conn(
 }
 
 /// Query local DB for CRR-tracked tables (tables with __crsql_clock counterpart)
-fn get_crr_table_allowlist(conn: &Connection) -> HashSet<String> {
+pub(crate) fn get_crr_table_allowlist(conn: &Connection) -> HashSet<String> {
     let mut set = HashSet::new();
     if let Ok(mut stmt) = conn.prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%\\_\\_crsql\\_clock' ESCAPE '\\'",

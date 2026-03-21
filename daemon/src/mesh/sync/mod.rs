@@ -5,6 +5,9 @@ mod ops;
 mod ops_apply;
 mod types;
 
+#[cfg(test)]
+pub(super) use ops_apply::{apply_changes_to_conn, get_crr_table_allowlist};
+
 #[path = "../sync_batch.rs"]
 mod sync_batch;
 #[cfg(test)]
