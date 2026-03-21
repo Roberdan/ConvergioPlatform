@@ -115,11 +115,15 @@ cmd_launch() {
   "$TOGGLE" on 2>/dev/null
   "$BUS" register "$sname" "$desc" "$tool" 2>/dev/null || true
 
+  export CONVERGIO_AGENT_NAME="$sname"
+
   echo -e "${G}Launching ${B}$sname${N}${G} ($desc)${N}"
   echo -e "${D}Model: $model | Tool: $tool | Invoke: $invoke${N}\n"
 
   local p="Il tuo nome è ${sname}. Ruolo: ${desc}. "
-  p+="MESSAGING: convergio-bus.sh who/send/read per comunicare. Nome: ${sname}. "
+  p+="MESSAGING: I messaggi in arrivo ti vengono mostrati automaticamente. "
+  p+="Per inviare: convergio-bus.sh send ${sname} <destinatario> <messaggio>. "
+  p+="Per vedere chi è online: convergio-bus.sh who. "
   [[ "$invoke" == /* ]] && p+="Esegui $invoke per iniziare." || p+="Lavora secondo il tuo ruolo."
 
   _launch_tool "$tool" "$p"
@@ -141,6 +145,7 @@ cmd_solve() {
   local goal="${goal_parts[*]}"
   [ -z "$goal" ] && { echo -e "${R}Usage: convergio solve \"problem\" [--autonomous|--approve-plan|--approve-each]${N}"; return 1; }
 
+  export CONVERGIO_AGENT_NAME="ali"
   "$TOGGLE" on 2>/dev/null
   "$BUS" register "ali" "orchestrator" "claude" 2>/dev/null || true
 
@@ -187,6 +192,7 @@ cmd_stop() {
 cmd_named() {
   local sname="${1:?Usage: convergio as <name> [--tool T]}"
   local tool="${2:-claude}"
+  export CONVERGIO_AGENT_NAME="$sname"
   "$TOGGLE" on 2>/dev/null
   "$BUS" register "$sname" "custom agent" "$tool" 2>/dev/null || true
   echo -e "${G}Launching ${B}$sname${N}\n"
@@ -197,6 +203,8 @@ cmd_named() {
 
 _launch_tool() {
   local tool="$1" prompt="$2"
+  # Set agent name in env so hooks can check inbox
+  export CONVERGIO_AGENT_NAME="${CONVERGIO_AGENT_NAME:-agent}"
   case "$tool" in
     claude)
       command -v claude &>/dev/null && { claude -p "$prompt" 2>/dev/null || claude; } \

@@ -130,6 +130,16 @@
         ]
       }
     ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_NAME=${CONVERGIO_AGENT_NAME:-}; if [ -n \"$AGENT_NAME\" ]; then DAEMON_URL=${CONVERGIO_DAEMON_URL:-http://localhost:8420}; MSGS=$(curl -sf \"$DAEMON_URL/api/ipc/messages?channel=dm:$AGENT_NAME&limit=5\" 2>/dev/null); if [ -n \"$MSGS\" ]; then COUNT=$(echo \"$MSGS\" | python3 -c \"import sys,json; msgs=json.load(sys.stdin).get('messages',[]); unread=[m for m in msgs if not m.get('read_at')]; print(len(unread))\" 2>/dev/null); if [ \"${COUNT:-0}\" -gt 0 ]; then echo \"INBOX: $COUNT message(s) for $AGENT_NAME. Read with: convergio-bus.sh read $AGENT_NAME\" >&2; fi; fi; fi"
+          }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
