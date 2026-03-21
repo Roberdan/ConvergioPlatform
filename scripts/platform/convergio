@@ -41,8 +41,25 @@ _daemon_ok() { curl -sf --connect-timeout 1 "$DAEMON_URL/api/ipc/status" > /dev/
 
 _cleanup_agent() {
   local name="${CONVERGIO_AGENT_NAME:-}"
+
+  # Kill entire process tree (all children, grandchildren, etc.)
+  local pgid
+  pgid=$(ps -o pgid= $$ 2>/dev/null | tr -d ' ')
+  if [ -n "$pgid" ] && [ "$pgid" != "0" ]; then
+    # Kill all processes in our process group except ourselves
+    kill -- -"$pgid" 2>/dev/null || true
+  fi
+
+  # Also kill any claude/copilot processes we spawned
+  pkill -P $$ 2>/dev/null || true
+
+  # Unregister from daemon
   [ -n "$name" ] && "$BUS" unregister "$name" 2>/dev/null
-  echo -e "\n${Y}Agent $name stopped.${N}"
+
+  # Broadcast abort so other agents know
+  "$BUS" broadcast "${name:-system}" "ABORT: $name shutdown" 2>/dev/null || true
+
+  echo -e "\n${Y}Agent $name stopped. All child processes killed.${N}"
 }
 
 cmd_help() {
@@ -189,14 +206,48 @@ cmd_solve() {
 
 cmd_stop() {
   local run_id="${1:-}"
-  echo -e "${Y}Stopping active execution...${N}"
-  "$BUS" broadcast "ali" "ABORT: User requested stop" 2>/dev/null || true
+  echo -e "${Y}Stopping ALL Convergio processes...${N}"
+
+  # 1. Broadcast abort to all agents via daemon
+  "$BUS" broadcast "system" "ABORT: User requested full stop" 2>/dev/null || true
+
+  # 2. Kill all claude processes spawned by convergio
+  pkill -f "convergio-autopilot" 2>/dev/null && echo "  Killed: autopilot"
+  pkill -f "convergio-menubar" 2>/dev/null && echo "  Killed: menubar"
+
+  # 3. Kill all Claude Code sessions (agent subprocesses)
+  pgrep -f "claude" 2>/dev/null | while read pid; do
+    local cmdline
+    cmdline=$(ps -p "$pid" -o args= 2>/dev/null)
+    # Only kill Claude sessions that were spawned with convergio agent prompts
+    if echo "$cmdline" | grep -qE "Sei (Ali|l'agente|il tuo nome)"; then
+      kill "$pid" 2>/dev/null && echo "  Killed: claude PID $pid"
+    fi
+  done
+
+  # 4. Cancel active execution run
   if [ -n "$run_id" ]; then
     sqlite3 "${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}" \
       "UPDATE execution_runs SET status='cancelled', completed_at=datetime('now') WHERE id=$run_id;" 2>/dev/null
-    echo "  Run $run_id cancelled"
+    echo "  Run #$run_id cancelled in DB"
   fi
-  echo "  Broadcast ABORT sent to all agents"
+
+  # 5. Unregister all convergio agents from daemon
+  if _daemon_ok; then
+    curl -sf "$DAEMON_URL/api/ipc/agents" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    agents = json.load(sys.stdin).get('agents', [])
+    for a in agents:
+        print(a.get('name', ''))
+except: pass
+" 2>/dev/null | while read name; do
+      [ -n "$name" ] && "$BUS" unregister "$name" 2>/dev/null
+    done
+    echo "  All agents unregistered from daemon"
+  fi
+
+  echo -e "${G}All stopped.${N}"
 }
 
 cmd_named() {
