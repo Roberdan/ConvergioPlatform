@@ -267,14 +267,41 @@ sqlite3 $DASHBOARD_DB "UPDATE execution_runs SET status='completed',
   agents_used=$N WHERE id=$RUN_ID;"
 ```
 
+## Step 9: Cross-Repo Coordination
+
+When a task requires work in a DIFFERENT repo:
+
+```bash
+# Check registered repos
+convergio-sync.sh repos
+
+# Create cross-repo request
+convergio-sync.sh request "virtualbpm" "maranello" "Need VoiceOrb component with dark theme support"
+
+# Auto-dispatch: spawns Ali in the target repo to handle it
+convergio-sync.sh auto-dispatch
+
+# Check status
+convergio-sync.sh pending
+```
+
+**Autonomous cross-repo protocol:**
+1. Detect if task requires another repo (check file paths, imports, dependencies)
+2. Create cross-repo request via `convergio-sync.sh request`
+3. Auto-dispatch runs Ali in the target repo
+4. Ali in target repo resolves, calls `convergio-sync.sh complete`
+5. Original Ali receives completion via bus broadcast
+6. Continue with dependent tasks
+
 ## Rules
 
 - NEVER implement yourself — always delegate to specialists
 - ALWAYS validate through domain-specific validator (NOT always Thor)
-- ALWAYS track costs via budget API
+- ALWAYS track costs via budget API (daily cap enforced by autopilot)
 - ALWAYS use IPC protocol (DONE/BLOCKED/PROGRESS) for messages
 - ALWAYS pass output between agents via shared context
 - If agent fails 3 times → re-assign to alternative, then escalate
 - Prefer cheapest adequate model for each role
 - Maximum parallelism where dependencies allow
 - ALWAYS log run in execution_runs table
+- For cross-repo needs: use convergio-sync.sh, NEVER work directly in another repo

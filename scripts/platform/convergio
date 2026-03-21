@@ -297,6 +297,7 @@ case "${1:-help}" in
   sync-agents)        cmd_sync_agents ;;
   solve)              shift; cmd_solve "$@" ;;
   stop)               shift; cmd_stop "${1:-}" ;;
+  sync)               shift; bash "$PLATFORM_DIR/scripts/platform/convergio-sync.sh" "$@" ;;
   autopilot)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-autopilot.sh" "${1:-once}" ;;
   learnings)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-learnings.sh" "${1:-summary}" ;;
   collect-metrics)    bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" collect ;;

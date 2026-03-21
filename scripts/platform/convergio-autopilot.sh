@@ -12,8 +12,82 @@ DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 INTERVAL="${2:-30}"
 PLAN_ID="${1:-}"
 
+MAX_BUDGET="${CONVERGIO_MAX_BUDGET:-10.00}"  # F2: daily budget cap in USD
+RETRY_FILE="/tmp/convergio-retry-state"
+
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[$(date '+%H:%M:%S')] WARN: $*" >&2; }
+
+# ─── F1-F3: Cost Tracking ───────────────────────────────────────────
+
+get_daily_cost() {
+  _db "SELECT COALESCE(SUM(cost_usd), 0) FROM execution_runs
+       WHERE started_at > datetime('now', '-1 day');"
+}
+
+check_budget() {
+  local spent
+  spent=$(get_daily_cost)
+  local over
+  over=$(echo "$spent >= $MAX_BUDGET" | bc -l 2>/dev/null || echo "0")
+  if [ "${over:-0}" -eq 1 ]; then
+    warn "BUDGET CAP reached: \$$spent / \$$MAX_BUDGET daily. Pausing execution."
+    "$BUS" broadcast "autopilot" "BUDGET CAP: \$$spent spent today. Execution paused." 2>/dev/null || true
+    return 1
+  fi
+  return 0
+}
+
+# ─── G2: Agent Health Monitoring ────────────────────────────────────
+
+AGENT_TIMEOUT=600  # 10 minutes silence = zombie
+
+check_agent_health() {
+  if ! curl -sf --connect-timeout 1 "$DAEMON_URL/api/ipc/agents" > /dev/null 2>&1; then
+    return 0  # daemon not running, skip
+  fi
+
+  local agents
+  agents=$(curl -sf "$DAEMON_URL/api/ipc/agents" 2>/dev/null)
+  [ -z "$agents" ] && return 0
+
+  echo "$agents" | python3 -c "
+import sys, json, datetime
+try:
+    d = json.load(sys.stdin)
+    now = datetime.datetime.utcnow()
+    for a in d.get('agents', []):
+        last = a.get('last_seen', '')
+        if not last: continue
+        try:
+            ts = datetime.datetime.fromisoformat(last.replace('Z',''))
+            delta = (now - ts).total_seconds()
+            if delta > $AGENT_TIMEOUT:
+                print(f'ZOMBIE: {a[\"name\"]} (silent {int(delta)}s)')
+        except: pass
+except: pass
+" 2>/dev/null | while read -r line; do
+    warn "$line"
+  done
+}
+
+# ─── G3: Retry with Backoff ─────────────────────────────────────────
+
+get_retry_count() {
+  local task_id="$1"
+  grep -c "^$task_id:" "$RETRY_FILE" 2>/dev/null || echo "0"
+}
+
+record_retry() {
+  local task_id="$1"
+  echo "$task_id:$(date +%s)" >> "$RETRY_FILE"
+}
+
+backoff_seconds() {
+  local attempt="$1"
+  # Exponential: 30, 60, 120
+  echo $(( 30 * (2 ** (attempt - 1)) ))
+}
 
 _db() { sqlite3 "$DB" "$1" 2>/dev/null; }
 
@@ -213,7 +287,14 @@ cmd_watch() {
   trap '"$BUS" unregister autopilot 2>/dev/null; exit 0' INT TERM
 
   while true; do
+    # F2: Check budget before each cycle
+    check_budget || { sleep 300; continue; }
+    # G2: Check agent health
+    check_agent_health
+    # Run main loop
     run_once || true
+    # Collect metrics every cycle
+    bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" collect > /dev/null 2>&1
     sleep "$INTERVAL"
   done
 }
