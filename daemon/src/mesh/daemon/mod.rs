@@ -17,5 +17,3 @@ pub use events::{now_ts, publish_event, relay_agent_activity_changes, relay_ipc_
 pub use net_utils::{detect_tailscale_ip, is_ws_brain_request, parse_peers_conf, websocket_key};
 pub use service::{handle_ws_client, run_service};
 pub use types::{DaemonConfig, DaemonState, InboundConnectionRateLimiter, MeshEvent};
-
-pub(super) const WS_BRAIN_ROUTE: &str = "/ws/brain";
