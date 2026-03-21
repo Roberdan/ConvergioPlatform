@@ -1,4 +1,5 @@
 pub mod handlers;
+pub mod peer_conf;
 pub mod sync_ops;
 
 use super::state::ServerState;
