@@ -8,14 +8,12 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
         let mut stmt = conn.prepare(
             "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '_crr_rebuild_%'",
         )?;
-        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-        let v: Vec<String> = rows.filter_map(|r| r.ok()).collect();
+        let v: Vec<String> = stmt.query_map([], |row| row.get::<_, String>(0))?.filter_map(|r| r.ok()).collect();
         v
     };
     for tmp in &temps {
         let _ = drop_sql_object_if_exists(conn, "TABLE", tmp);
     }
-    // Check if any tables need migration
     let needs_migration: bool = required_crdt_tables().iter().any(|table| {
         let clock = format!("{table}__crsql_clock");
         let already: bool = conn
@@ -35,21 +33,15 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
     // temporarily dropped tables cause errors during rebuild.
     let views: Vec<(String, String)> = {
         let mut stmt = conn.prepare("SELECT name, sql FROM sqlite_master WHERE type='view'")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
-        let v: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-        v
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        rows.filter_map(|r| r.ok()).collect()
     };
     let triggers: Vec<(String, String)> = {
         let mut stmt = conn.prepare(
             "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE '%__crsql_%' AND sql IS NOT NULL"
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
-        let v: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-        v
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        rows.filter_map(|r| r.ok()).collect()
     };
     for (name, _) in &views {
         let _ = drop_sql_object_if_exists(conn, "VIEW", name);
@@ -102,14 +94,11 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 fn drop_unique_indices(conn: &Connection, table: &str) -> rusqlite::Result<()> {
-    let indices: Vec<String> = {
-        let mut stmt = conn.prepare(
-            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?1 AND sql LIKE '%UNIQUE%'"
-        )?;
-        let rows = stmt.query_map([table], |row| row.get::<_, String>(0))?;
-        let v: Vec<String> = rows.filter_map(|r| r.ok()).collect();
-        v
-    };
+    let mut stmt = conn.prepare(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?1 AND sql LIKE '%UNIQUE%'"
+    )?;
+    let indices: Vec<String> = stmt.query_map([table], |row| row.get::<_, String>(0))?
+        .filter_map(|r| r.ok()).collect();
     for idx in &indices {
         drop_sql_object_if_exists(conn, "INDEX", idx)?;
     }
