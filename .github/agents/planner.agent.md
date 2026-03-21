@@ -2,7 +2,7 @@
 name: planner
 description: Create execution plans with waves/tasks from F-xx requirements. Uses planner-create.sh as gated entry point.
 tools: ["read", "edit", "search", "execute"]
-model: claude-opus-4.6-1m
+model: claude-opus-4-6-1m
 ---
 
 <!-- v2.7.0 (2026-03-19): Aligned with commands/planner.md v2.7.0 -->

@@ -1,8 +1,6 @@
-## <!-- v2.0.0 -->
-
+---
 name: prepare
 version: "2.0.0"
-
 ---
 
 # Prepare - Project Bootstrap

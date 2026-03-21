@@ -1,8 +1,6 @@
-## <!-- v2.0.0 -->
-
+---
 name: release
 version: "2.0.0"
-
 ---
 
 # Release Manager

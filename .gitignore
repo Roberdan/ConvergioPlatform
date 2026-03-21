@@ -147,8 +147,13 @@ data/*.json
 daemon/target/
 .DS_Store
 
-# Local symlinks
+# Local symlinks (created by convergio toggle, not tracked)
 claude-config/scripts/copilot
+.claude/commands
+.claude/agents
+.claude/rules
+.claude/reference
+.claude/CLAUDE.md
 
 # Sensitive/binary dotfile backups
 claude-config/config/dotfiles-backup/**/development_credentials

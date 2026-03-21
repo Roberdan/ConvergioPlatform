@@ -2,7 +2,7 @@
 name: prompt
 description: Extract structured requirements (F-xx) from user input. Outputs JSON to .copilot-tracking/
 tools: ["read", "search", "execute"]
-model: claude-opus-4.6
+model: claude-opus-4-6
 ---
 
 <!-- v2.0.0 (2026-02-15): Compact format per ADR 0009 - 30% token reduction -->

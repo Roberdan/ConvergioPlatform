@@ -1,8 +1,6 @@
-## <!-- v1.0.0 -->
-
+---
 name: check
 version: "1.0.0"
-
 ---
 
 # Session Check — Quick Recap

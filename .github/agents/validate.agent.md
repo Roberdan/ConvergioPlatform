@@ -2,7 +2,7 @@
 name: validate
 description: Thor quality validation - verify completed tasks/waves meet all F-xx requirements and quality gates.
 tools: ["read", "search", "execute"]
-model: claude-opus-4.6
+model: claude-opus-4-6
 ---
 
 <!-- v5.0.0 (2026-03-15): wave-only validation, Opus model, batch submitted→done -->

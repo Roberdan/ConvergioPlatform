@@ -15,6 +15,8 @@
 | Thor | `validate-wave` (Opus, per-wave only) | Advance/merge without Thor |
 | Merge | `wave-worktree.sh merge` | Unresolved PR comments |
 | Close | `plan-db.sh complete` | Pending tasks |
+| Calibrate | `plan-db.sh calibrate-estimates` (auto after close) | Skipping calibration |
+| Post-mortem | `Agent(plan-post-mortem)` → `plan-db.sh add-learning` | No learnings extracted |
 
 Single fixes: direct edit OK.
 

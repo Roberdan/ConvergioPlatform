@@ -1,108 +1,154 @@
 # ConvergioPlatform
 
-Unified control plane for the Convergio ecosystem: Rust mesh daemon, real-time dashboard, evolution engine, and AI agent orchestration across a multi-node network.
+Unified AI agent swarm: Rust daemon, mesh networking, plan-driven development, centralized telemetry, self-improving evolution engine. Model-agnostic, tool-agnostic, machine-agnostic.
+
+## What is Convergio?
+
+A distributed control plane that orchestrates AI agents across any model (Claude, GPT, Gemini, local LLMs), any tool (Claude Code, Copilot CLI, OpenCode), and any machine (local + Tailscale mesh). Agents communicate through a centralized daemon, execute plans with quality gates (Thor), and learn from every execution.
 
 ## Architecture
 
-| Layer | Path | Language | What it does |
-|-------|------|----------|-------------|
-| **Daemon** | `daemon/` | Rust | P2P mesh networking (Tailscale + HMAC-SHA256), HTTP/WS/SSE API, TUI, IPC engine, SQLite WAL + CRDT sync |
-| **Dashboard** | `dashboard/` | JS | Control Room web app built on [MaranelloLuceDesign](https://github.com/Roberdan/MaranelloLuceDesign) Presentation Runtime |
-| **Evolution** | `evolution/` | TypeScript | Self-improving optimization loop: telemetry, proposals, experiments, guardrails |
-| **Scripts** | `scripts/` | Bash | Mesh operations, platform tooling, agent bridges, nightly guardians |
-| **Config** | `claude-config/` | Markdown | Shared Claude Code configuration (agents, skills, rules, commands) |
+| Layer | Path | Language | Purpose |
+|---|---|---|---|
+| **Daemon** | `daemon/` | Rust | P2P mesh, HTTP/WS/SSE API, IPC engine, SQLite WAL + CRDT, TUI |
+| **Dashboard** | `dashboard/` | JS | Control Room on [MaranelloLuceDesign](https://github.com/Roberdan/MaranelloLuceDesign) |
+| **Evolution** | `evolution/` | TypeScript | Self-improvement: telemetry → proposals → experiments → apply |
+| **Config** | `claude-config/` | Markdown | Canonical agent/skill/rule definitions |
+| **Scripts** | `scripts/` | Bash | Mesh ops, plan DB, agent bridge, digests |
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/Roberdan/ConvergioPlatform.git
 cd ConvergioPlatform
-./setup.sh                    # symlinks, hooks, env
-cd daemon && cargo build --release  # build Rust daemon
-./dashboard/start.sh          # Control Room on http://localhost:8420
+./setup.sh                              # env vars, verify symlinks
+cd daemon && cargo build --release      # build Rust daemon
+./daemon/start.sh                       # start daemon on :8420
+convergioOn                             # enable swarm overlay
+convergio list                          # see available agents
+convergio menu                          # interactive agent launcher
 ```
 
-## Dashboard
+## Convergio CLI
 
-The Control Room is served by the Rust daemon on port 8420. Built with MaranelloLuceDesign v4.17.0:
+```bash
+# Agents
+convergio list                          # available agents
+convergio menu                          # interactive selection
+convergio planner                       # launch as planner (Claude)
+convergio executor pippo --tool copilot # launch as "pippo" on Copilot
+convergio as mario --tool opencode      # custom name on OpenCode
 
-- **8 views**: Overview, Plans, Mesh, Brain, Ideas, IPC, Admin, Terminal
-- **Real-time**: WebSocket for live updates, SSE for streaming operations
-- **4 themes**: Editorial, Nero, Avorio, Colorblind (WCAG 2.2 AA)
-- **Components**: `mn-app-shell`, `mn-chart`, `mn-data-table`, `mn-gauge`, `mn-gantt`, `mn-modal`, `mn-tabs`
-- **Brain**: Neural visualization of agent activity (force-directed canvas)
+# Communication (via daemon IPC)
+convergio who                           # active agents across all machines
+convergio msg pippo pluto "review auth" # send directed message
+convergio read pluto                    # read messages
+convergio broadcast pippo "standup"     # message all agents
+
+# Toggle
+convergio on                            # enable in ALL repos
+convergio off                           # clean Claude/Copilot
+convergio status                        # current state + daemon health
+
+# Workflow
+convergio plans                         # active plans
+convergio session                       # git + plans + PRs status
+convergio learnings                     # review session learnings
+convergio auto-update                   # analyze + propose improvements
+
+# Telemetry
+convergio models                        # available models (cloud + local)
+convergio metrics                       # system metrics
+convergio skills                        # agent skill pool
+convergio alerts                        # pending notifications
+```
+
+## Agent Swarm
+
+13 named agents, each with a specific role and default model:
+
+| Agent | Role | Model | Tool |
+|---|---|---|---|
+| `planner` | Plan creation + orchestration | opus | claude |
+| `executor` | Task execution with TDD | codex | copilot |
+| `thor` | Quality validation (10 gates) | opus | claude |
+| `prompt` | Requirements extraction | opus | claude |
+| `reviewer` | Independent plan review | sonnet | claude |
+| `rex` | Code review — patterns + security | haiku | claude |
+| `debugger` | Adversarial 3-hypothesis debugging | sonnet | claude |
+| `postmortem` | Plan execution analysis | opus | claude |
+| `optimizer` | Context + token optimization | opus | claude |
+| `auditor` | Deep cross-validated repo audit | opus | claude |
+| `convergio` | Platform control plane expert | sonnet | claude |
+| `llm` | Local LLM infrastructure | sonnet | claude |
+| `check` | Quick session status recap | mini | copilot |
+
+Agents communicate through the daemon IPC engine — works cross-terminal, cross-machine, cross-tool.
+
+## Plan-Driven Development
+
+```
+/prompt → /planner → review → DB → /execute → Thor → merge → learnings
+```
+
+| Phase | Agent | What |
+|---|---|---|
+| Requirements | `prompt` | Extract F-xx requirements from user input |
+| Planning | `planner` | Create spec.yaml with waves, tasks, models |
+| Review | `reviewer` | Independent quality review (fresh context) |
+| Execution | `executor` | TDD, one task at a time, drift detection |
+| Validation | `thor` | 10-gate quality check per wave (zero tolerance) |
+| Merge | — | Squash merge into main via worktree |
+| Learning | `postmortem` | Extract learnings → knowledge base |
+| Calibration | — | Auto-calibrate estimation accuracy |
+
+## Daemon API (76+ endpoints)
+
+| Category | Examples |
+|---|---|
+| Plans | `/api/plan-db/list`, `/api/plan-db/execution-tree/:id` |
+| IPC | `/api/ipc/agents`, `/api/ipc/send`, `/api/ipc/messages` |
+| Mesh | `/api/mesh`, `/api/mesh/topology`, `/api/mesh/metrics` |
+| Evolution | `/api/evolution/proposals`, `/api/evolution/roi` |
+| Dashboard | `/api/overview`, `/api/tokens/daily` |
+| Real-time | `WS /ws/dashboard`, `WS /ws/brain`, `WS /ws/pty` |
+| Telemetry | `/api/ipc/metrics`, `/api/ipc/models`, `/api/ipc/budget` |
+
+## Telemetry & Learning
+
+| System | Storage | Updates |
+|---|---|---|
+| Knowledge Base | `knowledge_base` table | `plan-db.sh kb-write` |
+| Plan Learnings | `plan_learnings` table | After task/wave/plan |
+| Plan Actuals | `plan_actuals` table | Tokens, cost, ROI, Thor rejections |
+| Metrics History | `metrics_history` table | Runtime, mesh, agent performance |
+| Earned Skills | `earned_skills` table | Promoted learnings → reusable skills |
+| Evolution | `evolution_proposals` table | Hypothesis → experiment → apply/reject |
+| Session Signals | `session-learnings.jsonl` | Real-time execution signals |
 
 ## Mesh Network
 
-Tailscale-based P2P mesh with HMAC-SHA256 authentication. One coordinator + N worker nodes.
-
-| Command | What |
-|---------|------|
-| `scripts/mesh/mesh-provision-node.sh <peer>` | Provision a new node |
-| `scripts/mesh/mesh-heartbeat.sh` | Check node health |
-| `scripts/mesh/mesh-sync-all.sh` | Sync config across mesh |
-| `scripts/mesh/mesh-preflight.sh` | Validate tools, auth, versions |
-| `scripts/platform/buongiorno.sh` | Morning routine: update all nodes |
-
-## Agent IPC
-
-AI agents (Claude Code, GitHub Copilot) register and communicate via the daemon IPC system.
+Tailscale P2P mesh with HMAC-SHA256. One coordinator + N workers.
 
 ```bash
-# Register an agent
-scripts/platform/agent-bridge.sh --register --name planner --type claude
-
-# List active agents
-curl localhost:8420/api/ipc/agents
-
-# Send a message
-curl -X POST localhost:8420/api/ipc/send \
-  -H 'Content-Type: application/json' \
-  -d '{"sender_name":"planner","channel":"planning","content":"W2 starting"}'
-```
-
-See [Agent Onboarding Guide](docs/guides/agent-onboarding.md) and [IPC API Reference](docs/api/ipc-agents.md).
-
-## Plan Database
-
-SQLite-backed plan/task/wave tracking with CLI tooling:
-
-```bash
-plan-db.sh status              # quick status
-plan-db.sh kanban              # kanban board
-plan-db.sh execution-tree 665  # tree view with statuses
-pianits.sh                     # CLI plan dashboard
-pianits.sh kanban              # kanban shortcut
+convergio heartbeat                     # check all nodes
+scripts/mesh/mesh-provision-node.sh     # provision new node
+scripts/mesh/mesh-sync-all.sh           # sync config across mesh
 ```
 
 ## Testing
 
 ```bash
-cd daemon && cargo test                    # Rust daemon tests
-cd evolution && npm ci && npm test         # Evolution engine tests
-scripts/platform/test-agent-ipc.sh        # Agent IPC E2E (requires daemon)
-npx playwright test                        # Dashboard E2E (requires daemon)
+cd daemon && cargo test                 # Rust daemon (107 modules)
+cd evolution && npx vitest run          # Evolution engine (43 tests)
+convergio status                        # verify CLI + daemon + symlinks
 ```
-
-## API Endpoints (76 total)
-
-The daemon exposes REST, WebSocket, and SSE endpoints on port 8420:
-
-| Category | Examples |
-|----------|---------|
-| Dashboard | `GET /api/overview`, `/api/mission`, `/api/tokens/daily` |
-| Plans | `GET /api/plan-db/list`, `/api/plan-db/execution-tree/:id` |
-| Mesh | `GET /api/mesh`, `/api/mesh/metrics`, `/api/mesh/topology` |
-| IPC | `GET /api/ipc/agents`, `/api/ipc/budget`, `/api/ipc/models` |
-| Ideas | `GET /api/ideas`, `POST /api/ideas` |
-| Real-time | `WS /ws/dashboard`, `WS /ws/brain`, `WS /ws/pty` |
-| Streaming | `SSE /api/chat/stream/:sid`, `/api/plan/preflight` |
 
 ## Ecosystem
 
 | Repo | Role |
-|------|------|
-| **ConvergioPlatform** (this) | Control plane, mesh, orchestration |
+|---|---|
+| **ConvergioPlatform** (this) | Control plane, swarm orchestration |
 | [MaranelloLuceDesign](https://github.com/Roberdan/MaranelloLuceDesign) | Ferrari Luce design system |
 | convergio | Backend platform (Go + Python) |
 | ConvergioCLI | Native CLI (C++) |

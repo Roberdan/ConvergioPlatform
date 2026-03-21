@@ -1,8 +1,6 @@
-## <!-- v2.0.0 -->
-
+---
 name: research
 version: "2.0.0"
-
 ---
 
 # Research Phase

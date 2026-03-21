@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-# setup.sh — ConvergioPlatform single-entry-point installer
+# setup.sh — ConvergioPlatform installer
+# Configures env vars and verifies project state.
+# Symlinks (.claude/commands etc.) are committed to git — no global ~/.claude mutation.
 # Usage: git clone <repo> && cd ConvergioPlatform && ./setup.sh
 set -euo pipefail
 
 PLATFORM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-detect_platform() {
-  case "$(uname -s)" in
-    Darwin) echo "macOS" ;;
-    Linux)  echo "Linux" ;;
-    *)      echo "Unknown"; return 1 ;;
-  esac
-}
 
 shell_profile() {
   if [[ -n "${ZSH_VERSION:-}" ]] || [[ "$SHELL" == */zsh ]]; then
@@ -26,73 +20,62 @@ warn() { echo "  [WARN] $1"; }
 fail() { echo "  [FAIL] $1"; }
 
 main() {
-  local platform profile db_path settings_src
-  local s_sym="FAIL" s_set="SKIP" s_db="FAIL" s_daemon="WARN"
-
+  local profile db_path
   echo "=== ConvergioPlatform Setup ==="
-  platform="$(detect_platform)" || { fail "Unsupported platform"; exit 1; }
-  echo "Platform: $platform | Directory: $PLATFORM_DIR"
+  echo "Platform: $(uname -s) | Directory: $PLATFORM_DIR"
   echo ""
 
-  # 1. Symlinks via existing script
-  local symlink_script="$PLATFORM_DIR/scripts/platform/setup-claude-symlinks.sh"
-  if [[ -x "$symlink_script" ]]; then
-    bash "$symlink_script" "$PLATFORM_DIR"
-    s_sym="OK"
-  else
-    fail "Symlink script not found: $symlink_script"
-    exit 1
+  # 1. Verify project-level symlinks (committed to git, no setup needed)
+  local missing=0
+  for link in commands agents rules reference CLAUDE.md; do
+    if [[ -L "$PLATFORM_DIR/.claude/$link" ]]; then
+      ok "Symlink: .claude/$link → $(readlink "$PLATFORM_DIR/.claude/$link")"
+    else
+      fail "Missing symlink: .claude/$link (run: scripts/platform/setup-claude-symlinks.sh)"
+      missing=1
+    fi
+  done
+
+  # 2. Recreate symlinks if any missing
+  if [[ "$missing" -eq 1 ]]; then
+    echo ""
+    echo "Recreating missing symlinks..."
+    bash "$PLATFORM_DIR/scripts/platform/setup-claude-symlinks.sh" "$PLATFORM_DIR"
   fi
   echo ""
 
-  # 2. Copy .claude/settings.json if present in project
-  settings_src="$PLATFORM_DIR/.claude/settings.json"
-  if [[ -f "$settings_src" ]]; then
-    mkdir -p "$HOME/.claude"
-    cp "$settings_src" "$HOME/.claude/settings.json"
-    s_set="OK"
-  fi
-
-  # 3. Set DASHBOARD_DB in shell profile if not already set
+  # 3. Set DASHBOARD_DB in shell profile (only global mutation)
   db_path="$PLATFORM_DIR/data/dashboard.db"
   profile="$(shell_profile)"
   if grep -q 'DASHBOARD_DB' "$profile" 2>/dev/null; then
-    s_db="OK"
+    ok "Database: DASHBOARD_DB already set"
   else
     echo "export DASHBOARD_DB=\"$db_path\"" >> "$profile"
-    s_db="OK"
+    ok "Database: DASHBOARD_DB=$db_path (added to $profile)"
   fi
   export DASHBOARD_DB="$db_path"
 
-  # 4. Check daemon binary
-  local daemon_bin="$PLATFORM_DIR/daemon/target/release/claude-core"
-  if [[ -x "$daemon_bin" ]]; then
-    s_daemon="OK"
+  # 4. Ensure data/dashboard.db symlink in ~/.claude/data/ (for global tools)
+  mkdir -p "$HOME/.claude/data"
+  if [[ ! -L "$HOME/.claude/data/dashboard.db" ]]; then
+    ln -sf "$db_path" "$HOME/.claude/data/dashboard.db"
+    ok "Global DB symlink: ~/.claude/data/dashboard.db"
+  else
+    ok "Global DB symlink: already exists"
   fi
 
-  # 5. Summary checklist
-  echo "=== Setup Summary ==="
-  local lnk_count
-  lnk_count="$(find "$HOME/.claude" -maxdepth 1 -type l 2>/dev/null | wc -l | tr -d ' ')"
-
-  if [[ "$s_sym" == "OK" ]]; then
-    ok "Symlinks: ~/.claude/ -> ConvergioPlatform/claude-config/ ($lnk_count links)"
-  else fail "Symlinks: setup failed"; fi
-
-  if [[ "$s_set" == "OK" ]]; then
-    ok "Settings: .claude/settings.json copied"
-  else warn "Settings: no project settings.json (create .claude/settings.json to enable)"; fi
-
-  if [[ "$s_db" == "OK" ]]; then
-    ok "Database: DASHBOARD_DB=$db_path"
-  else fail "Database: DASHBOARD_DB not configured"; fi
-
-  if [[ "$s_daemon" == "OK" ]]; then
+  # 5. Check daemon binary
+  local daemon_bin="$PLATFORM_DIR/daemon/target/release/claude-core"
+  if [[ -x "$daemon_bin" ]]; then
     ok "Daemon: $daemon_bin"
-  else warn "Daemon: not built (run: cd daemon && cargo build --release)"; fi
+  else
+    warn "Daemon: not built (run: cd daemon && cargo build --release)"
+  fi
 
   echo ""
-  echo "Done. Restart your shell or run: source $profile"
+  echo "Done. Global ~/.claude/ untouched (settings, commands, agents stay yours)."
+  echo "Project config active via .claude/ symlinks → claude-config/."
+  [[ -n "${missing:-}" && "$missing" -eq 1 ]] && echo "Restart shell or: source $profile"
 }
 
 main "$@"
