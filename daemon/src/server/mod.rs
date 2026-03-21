@@ -26,6 +26,7 @@ pub mod sse;
 pub mod sse_chat;
 pub mod sse_delegate;
 pub mod sse_preflight;
+pub mod sse_stream;
 pub mod state;
 pub mod ws;
 pub mod ws_brain;
