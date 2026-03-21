@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.4.0] - 2026-03-21
+
+### Added
+- Daemon API: `GET /api/runs` and `GET /api/runs/:id` — execution run history and detail
+- Daemon API: `GET /api/metrics` — platform telemetry endpoint (latency, cost, agent count)
+- Daemon API: `POST /api/ingest` — document ingestion trigger (PDF/DOCX/XLSX/URL/folder)
+- Daemon pause bridge: `POST /api/runs/:id/pause` and `/resume` — suspends execution, preserves state
+- CLI thin wrappers: `convergio-run-ops.sh`, `convergio-metrics.sh`, `convergio-ingest.sh` delegate to daemon when available, fall back to sqlite3 with warning when daemon is not running
+
+### Changed
+- Bash scripts consolidated into daemon API calls — CLI scripts are now thin wrappers over HTTP
+- `convergio-run-ops.sh`: reads `execution_runs` via daemon API; sqlite3 fallback on connection refused
+
 ## [3.3.0] - 2026-03-21
 
 ### Added

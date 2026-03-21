@@ -213,9 +213,11 @@ Supports non-code workstreams: research, strategy, design, legal, marketing, ana
 | Abort | `convergio stop [run_id]` — broadcast ABORT |
 | Toggle | `convergioOff` / `convergioOn` |
 
-## Daemon API (76+ endpoints)
+## Daemon API (82+ endpoints)
 
-IPC: `agents`, `send`, `messages`, `channels`, `context`, `locks` | Plans: `list`, `execution-tree`, `validate-wave` | Mesh: `peers`, `topology`, `delegate` | Evolution: `proposals`, `approve`, `experiments` | Real-time: `WS /ws/dashboard`, `SSE /api/chat/stream`
+IPC: `agents`, `send`, `messages`, `channels`, `context`, `locks` | Plans: `list`, `execution-tree`, `validate-wave` | Mesh: `peers`, `topology`, `delegate` | Evolution: `proposals`, `approve`, `experiments` | Runs: `GET /api/runs`, `GET /api/runs/:id`, `POST /api/runs/:id/pause`, `POST /api/runs/:id/resume` | Metrics: `GET /api/metrics` | Ingestion: `POST /api/ingest` | Real-time: `WS /ws/dashboard`, `SSE /api/chat/stream`
+
+CLI scripts (`convergio-run-ops.sh`, `convergio-metrics.sh`, `convergio-ingest.sh`) are thin wrappers over these endpoints; they fall back to read-only `sqlite3` with a warning when the daemon is not running.
 
 ## Mesh Network
 

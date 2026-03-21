@@ -50,7 +50,16 @@ Stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde+rmp-serde · hm
 | `cd daemon && cargo test` | Tests |
 | `./daemon/start.sh` | Run |
 
-API (22 modules): agents · chat · coordinator · dashboard · github · heartbeat · ideas · ipc · mesh · notify · peers · peers_ext · plan_db (import, lifecycle, ops, query) · plans · workers · mesh_provision · sse · ws · ws_pty
+API (25 modules): agents · chat · coordinator · dashboard · github · heartbeat · ideas · ipc · mesh · notify · peers · peers_ext · plan_db (import, lifecycle, ops, query) · plans · workers · mesh_provision · sse · ws · ws_pty · runs · metrics · ingest
+
+| New Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/runs` | GET | List execution runs (history, cost, duration) |
+| `/api/runs/:id` | GET | Single run detail |
+| `/api/runs/:id/pause` | POST | Suspend execution, preserve state |
+| `/api/runs/:id/resume` | POST | Resume a paused run |
+| `/api/metrics` | GET | Platform telemetry (latency, cost, agent count) |
+| `/api/ingest` | POST | Trigger document ingestion (PDF/DOCX/XLSX/URL/folder) |
 
 ## Dashboard
 
