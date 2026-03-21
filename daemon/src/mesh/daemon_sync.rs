@@ -1,3 +1,5 @@
+#[path = "daemon_sync_db.rs"]
+mod sync_db;
 #[path = "daemon_sync_loops.rs"]
 mod loops;
 #[path = "daemon_sync_frame.rs"]
