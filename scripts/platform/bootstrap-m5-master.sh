@@ -57,11 +57,16 @@ scp -r "$M3_TS:.claude/agents/" "$CLAUDE_DIR/agents/" 2>/dev/null || true
 scp -r "$M3_TS:.claude/reference/" "$CLAUDE_DIR/reference/" 2>/dev/null || true
 scp -r "$M3_TS:.claude/commands/" "$CLAUDE_DIR/commands/" 2>/dev/null || true
 
-# Copy scripts (digest/hook tooling only — not dashboard or rust)
-echo "  Copying scripts from M3..."
-scp -r "$M3_TS:.claude/scripts/*.sh" "$CLAUDE_DIR/scripts/" 2>/dev/null || true
-scp -r "$M3_TS:.claude/scripts/lib/" "$CLAUDE_DIR/scripts/lib/" 2>/dev/null || true
-scp -r "$M3_TS:.claude/scripts/archive/" "$CLAUDE_DIR/scripts/archive/" 2>/dev/null || true
+# Symlink scripts from ConvergioPlatform (NOT copy — single source of truth)
+echo "  Symlinking scripts from ConvergioPlatform..."
+mkdir -p "$CLAUDE_DIR/scripts/lib"
+for f in "$PLATFORM_DIR/claude-config/scripts/"*.sh; do
+  ln -sf "$f" "$CLAUDE_DIR/scripts/$(basename "$f")"
+done
+for f in "$PLATFORM_DIR/claude-config/scripts/lib/"*.sh; do
+  ln -sf "$f" "$CLAUDE_DIR/scripts/lib/$(basename "$f")"
+done
+echo "  OK: $(ls "$CLAUDE_DIR/scripts/"*.sh 2>/dev/null | wc -l | tr -d ' ') scripts symlinked"
 
 # ------ Step 4: Set up peers.conf ------
 echo "[4/9] Setting up mesh config..."
@@ -74,6 +79,14 @@ echo "[5/9] Setting environment..."
 if ! grep -q 'DASHBOARD_DB' ~/.zshenv 2>/dev/null; then
   echo "export DASHBOARD_DB=\"$PLATFORM_DIR/data/dashboard.db\"" >> ~/.zshenv
   echo "  Added DASHBOARD_DB to .zshenv"
+fi
+if ! grep -q '_ZO_DOCTOR' ~/.zshenv 2>/dev/null; then
+  echo 'export _ZO_DOCTOR=0' >> ~/.zshenv
+  echo "  Added _ZO_DOCTOR=0 to .zshenv"
+fi
+if ! grep -q 'claude/scripts' ~/.zshenv 2>/dev/null; then
+  echo 'export PATH="$HOME/.claude/scripts:$PATH"' >> ~/.zshenv
+  echo "  Added ~/.claude/scripts to PATH in .zshenv"
 fi
 export DASHBOARD_DB="$PLATFORM_DIR/data/dashboard.db"
 

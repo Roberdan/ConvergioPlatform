@@ -78,7 +78,7 @@ load_modules_for_command() {
 	validate | validate-task | validate-wave | validate-fxx | check-readiness | evaluate-wave | sync | auto-approve)
 		source_module "plan-db-validate.sh"
 		;;
-	kanban | kanban-json | json | status | execution-tree)
+	kanban | kanban-json | json | status | execution-tree | show | tasks)
 		source_module "plan-db-display.sh"
 		;;
 	import | render | get-context)
@@ -262,6 +262,17 @@ agent-tokens)
 	shift
 	cmd_agent_tokens "$@"
 	;;
+# Aliases
+show) cmd_execution_tree "${2:?plan_id required}" ;;
+tasks) cmd_execution_tree "${2:?plan_id required}" ;;
+task-detail | task-info)
+	sqlite3 -json "$DB_FILE" "
+		SELECT t.task_id, t.title, t.description, t.status, t.priority, t.model,
+		       t.effort_level, t.test_criteria, t.executor_agent,
+		       w.wave_id, w.name AS wave_name, w.worktree_path
+		FROM tasks t JOIN waves w ON t.wave_id_fk = w.id
+		WHERE t.plan_id = ${2:?plan_id required} AND t.task_id = '${3:?task_id required}';"
+	;;
 *)
 	echo "[ERROR] Unknown command: '${1:-}'" >&2
 	echo "" >&2
@@ -325,6 +336,9 @@ agent-tokens)
 	echo "  json <plan_id>                 Plan as JSON"
 	echo "  kanban-json                    Kanban as JSON"
 	echo "  execution-tree <plan_id>       Show execution tree with statuses"
+	echo "  show <plan_id>                 Alias for execution-tree"
+	echo "  tasks <plan_id>                Alias for execution-tree"
+	echo "  task-detail <plan_id> <task_id>  Single task JSON (e.g. task-detail 680 W1-01)"
 	echo ""
 	echo "Knowledge Base:"
 	echo "  kb-write <domain> <title> <content> [opts]  Write to KB"

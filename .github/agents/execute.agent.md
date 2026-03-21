@@ -44,6 +44,18 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 | 6    | **CANNOT mark done** — only wave Thor can. plan-db-safe.sh sets 'submitted' |
 | 7    | Prefer merge-async for overlapping execution, sync merge as fallback   |
 
+## plan-db.sh Quick Reference
+
+```
+get-context <plan_id>             # Full plan+tasks JSON (PREFERRED for init)
+show <plan_id>                    # Tree view with statuses (alias: execution-tree)
+task-detail <plan_id> <task_id>   # Single task JSON
+update-task <db_id> <status>      # Change task status
+validate-wave <wave_db_id>        # Thor validates wave
+```
+
+DO NOT use: `list-tasks`, `get-tasks`, `show-tasks`, `task-list`, `task-info`.
+
 ## Workflow
 
 ### Phase 1: Initialize (Self-Healing)

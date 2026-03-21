@@ -29,7 +29,10 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 - Always pass worktree path, constraints, readiness bundle, and CI knowledge.
 
 ## Required Flow
-1. Initialize + auto-heal plan/worktree metadata.
+1. Initialize: `bash claude-config/scripts/plan-db.sh get-context {plan_id}` — returns full JSON with tasks, worktree, constraints.
+   - To view tree: `bash claude-config/scripts/plan-db.sh show {plan_id}` (alias for `execution-tree`)
+   - To view single task: `bash claude-config/scripts/plan-db.sh task-detail {plan_id} {task_id}`
+   - Auto-heal plan/worktree metadata if needed.
 2. Run readiness checks and stop on critical warnings.
 3. Run drift check (MANDATORY before first task).
 4. **Per-wave loop** (repeat for each wave):

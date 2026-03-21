@@ -15,8 +15,11 @@ _Why: Plan 677 — executor queried `SELECT db_id` which doesn't exist. Column i
 ```
 # View plan/tasks:
 execution-tree <plan_id>          # Tree view with statuses
+show <plan_id>                    # Alias for execution-tree
+tasks <plan_id>                   # Alias for execution-tree
 json <plan_id>                    # Full plan as JSON
 status [project_id]               # Quick status
+task-detail <plan_id> <task_id>   # Single task JSON (e.g. task-detail 680 W1-01)
 
 # Task status updates:
 update-task <task_db_id> <status> [notes]   # pending|in_progress|submitted|done|blocked
@@ -34,12 +37,12 @@ complete <plan_id>                # Mark done
 cancel <plan_id> [reason]         # Cancel
 
 # Context:
-get-context <plan_id>             # Plan context for executor prompt
+get-context <plan_id>             # Full plan+tasks JSON for executor prompt (PREFERRED)
 get-worktree <plan_id>            # Worktree path
 ```
 
-Commands that DO NOT EXIST: `list-tasks`, `get-tasks`, `show-tasks`, `task-list`.
-Use `execution-tree` or `json` or direct SQL query instead.
+Commands that DO NOT EXIST: `list-tasks`, `get-tasks`, `show-tasks`, `task-list`, `task-info`.
+Use `execution-tree` (or `show`), `task-detail`, `get-context`, or direct SQL instead.
 _Why: Plan 677 — executor called `list-tasks` which doesn't exist, causing error cascade._
 
 ## Routing

@@ -34,6 +34,8 @@ Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 |---|---|
 | `data/dashboard.db` | Platform DB (env: `DASHBOARD_DB`) |
 | `~/.claude/data/dashboard.db` | Symlink to above |
+| `~/.claude/scripts/*.sh` | Symlinks to `claude-config/scripts/*.sh` (via bootstrap) |
+| `~/.claude/scripts/lib/*.sh` | Symlinks to `claude-config/scripts/lib/*.sh` |
 | `~/.claude/config/peers.conf` | Mesh config (per-machine) |
 | `daemon/Cargo.toml` | Rust deps (axum, rusqlite, tokio, ssh2, ratatui) |
 
