@@ -74,6 +74,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/metrics/cost",
     "/api/runs",
     "/api/runs/:id",
+    "/api/ingest/formats",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -120,6 +121,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/runs",
     "/api/runs/:id/pause",
     "/api/runs/:id/resume",
+    "/api/ingest",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",

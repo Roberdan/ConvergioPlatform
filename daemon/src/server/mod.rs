@@ -1,5 +1,6 @@
 pub mod api_agents;
 pub mod api_chat;
+pub mod api_ingest;
 pub mod api_coordinator;
 pub mod api_dashboard;
 pub mod api_evolution;
