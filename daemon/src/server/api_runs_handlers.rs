@@ -4,7 +4,7 @@ use super::state::{ApiError, ServerState};
 use axum::extract::{Path, State};
 use axum::Json;
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 #[derive(Deserialize)]
 pub struct UpdateRunBody {
@@ -25,6 +25,8 @@ pub async fn update_run(
     Path(id): Path<i64>,
     Json(body): Json<UpdateRunBody>,
 ) -> Result<Json<Value>, ApiError> {
+    // Capture status before body is moved into the sync block
+    let new_status = body.status.clone();
     // Perform DB update in a sync block — conn and vals are !Send, so must not
     // cross any await boundary. This block returns only the rows_changed count.
     let rows_changed = {
@@ -71,6 +73,15 @@ pub async fn update_run(
         return Err(ApiError::bad_request(format!("run {id} not found")));
     }
 
+    // Broadcast status change so dashboard updates in real time
+    if let Some(status) = new_status {
+        let _ = state.ws_tx.send(json!({
+            "type": "run_update",
+            "run_id": id,
+            "status": status,
+        }));
+    }
+
     // Re-fetch from state to include plan_name and delegation_cost
     get_run(State(state), Path(id)).await
 }
@@ -93,6 +104,13 @@ pub async fn pause_run(
         return Err(ApiError::bad_request(format!("run {id} not found")));
     }
 
+    // Broadcast pause so dashboard updates in real time
+    let _ = state.ws_tx.send(json!({
+        "type": "run_update",
+        "run_id": id,
+        "status": "paused",
+    }));
+
     get_run(State(state), Path(id)).await
 }
 
@@ -113,6 +131,13 @@ pub async fn resume_run(
     if rows_changed == 0 {
         return Err(ApiError::bad_request(format!("run {id} not found")));
     }
+
+    // Broadcast resume so dashboard updates in real time
+    let _ = state.ws_tx.send(json!({
+        "type": "run_update",
+        "run_id": id,
+        "status": "running",
+    }));
 
     get_run(State(state), Path(id)).await
 }

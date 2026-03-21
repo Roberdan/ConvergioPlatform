@@ -185,5 +185,11 @@ async fn create_run(
     )
     .map_err(|e| ApiError::internal(format!("create run failed: {e}")))?;
     let id = conn.last_insert_rowid();
+    // Broadcast run creation so dashboard updates in real time
+    let _ = state.ws_tx.send(json!({
+        "type": "run_update",
+        "run_id": id,
+        "status": "running",
+    }));
     Ok(Json(json!({"id": id})))
 }
