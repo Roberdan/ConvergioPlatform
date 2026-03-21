@@ -39,6 +39,12 @@ get_agent() {
 
 _daemon_ok() { curl -sf --connect-timeout 1 "$DAEMON_URL/api/ipc/status" > /dev/null 2>&1; }
 
+_cleanup_agent() {
+  local name="${CONVERGIO_AGENT_NAME:-}"
+  [ -n "$name" ] && "$BUS" unregister "$name" 2>/dev/null
+  echo -e "\n${Y}Agent $name stopped.${N}"
+}
+
 cmd_help() {
   echo -e "${B}convergio${N} — Swarm CLI v2.0.0\n"
   echo -e "${B}Solve (virtual organization):${N}"
@@ -207,12 +213,19 @@ cmd_named() {
 
 _launch_tool() {
   local tool="$1" prompt="$2"
-  # Set agent name in env so hooks can check inbox
   export CONVERGIO_AGENT_NAME="${CONVERGIO_AGENT_NAME:-agent}"
+
+  # Trap Ctrl+C for clean shutdown
+  trap '_cleanup_agent; exit 0' INT TERM
+
   case "$tool" in
     claude)
-      command -v claude &>/dev/null && { claude -p "$prompt" 2>/dev/null || claude; } \
-        || { echo -e "${Y}Claude CLI not found${N}"; echo "$prompt"; } ;;
+      if command -v claude &>/dev/null; then
+        # Interactive mode: prompt as first argument (NOT -p which is silent print mode)
+        claude "$prompt"
+      else
+        echo -e "${Y}Claude CLI not found${N}"; echo "$prompt"
+      fi ;;
     copilot)
       command -v gh &>/dev/null && { echo "$prompt"; gh copilot 2>/dev/null; } \
         || { echo -e "${Y}gh CLI not found${N}"; echo "$prompt"; } ;;
