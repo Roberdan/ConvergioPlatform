@@ -206,48 +206,49 @@ cmd_solve() {
 
 cmd_stop() {
   local run_id="${1:-}"
-  echo -e "${Y}Stopping ALL Convergio processes...${N}"
+  echo -e "${Y}Stopping Convergio processes (NOT your other work)...${N}"
 
   # 1. Broadcast abort to all agents via daemon
   "$BUS" broadcast "system" "ABORT: User requested full stop" 2>/dev/null || true
 
-  # 2. Kill all claude processes spawned by convergio
+  # 2. Kill ONLY convergio-spawned processes (not user's own Claude/Copilot)
   pkill -f "convergio-autopilot" 2>/dev/null && echo "  Killed: autopilot"
-  pkill -f "convergio-menubar" 2>/dev/null && echo "  Killed: menubar"
 
-  # 3. Kill all Claude Code sessions (agent subprocesses)
-  pgrep -f "claude" 2>/dev/null | while read pid; do
-    local cmdline
-    cmdline=$(ps -p "$pid" -o args= 2>/dev/null)
-    # Only kill Claude sessions that were spawned with convergio agent prompts
-    if echo "$cmdline" | grep -qE "Sei (Ali|l'agente|il tuo nome)"; then
-      kill "$pid" 2>/dev/null && echo "  Killed: claude PID $pid"
-    fi
+  # 3. Kill agent sessions — identified by CONVERGIO_AGENT_NAME env var
+  #    This is safe: only processes launched via `convergio <agent>` have this env
+  ps -eo pid,command 2>/dev/null | grep "CONVERGIO_AGENT_NAME" | grep -v grep | while read pid rest; do
+    kill "$pid" 2>/dev/null && echo "  Killed: agent PID $pid"
   done
 
-  # 4. Cancel active execution run
+  # 4. Cancel active execution runs in DB
+  local db="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
   if [ -n "$run_id" ]; then
-    sqlite3 "${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}" \
-      "UPDATE execution_runs SET status='cancelled', completed_at=datetime('now') WHERE id=$run_id;" 2>/dev/null
-    echo "  Run #$run_id cancelled in DB"
+    sqlite3 "$db" "UPDATE execution_runs SET status='cancelled', completed_at=datetime('now') WHERE id=$run_id;" 2>/dev/null
+    echo "  Run #$run_id cancelled"
+  else
+    local active
+    active=$(sqlite3 "$db" "SELECT count(*) FROM execution_runs WHERE status='running';" 2>/dev/null)
+    if [ "${active:-0}" -gt 0 ]; then
+      sqlite3 "$db" "UPDATE execution_runs SET status='cancelled', completed_at=datetime('now') WHERE status='running';" 2>/dev/null
+      echo "  Cancelled $active running execution(s)"
+    fi
   fi
 
-  # 5. Unregister all convergio agents from daemon
+  # 5. Unregister all convergio agents from daemon (NOT the daemon itself)
   if _daemon_ok; then
     curl -sf "$DAEMON_URL/api/ipc/agents" 2>/dev/null | python3 -c "
 import sys, json
 try:
-    agents = json.load(sys.stdin).get('agents', [])
-    for a in agents:
+    for a in json.load(sys.stdin).get('agents', []):
         print(a.get('name', ''))
 except: pass
 " 2>/dev/null | while read name; do
       [ -n "$name" ] && "$BUS" unregister "$name" 2>/dev/null
     done
-    echo "  All agents unregistered from daemon"
+    echo "  Agents unregistered from daemon"
   fi
 
-  echo -e "${G}All stopped.${N}"
+  echo -e "${G}Convergio stopped. Daemon still running (use 'convergio daemon stop' to stop daemon).${N}"
 }
 
 cmd_named() {

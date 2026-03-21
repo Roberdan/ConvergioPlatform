@@ -82,69 +82,21 @@ fn sse_data(block: &str) -> Option<&str> {
     block.lines().find_map(|l| l.strip_prefix("data: "))
 }
 
-// -- Claude API (POST https://api.anthropic.com/v1/messages) --
+// -- Claude direct API: DISABLED --
+// SECURITY: Never call Anthropic API directly with API keys.
+// All LLM calls MUST go through LiteLLM proxy (Provider::LiteLLM)
+// or through Claude Code/Copilot subscriptions (OAuth).
+// API keys are NOT allowed in Convergio.
 
 async fn stream_claude(
     tx: &mpsc::Sender<StreamChunk>,
     model: &str,
-    messages: &[ChatMessage],
+    _messages: &[ChatMessage],
 ) -> Result<(), String> {
-    let api_key =
-        std::env::var("ANTHROPIC_API_KEY").map_err(|_| "ANTHROPIC_API_KEY not set".to_string())?;
-    let body = json!({"model": model, "max_tokens": 4096, "stream": true, "messages": messages});
-    let resp = Client::new()
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", &api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("accept", "text/event-stream")
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Claude API request failed: {e}"))?;
-    if !resp.status().is_success() {
-        let s = resp.status();
-        return Err(format!(
-            "Claude API {s}: {}",
-            resp.text().await.unwrap_or_default()
-        ));
-    }
-    consume_sse(tx, resp, parse_claude_sse).await
-}
-
-/// Parse content_block_delta, message_start, message_delta, error from Claude SSE.
-fn parse_claude_sse(block: &str) -> Option<StreamChunk> {
-    let parsed: Value = serde_json::from_str(sse_data(block)?).ok()?;
-    match parsed.get("type")?.as_str()? {
-        "content_block_delta" => {
-            let text = parsed.get("delta")?.get("text")?.as_str()?;
-            Some(StreamChunk::Text(text.to_string()))
-        }
-        "message_delta" => {
-            let u = parsed.get("usage")?;
-            Some(StreamChunk::Usage(TokenUsage {
-                input_tokens: 0,
-                output_tokens: u.get("output_tokens")?.as_u64()?,
-            }))
-        }
-        "message_start" => {
-            let u = parsed.get("message")?.get("usage")?;
-            Some(StreamChunk::Usage(TokenUsage {
-                input_tokens: u.get("input_tokens").and_then(Value::as_u64).unwrap_or(0),
-                output_tokens: u.get("output_tokens").and_then(Value::as_u64).unwrap_or(0),
-            }))
-        }
-        "error" => {
-            let msg = parsed
-                .get("error")
-                .and_then(|e| e.get("message"))
-                .and_then(Value::as_str)
-                .unwrap_or("unknown error");
-            warn!("Claude SSE error: {msg}");
-            Some(StreamChunk::Error(msg.to_string()))
-        }
-        _ => None,
-    }
+    warn!("BLOCKED: Direct Anthropic API call attempted for model '{}'. Use LiteLLM proxy instead. Start with: convergio-llm.sh start", model);
+    Err(format!(
+        "BLOCKED: Direct API calls disabled. Route through LiteLLM proxy (localhost:4000) or use Claude Code/Copilot subscription. Model: {model}"
+    ))
 }
 
 // -- LiteLLM proxy (POST http://localhost:4000/v1/chat/completions) --

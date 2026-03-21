@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# batch-dispatcher.sh v1.0.0
-# Submit a plan task to Anthropic Batch API, poll for result, update DB.
-# Usage: batch-dispatcher.sh --task-id ID --plan-id ID --prompt "text"
-#        batch-dispatcher.sh <task_id> <plan_id> <prompt>
-# Eligibility: effort_level=1 AND type IN (chore, doc, documentation, test)
-# Requires: ANTHROPIC_API_KEY env var
+# batch-dispatcher.sh v2.0.0
+# DISABLED: Direct Anthropic API calls are not allowed.
+# All LLM access must go through Claude Code/Copilot subscription or LiteLLM proxy.
+# This script is kept for reference but will error if called.
+
+echo "BLOCKED: batch-dispatcher.sh uses direct Anthropic API (ANTHROPIC_API_KEY)." >&2
+echo "Convergio does NOT use API keys. Use Claude Code or LiteLLM proxy instead." >&2
+echo "For batch tasks: use convergio autopilot or convergio solve." >&2
+exit 1
+
+# --- LEGACY CODE BELOW (disabled) ---
 
 DB_FILE="${CLAUDE_DB:-$HOME/.claude/data/dashboard.db}"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

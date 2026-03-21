@@ -13,12 +13,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::warn;
 
 /// Determine LLM provider from model name.
-fn provider_for_model(model: &str) -> Provider {
-    if model.starts_with("claude") {
-        Provider::Claude
-    } else {
-        Provider::LiteLLM
-    }
+/// SECURITY: Always route through LiteLLM proxy — never call Anthropic API directly.
+/// LiteLLM handles auth, rate limiting, cost tracking, and supports all providers.
+fn provider_for_model(_model: &str) -> Provider {
+    Provider::LiteLLM
 }
 
 /// Cost estimate per 1k tokens (rough defaults for budget visibility).
