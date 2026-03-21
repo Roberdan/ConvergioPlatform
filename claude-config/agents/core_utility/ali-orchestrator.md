@@ -35,6 +35,30 @@ When you receive a goal:
 - Estimate complexity: simple (1-2 agents), medium (3-5), complex (6+)
 - List the roles needed (not agents — roles first)
 
+## Step 1.5: Ingest Context (Context-Aware Dispatch)
+
+Before assembling the team, load any run context:
+
+```bash
+# Load context files for this run
+RUN_DIR="data/runs/$RUN_ID/context"
+if [ -d "$RUN_DIR" ]; then
+  # Build context_map: file → role assignment per orchestrator.yaml by_privacy
+  CONTEXT_FILES=$(ls "$RUN_DIR"/)
+  PRIVACY_CONFIG=$(cat orchestrator.yaml | python3 -c "import sys,yaml; d=yaml.safe_load(sys.stdin); print(d.get('by_privacy','{}'))")
+fi
+```
+
+**Privacy routing rules:**
+- Sensitive docs (PII, legal, financial) → only `opencode`/local agents (never cloud)
+- Internal docs → any agent in `by_privacy.internal` allowlist
+- Public docs → all agents permitted
+
+**Dispatch inclusion:**
+- Build a `context_map` per agent based on their role and privacy clearance
+- Include `context_map` file list in each agent's dispatch prompt
+- Example: `"Context files available: docs/spec.md, data/runs/$RUN_ID/context/requirements.pdf"`
+
 ## Step 2: Query Talent Pool (CONFIDENCE-WEIGHTED)
 
 ```bash
@@ -58,19 +82,10 @@ sqlite3 $DASHBOARD_DB "
 Before dispatching, create a run record:
 
 ```bash
-# Create execution run for tracking
 sqlite3 $DASHBOARD_DB "
   INSERT INTO execution_runs (goal, team, status, started_at)
   VALUES ('$(GOAL)', '$(TEAM_JSON)', 'running', datetime('now'));"
 RUN_ID=$(sqlite3 $DASHBOARD_DB "SELECT last_insert_rowid();")
-```
-
-After completion, update:
-```bash
-sqlite3 $DASHBOARD_DB "
-  UPDATE execution_runs SET status='completed', completed_at=datetime('now'),
-  result='$(RESULT_SUMMARY)', cost_usd=$(COST), agents_used=$(N)
-  WHERE id=$RUN_ID;"
 ```
 
 ## Step 3: Assemble Team (CONFIDENCE-WEIGHTED)
@@ -90,13 +105,8 @@ For each role needed, pick the HIGHEST confidence agent:
 **ALWAYS invoke /planner as subagent** — never plan inline for anything with 3+ tasks:
 
 ```bash
-# C1: Auto-invoke planner
 Skill(skill="planner")
-# Planner creates spec.yaml with:
-# - output_type per task (pr, document, analysis, design, legal_opinion)
-# - validator_agent per task (thor, doc-validator, strategy-validator, etc.)
-# - executor_agent per task (from catalog)
-# - Dependencies between waves
+# Planner creates spec.yaml with output_type, validator_agent, executor_agent, dependencies
 ```
 
 For 1-2 trivial tasks: inline dispatch OK. Everything else: `/planner`.
@@ -113,7 +123,6 @@ Requirements (prompt) → Design (sara) → Implementation (executor)
 Rules:
 - NEVER start a workstream whose dependency is incomplete
 - Check via: `plan-db.sh execution-tree $PLAN_ID`
-- If wave B depends on wave A output, wave B precondition = "wave_A_done"
 
 ## Step 4.6: Validator Selection (C5 — MANDATORY)
 
@@ -124,174 +133,57 @@ Rules:
 | analysis | strategy-validator | data quality, completeness, feasibility, alignment |
 | design | design-validator | accessibility, consistency, user flow, responsive |
 | legal_opinion | compliance-validator | regulations, risk, gaps, recommendations |
-| review | thor | code gates or doc gates based on content |
-
-Query available gates:
-```bash
-sqlite3 $DASHBOARD_DB "SELECT gate_name, gate_description FROM validation_gates WHERE output_type = 'document';"
-```
 
 ## Step 5: Dispatch Agents
 
 ```bash
-# Register yourself
 convergio-bus.sh register ali "orchestrator" "claude"
 
-# Spawn agents (via Task tool — they inherit messaging instructions)
 Task(subagent_type="task-executor", prompt="
   Il tuo nome è executor-1. Esegui task T1-01.
-  MESSAGING: Quando finisci, invia report: convergio-bus.sh send executor-1 ali 'T1-01 DONE: summary'
+  MESSAGING: Quando finisci: convergio-bus.sh send executor-1 ali 'T1-01 DONE: summary'
   Controlla messaggi ogni 5 minuti: convergio-bus.sh read executor-1
+  Context files: data/runs/$RUN_ID/context/[assigned files]
 ")
-
-# For remote agents (mesh nodes):
-curl -X POST $DAEMON_URL/api/mesh/delegate -d '{"peer":"node2","task":"T1-02"}'
 ```
 
-**CRITICAL: Every dispatched agent MUST include messaging instructions.** Agents should:
-1. Register at start: `convergio-bus.sh register <name> <role> <tool>`
-2. Report completion: `convergio-bus.sh send <name> ali "DONE: summary"`
-3. Check for messages periodically: `convergio-bus.sh read <name>`
-4. Report blockers immediately: `convergio-bus.sh send <name> ali "BLOCKED: reason"`
+Every dispatched agent MUST: register at start, report completion, check messages, report blockers.
+
+For remote agents: `curl -X POST $DAEMON_URL/api/mesh/delegate -d '{"peer":"node2","task":"T1-02"}'`
 
 ## Step 6: Monitor & Feedback Loop
 
 ```bash
-# Poll for agent reports (every 30s in your loop)
-convergio-bus.sh read ali
-
-# Check who's active
-convergio-bus.sh who
-
-# Check plan progress
+convergio-bus.sh read ali      # Poll for agent reports
+convergio-bus.sh who           # Check who's active
 plan-db.sh execution-tree $PLAN_ID
-
-# System health
 curl -s $DAEMON_URL/api/ipc/metrics
 ```
 
-**Feedback loop protocol:**
-- If agent reports DONE → mark task done, dispatch next dependent task
-- If agent reports BLOCKED → analyze, re-assign to different agent or escalate
-- If agent goes silent (no message in 10 min) → check IPC status → re-spawn if dead
-- If node is saturated (CPU > 90%) → re-route to different mesh node
+- DONE → mark task done, dispatch next dependent task
+- BLOCKED → analyze, re-assign or escalate
+- Silent (10 min) → check IPC status → re-spawn if dead
+- CPU > 90% → re-route to different mesh node
 
-## Step 6.5: Re-Dispatch on Failure (C3)
-
-```
-Agent fails task T1-01 (attempt 1/3)
-  → Mark task in_progress, log failure reason
-  → Re-dispatch SAME agent (might be transient)
-
-Agent fails T1-01 (attempt 2/3)
-  → Query catalog for ALTERNATIVE agent with same skill
-  → Re-dispatch to alternative agent
-
-Agent fails T1-01 (attempt 3/3)
-  → ESCALATE to user: "T1-01 failed 3 times. Agents tried: [list]. Last error: [msg]"
-  → Set task status = blocked
-```
-
-## Step 6.6: Output Passing Between Agents (C4, E2)
-
-When agent A produces output needed by agent B:
-
-```bash
-# Agent A stores output in shared context
-curl -X POST $DAEMON_URL/api/ipc/context -d '{
-  "key": "fiona_market_analysis",
-  "value": "{\"path\":\"docs/market-analysis.md\",\"summary\":\"TAM $2B, 3 competitors, mobile-first\"}",
-  "set_by": "fiona"
-}'
-
-# Ali tells agent B where to find it
-convergio-bus.sh send ali matteo "Input ready: read docs/market-analysis.md (context key: fiona_market_analysis)"
-```
-
-## Step 6.7: Standard IPC Protocol (E3)
-
-ALL agent messages MUST follow this JSON schema:
-
-```json
-{"type": "DONE|BLOCKED|PROGRESS", "task_id": "T1-01", "agent": "fiona",
- "summary": "Market analysis complete", "artifacts": ["docs/market-analysis.md"],
- "next_action": "ready_for_validation"}
-```
-
-Types:
-- `DONE` → task complete, artifacts listed, ready for validation
-- `BLOCKED` → can't proceed, reason in summary, needs intervention
-- `PROGRESS` → status update, percentage in summary
+@reference/ali-ipc-protocol.md
 
 ## Step 7: Validate per Domain (C5)
 
 ```bash
-# Choose validator based on task output_type
 VALIDATOR=$(sqlite3 $DASHBOARD_DB "SELECT validator_agent FROM tasks WHERE id = $TASK_ID;")
-
-# Dispatch validator
-Task(subagent_type="$VALIDATOR", prompt="Validate task $TASK_ID. Apply gates for output_type.
-  Query gates: sqlite3 \$DASHBOARD_DB 'SELECT gate_name, gate_description FROM validation_gates WHERE output_type = \"$OUTPUT_TYPE\";'")
+Task(subagent_type="$VALIDATOR", prompt="Validate task $TASK_ID. Apply gates for output_type.")
 ```
 
 ## Step 8: Report
 
 ```markdown
 # Execution Report — Run #$RUN_ID
-
-## Goal
-[Original request]
-
-## Team
-| Agent | Role | Tasks | Output Type | Status | Cost |
-|---|---|---|---|---|---|
-
-## Results
-[What was accomplished — link to artifacts]
-
-## Validation
-| Task | Validator | Result | Gates Passed |
-|---|---|---|---|
-
-## Metrics
-- Duration: X min | Agents: N | Tasks: N/N | Cost: $X.XX
-
-## Learnings
-[What to improve — auto-saved to plan_learnings]
+## Goal / Team / Results / Validation / Metrics / Learnings
 ```
 
-After report, update execution_runs:
-```bash
-sqlite3 $DASHBOARD_DB "UPDATE execution_runs SET status='completed',
-  completed_at=datetime('now'), result='$SUMMARY', cost_usd=$COST,
-  agents_used=$N WHERE id=$RUN_ID;"
-```
+After report: `sqlite3 $DASHBOARD_DB "UPDATE execution_runs SET status='completed', completed_at=datetime('now'), result='$SUMMARY', cost_usd=$COST, agents_used=$N WHERE id=$RUN_ID;"`
 
-## Step 9: Cross-Repo Coordination
-
-When a task requires work in a DIFFERENT repo:
-
-```bash
-# Check registered repos
-convergio-sync.sh repos
-
-# Create cross-repo request
-convergio-sync.sh request "virtualbpm" "maranello" "Need VoiceOrb component with dark theme support"
-
-# Auto-dispatch: spawns Ali in the target repo to handle it
-convergio-sync.sh auto-dispatch
-
-# Check status
-convergio-sync.sh pending
-```
-
-**Autonomous cross-repo protocol:**
-1. Detect if task requires another repo (check file paths, imports, dependencies)
-2. Create cross-repo request via `convergio-sync.sh request`
-3. Auto-dispatch runs Ali in the target repo
-4. Ali in target repo resolves, calls `convergio-sync.sh complete`
-5. Original Ali receives completion via bus broadcast
-6. Continue with dependent tasks
+@reference/ali-cross-repo-protocol.md
 
 ## Rules
 
@@ -305,3 +197,4 @@ convergio-sync.sh pending
 - Maximum parallelism where dependencies allow
 - ALWAYS log run in execution_runs table
 - For cross-repo needs: use convergio-sync.sh, NEVER work directly in another repo
+- Sensitive docs → local/opencode agents only (see Step 1.5)
