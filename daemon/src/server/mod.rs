@@ -18,6 +18,7 @@ pub mod api_plan_db_import_parsers;
 pub mod api_plan_db_lifecycle;
 pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
+pub mod api_plan_db_query_fmt;
 pub mod api_plans;
 pub mod api_workers;
 pub mod llm_client;
