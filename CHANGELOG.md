@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.3.0] - 2026-03-21
+
+### Added
+- Document ingestion engine: PDF/DOCX/XLSX/CSV/PPTX/URL/folder → markdown (`scripts/platform/convergio-ingest.sh`)
+- `--context` flag on `convergio-run-ops.sh` — attaches ingested documents to execution runs
+- Dashboard Approvals view: approve/cancel/pause plans with real-time status (`dashboard/views/approvals.js`)
+- `execution_runs` paused status + context columns migration (plan lifecycle tracking)
+- Per-run analytics to `convergio-metrics.sh` (duration, cost, agent count per run)
+
+### Changed
+- Daemon server files split into 250-line submodules (20+ refactors across mesh/server/ipc/api)
+- Evolution engine wiring: convergio-metrics.sh feeds evolution telemetry pipeline
+- Dead code removed from autopilot, mesh sync, IPC router
+
 ## [3.2.0] - 2026-03-19
 
 ### Added

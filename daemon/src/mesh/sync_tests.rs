@@ -1,4 +1,5 @@
 use super::*;
+use rusqlite::Connection;
 
 fn seeded_conn() -> Connection {
     let conn = Connection::open_in_memory().expect("conn");

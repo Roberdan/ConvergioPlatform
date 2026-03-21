@@ -46,6 +46,12 @@ All scripts are in `claude-config/scripts/`. NOT in PATH. Always use:
 `bash claude-config/scripts/plan-db.sh`, `bash claude-config/scripts/wave-worktree.sh`, etc.
 _Why: Plan 677 — `command not found` in new session._
 
+## CRITICAL: Script Paths
+
+All scripts are in `claude-config/scripts/`. NOT in PATH. Always use:
+`bash claude-config/scripts/plan-db.sh`, `bash claude-config/scripts/wave-worktree.sh`, etc.
+_Why: Plan 677 — `command not found` in new session._
+
 ## Module References
 - Init + readiness: `@reference/commands/execute/initialize-and-readiness.md`
 - Task routing + tracking: `@reference/commands/execute/task-routing-and-tracking.md`

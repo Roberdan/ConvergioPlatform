@@ -1,53 +1,12 @@
+use super::api_plan_db_import_parsers::parse_waves;
 use super::state::{ApiError, ServerState};
 use axum::extract::State;
 use axum::routing::post;
 use axum::{Json, Router};
-use serde::Deserialize;
 use serde_json::{json, Value};
 
 pub fn router() -> Router<ServerState> {
     Router::new().route("/api/plan-db/import", post(handle_import))
-}
-
-#[derive(Deserialize)]
-struct WaveSpec {
-    id: String,
-    name: String,
-    #[serde(default)]
-    depends_on: Option<String>,
-    #[serde(default = "default_hours")]
-    estimated_hours: i64,
-    #[serde(default)]
-    tasks: Vec<TaskSpec>,
-}
-
-fn default_hours() -> i64 {
-    8
-}
-
-#[derive(Deserialize)]
-struct TaskSpec {
-    id: String,
-    title: String,
-    #[serde(default = "default_priority")]
-    priority: String,
-    #[serde(rename = "type", default = "default_type")]
-    task_type: String,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default)]
-    test_criteria: Option<Value>,
-    #[serde(default)]
-    model: Option<String>,
-    #[serde(default)]
-    assignee: Option<String>,
-}
-
-fn default_priority() -> String {
-    "P1".to_string()
-}
-fn default_type() -> String {
-    "feature".to_string()
 }
 
 /// POST /api/plan-db/import — bulk import waves+tasks from JSON/YAML spec
@@ -160,42 +119,11 @@ async fn handle_import(
     })))
 }
 
-fn parse_waves(body: &Value) -> Result<Vec<WaveSpec>, ApiError> {
-    // If "waves" array is provided directly
-    if let Some(waves_val) = body.get("waves") {
-        return serde_json::from_value::<Vec<WaveSpec>>(waves_val.clone())
-            .map_err(|e| ApiError::bad_request(format!("invalid waves: {e}")));
-    }
-
-    // If "spec" is provided as a string (YAML), parse it
-    if let Some(spec_str) = body.get("spec").and_then(Value::as_str) {
-        let parsed: Value = serde_yaml::from_str(spec_str)
-            .map_err(|e| ApiError::bad_request(format!("YAML parse failed: {e}")))?;
-        if let Some(waves_val) = parsed.get("waves") {
-            return serde_json::from_value::<Vec<WaveSpec>>(waves_val.clone())
-                .map_err(|e| ApiError::bad_request(format!("invalid waves in spec: {e}")));
-        }
-        return Err(ApiError::bad_request("spec missing 'waves' key"));
-    }
-
-    // If "spec" is a JSON object
-    if let Some(spec_obj) = body.get("spec") {
-        if let Some(waves_val) = spec_obj.get("waves") {
-            return serde_json::from_value::<Vec<WaveSpec>>(waves_val.clone())
-                .map_err(|e| ApiError::bad_request(format!("invalid waves in spec: {e}")));
-        }
-        return Err(ApiError::bad_request("spec missing 'waves' key"));
-    }
-
-    Err(ApiError::bad_request(
-        "missing 'waves' or 'spec' in request body",
-    ))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::api_plan_db_import_parsers::parse_waves;
     use crate::db::PlanDb;
+    use serde_json::json;
 
     fn setup_db() -> PlanDb {
         let db = PlanDb::open_in_memory().expect("db");
