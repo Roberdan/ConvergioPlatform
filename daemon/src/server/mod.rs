@@ -5,6 +5,7 @@ pub mod api_dashboard;
 pub mod api_evolution;
 pub mod api_github;
 pub mod api_heartbeat;
+pub mod api_heartbeat_handlers;
 pub mod api_ideas;
 pub mod api_ipc;
 pub mod api_mesh;
