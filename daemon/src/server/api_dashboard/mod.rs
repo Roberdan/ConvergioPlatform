@@ -4,6 +4,7 @@ mod nightly_data;
 mod nightly_handlers;
 mod overview;
 mod plans;
+mod plans_detail;
 
 use super::state::ServerState;
 use axum::routing::{get, post};
