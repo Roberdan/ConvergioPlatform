@@ -4,7 +4,7 @@ mod daemon_auth_config_tests;
 #[path = "../daemon_sync.rs"]
 mod daemon_sync;
 #[cfg(test)]
-#[path = "../daemon_tests.rs"]
+#[path = "../daemon_tests/mod.rs"]
 mod daemon_tests;
 
 mod events;
