@@ -33,6 +33,12 @@ log_warn() { echo -e "\033[0;33m[WARN]\033[0m $*"; }
 
 ensure_review_dir() { mkdir -p "$REVIEW_DIR"; }
 
+reset_reviews() {
+    rm -rf "$REVIEW_DIR"
+    mkdir -p "$REVIEW_DIR"
+    log_ok "Review state cleared"
+}
+
 register_review() {
     local type="$1" file="$2"
     [[ "$type" != "standard" ]] && { log_err "Review type must be: standard"; exit 1; }
