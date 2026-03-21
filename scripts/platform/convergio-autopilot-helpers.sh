@@ -4,6 +4,8 @@
 # Provides: plan discovery, wave state machine, trigger_*, execution_runs wiring
 set -uo pipefail
 
+_validate_id() { [[ "$1" =~ ^[0-9]+$ ]] || { log "SECURITY: invalid ID '$1' — aborting"; return 1; }; }
+
 # ─── Plan Discovery ─────────────────────────────────────────────────
 
 find_actionable_plan() {
@@ -34,6 +36,8 @@ apply_pause_events() {
 
   while IFS='|' read -r ev_id ev_plan_id; do
     [ -z "$ev_id" ] && continue
+    _validate_id "$ev_id" || continue
+    _validate_id "$ev_plan_id" || continue
     log "PAUSE_BRIDGE: pause_run event $ev_id for plan $ev_plan_id"
     _db "UPDATE execution_runs SET status = 'paused'
          WHERE plan_id = $ev_plan_id AND status = 'running';"
@@ -46,6 +50,7 @@ apply_pause_events() {
 
 get_current_wave() {
   local pid="$1"
+  _validate_id "$pid" || return 1
   _db "SELECT id, wave_id, status, tasks_done, tasks_total
        FROM waves WHERE plan_id = $pid AND status IN ('pending','in_progress','merging')
        ORDER BY position LIMIT 1;"
@@ -53,21 +58,25 @@ get_current_wave() {
 
 count_pending_tasks() {
   local wave_db_id="$1"
+  _validate_id "$wave_db_id" || return 1
   _db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'pending';"
 }
 
 count_submitted_tasks() {
   local wave_db_id="$1"
+  _validate_id "$wave_db_id" || return 1
   _db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'submitted';"
 }
 
 count_in_progress_tasks() {
   local wave_db_id="$1"
+  _validate_id "$wave_db_id" || return 1
   _db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'in_progress';"
 }
 
 all_tasks_submitted_or_done() {
   local wave_db_id="$1"
+  _validate_id "$wave_db_id" || return 1
   local remaining
   remaining=$(_db "SELECT count(*) FROM tasks
                    WHERE wave_id_fk = $wave_db_id
@@ -77,6 +86,7 @@ all_tasks_submitted_or_done() {
 
 wave_all_done() {
   local wave_db_id="$1"
+  _validate_id "$wave_db_id" || return 1
   local remaining
   remaining=$(_db "SELECT count(*) FROM tasks
                    WHERE wave_id_fk = $wave_db_id
@@ -90,6 +100,7 @@ wave_all_done() {
 # Idempotent: skips if a 'running' row already exists for this plan.
 execution_runs_start() {
   local pid="$1"
+  _validate_id "$pid" || return 1
   local existing
   existing=$(_db "SELECT count(*) FROM execution_runs
                   WHERE plan_id = $pid AND status = 'running';" 2>/dev/null || echo "0")
@@ -104,6 +115,7 @@ execution_runs_start() {
 # B4: no run_id FK — join by plan_id and rows since run started_at.
 execution_runs_update_wave() {
   local pid="$1"
+  _validate_id "$pid" || return 1
   _db "UPDATE execution_runs
        SET cost_usd = (
          SELECT COALESCE(SUM(d.cost_usd), 0)
@@ -131,6 +143,7 @@ execution_runs_update_wave() {
 # SET status='completed' when plan finishes.
 execution_runs_complete() {
   local pid="$1"
+  _validate_id "$pid" || return 1
   _db "UPDATE execution_runs
        SET status = 'completed', completed_at = datetime('now')
        WHERE plan_id = $pid AND status = 'running';" 2>/dev/null || true

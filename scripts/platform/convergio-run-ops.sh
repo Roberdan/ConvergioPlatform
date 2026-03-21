@@ -3,6 +3,8 @@
 # Sourced by convergio. PLATFORM_DIR, BUS, DAEMON_URL, color vars must be set.
 set -euo pipefail
 
+_validate_id() { [[ "$1" =~ ^[0-9]+$ ]] || die "Invalid ID: $1 (must be numeric)"; }
+
 _cleanup_agent() {
   local name="${CONVERGIO_AGENT_NAME:-}"
   local pgid
@@ -105,6 +107,7 @@ cmd_solve() {
 
 cmd_stop() {
   local run_id="${1:-}" db="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
+  [ -n "$run_id" ] && _validate_id "$run_id"
   echo -e "${Y}Stopping Convergio processes (NOT your other work)...${N}"
   "$BUS" broadcast "system" "ABORT: User requested full stop" 2>/dev/null || true
   pkill -f "convergio-autopilot" 2>/dev/null && echo "  Killed: autopilot"
@@ -140,6 +143,7 @@ except: pass
 cmd_pause() {
   local run_id="${1:-}"
   [ -z "$run_id" ] && { echo -e "${R}Usage: convergio pause <run_id>${N}"; return 1; }
+  _validate_id "$run_id"
 
   local db="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
   sqlite3 "$db" "UPDATE execution_runs SET status='paused', paused_at=datetime('now') WHERE id=$run_id;" 2>/dev/null
@@ -150,6 +154,7 @@ cmd_pause() {
 cmd_resume() {
   local run_id="${1:-}"
   [ -z "$run_id" ] && { echo -e "${R}Usage: convergio resume <run_id>${N}"; return 1; }
+  _validate_id "$run_id"
 
   local db="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
   sqlite3 "$db" "UPDATE execution_runs SET status='running', paused_at=NULL WHERE id=$run_id;" 2>/dev/null

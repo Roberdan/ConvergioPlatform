@@ -9,6 +9,8 @@ DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
 _db() { sqlite3 "$DB" "$1" 2>/dev/null; }
+_validate_id() { [[ "$1" =~ ^[0-9]+$ ]] || { echo "Invalid ID: $1 (must be numeric)" >&2; exit 1; }; }
+_validate_days() { [[ "$1" =~ ^[0-9]+$ ]] || { echo "Invalid days value: $1 (must be numeric)" >&2; exit 1; }; }
 
 collect_system() {
   local cpu mem
@@ -92,6 +94,7 @@ cmd_report() {
 
 cmd_clean() {
   local days="${1:-30}"
+  _validate_days "$days"
   _db "DELETE FROM metrics_history WHERE recorded_at < datetime('now', '-$days days');"
   echo "Cleaned metrics older than $days days"
 }
@@ -102,6 +105,7 @@ cmd_run() {
     echo "Usage: convergio-metrics.sh run <run_id>" >&2
     exit 1
   fi
+  _validate_id "$run_id"
 
   # Fetch the execution run row
   local row
