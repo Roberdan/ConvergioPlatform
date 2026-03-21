@@ -33,6 +33,20 @@ Run `bash claude-config/scripts/planner-create.sh readiness {plan_id}` which che
 
 If readiness passes → proceed. If fails → fix errors, do NOT proceed.
 
+## Drift Check + Rebase (MANDATORY before first task)
+
+Run: `bash claude-config/scripts/plan-db.sh drift-check {plan_id}`
+
+If drift detected (main has new commits since worktree creation):
+```bash
+cd {worktree_path} && git rebase origin/main
+```
+This is NORMAL — the planner may commit config changes on main after creating the worktree.
+Rebase, then proceed. Do NOT abort because of drift.
+
+_Why: Plan 677 — worktree created, then 7 commits on main (planner/executor fixes).
+Drift check correctly detected overlap but executor treated it as blocking error._
+
 ## Auto-Heal
 
 If worktree missing but plan is `doing`:

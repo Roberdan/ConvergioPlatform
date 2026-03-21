@@ -1,16 +1,28 @@
 # Execute — Task Routing & Tracking
 
+## DB Schema (CRITICAL — do NOT guess column names)
+
+Tasks table PK is `id` (INTEGER), NOT `db_id`. Full schema: `@reference/operational/plan-db-schema.md`
+
+Key columns: `id` (PK), `plan_id`, `wave_id_fk`, `task_id` (human string like T1-01),
+`title`, `status`, `description`, `model`, `executor_agent`, `validator_agent`,
+`output_type`, `test_criteria`, `effort_level`, `notes`, `started_at`, `completed_at`.
+
+_Why: Plan 677 — executor queried `SELECT db_id` which doesn't exist. Column is `id`._
+
 ## Routing
 
 Read per-task from DB:
 ```sql
-SELECT task_id, model, executor_agent, output_type, validator_agent, test_criteria
+SELECT id, task_id, title, status, model, executor_agent, output_type, validator_agent, test_criteria, description
 FROM tasks WHERE plan_id = {plan_id} AND wave_id_fk = {wave_db_id} AND status = 'pending'
 ORDER BY task_id;
 ```
 
-| Field | Use |
+| Column | Use |
 |---|---|
+| `id` | DB primary key (pass to copilot-worker.sh and plan-db-safe.sh) |
+| `task_id` | Human ID (T1-01, T2a-01, etc) — for display/logging |
 | `model` | Model to use (claude-sonnet-4.6, gpt-5, etc) |
 | `executor_agent` | `task-executor` (claude) or `task-executor-copilot` (copilot) |
 | `output_type` | `pr` (code), `document`, `analysis`, `design`, `legal_opinion` |
