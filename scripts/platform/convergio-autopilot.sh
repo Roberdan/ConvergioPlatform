@@ -15,8 +15,15 @@ PLAN_ID="${1:-}"
 MAX_BUDGET="${CONVERGIO_MAX_BUDGET:-10.00}"  # F2: daily budget cap in USD
 RETRY_FILE="/tmp/convergio-retry-state"
 
-log() { echo "[$(date '+%H:%M:%S')] $*"; }
+# Source helpers (plan discovery, wave state machine, trigger_*, execution_runs)
+HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=convergio-autopilot-helpers.sh
+source "$HELPERS_DIR/convergio-autopilot-helpers.sh"
+
+log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[$(date '+%H:%M:%S')] WARN: $*" >&2; }
+
+_db() { sqlite3 "$DB" "$1" 2>/dev/null; }
 
 # ─── F1-F3: Cost Tracking ───────────────────────────────────────────
 
@@ -89,138 +96,27 @@ backoff_seconds() {
   echo $(( 30 * (2 ** (attempt - 1)) ))
 }
 
-_db() { sqlite3 "$DB" "$1" 2>/dev/null; }
-
-# ─── Plan Discovery ─────────────────────────────────────────────────
-
-find_actionable_plan() {
-  if [ -n "$PLAN_ID" ]; then
-    echo "$PLAN_ID"
-  else
-    # Find plans in 'doing' status with pending waves
-    _db "SELECT p.id FROM plans p
-         WHERE p.status = 'doing'
-         AND EXISTS (SELECT 1 FROM waves w WHERE w.plan_id = p.id AND w.status IN ('pending','in_progress'))
-         ORDER BY p.id DESC LIMIT 1;"
-  fi
-}
-
-# ─── Wave State Machine ─────────────────────────────────────────────
-
-get_current_wave() {
-  local pid="$1"
-  _db "SELECT id, wave_id, status, tasks_done, tasks_total
-       FROM waves WHERE plan_id = $pid AND status IN ('pending','in_progress','merging')
-       ORDER BY position LIMIT 1;"
-}
-
-count_pending_tasks() {
-  local wave_db_id="$1"
-  _db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'pending';"
-}
-
-count_submitted_tasks() {
-  local wave_db_id="$1"
-  _db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'submitted';"
-}
-
-count_in_progress_tasks() {
-  local wave_db_id="$1"
-  _db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status = 'in_progress';"
-}
-
-all_tasks_submitted_or_done() {
-  local wave_db_id="$1"
-  local remaining
-  remaining=$(_db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status NOT IN ('submitted','done','skipped','cancelled');")
-  [ "${remaining:-1}" -eq 0 ]
-}
-
-wave_all_done() {
-  local wave_db_id="$1"
-  local remaining
-  remaining=$(_db "SELECT count(*) FROM tasks WHERE wave_id_fk = $wave_db_id AND status NOT IN ('done','skipped','cancelled');")
-  [ "${remaining:-1}" -eq 0 ]
-}
-
-# ─── Actions ─────────────────────────────────────────────────────────
-
-trigger_execution() {
-  local pid="$1" wave_db_id="$2" wave_id="$3"
-  log "DISPATCH: Executing wave $wave_id (plan $pid)"
-
-  # Register autopilot as agent
-  "$BUS" register "autopilot" "auto-executor" "system" 2>/dev/null || true
-
-  # Notify via IPC
-  "$BUS" send "autopilot" "general" "Auto-dispatching wave $wave_id for plan $pid" 2>/dev/null || true
-
-  # Update wave status
-  _db "UPDATE waves SET status = 'in_progress' WHERE id = $wave_db_id AND status = 'pending';"
-
-  # Launch executor (this spawns Claude/Copilot with /execute)
-  log "  Spawning executor for plan $pid..."
-  if command -v claude &>/dev/null; then
-    claude -p "Esegui /execute $pid. Focus su wave $wave_id. Modalità autonoma." &
-    local executor_pid=$!
-    log "  Executor PID: $executor_pid"
-  else
-    warn "Claude CLI not found — manual execution needed"
-  fi
-}
-
-trigger_thor() {
-  local pid="$1" wave_db_id="$2" wave_id="$3"
-  log "THOR: Validating wave $wave_id (plan $pid)"
-
-  "$BUS" send "autopilot" "general" "Thor validation starting for wave $wave_id" 2>/dev/null || true
-
-  if command -v claude &>/dev/null; then
-    claude -p "Sei Thor. Valida wave $wave_id (db_id: $wave_db_id) del plan $pid. Tutti i 10 gate. Se PASS: plan-db.sh validate-wave $wave_db_id" &
-    log "  Thor spawned"
-  else
-    warn "Claude CLI not found — run manually: plan-db.sh validate-wave $wave_db_id"
-  fi
-}
-
-trigger_merge() {
-  local pid="$1" wave_db_id="$2" wave_id="$3"
-  log "MERGE: Wave $wave_id (plan $pid)"
-
-  "$BUS" send "autopilot" "general" "Merging wave $wave_id" 2>/dev/null || true
-
-  bash "$SCRIPTS/wave-worktree.sh" merge "$pid" "$wave_db_id" 2>/dev/null && {
-    log "  Merge complete"
-  } || {
-    warn "Merge failed — manual intervention needed"
-  }
-}
-
-trigger_calibration() {
-  local pid="$1"
-  log "CALIBRATE: Post-plan calibration for plan $pid"
-  bash "$SCRIPTS/plan-db.sh" calibrate-estimates 2>/dev/null || true
-  log "  Calibration done"
-}
-
-trigger_postmortem() {
-  local pid="$1"
-  log "POSTMORTEM: Analyzing plan $pid"
-
-  if command -v claude &>/dev/null; then
-    claude -p "Sei plan-post-mortem. Analizza plan $pid: plan-db.sh get-learnings $pid. Estrai pattern, scrivi learnings con plan-db.sh add-learning." &
-    log "  Post-mortem spawned"
-  fi
-}
-
 # ─── Main Loop ───────────────────────────────────────────────────────
 
 run_once() {
+  # B3 fix: apply pause_run events BEFORE checking plan state
+  apply_pause_events
+
   local pid
   pid=$(find_actionable_plan)
 
   if [ -z "$pid" ]; then
     return 1  # No actionable plan
+  fi
+
+  # B3: check if this plan's run is paused
+  local run_status
+  run_status=$(_db "SELECT status FROM execution_runs
+                    WHERE plan_id = $pid AND status IN ('running','paused')
+                    ORDER BY started_at DESC LIMIT 1;" 2>/dev/null || true)
+  if [ "${run_status:-}" = "paused" ]; then
+    log "PAUSED: Plan $pid execution is paused — skipping"
+    return 0
   fi
 
   local wave_info
@@ -230,6 +126,7 @@ run_once() {
     # All waves done — plan complete
     log "COMPLETE: Plan $pid — all waves done"
     _db "UPDATE plans SET status = 'done', completed_at = datetime('now') WHERE id = $pid AND status = 'doing';"
+    execution_runs_complete "$pid"
     trigger_calibration "$pid"
     trigger_postmortem "$pid"
     return 0
@@ -243,12 +140,10 @@ run_once() {
 
   case "$wave_status" in
     pending)
-      # Wave needs execution
       trigger_execution "$pid" "$wave_db_id" "$wave_id"
       ;;
     in_progress)
       if all_tasks_submitted_or_done "$wave_db_id"; then
-        # All tasks submitted → trigger Thor
         local submitted
         submitted=$(count_submitted_tasks "$wave_db_id")
         if [ "${submitted:-0}" -gt 0 ]; then
@@ -306,7 +201,8 @@ cmd_status() {
   echo "  Active plans: ${active:-0}"
 
   _db "SELECT p.id, p.name, p.status, p.tasks_done || '/' || p.tasks_total as progress
-       FROM plans p WHERE p.status = 'doing' ORDER BY p.id DESC LIMIT 5;" | while IFS='|' read -r id name status progress; do
+       FROM plans p WHERE p.status = 'doing' ORDER BY p.id DESC LIMIT 5;" | \
+  while IFS='|' read -r id name status progress; do
     echo "  Plan $id: $name ($progress)"
   done
 }
