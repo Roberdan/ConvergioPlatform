@@ -1,4 +1,4 @@
-use super::state::{query_one, query_rows, ApiError, ServerState};
+use crate::server::state::{query_one, query_rows, ApiError, ServerState};
 use axum::extract::{Path, State};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -13,7 +13,9 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/peers/coordinator — return current coordinator node
-async fn handle_coordinator(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
+pub async fn handle_coordinator(
+    State(state): State<ServerState>,
+) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
 
@@ -57,7 +59,7 @@ async fn handle_coordinator(State(state): State<ServerState>) -> Result<Json<Val
 }
 
 /// GET /api/mesh/topology — active connections graph
-async fn handle_topology(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
+pub async fn handle_topology(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
 
@@ -129,14 +131,13 @@ async fn handle_topology(State(state): State<ServerState>) -> Result<Json<Value>
 }
 
 /// GET /api/mesh/ping/:peer — measure RTT to peer
-async fn handle_ping(
+pub async fn handle_ping(
     State(state): State<ServerState>,
     Path(peer): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
 
-    // Check if peer exists
     let peer_info = query_one(
         conn,
         "SELECT peer_name, last_seen FROM peer_heartbeats WHERE peer_name = ?1",
@@ -147,7 +148,6 @@ async fn handle_ping(
         return Err(ApiError::bad_request(format!("peer '{peer}' not found")));
     }
 
-    // Try TCP connection to peer's mesh port (9420)
     let start = std::time::Instant::now();
     let addr = format!("{peer}:9420");
     let timeout = std::time::Duration::from_secs(5);
@@ -168,7 +168,9 @@ async fn handle_ping(
 }
 
 /// GET /api/mesh/diagnostics — overall mesh health
-async fn handle_diagnostics(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
+pub async fn handle_diagnostics(
+    State(state): State<ServerState>,
+) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
 
@@ -204,71 +206,4 @@ async fn handle_diagnostics(State(state): State<ServerState>) -> Result<Json<Val
         "version": env!("CARGO_PKG_VERSION"),
         "warnings": warnings,
     })))
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::db::PlanDb;
-    use crate::server::state::{query_one, query_rows};
-
-    fn setup_db() -> PlanDb {
-        let db = PlanDb::open_in_memory().expect("db");
-        db.connection()
-            .execute_batch(
-                "CREATE TABLE peer_heartbeats (
-                     peer_name TEXT PRIMARY KEY, last_seen REAL,
-                     load_json TEXT, capabilities TEXT
-                 );
-                 CREATE TABLE mesh_sync_stats (
-                     peer_name TEXT PRIMARY KEY, avg_latency_ms REAL,
-                     last_sync_at TEXT
-                 );
-                 INSERT INTO peer_heartbeats VALUES
-                     ('mac-worker-2', strftime('%s','now'), '{\"cpu\":20}', 'coordinator'),
-                     ('linux-worker', strftime('%s','now') - 60, '{\"cpu\":50}', 'worker'),
-                     ('mac-worker-1', strftime('%s','now') - 200, '{\"cpu\":30}', 'worker');",
-            )
-            .expect("schema");
-        db
-    }
-
-    #[test]
-    fn api_peers_coordinator_found() {
-        let db = setup_db();
-        let peers = query_rows(
-            db.connection(),
-            "SELECT peer_name FROM peer_heartbeats ORDER BY last_seen DESC",
-            [],
-        )
-        .unwrap();
-        let coordinator = peers.iter().find(|p| {
-            p.get("peer_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .contains("mac-worker-2")
-        });
-        assert!(coordinator.is_some());
-    }
-
-    #[test]
-    fn api_peers_topology_nodes() {
-        let db = setup_db();
-        let nodes = query_rows(
-            db.connection(),
-            "SELECT peer_name FROM peer_heartbeats ORDER BY peer_name",
-            [],
-        )
-        .unwrap();
-        assert_eq!(nodes.len(), 3);
-    }
-
-    #[test]
-    fn api_peers_diagnostics_counts() {
-        let db = setup_db();
-        let total: i64 = db
-            .connection()
-            .query_row("SELECT COUNT(*) FROM peer_heartbeats", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(total, 3);
-    }
 }
