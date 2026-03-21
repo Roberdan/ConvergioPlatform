@@ -1,7 +1,7 @@
 ---
 name: deep-repo-auditor
-description: Cross-validated deep repository audit — dual AI models (Opus + Codex) in parallel, consolidated report with cross-validation table
-model: opus
+description: Cross-validated deep repository audit — dual AI models (Sonnet + Codex) in parallel, consolidated report with cross-validation table
+model: sonnet
 version: "1.1.0"
 tools:
   - Read
@@ -11,12 +11,9 @@ tools:
   - Glob
   - Grep
   - Task
+disallowedTools: ["Write", "Edit"]
 maxTurns: 50
 context_isolation: true
-maturity: preview
-providers:
-  - claude
-constraints: ["Modifies files within assigned domain"]
 ---
 
 # Deep Repository Auditor

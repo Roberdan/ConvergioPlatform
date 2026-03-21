@@ -27,6 +27,7 @@ AGENT_LIST=(
   "convergio|Platform control plane expert|@Convergio|sonnet|claude"
   "llm|Local LLM infrastructure|@ConvergioLLM|sonnet|claude"
   "check|Quick session status recap|/check|mini|copilot"
+  "ali|Chief of Staff — orchestrates virtual teams|@ali-orchestrator|opus|claude"
 )
 
 get_agent() {
@@ -40,8 +41,10 @@ _daemon_ok() { curl -sf --connect-timeout 1 "$DAEMON_URL/api/ipc/status" > /dev/
 
 cmd_help() {
   echo -e "${B}convergio${N} — Swarm CLI v2.0.0\n"
-  echo -e "${B}Agents:${N}"
-  echo -e "  convergio ${C}<agent> [name] [--tool T]${N}  Launch (tools: claude|copilot|opencode)"
+  echo -e "${B}Solve (virtual organization):${N}"
+  echo -e "  convergio ${C}solve \"problem\"${N}            Ali assembles a team and solves it"
+  echo -e "\n${B}Agents (any model/tool):${N}"
+  echo -e "  convergio ${C}<agent> [name] [--tool T]${N}  Launch (tools: claude|copilot|opencode|local)"
   echo -e "  convergio ${C}as <name> [--tool T]${N}       Custom name"
   echo -e "  convergio ${C}list${N}                       Available agents"
   echo -e "  convergio ${C}menu${N}                       Interactive"
@@ -118,6 +121,33 @@ cmd_launch() {
   "$BUS" unregister "$sname" 2>/dev/null || true
 }
 
+cmd_solve() {
+  local goal="$*"
+  [ -z "$goal" ] && { echo -e "${R}Usage: convergio solve \"describe your problem\"${N}"; return 1; }
+
+  "$TOGGLE" on 2>/dev/null
+  "$BUS" register "ali" "orchestrator" "claude" 2>/dev/null || true
+
+  echo -e "${B}Convergio Solve${N}"
+  echo -e "${D}Goal: $goal${N}"
+  echo -e "${G}Spawning Ali (Chief of Staff, Opus)...${N}\n"
+
+  local p="Sei Ali, il Chief of Staff di Convergio. "
+  p+="Il tuo compito: risolvere questo problema assemblando un team virtuale di agenti specializzati. "
+  p+="PROBLEMA: $goal "
+  p+="ISTRUZIONI: "
+  p+="1) Analizza il problema — dominio, complessità, ruoli necessari. "
+  p+="2) Cerca agenti adatti: sqlite3 \$DASHBOARD_DB \"SELECT name, category, model, substr(description,1,80) FROM agent_catalog WHERE description LIKE '%keyword%';\" "
+  p+="3) Assembla il team — scegli gli specialisti giusti. "
+  p+="4) Crea il piano di esecuzione (usa /planner per piani complessi, inline per semplici). "
+  p+="5) Dispatcha gli agenti (Task tool per subagent, convergio-bus.sh per messaging). "
+  p+="6) Monitora il progresso e riporta i risultati. "
+  p+="NON implementare tu — delega sempre agli specialisti. Verifica sempre con Thor."
+
+  _launch_tool "claude" "$p"
+  "$BUS" unregister "ali" 2>/dev/null || true
+}
+
 cmd_named() {
   local sname="${1:?Usage: convergio as <name> [--tool T]}"
   local tool="${2:-claude}"
@@ -141,6 +171,20 @@ _launch_tool() {
     opencode)
       command -v opencode &>/dev/null && { echo "$prompt" | opencode 2>/dev/null; } \
         || { echo -e "${Y}OpenCode not found${N}"; echo "$prompt"; } ;;
+    local)
+      # Local LLM via LiteLLM proxy (convergio-llm.sh must be running)
+      local LITELLM_URL="${LITELLM_URL:-http://localhost:4000}"
+      if curl -sf "$LITELLM_URL/health" > /dev/null 2>&1; then
+        echo -e "${G}Sending to local LLM ($LITELLM_URL)${N}\n"
+        curl -sf "$LITELLM_URL/chat/completions" \
+          -H "Content-Type: application/json" \
+          -d "{\"model\":\"local\",\"messages\":[{\"role\":\"system\",\"content\":\"$prompt\"},{\"role\":\"user\",\"content\":\"Start.\"}]}" \
+          2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['choices'][0]['message']['content'])" 2>/dev/null \
+          || echo -e "${R}Local LLM request failed${N}"
+      else
+        echo -e "${Y}Local LLM not running. Start with: convergio-llm.sh start${N}"
+        echo "$prompt"
+      fi ;;
     *) echo -e "${Y}Unknown tool: $tool${N}"; echo "$prompt" ;;
   esac
 }
@@ -216,6 +260,8 @@ case "${1:-help}" in
   skills)             cmd_skills ;;
   alerts)             cmd_alerts ;;
   sync-agents)        cmd_sync_agents ;;
+  solve)              shift; cmd_solve "$@" ;;
+  import-agents)      shift; bash "$PLATFORM_DIR/scripts/platform/convergio-import-agents.sh" "${1:-}" ;;
   heartbeat|hb|mesh)  cmd_heartbeat ;;
   *)
     if get_agent "$1" > /dev/null 2>&1; then

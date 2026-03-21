@@ -4,7 +4,15 @@ Unified AI agent swarm: Rust daemon, mesh networking, plan-driven development, c
 
 ## What is Convergio?
 
-A distributed control plane that orchestrates AI agents across any model (Claude, GPT, Gemini, local LLMs), any tool (Claude Code, Copilot CLI, OpenCode), and any machine (local + Tailscale mesh). Agents communicate through a centralized daemon, execute plans with quality gates (Thor), and learn from every execution.
+A **virtual organization** you can rent. Give it a problem — it assembles a team of specialized AI agents, coordinates them, and delivers the result. Like hiring an entire agency, but the staff are AI models running on any provider.
+
+- **84+ specialized agents**: engineers, designers, PMs, QA, strategists, compliance experts, DevOps
+- **Any model**: Claude, GPT, Gemini, local LLMs (oMLX/LiteLLM)
+- **Any tool**: Claude Code, Copilot CLI, OpenCode, raw API
+- **Any machine**: local, Tailscale mesh nodes, cloud
+- **One command**: `convergio solve "build me a fitness tracking MVP"`
+
+Ali (Chief of Staff, Opus) analyzes your problem, picks the right specialists from the catalog, creates an execution plan, dispatches agents, monitors progress through Thor quality gates, and reports results with evidence.
 
 ## Architecture
 
@@ -29,9 +37,41 @@ convergio list                          # see available agents
 convergio menu                          # interactive agent launcher
 ```
 
+## Virtual Organization
+
+```bash
+convergio solve "Build a SaaS MVP for fitness tracking with React + Rust backend"
+```
+
+Ali (Chief of Staff) will:
+1. Analyze → domains: frontend, backend, UX, QA, DevOps
+2. Query catalog → find `sara-ux-ui-designer`, `baccio-tech-architect`, `task-executor`, `thor`, `marco-devops-engineer`
+3. Create plan → waves with tasks, models, effort estimates
+4. Dispatch → spawn agents on optimal tool/model/machine
+5. Monitor → track via IPC, re-allocate on failure
+6. Report → structured results with evidence and learnings
+
+The agent catalog covers 11 domains:
+
+| Domain | Agents | Examples |
+|---|---|---|
+| Core Utility | 19 | Thor, Ali, planner, reviewer, optimizer |
+| Technical Dev | 11 | task-executor, Rex, Dario debugger, Baccio architect |
+| Business Ops | 11 | Davide PM, Oliver PM, Andrea customer success |
+| Specialized | 14 | Omri data scientist, Fiona analyst, Ava analytics |
+| Leadership | 7 | Amy CFO, Antonio strategy, Satya board |
+| Compliance | 5 | Elena legal, Luca security, Dr. Enzo healthcare |
+| Release Mgmt | 5 | app-release-manager, feature-release, ecosystem-sync |
+| Design/UX | 3 | Jony creative director, Sara UX/UI |
+| Research | 1 | research-report-generator |
+| Reference | 5 | Playbooks (Dario, Otto) |
+
 ## Convergio CLI
 
 ```bash
+# Solve (virtual organization)
+convergio solve "your problem here"    # Ali assembles team and solves it
+
 # Agents
 convergio list                          # available agents
 convergio menu                          # interactive selection
