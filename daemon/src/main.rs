@@ -102,6 +102,9 @@ async fn main() {
                         std::process::exit(2);
                     }
                 };
+                if let Err(e) = claude_core::db::migrations::run(db.connection()) {
+                    eprintln!("[startup] migrations failed: {e}");
+                }
                 let command = args.first().map(String::as_str).unwrap_or_default();
                 let mut stdin_payload = None;
                 if command == "apply-changes" {

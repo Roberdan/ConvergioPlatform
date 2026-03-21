@@ -69,6 +69,11 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/evolution/experiments",
     "/api/evolution/roi",
     "/api/evolution/audit/:id",
+    "/api/metrics/run/:id",
+    "/api/metrics/summary",
+    "/api/metrics/cost",
+    "/api/runs",
+    "/api/runs/:id",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -112,12 +117,16 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/workers/launch",
     "/api/evolution/proposals/:id/approve",
     "/api/evolution/proposals/:id/reject",
+    "/api/runs",
+    "/api/runs/:id/pause",
+    "/api/runs/:id/resume",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",
     "/api/chat/requirement",
     "/api/peers/:name",
     "/api/nightly/config/:project_id",
+    "/api/runs/:id",
 ];
 pub const DELETE_ROUTES: &[&str] = &["/api/ideas/:id", "/api/chat/session", "/api/peers/:name"];
 pub const SSE_ROUTES: &[&str] = &[
