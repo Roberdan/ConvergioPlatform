@@ -8,6 +8,7 @@ pub mod api_github_handlers;
 pub mod api_heartbeat;
 pub mod api_heartbeat_handlers;
 pub mod api_ideas;
+pub mod api_ideas_handlers;
 pub mod api_ipc;
 pub mod api_mesh;
 pub mod api_notify;
