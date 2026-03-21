@@ -49,12 +49,14 @@ User → convergio solve → Ali (orchestrator)
 ```bash
 git clone https://github.com/Roberdan/ConvergioPlatform.git
 cd ConvergioPlatform
-./setup.sh                    # env vars, CLI aliases, enable overlay
-cd daemon && cargo build --release
-./daemon/start.sh             # daemon on :8420
-convergio list                # see 89 agents
-convergio solve "your goal"   # Ali takes over
+./setup.sh                         # env vars, CLI aliases, enable overlay
+cd daemon && cargo build --release # build Rust daemon
+convergio daemon install           # auto-start on boot
+convergio daemon menubar           # status icon in menu bar (◉/◎)
+convergio solve "your goal"        # Ali takes over
 ```
+
+After setup, the daemon runs automatically. The menu bar icon shows status (◉ running / ◎ stopped), active agent count, and quick actions (start/stop/dashboard).
 
 Disable anytime: `convergioOff`. Re-enable: `convergioOn`. Full revert: `revert-claude-symlinks.sh --env`.
 

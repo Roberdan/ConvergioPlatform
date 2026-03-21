@@ -155,6 +155,9 @@ claude-config/scripts/copilot
 .claude/reference
 .claude/CLAUDE.md
 
+# Compiled binaries
+scripts/platform/convergio-menubar
+
 # Sensitive/binary dotfile backups
 claude-config/config/dotfiles-backup/**/development_credentials
 claude-config/config/dotfiles-backup/**/settings.local.json
