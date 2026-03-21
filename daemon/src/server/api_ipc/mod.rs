@@ -1,5 +1,6 @@
 // api_ipc: IPC coordination and intelligence endpoints
 mod handlers;
+mod handlers_ext;
 mod routes;
 
 use super::state::ServerState;
