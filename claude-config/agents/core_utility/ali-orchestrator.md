@@ -35,27 +35,47 @@ When you receive a goal:
 - Estimate complexity: simple (1-2 agents), medium (3-5), complex (6+)
 - List the roles needed (not agents — roles first)
 
-## Step 2: Query Talent Pool
+## Step 2: Query Talent Pool (CONFIDENCE-WEIGHTED)
 
 ```bash
-# Find agents by skill
+# Find agents by skill — ORDER BY CONFIDENCE (higher = better match)
 sqlite3 $DASHBOARD_DB "
-  SELECT ac.name, ac.category, ac.model, ac.description
+  SELECT ac.name, ac.category, ac.model, ask.confidence, substr(ac.description, 1, 60)
   FROM agent_catalog ac
   JOIN agent_skills ask ON ac.name = ask.agent_name
   WHERE ask.skill IN ('skill1', 'skill2')
-  ORDER BY ask.confidence DESC;"
+  ORDER BY ask.confidence DESC, ac.model ASC;"
+# Pick the HIGHEST confidence agent for each role. If tied, prefer cheaper model.
 
-# Or search by description
+# Search by description
 sqlite3 $DASHBOARD_DB "
   SELECT name, category, model, substr(description, 1, 80)
-  FROM agent_catalog
-  WHERE description LIKE '%keyword%';"
+  FROM agent_catalog WHERE description LIKE '%keyword%';"
 ```
 
-## Step 3: Assemble Team
+## Step 2.5: Log Run (MANDATORY)
 
-For each role needed, pick the best agent:
+Before dispatching, create a run record:
+
+```bash
+# Create execution run for tracking
+sqlite3 $DASHBOARD_DB "
+  INSERT INTO execution_runs (goal, team, status, started_at)
+  VALUES ('$(GOAL)', '$(TEAM_JSON)', 'running', datetime('now'));"
+RUN_ID=$(sqlite3 $DASHBOARD_DB "SELECT last_insert_rowid();")
+```
+
+After completion, update:
+```bash
+sqlite3 $DASHBOARD_DB "
+  UPDATE execution_runs SET status='completed', completed_at=datetime('now'),
+  result='$(RESULT_SUMMARY)', cost_usd=$(COST), agents_used=$(N)
+  WHERE id=$RUN_ID;"
+```
+
+## Step 3: Assemble Team (CONFIDENCE-WEIGHTED)
+
+For each role needed, pick the HIGHEST confidence agent:
 
 | Role Needed | Agent | Model | Why |
 |---|---|---|---|
@@ -83,30 +103,44 @@ For simple goals: decompose inline, dispatch directly.
 # Register yourself
 convergio-bus.sh register ali "orchestrator" "claude"
 
-# Spawn agents (via convergio CLI or Task tool)
-# For local agents:
-Task(subagent_type="task-executor", prompt="Execute task T1-01...")
+# Spawn agents (via Task tool — they inherit messaging instructions)
+Task(subagent_type="task-executor", prompt="
+  Il tuo nome è executor-1. Esegui task T1-01.
+  MESSAGING: Quando finisci, invia report: convergio-bus.sh send executor-1 ali 'T1-01 DONE: summary'
+  Controlla messaggi ogni 5 minuti: convergio-bus.sh read executor-1
+")
 
 # For remote agents (mesh nodes):
-# Use daemon delegation API
 curl -X POST $DAEMON_URL/api/mesh/delegate -d '{"peer":"node2","task":"T1-02"}'
 ```
 
-## Step 6: Monitor
+**CRITICAL: Every dispatched agent MUST include messaging instructions.** Agents should:
+1. Register at start: `convergio-bus.sh register <name> <role> <tool>`
+2. Report completion: `convergio-bus.sh send <name> ali "DONE: summary"`
+3. Check for messages periodically: `convergio-bus.sh read <name>`
+4. Report blockers immediately: `convergio-bus.sh send <name> ali "BLOCKED: reason"`
+
+## Step 6: Monitor & Feedback Loop
 
 ```bash
+# Poll for agent reports (every 30s in your loop)
+convergio-bus.sh read ali
+
 # Check who's active
 convergio-bus.sh who
 
 # Check plan progress
 plan-db.sh execution-tree $PLAN_ID
 
-# Read reports from agents
-convergio-bus.sh read ali
-
 # System health
 curl -s $DAEMON_URL/api/ipc/metrics
 ```
+
+**Feedback loop protocol:**
+- If agent reports DONE → mark task done, dispatch next
+- If agent reports BLOCKED → analyze, re-assign or escalate
+- If agent goes silent (no message in 10 min) → check IPC status → re-spawn if dead
+- If node is saturated (CPU > 90%) → re-route to different mesh node
 
 ## Step 7: Report
 

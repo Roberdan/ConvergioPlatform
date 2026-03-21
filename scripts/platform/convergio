@@ -56,12 +56,16 @@ cmd_help() {
   echo -e "\n${B}Toggle:${N}"
   echo -e "  convergio ${C}on|off|status${N}              Enable/disable/check"
   echo -e "\n${B}Workflow:${N}"
-  echo -e "  convergio ${C}plans|session|learnings${N}    Plan status"
-  echo -e "  convergio ${C}auto-update${N}                Analyze + improve"
-  echo -e "\n${B}Telemetry:${N}"
+  echo -e "  convergio ${C}plans|session${N}              Plan status"
+  echo -e "  convergio ${C}autopilot [watch]${N}          Auto execute→Thor→merge loop"
+  echo -e "  convergio ${C}auto-update${N}                Analyze + propose improvements"
+  echo -e "\n${B}Telemetry & Learning:${N}"
   echo -e "  convergio ${C}models|metrics|skills|alerts${N}"
+  echo -e "  convergio ${C}learnings [analyze|promote]${N} Knowledge system"
+  echo -e "  convergio ${C}collect-metrics${N}             Snapshot system telemetry"
   echo -e "\n${B}Maintenance:${N}"
-  echo -e "  convergio ${C}sync-agents|heartbeat${N}"
+  echo -e "  convergio ${C}sync-agents|import-agents${N}"
+  echo -e "  convergio ${C}heartbeat${N}                  Mesh status"
 }
 
 cmd_list() {
@@ -261,6 +265,9 @@ case "${1:-help}" in
   alerts)             cmd_alerts ;;
   sync-agents)        cmd_sync_agents ;;
   solve)              shift; cmd_solve "$@" ;;
+  autopilot)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-autopilot.sh" "${1:-once}" ;;
+  learnings)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-learnings.sh" "${1:-summary}" ;;
+  collect-metrics)    bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" collect ;;
   import-agents)      shift; bash "$PLATFORM_DIR/scripts/platform/convergio-import-agents.sh" "${1:-}" ;;
   heartbeat|hb|mesh)  cmd_heartbeat ;;
   *)
