@@ -153,13 +153,13 @@ fn is_pid_alive(pid: i64, host: &str) -> bool {
     }
 }
 
-fn gethostname() -> String {
+pub fn gethostname() -> String {
     hostname::get()
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_else(|_| "unknown".to_string())
 }
 
-fn map_lock_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IpcFileLock> {
+pub fn map_lock_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IpcFileLock> {
     Ok(IpcFileLock {
         file_pattern: row.get(0)?,
         agent: row.get(1)?,
