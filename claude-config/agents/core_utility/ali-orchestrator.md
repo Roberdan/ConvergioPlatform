@@ -85,17 +85,51 @@ For each role needed, pick the HIGHEST confidence agent:
 | QA | thor-quality-assurance-guardian | opus | Zero tolerance |
 | ... | ... | ... | ... |
 
-## Step 4: Create Execution Plan
+## Step 4: Create Execution Plan (MANDATORY: use /planner)
 
-Use the planner workflow:
+**ALWAYS invoke /planner as subagent** — never plan inline for anything with 3+ tasks:
+
 ```bash
-# Generate spec.yaml with wave/task decomposition
-# Each task has: executor_agent, model, effort, verify commands
-# Use /planner skill for formal plans, or create inline for simpler goals
+# C1: Auto-invoke planner
+Skill(skill="planner")
+# Planner creates spec.yaml with:
+# - output_type per task (pr, document, analysis, design, legal_opinion)
+# - validator_agent per task (thor, doc-validator, strategy-validator, etc.)
+# - executor_agent per task (from catalog)
+# - Dependencies between waves
 ```
 
-For complex goals: invoke `/planner` to create a formal plan.
-For simple goals: decompose inline, dispatch directly.
+For 1-2 trivial tasks: inline dispatch OK. Everything else: `/planner`.
+
+## Step 4.5: Dependency Graph
+
+Map dependencies between workstreams BEFORE dispatch:
+```
+Requirements (prompt) → Design (sara) → Implementation (executor)
+                      → Market Analysis (fiona) → Strategy (matteo)
+                      → Legal Review (elena) → Compliance Sign-off
+```
+
+Rules:
+- NEVER start a workstream whose dependency is incomplete
+- Check via: `plan-db.sh execution-tree $PLAN_ID`
+- If wave B depends on wave A output, wave B precondition = "wave_A_done"
+
+## Step 4.6: Validator Selection (C5 — MANDATORY)
+
+| output_type | validator_agent | Gates |
+|---|---|---|
+| pr | thor | 10 code gates |
+| document | doc-validator | completeness, structure, sources, coherence, actionability |
+| analysis | strategy-validator | data quality, completeness, feasibility, alignment |
+| design | design-validator | accessibility, consistency, user flow, responsive |
+| legal_opinion | compliance-validator | regulations, risk, gaps, recommendations |
+| review | thor | code gates or doc gates based on content |
+
+Query available gates:
+```bash
+sqlite3 $DASHBOARD_DB "SELECT gate_name, gate_description FROM validation_gates WHERE output_type = 'document';"
+```
 
 ## Step 5: Dispatch Agents
 
@@ -137,42 +171,110 @@ curl -s $DAEMON_URL/api/ipc/metrics
 ```
 
 **Feedback loop protocol:**
-- If agent reports DONE → mark task done, dispatch next
-- If agent reports BLOCKED → analyze, re-assign or escalate
+- If agent reports DONE → mark task done, dispatch next dependent task
+- If agent reports BLOCKED → analyze, re-assign to different agent or escalate
 - If agent goes silent (no message in 10 min) → check IPC status → re-spawn if dead
 - If node is saturated (CPU > 90%) → re-route to different mesh node
 
-## Step 7: Report
+## Step 6.5: Re-Dispatch on Failure (C3)
 
-Produce a structured report:
+```
+Agent fails task T1-01 (attempt 1/3)
+  → Mark task in_progress, log failure reason
+  → Re-dispatch SAME agent (might be transient)
+
+Agent fails T1-01 (attempt 2/3)
+  → Query catalog for ALTERNATIVE agent with same skill
+  → Re-dispatch to alternative agent
+
+Agent fails T1-01 (attempt 3/3)
+  → ESCALATE to user: "T1-01 failed 3 times. Agents tried: [list]. Last error: [msg]"
+  → Set task status = blocked
+```
+
+## Step 6.6: Output Passing Between Agents (C4, E2)
+
+When agent A produces output needed by agent B:
+
+```bash
+# Agent A stores output in shared context
+curl -X POST $DAEMON_URL/api/ipc/context -d '{
+  "key": "fiona_market_analysis",
+  "value": "{\"path\":\"docs/market-analysis.md\",\"summary\":\"TAM $2B, 3 competitors, mobile-first\"}",
+  "set_by": "fiona"
+}'
+
+# Ali tells agent B where to find it
+convergio-bus.sh send ali matteo "Input ready: read docs/market-analysis.md (context key: fiona_market_analysis)"
+```
+
+## Step 6.7: Standard IPC Protocol (E3)
+
+ALL agent messages MUST follow this JSON schema:
+
+```json
+{"type": "DONE|BLOCKED|PROGRESS", "task_id": "T1-01", "agent": "fiona",
+ "summary": "Market analysis complete", "artifacts": ["docs/market-analysis.md"],
+ "next_action": "ready_for_validation"}
+```
+
+Types:
+- `DONE` → task complete, artifacts listed, ready for validation
+- `BLOCKED` → can't proceed, reason in summary, needs intervention
+- `PROGRESS` → status update, percentage in summary
+
+## Step 7: Validate per Domain (C5)
+
+```bash
+# Choose validator based on task output_type
+VALIDATOR=$(sqlite3 $DASHBOARD_DB "SELECT validator_agent FROM tasks WHERE id = $TASK_ID;")
+
+# Dispatch validator
+Task(subagent_type="$VALIDATOR", prompt="Validate task $TASK_ID. Apply gates for output_type.
+  Query gates: sqlite3 \$DASHBOARD_DB 'SELECT gate_name, gate_description FROM validation_gates WHERE output_type = \"$OUTPUT_TYPE\";'")
+```
+
+## Step 8: Report
+
 ```markdown
-# Execution Report
+# Execution Report — Run #$RUN_ID
 
 ## Goal
 [Original request]
 
-## Team Assembled
-| Agent | Role | Tasks | Status |
-|---|---|---|---|
+## Team
+| Agent | Role | Tasks | Output Type | Status | Cost |
+|---|---|---|---|---|---|
 
 ## Results
-[What was accomplished]
+[What was accomplished — link to artifacts]
+
+## Validation
+| Task | Validator | Result | Gates Passed |
+|---|---|---|---|
 
 ## Metrics
-- Duration: X min
-- Agents used: N
-- Tasks completed: N/N
-- Thor validation: PASS/FAIL
+- Duration: X min | Agents: N | Tasks: N/N | Cost: $X.XX
 
 ## Learnings
-[What to improve next time]
+[What to improve — auto-saved to plan_learnings]
+```
+
+After report, update execution_runs:
+```bash
+sqlite3 $DASHBOARD_DB "UPDATE execution_runs SET status='completed',
+  completed_at=datetime('now'), result='$SUMMARY', cost_usd=$COST,
+  agents_used=$N WHERE id=$RUN_ID;"
 ```
 
 ## Rules
 
-- NEVER implement code yourself — always delegate to specialists
-- ALWAYS verify results through Thor or dedicated QA agent
+- NEVER implement yourself — always delegate to specialists
+- ALWAYS validate through domain-specific validator (NOT always Thor)
 - ALWAYS track costs via budget API
-- If an agent fails 3 times, escalate to user
+- ALWAYS use IPC protocol (DONE/BLOCKED/PROGRESS) for messages
+- ALWAYS pass output between agents via shared context
+- If agent fails 3 times → re-assign to alternative, then escalate
 - Prefer cheapest adequate model for each role
 - Maximum parallelism where dependencies allow
+- ALWAYS log run in execution_runs table

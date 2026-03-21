@@ -152,7 +152,19 @@
                 "summary": { "type": "string", "maxLength": 80 },
                 "executor_agent": {
                   "type": "string",
-                  "enum": ["copilot", "claude"]
+                  "description": "Agent name from catalog or tool type"
+                },
+                "output_type": {
+                  "type": "string",
+                  "enum": ["pr", "document", "analysis", "design", "legal_opinion", "plan", "review", "presentation", "other"],
+                  "default": "pr",
+                  "description": "Type of deliverable this task produces"
+                },
+                "validator_agent": {
+                  "type": "string",
+                  "enum": ["thor", "doc-validator", "strategy-validator", "design-validator", "compliance-validator"],
+                  "default": "thor",
+                  "description": "Agent that validates this task output"
                 },
                 "skip_if": { "type": "string" },
                 "output_match": { "type": "object" },

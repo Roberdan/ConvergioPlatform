@@ -21,6 +21,24 @@ Plan creation and orchestration with strict approval, Thor gates, and per-task r
 10. **No scaffold-only tasks** — every task MUST produce working, wired code. Stubs (`todo!()`, `// TODO`, empty handlers) are REJECTED by Thor. If a task creates modules, the CLI/API that calls them MUST be wired in the SAME task or an explicit wiring task in the SAME wave. _Why: Plan 644 — CLI had 9 `todo!()` stubs, core modules existed but were unreachable._
 11. **UI = Maranello Design System** — any task producing UI (web, dashboard, frontend) MUST use the Maranello Luce Design System. Reference the `@NaSra` agent (`github.com/Roberdan/MaranelloLuceDesign/.github/agents/NaSra.agent.md`) for tokens, themes, components, and WCAG compliance. Add `NaSra` as advisor agent in UI task prompts. _Why: Consistent Ferrari Luce-inspired design across all projects._
 
+12. **Multi-domain workstreams** — tasks are NOT limited to code. Supported output_type: `pr` (code), `document`, `analysis`, `design`, `legal_opinion`, `plan`, `review`, `presentation`. Each task MUST have `output_type` and `validator_agent` set. _Why: Convergio is a virtual organization, not just a code factory._
+13. **Validator per domain** — Thor validates code (`output_type: pr`). For other types use: `doc-validator`, `strategy-validator`, `design-validator`, `compliance-validator`. Set `validator_agent` in spec per task.
+14. **Task types expanded** — beyond code: `research`, `strategy`, `design`, `legal`, `marketing`, `analysis`, `planning`, `communication` are valid task types.
+
+## Spec YAML — Non-Code Task Example
+
+```yaml
+- id: T1-01
+  do: "Write market analysis for fitness tracking segment"
+  type: analysis
+  output_type: analysis
+  model: claude-opus-4.6
+  executor_agent: fiona-market-analyst
+  validator_agent: strategy-validator
+  effort: 2
+  verify: ["test -f docs/market-analysis.md", "wc -l docs/market-analysis.md | awk '{if($1 < 50) exit 1}'"]
+```
+
 ## Workflow References
 - Core workflow: `@reference/commands/planner/core-workflow.md`
 - Quality gates: `@reference/commands/planner/quality-gates.md`

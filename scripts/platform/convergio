@@ -126,30 +126,61 @@ cmd_launch() {
 }
 
 cmd_solve() {
-  local goal="$*"
-  [ -z "$goal" ] && { echo -e "${R}Usage: convergio solve \"describe your problem\"${N}"; return 1; }
+  # Parse flags
+  local autonomy="approve-plan"  # default: approve plan, then auto-execute
+  local goal_parts=()
+  for arg in "$@"; do
+    case "$arg" in
+      --autonomous)    autonomy="autonomous" ;;
+      --approve-each)  autonomy="approve-each" ;;
+      --approve-plan)  autonomy="approve-plan" ;;
+      *)               goal_parts+=("$arg") ;;
+    esac
+  done
+  local goal="${goal_parts[*]}"
+  [ -z "$goal" ] && { echo -e "${R}Usage: convergio solve \"problem\" [--autonomous|--approve-plan|--approve-each]${N}"; return 1; }
 
   "$TOGGLE" on 2>/dev/null
   "$BUS" register "ali" "orchestrator" "claude" 2>/dev/null || true
 
   echo -e "${B}Convergio Solve${N}"
   echo -e "${D}Goal: $goal${N}"
+  echo -e "${D}Autonomy: $autonomy${N}"
   echo -e "${G}Spawning Ali (Chief of Staff, Opus)...${N}\n"
 
   local p="Sei Ali, il Chief of Staff di Convergio. "
-  p+="Il tuo compito: risolvere questo problema assemblando un team virtuale di agenti specializzati. "
   p+="PROBLEMA: $goal "
+  p+="MODALITA: $autonomy "
+  case "$autonomy" in
+    autonomous)   p+="Esegui tutto senza chiedere approvazione. Solo escalate su 3x failure. " ;;
+    approve-plan) p+="Presenta il piano per approvazione, poi esegui tutto automaticamente. Ferma solo pre-merge. " ;;
+    approve-each) p+="Chiedi approvazione PRIMA di ogni dispatch di agente e PRIMA di ogni merge. " ;;
+  esac
   p+="ISTRUZIONI: "
-  p+="1) Analizza il problema — dominio, complessità, ruoli necessari. "
-  p+="2) Cerca agenti adatti: sqlite3 \$DASHBOARD_DB \"SELECT name, category, model, substr(description,1,80) FROM agent_catalog WHERE description LIKE '%keyword%';\" "
-  p+="3) Assembla il team — scegli gli specialisti giusti. "
-  p+="4) Crea il piano di esecuzione (usa /planner per piani complessi, inline per semplici). "
-  p+="5) Dispatcha gli agenti (Task tool per subagent, convergio-bus.sh per messaging). "
-  p+="6) Monitora il progresso e riporta i risultati. "
-  p+="NON implementare tu — delega sempre agli specialisti. Verifica sempre con Thor."
+  p+="1) Analizza il problema — dominio, complessita, ruoli. "
+  p+="2) Cerca agenti: sqlite3 \$DASHBOARD_DB \"SELECT ac.name, ac.category, ac.model, ask.confidence, substr(ac.description,1,60) FROM agent_catalog ac JOIN agent_skills ask ON ac.name=ask.agent_name WHERE ask.skill IN ('keyword') ORDER BY ask.confidence DESC;\" "
+  p+="3) Assembla team (confidence-weighted). "
+  p+="4) Invoca /planner per il piano (SEMPRE per 3+ task). "
+  p+="5) Per ogni task, scegli il validatore corretto per output_type (Thor per code, doc-validator per documenti, strategy-validator per analisi, design-validator per design, compliance-validator per legal). "
+  p+="6) Dispatcha agenti. Passa output tra agenti via shared context. "
+  p+="7) Monitora, re-dispatcha su failure (max 3 tentativi per task). "
+  p+="8) Riporta risultati con metriche. "
+  p+="NON implementare tu — delega SEMPRE agli specialisti."
 
   _launch_tool "claude" "$p"
   "$BUS" unregister "ali" 2>/dev/null || true
+}
+
+cmd_stop() {
+  local run_id="${1:-}"
+  echo -e "${Y}Stopping active execution...${N}"
+  "$BUS" broadcast "ali" "ABORT: User requested stop" 2>/dev/null || true
+  if [ -n "$run_id" ]; then
+    sqlite3 "${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}" \
+      "UPDATE execution_runs SET status='cancelled', completed_at=datetime('now') WHERE id=$run_id;" 2>/dev/null
+    echo "  Run $run_id cancelled"
+  fi
+  echo "  Broadcast ABORT sent to all agents"
 }
 
 cmd_named() {
@@ -265,6 +296,7 @@ case "${1:-help}" in
   alerts)             cmd_alerts ;;
   sync-agents)        cmd_sync_agents ;;
   solve)              shift; cmd_solve "$@" ;;
+  stop)               shift; cmd_stop "${1:-}" ;;
   autopilot)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-autopilot.sh" "${1:-once}" ;;
   learnings)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-learnings.sh" "${1:-summary}" ;;
   collect-metrics)    bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" collect ;;
