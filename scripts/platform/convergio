@@ -70,7 +70,10 @@ cmd_help() {
   echo -e "  convergio ${C}pause <run_id>${N}             Pause a running execution"
   echo -e "  convergio ${C}resume <run_id>${N}            Resume a paused execution"
   echo -e "\n${B}Telemetry & Learning:${N}"
-  echo -e "  convergio ${C}models|metrics|skills|alerts${N}"
+  echo -e "  convergio ${C}models|skills|alerts${N}"
+  echo -e "  convergio ${C}metrics${N}                        System metrics (daemon)"
+  echo -e "  convergio ${C}metrics runs${N}                   List execution runs"
+  echo -e "  convergio ${C}metrics run <id>${N}               Per-run: duration, cost, agents, tasks"
   echo -e "  convergio ${C}learnings [analyze|promote]${N} Knowledge system"
   echo -e "  convergio ${C}collect-metrics${N}             Snapshot system telemetry"
   echo -e "  convergio ${C}watch-agents${N}               Real-time agent activity stream"
@@ -99,7 +102,14 @@ cmd_msg()       { "$BUS" send "$@"; }
 cmd_read_msg()  { "$BUS" read "$@"; }
 cmd_broadcast() { "$BUS" broadcast "$@"; }
 cmd_models()    { "$BUS" models; }
-cmd_metrics()   { "$BUS" metrics; }
+cmd_metrics() {
+  local sub="${1:-}"
+  case "$sub" in
+    run)   shift; bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" run "${1:-}" ;;
+    runs)  bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" runs ;;
+    *)     "$BUS" metrics ;;
+  esac
+}
 cmd_skills()    { "$BUS" skills; }
 
 cmd_alerts() {
@@ -160,7 +170,7 @@ case "${1:-help}" in
   learnings)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-learnings.sh" "${1:-summary}" ;;
   auto-update|update) cmd_auto_update ;;
   models)             cmd_models ;;
-  metrics)            cmd_metrics ;;
+  metrics)            shift; cmd_metrics "${@}" ;;
   skills)             cmd_skills ;;
   alerts)             cmd_alerts ;;
   sync-agents)        cmd_sync_agents ;;

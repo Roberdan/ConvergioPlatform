@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# convergio-metrics.sh — Telemetry collector
+# convergio-metrics.sh — Telemetry collector + per-run analytics
 # Collects system + agent metrics and writes to metrics_history table
 # Run via: convergio-autopilot.sh watch (includes metrics) or cron
-set -uo pipefail
+set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
@@ -96,14 +96,109 @@ cmd_clean() {
   echo "Cleaned metrics older than $days days"
 }
 
+cmd_run() {
+  local run_id="${1:-}"
+  if [ -z "$run_id" ]; then
+    echo "Usage: convergio-metrics.sh run <run_id>" >&2
+    exit 1
+  fi
+
+  # Fetch the execution run row
+  local row
+  row=$(_db "SELECT id, goal, status, plan_id, started_at, completed_at, duration_minutes FROM execution_runs WHERE id = $run_id;")
+  if [ -z "$row" ]; then
+    echo "Run $run_id not found." >&2
+    exit 1
+  fi
+
+  local run_goal run_status run_plan_id run_started run_completed run_duration
+  IFS='|' read -r _ run_goal run_status run_plan_id run_started run_completed run_duration <<< "$row"
+
+  # Duration: prefer stored value, else compute from timestamps
+  local duration_str="N/A"
+  if [ -n "$run_duration" ] && [ "$run_duration" != "NULL" ]; then
+    duration_str="${run_duration}m"
+  elif [ -n "$run_started" ] && [ -n "$run_completed" ] && [ "$run_completed" != "NULL" ]; then
+    local mins
+    mins=$(_db "SELECT round((julianday('$run_completed') - julianday('$run_started')) * 1440, 1) FROM execution_runs WHERE id = $run_id;")
+    duration_str="${mins}m"
+  fi
+
+  # Cost: sum delegation_log.cost_estimate for same plan_id within run window
+  local cost="0.00"
+  if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "NULL" ]; then
+    local end_bound="${run_completed:-$(date -u '+%Y-%m-%d %H:%M:%S')}"
+    cost=$(_db "SELECT printf('%.4f', coalesce(sum(cost_estimate),0))
+      FROM delegation_log
+      WHERE plan_id = $run_plan_id
+        AND created_at >= '$run_started'
+        AND created_at <= '$end_bound';")
+  fi
+
+  # Distinct agents used (executor_agent from tasks with the same plan_id)
+  local agents="N/A"
+  if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "NULL" ]; then
+    agents=$(_db "SELECT coalesce(group_concat(DISTINCT executor_agent), 'none')
+      FROM tasks WHERE plan_id = $run_plan_id AND executor_agent IS NOT NULL;")
+  fi
+
+  # Tasks completed / total for the plan
+  local tasks_total="0" tasks_done="0" val_pass="N/A"
+  if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "NULL" ]; then
+    tasks_total=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id;")
+    tasks_done=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id AND status IN ('done','submitted');")
+    # Validation pass rate: tasks with non-null validation_report containing 'PASS'
+    local val_total val_passed
+    val_total=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id AND validation_report IS NOT NULL;")
+    val_passed=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id AND validation_report LIKE '%PASS%';")
+    if [ "${val_total:-0}" -gt 0 ]; then
+      val_pass=$(_db "SELECT printf('%d%%', round(100.0 * $val_passed / $val_total));" )
+    fi
+  fi
+
+  echo "=== Run #${run_id} ==="
+  echo "  Goal:       ${run_goal:-N/A}"
+  echo "  Status:     ${run_status:-N/A}"
+  echo "  Plan ID:    ${run_plan_id:-N/A}"
+  echo "  Started:    ${run_started:-N/A}"
+  echo "  Completed:  ${run_completed:-N/A}"
+  echo "  Duration:   ${duration_str}"
+  echo "  Cost:       \$${cost} USD"
+  echo "  Agents:     ${agents}"
+  echo "  Tasks:      ${tasks_done}/${tasks_total} completed"
+  echo "  Val pass:   ${val_pass}"
+}
+
+cmd_runs() {
+  echo "=== Execution Runs ==="
+  local rows
+  rows=$(_db "SELECT id, goal, status, plan_id, started_at, completed_at, duration_minutes FROM execution_runs ORDER BY id DESC LIMIT 20;")
+
+  if [ -z "$rows" ]; then
+    echo "  No execution runs found."
+    return
+  fi
+
+  printf "  %-5s %-10s %-8s %-40s %s\n" "ID" "PLAN" "STATUS" "GOAL" "STARTED"
+  echo "  ───── ────────── ──────── ──────────────────────────────────────── ───────────────────"
+  while IFS='|' read -r id goal status plan_id started completed duration; do
+    local short_goal="${goal:0:40}"
+    printf "  %-5s %-10s %-8s %-40s %s\n" "$id" "${plan_id:-N/A}" "$status" "$short_goal" "${started:-N/A}"
+  done <<< "$rows"
+}
+
 case "${1:-collect}" in
   collect) cmd_collect ;;
   report)  cmd_report ;;
   clean)   shift; cmd_clean "${1:-30}" ;;
+  run)     shift; cmd_run "${1:-}" ;;
+  runs)    cmd_runs ;;
   *)
-    echo "convergio-metrics.sh — Telemetry collector"
+    echo "convergio-metrics.sh — Telemetry collector + per-run analytics"
     echo "  collect        Collect current metrics"
     echo "  report         Show 24h metric report"
     echo "  clean [days]   Remove old metrics (default: 30 days)"
+    echo "  run <id>       Per-run: duration, cost, agents, tasks, validation"
+    echo "  runs           List execution runs with summary stats"
     ;;
 esac
