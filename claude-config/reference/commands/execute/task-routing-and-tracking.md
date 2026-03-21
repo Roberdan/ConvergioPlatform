@@ -10,6 +10,38 @@ Key columns: `id` (PK), `plan_id`, `wave_id_fk`, `task_id` (human string like T1
 
 _Why: Plan 677 — executor queried `SELECT db_id` which doesn't exist. Column is `id`._
 
+## plan-db.sh Commands (ONLY use these — do NOT invent commands)
+
+```
+# View plan/tasks:
+execution-tree <plan_id>          # Tree view with statuses
+json <plan_id>                    # Full plan as JSON
+status [project_id]               # Quick status
+
+# Task status updates:
+update-task <task_db_id> <status> [notes]   # pending|in_progress|submitted|done|blocked
+update-wave <wave_db_id> <status>           # pending|in_progress|done|blocked
+
+# Validation:
+drift-check <plan_id>             # JSON — check branch_behind, NOT exit code
+evaluate-wave <wave_db_id>        # Check wave preconditions
+validate-wave <wave_db_id> [by]   # Thor validates all submitted tasks in wave
+check-readiness <plan_id>         # Full readiness check
+
+# Lifecycle:
+start <plan_id>                   # Begin execution
+complete <plan_id>                # Mark done
+cancel <plan_id> [reason]         # Cancel
+
+# Context:
+get-context <plan_id>             # Plan context for executor prompt
+get-worktree <plan_id>            # Worktree path
+```
+
+Commands that DO NOT EXIST: `list-tasks`, `get-tasks`, `show-tasks`, `task-list`.
+Use `execution-tree` or `json` or direct SQL query instead.
+_Why: Plan 677 — executor called `list-tasks` which doesn't exist, causing error cascade._
+
 ## Routing
 
 Read per-task from DB:
@@ -73,7 +105,17 @@ submitted → done (ONLY Thor/validator via validate-wave)
 
 Mark in_progress: `bash claude-config/scripts/plan-db-safe.sh update-task {task_db_id} in_progress`
 Mark submitted: `bash claude-config/scripts/plan-db-safe.sh update-task {task_db_id} submitted "summary"`
-NEVER mark done directly — Thor does that via validate-wave.
+NEVER mark done directly — Thor does that via `bash claude-config/scripts/plan-db.sh validate-wave {wave_db_id}`.
+
+To get task_db_id from task_id string:
+```bash
+sqlite3 "$DASHBOARD_DB" "SELECT id FROM tasks WHERE plan_id = 677 AND task_id = 'T1-01';"
+```
+
+To get wave_db_id:
+```bash
+sqlite3 "$DASHBOARD_DB" "SELECT id FROM waves WHERE plan_id = 677 AND wave_id = 'W1';"
+```
 
 ## Per-Task Mechanical Gates (before submitted)
 

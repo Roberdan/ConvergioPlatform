@@ -37,7 +37,8 @@ If readiness passes → proceed. If fails → fix errors, do NOT proceed.
 
 Run: `bash claude-config/scripts/plan-db.sh drift-check {plan_id}`
 
-Drift check exits 1 for minor/major drift. Interpret the JSON:
+**IMPORTANT: drift-check ALWAYS exits 1 if any drift exists. This is NOT an error.**
+**Read the JSON output, ignore the exit code.** Interpret the JSON:
 
 | `branch_behind` | `drift` | Action |
 |---|---|---|
