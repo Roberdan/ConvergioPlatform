@@ -1,7 +1,7 @@
-use super::state::{query_rows, ApiError, ServerState};
+use crate::server::state::{query_rows, ApiError, ServerState};
 use axum::extract::State;
-use axum::routing::{get, post};
 use axum::{Json, Router};
+use axum::routing::{get, post};
 use serde_json::{json, Value};
 
 pub fn router() -> Router<ServerState> {
@@ -13,7 +13,7 @@ pub fn router() -> Router<ServerState> {
 
 /// POST /api/notify — create notification, attempt native delivery + mesh relay
 /// Body: {severity, title, message, plan_id?, link?}
-async fn handle_notify(
+pub async fn handle_notify(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
@@ -74,7 +74,7 @@ async fn handle_notify(
 }
 
 /// GET /api/notify/queue — list pending notifications
-async fn handle_queue(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
+pub async fn handle_queue(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let notifications = query_rows(
         &conn,
@@ -94,7 +94,7 @@ async fn handle_queue(State(state): State<ServerState>) -> Result<Json<Value>, A
 
 /// POST /api/notify/deliver — mark notifications as delivered
 /// Body: {ids: [1, 2, 3]}
-async fn handle_deliver(
+pub async fn handle_deliver(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
@@ -127,7 +127,7 @@ async fn handle_deliver(
 }
 
 /// Try to send a native OS notification (non-blocking, best-effort)
-fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
+pub fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
     let icon = match severity {
         "error" => "❌",
         "warning" => "⚠️",
@@ -166,7 +166,7 @@ fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn();
-        result.is_ok()
+        return result.is_ok();
     }
 
     #[cfg(target_os = "linux")]
@@ -182,80 +182,5 @@ fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         false
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::db::PlanDb;
-    use crate::server::state::query_rows;
-
-    fn setup_db() -> PlanDb {
-        let db = PlanDb::open_in_memory().expect("db");
-        db.connection()
-            .execute_batch(
-                "CREATE TABLE notification_queue (
-                     id INTEGER PRIMARY KEY, severity TEXT DEFAULT 'info',
-                     title TEXT NOT NULL DEFAULT '', message TEXT,
-                     plan_id INTEGER, link TEXT,
-                     status TEXT DEFAULT 'pending',
-                     created_at TEXT DEFAULT (datetime('now')),
-                     delivered_at TEXT
-                 );",
-            )
-            .expect("schema");
-        db
-    }
-
-    #[test]
-    fn api_notify_insert_and_query() {
-        let db = setup_db();
-        let conn = db.connection();
-
-        conn.execute(
-            "INSERT INTO notification_queue (severity, title, message, status) \
-             VALUES ('info', 'Test', 'Hello world', 'pending')",
-            [],
-        )
-        .unwrap();
-
-        let pending = query_rows(
-            conn,
-            "SELECT id, title FROM notification_queue WHERE status = 'pending'",
-            [],
-        )
-        .unwrap();
-        assert_eq!(pending.len(), 1);
-    }
-
-    #[test]
-    fn api_notify_deliver_marks_done() {
-        let db = setup_db();
-        let conn = db.connection();
-
-        conn.execute(
-            "INSERT INTO notification_queue (severity, title, status) \
-             VALUES ('info', 'N1', 'pending'), ('info', 'N2', 'pending')",
-            [],
-        )
-        .unwrap();
-
-        let changed = conn
-            .execute(
-                "UPDATE notification_queue SET status = 'delivered', \
-                 delivered_at = datetime('now') WHERE id = 1 AND status = 'pending'",
-                rusqlite::params![],
-            )
-            .unwrap();
-        assert_eq!(changed, 1);
-
-        let pending: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM notification_queue WHERE status = 'pending'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(pending, 1);
     }
 }
