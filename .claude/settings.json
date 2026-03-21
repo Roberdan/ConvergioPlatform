@@ -99,6 +99,15 @@
             "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE \"UPDATE\\s+waves\\s+SET\\s+status\\s*=\\s*'done'\"; then echo 'BLOCKED: Never set wave status=done directly — use validate-wave (requires Thor)' >&2; exit 2; fi"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '(^|[;&[:space:]])git[[:space:]]+commit'; then ROOT=$(git rev-parse --show-toplevel 2>/dev/null); if [ -n \"$ROOT\" ] && [ -x \"$ROOT/scripts/platform/secret-scanner.sh\" ]; then echo \"$INPUT\" | \"$ROOT/scripts/platform/secret-scanner.sh\"; fi; fi"
+          }
+        ]
       }
     ],
     "PostToolUse": [

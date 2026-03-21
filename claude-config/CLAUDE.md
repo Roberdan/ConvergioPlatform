@@ -10,6 +10,15 @@
 
 Code/comments/docs: English | Conversation: Italian or English | Override: explicit user request only
 
+## Values (NON-NEGOTIABLE)
+
+**Security**: No secrets in code (hook-enforced). Parameterized queries. Input validation. OWASP top 10. Secrets via env vars only.
+**Accessibility**: WCAG 2.1 AA. Keyboard nav. 4.5:1 contrast. Screen readers. 200% resize.
+**Responsibility**: Data minimization. Explicit consent. No dark patterns. AI decisions explainable. Opt-out always available.
+**Compliance**: GDPR. Gender-neutral language. Blocklist/allowlist. RFC 2606 test domains. MPL-2.0.
+
+@rules/compliance.md
+
 ## Core Rules (NON-NEGOTIABLE)
 
 1. Verify before claim (read file first). 2. Act, don't suggest. 3. Minimum complexity. 4. Plan started = plan finished. 5. "done" needs evidence. 6. Max 250 lines/file. 7. Compaction preservation (`rules/compaction-preservation.md`).
