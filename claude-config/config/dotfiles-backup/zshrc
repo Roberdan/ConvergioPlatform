@@ -488,8 +488,8 @@ export PATH="$HOME/.claude/scripts:$PATH"
 unalias copilot 2>/dev/null
 alias copilot="command copilot --yolo"
 
-# Grafana Cloud - MCP Server
-export GRAFANA_SERVICE_ACCOUNT_TOKEN="glsa_AXZa5ZVKYfZZ0rtOjG71ZVl5itMz6YGP_556cf195"
+# Grafana Cloud - MCP Server (token removed — use env var)
+# export GRAFANA_SERVICE_ACCOUNT_TOKEN="$GRAFANA_TOKEN"
 
 [[ -f "/Users/roberdan/.config/kaku/zsh/kaku.zsh" ]] && source "/Users/roberdan/.config/kaku/zsh/kaku.zsh" # Kaku Shell Integration
 
