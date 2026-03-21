@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.convergio.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/Roberdan/GitHub/ConvergioPlatform/daemon/start.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/Roberdan/.claude/data/convergio-daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/Roberdan/.claude/data/convergio-daemon.err</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DASHBOARD_DB</key>
+        <string>/Users/Roberdan/GitHub/ConvergioPlatform/data/dashboard.db</string>
+        <key>CONVERGIO_PLATFORM_DIR</key>
+        <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
+</dict>
+</plist>
