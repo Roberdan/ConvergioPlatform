@@ -1,187 +1,250 @@
 # ConvergioPlatform
 
-Unified AI agent swarm: Rust daemon, mesh networking, plan-driven development, centralized telemetry, self-improving evolution engine. Model-agnostic, tool-agnostic, machine-agnostic.
+A **virtual organization** powered by AI. Give it a problem — it assembles a team of specialized agents, coordinates them across any model/tool/machine, and delivers the result. Like renting an entire agency.
 
-## What is Convergio?
+## How It Works
 
-A **virtual organization** you can rent. Give it a problem — it assembles a team of specialized AI agents, coordinates them, and delivers the result. Like hiring an entire agency, but the staff are AI models running on any provider.
+```bash
+convergio solve "Build a SaaS MVP for fitness tracking"
+```
 
-- **84+ specialized agents**: engineers, designers, PMs, QA, strategists, compliance experts, DevOps
-- **Any model**: Claude, GPT, Gemini, local LLMs (oMLX/LiteLLM)
-- **Any tool**: Claude Code, Copilot CLI, OpenCode, raw API
-- **Any machine**: local, Tailscale mesh nodes, cloud
-- **One command**: `convergio solve "build me a fitness tracking MVP"`
+Ali (Chief of Staff, Opus) does everything:
+1. **Analyzes** the problem — identifies domains: frontend, backend, UX, QA, DevOps
+2. **Queries the talent pool** — 89 agents, 119 skills, confidence-weighted selection
+3. **Creates a plan** — waves, tasks, per-task model/tool/validator assignment
+4. **Dispatches agents** — spawns them on optimal tool (Claude/Copilot/OpenCode/local LLM)
+5. **Monitors** — real-time via daemon IPC, re-dispatches on failure, budget cap enforcement
+6. **Validates** — domain-specific validators (Thor for code, doc-validator for docs, compliance-validator for legal)
+7. **Reports** — structured results with cost, duration, learnings
 
-Ali (Chief of Staff, Opus) analyzes your problem, picks the right specialists from the catalog, creates an execution plan, dispatches agents, monitors progress through Thor quality gates, and reports results with evidence.
+Agents communicate like Slack — channels, DMs, broadcasts. Messages arrive automatically via push notifications. No polling needed.
 
 ## Architecture
 
-| Layer | Path | Language | Purpose |
+```
+User → convergio solve → Ali (orchestrator)
+                           ├→ spawns agents (any model, any tool, any machine)
+                           ├→ coordinates via daemon IPC (channels, DMs, broadcast)
+                           ├→ validates via domain validators (Thor, doc, strategy, design, compliance)
+                           └→ learns (knowledge base, skills, calibration)
+                                    ↕
+                              Daemon :8420 (Rust)
+                           ├→ IPC engine (messaging, registry, shared context, file locks)
+                           ├→ Mesh P2P (Tailscale, HMAC-SHA256, CRDT sync)
+                           ├→ Plan DB (SQLite WAL, waves, tasks, validation triggers)
+                           ├→ Evolution (proposals → experiments → apply)
+                           └→ Telemetry (metrics, budget, cost tracking)
+```
+
+| Layer | Path | Lang | Purpose |
 |---|---|---|---|
-| **Daemon** | `daemon/` | Rust | P2P mesh, HTTP/WS/SSE API, IPC engine, SQLite WAL + CRDT, TUI |
+| **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI |
 | **Dashboard** | `dashboard/` | JS | Control Room on [MaranelloLuceDesign](https://github.com/Roberdan/MaranelloLuceDesign) |
-| **Evolution** | `evolution/` | TypeScript | Self-improvement: telemetry → proposals → experiments → apply |
-| **Config** | `claude-config/` | Markdown | Canonical agent/skill/rule definitions |
-| **Scripts** | `scripts/` | Bash | Mesh ops, plan DB, agent bridge, digests |
+| **Evolution** | `evolution/` | TS | Self-improvement: telemetry → proposals → experiments |
+| **Config** | `claude-config/` | MD | 89 agents, 8 commands, 8 rules, 27 validation gates |
+| **Scripts** | `scripts/` | Bash | 10 CLI scripts, mesh ops, plan DB, digests |
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/Roberdan/ConvergioPlatform.git
 cd ConvergioPlatform
-./setup.sh                              # env vars, verify symlinks
-cd daemon && cargo build --release      # build Rust daemon
-./daemon/start.sh                       # start daemon on :8420
-convergioOn                             # enable swarm overlay
-convergio list                          # see available agents
-convergio menu                          # interactive agent launcher
+./setup.sh                    # env vars, CLI aliases, enable overlay
+cd daemon && cargo build --release
+./daemon/start.sh             # daemon on :8420
+convergio list                # see 89 agents
+convergio solve "your goal"   # Ali takes over
 ```
 
-## Virtual Organization
-
-```bash
-convergio solve "Build a SaaS MVP for fitness tracking with React + Rust backend"
-```
-
-Ali (Chief of Staff) will:
-1. Analyze → domains: frontend, backend, UX, QA, DevOps
-2. Query catalog → find `sara-ux-ui-designer`, `baccio-tech-architect`, `task-executor`, `thor`, `marco-devops-engineer`
-3. Create plan → waves with tasks, models, effort estimates
-4. Dispatch → spawn agents on optimal tool/model/machine
-5. Monitor → track via IPC, re-allocate on failure
-6. Report → structured results with evidence and learnings
-
-The agent catalog covers 11 domains:
-
-| Domain | Agents | Examples |
-|---|---|---|
-| Core Utility | 19 | Thor, Ali, planner, reviewer, optimizer |
-| Technical Dev | 11 | task-executor, Rex, Dario debugger, Baccio architect |
-| Business Ops | 11 | Davide PM, Oliver PM, Andrea customer success |
-| Specialized | 14 | Omri data scientist, Fiona analyst, Ava analytics |
-| Leadership | 7 | Amy CFO, Antonio strategy, Satya board |
-| Compliance | 5 | Elena legal, Luca security, Dr. Enzo healthcare |
-| Release Mgmt | 5 | app-release-manager, feature-release, ecosystem-sync |
-| Design/UX | 3 | Jony creative director, Sara UX/UI |
-| Research | 1 | research-report-generator |
-| Reference | 5 | Playbooks (Dario, Otto) |
+Disable anytime: `convergioOff`. Re-enable: `convergioOn`. Full revert: `revert-claude-symlinks.sh --env`.
 
 ## Convergio CLI
 
 ```bash
-# Solve (virtual organization)
-convergio solve "your problem here"    # Ali assembles team and solves it
+# Virtual Organization
+convergio solve "problem"               # Ali assembles team and solves
+convergio solve "problem" --autonomous   # no approval needed
+convergio solve "problem" --approve-each # approve every step
+convergio stop [run_id]                  # abort execution
 
-# Agents
-convergio list                          # available agents
-convergio menu                          # interactive selection
-convergio planner                       # launch as planner (Claude)
-convergio executor pippo --tool copilot # launch as "pippo" on Copilot
-convergio as mario --tool opencode      # custom name on OpenCode
+# Named Agents (any model, any tool)
+convergio planner                        # launch as planner (Claude Opus)
+convergio executor pippo --tool copilot  # "pippo" on Copilot (GPT Codex)
+convergio as mario --tool opencode       # custom name on OpenCode
+convergio as amy --tool local            # local LLM via LiteLLM
+convergio menu                           # interactive selection
+convergio list                           # all 89 agents
 
-# Communication (via daemon IPC)
-convergio who                           # active agents across all machines
-convergio msg pippo pluto "review auth" # send directed message
-convergio read pluto                    # read messages
-convergio broadcast pippo "standup"     # message all agents
+# Communication (daemon IPC — like Slack for agents)
+convergio who                            # active agents (all machines)
+convergio msg pippo pluto "review auth"  # direct message
+convergio read pluto                     # read inbox
+convergio broadcast pippo "standup"      # message all
+convergio watch-agents                   # real-time activity stream (WebSocket)
 
-# Toggle
-convergio on                            # enable in ALL repos
-convergio off                           # clean Claude/Copilot
-convergio status                        # current state + daemon health
+# Cross-Repo Coordination
+convergio sync request virtualbpm maranello "Need VoiceOrb component"
+convergio sync pending                   # show pending requests
+convergio sync auto-dispatch             # Ali handles cross-repo requests
+
+# Organizational Telemetry
+convergio org live                       # last N agent interactions
+convergio org matrix                     # who talks to whom
+convergio org teams                      # active teams per run
+convergio org flow <run_id>              # timeline of a run
+convergio org stats                      # overall statistics
 
 # Workflow
-convergio plans                         # active plans
-convergio session                       # git + plans + PRs status
-convergio learnings                     # review session learnings
-convergio auto-update                   # analyze + propose improvements
+convergio plans                          # active plans
+convergio session                        # git + plans + PRs
+convergio autopilot watch                # auto execute→Thor→merge loop
+convergio auto-update                    # analyze learnings, propose improvements
 
-# Telemetry
-convergio models                        # available models (cloud + local)
-convergio metrics                       # system metrics
-convergio skills                        # agent skill pool
-convergio alerts                        # pending notifications
+# Telemetry & Learning
+convergio models                         # available models (cloud + local)
+convergio metrics                        # system metrics
+convergio skills                         # agent skill pool
+convergio alerts                         # pending notifications
+convergio learnings analyze              # find recurring patterns
+convergio learnings promote              # auto-promote to knowledge/skills
+convergio collect-metrics                # snapshot system telemetry
+
+# Toggle & Setup
+convergio on                             # enable in ALL repos
+convergio off                            # clean Claude/Copilot
+convergio status                         # overlay + daemon state
+convergio sync-agents                    # regenerate tool-specific agent files
+convergio import-agents <path>           # import agents from external repo
 ```
 
-## Agent Swarm
+## Agent Catalog (89 agents, 12 domains)
 
-13 named agents, each with a specific role and default model:
-
-| Agent | Role | Model | Tool |
+| Domain | Count | Examples | Default Model |
 |---|---|---|---|
-| `planner` | Plan creation + orchestration | opus | claude |
-| `executor` | Task execution with TDD | codex | copilot |
-| `thor` | Quality validation (10 gates) | opus | claude |
-| `prompt` | Requirements extraction | opus | claude |
-| `reviewer` | Independent plan review | sonnet | claude |
-| `rex` | Code review — patterns + security | haiku | claude |
-| `debugger` | Adversarial 3-hypothesis debugging | sonnet | claude |
-| `postmortem` | Plan execution analysis | opus | claude |
-| `optimizer` | Context + token optimization | opus | claude |
-| `auditor` | Deep cross-validated repo audit | opus | claude |
-| `convergio` | Platform control plane expert | sonnet | claude |
-| `llm` | Local LLM infrastructure | sonnet | claude |
-| `check` | Quick session status recap | mini | copilot |
+| Core Utility | 19 | Ali, Thor, planner, reviewer, optimizer | opus/sonnet |
+| Technical Dev | 11 | task-executor, Rex reviewer, Dario debugger, Baccio architect | codex/haiku |
+| Business Ops | 11 | Davide PM, Oliver PM, Andrea customer success | sonnet/haiku |
+| Specialized | 14 | Omri data scientist, Fiona analyst, Ava analytics | haiku |
+| Leadership | 7 | Amy CFO, Antonio strategy, Satya board | sonnet |
+| Compliance | 5 | Elena legal, Luca security, Dr. Enzo healthcare | opus |
+| Release Mgmt | 5 | app-release-manager, ecosystem-sync | sonnet |
+| Design/UX | 3 | Jony creative director, Sara UX/UI | sonnet |
+| Research | 1 | research-report-generator | sonnet |
+| Reference | 5 | Playbooks (Dario debugger, Otto performance) | — |
 
-Agents communicate through the daemon IPC engine — works cross-terminal, cross-machine, cross-tool.
+All agents support: Claude Code, Copilot CLI, OpenCode, local LLMs. Model and tool selected per-task by Ali or planner.
+
+## Validation System (5 validators, 27 gates)
+
+Not just code. Every output type has its own validator:
+
+| Output Type | Validator | Gates | Examples |
+|---|---|---|---|
+| `pr` (code) | Thor | 10 | tests, lint, type check, scope, integration, TDD |
+| `document` | doc-validator | 5 | completeness, structure, sources, coherence, actionability |
+| `analysis` | strategy-validator | 4 | data quality, completeness, feasibility, alignment |
+| `design` | design-validator | 4 | accessibility (WCAG), consistency, user flow, responsive |
+| `legal_opinion` | compliance-validator | 4 | regulations, risk, gaps, remediation |
+
+Enforced by DB trigger: tasks can't be marked `done` without validation by the assigned validator.
+
+## Agent Communication
+
+The daemon IPC engine works like Slack for agents:
+
+| Feature | How |
+|---|---|
+| Channels | `ipc_channels` — auto-created, named (general, dm:pippo, planning) |
+| Direct messages | `POST /api/ipc/send` with agent name |
+| Broadcast | Send to channel, all subscribers see it |
+| Who's online | `GET /api/ipc/agents` — name, host, type, last_seen |
+| Push notifications | Notification hook checks inbox automatically — no polling |
+| Shared context | `ipc_shared_context` — pass artifacts between agents (LWW) |
+| File locks | `ipc_file_locks` — prevent two agents editing same file |
+| Real-time stream | `WS /ws/dashboard` — live agent events |
+| Cross-repo | `convergio sync` — requests/dispatch between repos |
+
+Agents are born dynamically (spawned by Ali or user), communicate via IPC, and die when their task is complete. Ali re-spawns on failure (3 attempts with exponential backoff).
 
 ## Plan-Driven Development
 
 ```
-/prompt → /planner → review → DB → /execute → Thor → merge → learnings
+/prompt → /planner → review → DB → /execute → validate → merge → learn
 ```
 
-| Phase | Agent | What |
-|---|---|---|
-| Requirements | `prompt` | Extract F-xx requirements from user input |
-| Planning | `planner` | Create spec.yaml with waves, tasks, models |
-| Review | `reviewer` | Independent quality review (fresh context) |
-| Execution | `executor` | TDD, one task at a time, drift detection |
-| Validation | `thor` | 10-gate quality check per wave (zero tolerance) |
-| Merge | — | Squash merge into main via worktree |
-| Learning | `postmortem` | Extract learnings → knowledge base |
-| Calibration | — | Auto-calibrate estimation accuracy |
+| Phase | Agent | Output Type | Validator |
+|---|---|---|---|
+| Requirements | `prompt` | — | — |
+| Planning | `planner` | plan | user approval |
+| Review | `reviewer` | review | — |
+| Execution | per-task agent | per-task | per-task validator |
+| Validation | Thor / domain validator | — | — |
+| Merge | — | — | pre-merge gates |
+| Learning | `postmortem` | — | — |
+| Calibration | auto | — | — |
 
-## Daemon API (76+ endpoints)
-
-| Category | Examples |
-|---|---|
-| Plans | `/api/plan-db/list`, `/api/plan-db/execution-tree/:id` |
-| IPC | `/api/ipc/agents`, `/api/ipc/send`, `/api/ipc/messages` |
-| Mesh | `/api/mesh`, `/api/mesh/topology`, `/api/mesh/metrics` |
-| Evolution | `/api/evolution/proposals`, `/api/evolution/roi` |
-| Dashboard | `/api/overview`, `/api/tokens/daily` |
-| Real-time | `WS /ws/dashboard`, `WS /ws/brain`, `WS /ws/pty` |
-| Telemetry | `/api/ipc/metrics`, `/api/ipc/models`, `/api/ipc/budget` |
+Supports non-code workstreams: research, strategy, design, legal, marketing, analysis.
 
 ## Telemetry & Learning
 
-| System | Storage | Updates |
+| System | Storage | Purpose |
 |---|---|---|
-| Knowledge Base | `knowledge_base` table | `plan-db.sh kb-write` |
-| Plan Learnings | `plan_learnings` table | After task/wave/plan |
-| Plan Actuals | `plan_actuals` table | Tokens, cost, ROI, Thor rejections |
-| Metrics History | `metrics_history` table | Runtime, mesh, agent performance |
-| Earned Skills | `earned_skills` table | Promoted learnings → reusable skills |
-| Evolution | `evolution_proposals` table | Hypothesis → experiment → apply/reject |
-| Session Signals | `session-learnings.jsonl` | Real-time execution signals |
+| Agent Events | `ipc_messages` + `agent_events` | Who did what, when, to whom |
+| Execution Runs | `execution_runs` | Per-run: goal, team, cost, duration, result |
+| Knowledge Base | `knowledge_base` | Domain insights, confidence, hit count |
+| Plan Learnings | `plan_learnings` | Post-mortem: estimation misses, rejections |
+| Plan Actuals | `plan_actuals` | Tokens, cost, ROI, Thor rejection rate |
+| Metrics History | `metrics_history` | CPU, memory, agent count, plan progress |
+| Earned Skills | `earned_skills` | Promoted learnings → reusable skills |
+| Agent Catalog | `agent_catalog` + `agent_skills` | 89 agents, 119 skill mappings |
+| Validation Gates | `validation_gates` | 27 gates across 5 output types |
+| Evolution | `evolution_proposals` | Hypothesis → experiment → apply/reject |
+| Budget | `execution_runs.cost_usd` | Daily cap ($10 default), per-run tracking |
+
+## Safety & Controls
+
+| Control | How |
+|---|---|
+| Autonomy levels | `--autonomous`, `--approve-plan`, `--approve-each` |
+| Budget cap | `$CONVERGIO_MAX_BUDGET` (default $10/day) — autopilot pauses on exceed |
+| Secret scanner | Pre-commit hook blocks API keys, tokens, passwords, hardcoded URLs |
+| Agent health | Zombie detection (10 min timeout), auto-prune |
+| Retry backoff | Exponential (30s, 60s, 120s), escalate after 3 failures |
+| Abort | `convergio stop [run_id]` — broadcast ABORT to all agents |
+| Values | Security (OWASP), Accessibility (WCAG 2.1 AA), Responsibility (GDPR), Compliance |
+| Toggle | `convergioOff` removes all overlay — instant clean state |
+| Revert | `revert-claude-symlinks.sh --env` — full rollback including env vars |
+
+## Daemon API (76+ endpoints)
+
+| Category | Key Endpoints |
+|---|---|
+| IPC | `agents`, `send`, `messages`, `channels`, `context`, `locks`, `conflicts` |
+| Plans | `list`, `execution-tree`, `start`, `complete`, `validate-wave` |
+| Mesh | `peers`, `topology`, `metrics`, `delegate`, `heartbeat` |
+| Evolution | `proposals`, `approve`, `reject`, `experiments`, `roi` |
+| Dashboard | `overview`, `tokens/daily`, `notifications` |
+| Real-time | `WS /ws/dashboard`, `WS /ws/brain`, `WS /ws/pty` |
+| Streaming | `SSE /api/chat/stream`, `SSE /api/plan/preflight` |
 
 ## Mesh Network
 
-Tailscale P2P mesh with HMAC-SHA256. One coordinator + N workers.
+Tailscale P2P mesh with HMAC-SHA256. One coordinator + N workers. CRDT-enabled DB sync.
 
 ```bash
 convergio heartbeat                     # check all nodes
-scripts/mesh/mesh-provision-node.sh     # provision new node
-scripts/mesh/mesh-sync-all.sh           # sync config across mesh
+convergio sync register-repo vbpm ~/GitHub/VirtualBPM
+convergio sync request vbpm maranello "Need component X"
 ```
 
 ## Testing
 
 ```bash
-cd daemon && cargo test                 # Rust daemon (107 modules)
+cd daemon && cargo test                 # Rust daemon (140 modules)
 cd evolution && npx vitest run          # Evolution engine (43 tests)
-convergio status                        # verify CLI + daemon + symlinks
+convergio status                        # CLI + daemon + symlinks
+convergio org stats                     # organizational telemetry
+convergio learnings summary             # knowledge system health
 ```
 
 ## Ecosystem

@@ -55,9 +55,31 @@ Backend migrations → `rules/migration-checklist.md`. Pre-closure: `git-digest.
 
 @rules/enforcement.md
 
+## Agent Communication (IPC)
+
+Daemon on `:8420` is the message bus. Agents communicate like Slack:
+- Send: `convergio-bus.sh send <you> <them> <message>`
+- Read: automatic via Notification hook (checks inbox after each action)
+- Who: `convergio-bus.sh who`
+- Shared context: `curl POST /api/ipc/context` for artifact passing
+- Protocol: `{"type":"DONE|BLOCKED|PROGRESS","task_id":"T1-01","agent":"name","summary":"..."}`
+
+## Validation (multi-domain)
+
+| Output | Validator | Gates |
+|---|---|---|
+| code (pr) | thor | 10 gates |
+| document | doc-validator | 5 gates |
+| analysis | strategy-validator | 4 gates |
+| design | design-validator | 4 gates |
+| legal | compliance-validator | 4 gates |
+
+Set `validator_agent` per task in spec.yaml. DB trigger enforces.
+
 ## Tools & Agents
 
 Priority: LSP → Glob/Grep/Read/Edit → Subagents → Bash (git/npm only).
+Orchestration: `convergio solve` → Ali → /planner → agents → validators → merge.
 
 @reference/operational/core-tools.md
 
