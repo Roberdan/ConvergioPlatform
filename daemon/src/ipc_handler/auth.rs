@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use super::types::AuthCommands;
 use super::utils::default_db_path;
 
