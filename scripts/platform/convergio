@@ -302,6 +302,7 @@ case "${1:-help}" in
   autopilot)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-autopilot.sh" "${1:-once}" ;;
   learnings)          shift; bash "$PLATFORM_DIR/scripts/platform/convergio-learnings.sh" "${1:-summary}" ;;
   collect-metrics)    bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" collect ;;
+  org)                shift; bash "$PLATFORM_DIR/scripts/platform/convergio-org.sh" "${1:-help}" "${2:-}" ;;
   watch-agents)       echo "Watching agent activity (Ctrl+C to stop)..." ; curl -sf -N "$DAEMON_URL/ws/dashboard" 2>/dev/null | python3 -c "
 import sys,json
 for line in sys.stdin:
