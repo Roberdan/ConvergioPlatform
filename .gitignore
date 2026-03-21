@@ -155,6 +155,12 @@ claude-config/scripts/copilot
 .claude/reference
 .claude/CLAUDE.md
 
+# Circular symlinks (bug guard — toggle creates these accidentally)
+claude-config/agents/agents
+claude-config/commands/commands
+claude-config/reference/reference
+claude-config/rules/rules
+
 # Compiled binaries
 scripts/platform/convergio-menubar
 

@@ -60,8 +60,10 @@ enable() {
       echo "  Backed up: $name → ${name}.convergio-backup"
     fi
 
-    # Absolute symlink (cross-filesystem safe)
-    ln -sf "$CONFIG_SRC/$name" "$link"
+    # Remove existing symlink first to prevent circular link creation
+    # (ln -sf follows existing symlink dirs instead of replacing them)
+    [ -L "$link" ] && unlink "$link"
+    ln -s "$CONFIG_SRC/$name" "$link"
   done
 
   # Also ensure project-level .claude/ in ConvergioPlatform has its symlinks
@@ -69,6 +71,15 @@ enable() {
   for name in commands agents rules reference CLAUDE.md; do
     if [ ! -L "$proj_claude/$name" ] && [ ! -e "$proj_claude/$name" ]; then
       ln -sf "../claude-config/$name" "$proj_claude/$name"
+    fi
+  done
+
+  # Guard: remove circular symlinks that can appear if toggle runs twice
+  # e.g. claude-config/agents/agents → claude-config/agents (self-referencing)
+  for name in commands agents rules reference; do
+    local circular="$CONFIG_SRC/$name/$name"
+    if [ -L "$circular" ]; then
+      unlink "$circular" 2>/dev/null && echo "  Removed circular symlink: $name/$name"
     fi
   done
 

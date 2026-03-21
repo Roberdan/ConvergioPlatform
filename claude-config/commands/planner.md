@@ -55,20 +55,24 @@ Plan creation and orchestration with strict approval, Thor gates, and per-task r
 After generating the spec YAML, you MUST complete ALL steps before presenting to user:
 
 ```
-1. planner-create.sh reset
-2. Launch 1 review agent — MUST pass the EXACT spec file path in the prompt:
-   Agent(subagent_type="plan-reviewer", prompt="Review the spec at <EXACT_PATH>. FIRST ACTION: Read <EXACT_PATH>. Do NOT search for other spec files. Write review to /tmp/review-standard.md.")
-3. Wait for review to complete
-4. planner-create.sh register-review standard /tmp/review-standard.md
-5. planner-create.sh check-reviews  ← MUST pass
-6. Apply review fixes to spec YAML
-7. planner-create.sh create <project> "<name>" --source-file <spec>
-8. planner-create.sh import <plan_id> <spec.yaml>
-9. Present plan summary for user approval
+1.  planner-create.sh reset
+2.  Launch 1 review agent — MUST pass the EXACT spec file path:
+    Agent(subagent_type="plan-reviewer", prompt="Review the spec at <EXACT_PATH>. FIRST ACTION: Read <EXACT_PATH>. Do NOT search for other spec files. Write review to /tmp/review-standard.md.")
+3.  Wait for review to complete
+4.  planner-create.sh register-review standard /tmp/review-standard.md
+5.  planner-create.sh check-reviews  ← MUST pass
+6.  Apply ALL review fixes to spec YAML (blockers + advisories)
+7.  Verify spec: every task has verify[] array, effort 1-3, model, executor_agent, validator_agent, output_type
+8.  planner-create.sh create <project> "<name>" --source-file <spec>
+9.  planner-create.sh import <plan_id> <spec.yaml>
+    ← import now auto-validates: test_criteria, effort range, review linkage, worktree creation
+10. planner-create.sh readiness <plan_id>  ← MUST pass with 0 errors
+11. Present plan summary for user approval
 ```
 
-NEVER present the plan before step 5 passes. NEVER write to DB without `planner-create.sh`.
-_Why: Plan 616 — reviews skipped, manual DB writes caused data loss._
+NEVER present the plan before step 10 passes. NEVER write to DB without `planner-create.sh`.
+If import reports errors, FIX THEM before readiness check. If readiness fails, FIX before presenting.
+_Why: Plan 616 — reviews skipped. Plan 677 — presented as ready but had no worktree, no review linkage, missing test_criteria. Executor correctly blocked._
 
 ## DB Safety (NON-NEGOTIABLE)
 
