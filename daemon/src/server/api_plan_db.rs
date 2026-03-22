@@ -114,6 +114,7 @@ async fn handle_task_update(
         .ok_or_else(|| ApiError::bad_request("missing status"))?;
     let notes = body.get("notes").and_then(Value::as_str).unwrap_or("");
     let tokens = body.get("tokens").and_then(Value::as_i64).unwrap_or(0);
+    let validated_by = body.get("validated_by").and_then(Value::as_str);
 
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -121,13 +122,14 @@ async fn handle_task_update(
     let changed = conn
         .execute(
             "UPDATE tasks SET status = ?1, \
+             validated_by = COALESCE(?4, validated_by), \
              started_at = CASE WHEN ?1 = 'in_progress' AND started_at IS NULL \
                THEN datetime('now') ELSE started_at END, \
              completed_at = CASE WHEN ?1 IN ('done','submitted') \
                THEN datetime('now') ELSE completed_at END, \
              tokens = tokens + ?2 \
              WHERE id = ?3",
-            rusqlite::params![status, tokens, task_id],
+            rusqlite::params![status, tokens, task_id, validated_by],
         )
         .map_err(|e| ApiError::internal(format!("update failed: {e}")))?;
 
