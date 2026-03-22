@@ -9,6 +9,7 @@ mod cli_kb;
 mod cli_lock;
 mod cli_ops;
 mod cli_plan;
+mod cli_project;
 mod cli_plan_handlers;
 mod cli_review;
 mod cli_run;
@@ -195,6 +196,7 @@ async fn dispatch(command: Commands) {
         Commands::Audit { path } => cli_audit::handle(path),
         Commands::Skill { command } => cli_skill::handle(command).await,
         Commands::Bus { command } => cli_bus::handle(command).await,
+        Commands::Project { command } => cli_project::handle(command).await,
         Commands::Metrics { command } => cli_ops::handle_metrics(command).await,
         Commands::Alert { command } => cli_ops::handle_alert(command).await,
     }

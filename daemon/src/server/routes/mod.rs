@@ -10,6 +10,7 @@ use super::api_agents;
 use super::api_chat;
 use super::api_ingest;
 use super::api_coordinator;
+use super::api_deliverables;
 use super::api_dashboard;
 use super::api_evolution;
 use super::api_github;
@@ -101,6 +102,7 @@ pub fn build_router_with_db(
         .merge(api_runs::router())
         .merge(api_metrics::router())
         .merge(api_ingest::router())
+        .merge(api_deliverables::router())
         .route("/api/chat/stream/:sid", get(sse::chat_stream_sse))
         .route("/api/mesh/action/stream", get(sse::mesh_action_sse))
         .route("/api/mesh/fullsync", get(sse::mesh_action_sse))

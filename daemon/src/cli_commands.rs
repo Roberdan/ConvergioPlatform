@@ -8,6 +8,7 @@ use crate::cli_checkpoint;
 use crate::cli_kb;
 use crate::cli_lock;
 use crate::cli_ops;
+use crate::cli_project;
 use crate::cli_plan;
 use crate::cli_review;
 use crate::cli_run;
@@ -132,6 +133,11 @@ pub enum Commands {
     Bus {
         #[command(subcommand)]
         command: cli_bus::BusCommands,
+    },
+    /// Project management commands (cvg project create/list/show)
+    Project {
+        #[command(subcommand)]
+        command: cli_project::ProjectCommands,
     },
     /// Metrics commands (summary, collect)
     Metrics {

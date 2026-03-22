@@ -61,6 +61,7 @@ notify = { version = "6.1", default-features = false, features = ["macos_fsevent
 crossterm = { version = "0.28", features = ["event-stream"] }
 futures-util = "0.3"
 regex = "1"
+dirs = "5"
 
 [dev-dependencies]
 tower = "0.5"

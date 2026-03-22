@@ -129,6 +129,18 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE plans ADD COLUMN waves_merged INTEGER DEFAULT 0",
     "CREATE TABLE IF NOT EXISTS plan_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, reviewer_agent TEXT NOT NULL, verdict TEXT NOT NULL, suggestions TEXT, raw_report TEXT, reviewed_at TEXT NOT NULL DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS agent_catalog (name TEXT PRIMARY KEY, category TEXT, description TEXT, model TEXT, tools TEXT, skills TEXT, source_repo TEXT, constitution_version TEXT, version TEXT, created_at DATETIME DEFAULT (datetime('now')), updated_at DATETIME DEFAULT (datetime('now')))",
+    // Plan 689 — project metadata columns
+    "ALTER TABLE projects ADD COLUMN input_path TEXT DEFAULT NULL",
+    "ALTER TABLE projects ADD COLUMN output_path TEXT DEFAULT NULL",
+    "ALTER TABLE projects ADD COLUMN github_url TEXT DEFAULT NULL",
+    "ALTER TABLE projects ADD COLUMN icon_path TEXT DEFAULT NULL",
+    // Plan 689 — deliverables table
+    "CREATE TABLE IF NOT EXISTS deliverables (id INTEGER PRIMARY KEY, task_id INTEGER REFERENCES tasks(id), project_id TEXT NOT NULL, name TEXT NOT NULL, output_path TEXT, version INTEGER DEFAULT 1, status TEXT DEFAULT 'pending' CHECK(status IN ('pending','in_progress','ready','approved','rejected')), output_type TEXT NOT NULL, metadata_json TEXT DEFAULT '{}', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, approved_at DATETIME DEFAULT NULL, approved_by TEXT DEFAULT NULL, updated_at DATETIME DEFAULT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_deliverables_project ON deliverables(project_id)",
+    "CREATE INDEX IF NOT EXISTS idx_deliverables_task ON deliverables(task_id)",
+    // Plan 689 — solve_sessions table
+    "CREATE TABLE IF NOT EXISTS solve_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL DEFAULT (datetime('now')), user_input TEXT NOT NULL, constitution_check TEXT, triage_level TEXT CHECK(triage_level IN ('light','standard','full')), clarification_rounds TEXT, research_findings TEXT, problem_statement TEXT, requirements_json TEXT, acceptance_invariants TEXT, routed_to TEXT, decision_audit TEXT, plan_id INTEGER REFERENCES plans(id), project_id TEXT DEFAULT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_solve_sessions_project ON solve_sessions(project_id)",
 ];
 
 /// Run DB migrations and return a connection pool for `db_path`.
