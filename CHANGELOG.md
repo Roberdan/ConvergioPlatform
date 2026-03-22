@@ -1,5 +1,30 @@
 # Changelog
 
+## [v5.0.0] - 2026-03-22
+
+### Added — Convergio Core Consolidation (Plan #685)
+- `cvg` — unified CLI binary (Rust daemon) replacing 400+ sqlite3 calls and bash wrappers
+- CLI subcommands: `cvg plan`, `cvg task`, `cvg wave`, `cvg checkpoint`, `cvg lock`, `cvg review`, `cvg agent`, `cvg kb`, `cvg run`, `cvg mesh`, `cvg session`, `cvg skill`, `cvg audit`
+- 6 new daemon API endpoints: `POST /api/review`, `POST /api/checkpoint`, `POST /api/kb-write`, `GET /api/path-canonical`, `GET /api/tracking/tokens`, `GET /api/tracking/activity`
+- Smart import: daemon infers model, validator, version from spec (no manual flags)
+- Tracking API: 4 endpoints for token usage, agent activity, session state, drift detection
+- Path canonicalization: case-insensitive file resolution across all CLI and API calls
+- `cvg skill lint` and `cvg skill transpile` — replace `skill-lint.sh` + 3 transpiler scripts
+- `cvg audit` — replaces `project-audit.sh`
+- ADR-0200: Convergio Core Consolidation — single daemon binary as sole state authority
+
+### Changed — BREAKING
+- All hooks migrated to `cvg` — zero direct `sqlite3` calls remaining (21 hooks, 7 skills, all rules/docs)
+- `plan-db.sh` commands superseded by `cvg plan/task/wave/…` equivalents
+- `project-audit.sh` superseded by `cvg audit`
+- `skill-lint.sh`, `skill-transpile-*.sh` superseded by `cvg skill lint/transpile`
+- Enforcement rules, skill specs, and agent docs updated: all references use `cvg`
+
+### Removed — BREAKING
+- Archived: `scripts/archive/mesh-env-setup.sh`, `mesh-normalize-hosts.sh` (zero callers; superseded by daemon)
+- Direct sqlite3 in hooks replaced by daemon API calls
+- `convergio` bash wrappers for plan/task/wave operations replaced by native Rust CLI
+
 ## [v4.0.0] - 2026-03-22
 
 ### Added
