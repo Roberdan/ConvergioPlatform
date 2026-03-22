@@ -24,7 +24,7 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | `cd dashboard && ./start.sh` | Run Control Room (reads DASHBOARD_DB) |
 | `cd evolution && npx tsc --noEmit` | Type check evolution |
 | `cd evolution && npx vitest run` | Evolution tests |
-| `plan-db.sh status convergio` | Plan status |
+| `cvg plan status convergio` | Plan status |
 | `scripts/mesh/mesh-heartbeat.sh` | Check mesh nodes |
 
 ## Architecture

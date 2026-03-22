@@ -19,13 +19,13 @@ Standard: 3 (claude-sonnet-4.6) | Max Parallel: 5 hard cap (**claude-opus-4.6**)
 
 ## Lean Coordinator
 
-Dispatch + DB + checkpoint ONLY. NEVER Read project files, NEVER read transcripts, NEVER run tests. Max 4 tasks/wave. Checkpoint: after EVERY task → `plan-checkpoint.sh save <plan_id>`. DB update SAME MESSAGE as executor result. _Why: Plan 382 — coordinator context bloat caused missed tasks and stale DB state._
+Dispatch + DB + checkpoint ONLY. NEVER Read project files, NEVER read transcripts, NEVER run tests. Max 4 tasks/wave. Checkpoint: after EVERY task → `cvg checkpoint save <plan_id>`. DB update SAME MESSAGE as executor result. _Why: Plan 382 — coordinator context bloat caused missed tasks and stale DB state._
 
 ## Post-Task Protocol (MANDATORY)
 
 Per task: (0) checkpoint (1) verify DB — NO per-task Thor (mechanical gates suffice)
 
-Per wave: (2) Thor `plan-db.sh validate-wave` **(Opus)** (3) `wave-worktree.sh merge` (4) PR comments → `Task(subagent_type='pr-comment-resolver')` (5) cleanup: `session-reaper.sh --max-age 0` + verify worktree/branch deleted + wave=done (6) next wave
+Per wave: (2) Thor `cvg plan validate` **(Opus)** (3) `cvg wave merge` (4) PR comments → `Task(subagent_type='pr-comment-resolver')` (5) cleanup: `session-reaper.sh --max-age 0` + verify worktree/branch deleted + wave=done (6) next wave
 
 ## Sync & Closure
 

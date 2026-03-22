@@ -21,7 +21,7 @@ During plan execution, the coordinator MUST minimize context consumption. Compac
 1. **NEVER Read project files** during execution. Task-executor reads+writes. Thor validates. Coordinator dispatches.
 2. **NEVER read `/private/tmp/` transcript files**. The Agent tool returns a summary — use ONLY that.
 3. **After task completes**: (a) checkpoint, (b) update DB, (c) launch Thor or next task. Three steps, nothing more.
-4. **Batch DB operations**: Use `plan-checkpoint.sh save <id>` (one call) instead of multiple sqlite3 queries.
+4. **Batch DB operations**: Use `cvg checkpoint save <id>` (one call) instead of multiple sqlite3 queries.
 5. **Parallel launches**: Launch ALL independent tasks in ONE message with multiple Agent tool calls.
 6. **Max 4 tasks per wave**: Planner MUST split waves with >4 tasks. Coordinator context cannot survive 6+ task cycles.
 
@@ -29,15 +29,15 @@ During plan execution, the coordinator MUST minimize context consumption. Compac
 
 | Event | Action |
 |---|---|
-| After every task-executor completes | `plan-checkpoint.sh save <plan_id>` |
-| Before launching >2 parallel tasks | `plan-checkpoint.sh save <plan_id>` |
-| PreCompact hook (automatic) | `preserve-context.sh` -> `plan-checkpoint.sh save-auto` |
+| After every task-executor completes | `cvg checkpoint save <plan_id>` |
+| Before launching >2 parallel tasks | `cvg checkpoint save <plan_id>` |
+| PreCompact hook (automatic) | `preserve-context.sh` -> `cvg checkpoint save-auto` |
 
 ## Post-Compaction Recovery
 
 After compaction, the coordinator MUST:
-1. Read checkpoint: `plan-checkpoint.sh restore <plan_id>` (or check MEMORY.md)
-2. Verify: `plan-db.sh execution-tree <plan_id>`
+1. Read checkpoint: `cvg checkpoint restore <plan_id>` (or check MEMORY.md)
+2. Verify: `cvg plan execution-tree <plan_id>`
 3. Resume from last known state — do NOT re-read files or re-verify completed work
 4. Trust task-executor + Thor results — they ran in isolated contexts
 

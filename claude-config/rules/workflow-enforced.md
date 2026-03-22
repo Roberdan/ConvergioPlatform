@@ -12,34 +12,34 @@ GOAL -> /planner (Opus) -> DB approved -> /execute {id} -> thor per-task -> thor
 |------|------|-----|---------------|
 | 1 | Capture goal | `/prompt` or user message | — |
 | 2 | Plan | `Skill(skill="planner")` **on Opus** | Blocks `EnterPlanMode` |
-| 3 | DB create | `planner-create.sh` (after reviews) | Blocks `plan-db.sh create/import` |
+| 3 | DB create | `cvg review create` (after reviews) | Blocks `cvg plan create/import` |
 | 4 | Execute | `Skill(skill="execute", args="{id}")` | Blocks direct file edits during plan |
-| 5 | Task done | `plan-db-safe.sh update-task {id} done` | Blocks `plan-db.sh update-task done` |
-| 6 | Thor task | `plan-db.sh validate-task {id} {plan}` | Blocks wave advance without Thor |
-| 7 | Thor wave | `plan-db.sh validate-wave {wave_id}` | Blocks merge without wave Thor |
-| 8 | Merge | `wave-worktree.sh merge {plan} {wave}` | Blocks with unresolved PR comments |
+| 5 | Task done | `cvg task update {id} done` | Blocks direct task done (non-safe path) |
+| 6 | Thor task | `cvg task validate {id} {plan}` | Blocks wave advance without Thor |
+| 7 | Thor wave | `cvg plan validate {wave_id}` | Blocks merge without wave Thor |
+| 8 | Merge | `cvg wave merge {plan} {wave}` | Blocks with unresolved PR comments |
 | 9 | Repeat 4-8 | Next wave | — |
-| 10 | Close | `plan-db.sh complete {plan_id}` | Blocks if tasks not validated |
+| 10 | Close | `cvg plan complete {plan_id}` | Blocks if tasks not validated |
 
 ## What Gets You BLOCKED
 
 | Violation | Block message |
 |-----------|--------------|
 | Edit/Write during active plan without task-executor | "Use Skill(execute) — direct edits during plans are blocked" |
-| `plan-db-safe.sh done` without running tests | "Show test output before marking done" |
-| Declaring "done" without Thor | "Run plan-db.sh validate-task first" |
+| `cvg task update done` without running tests | "Show test output before marking done" |
+| Declaring "done" without Thor | "Run cvg task validate first" |
 | Advancing wave without all tasks Thor-validated | "N tasks still in submitted status" |
 | Merging with unresolved PR comments | "Resolve all PR threads first" |
-| Skipping checkpoint after task | "Run plan-checkpoint.sh save first" |
+| Skipping checkpoint after task | "Run cvg checkpoint save first" |
 
 ## Single Fix for Each Problem
 
 | "I forgot to..." | Just run |
 |-------------------|----------|
-| Update DB after task | `plan-db-safe.sh update-task {id} done "summary"` |
-| Run Thor | `plan-db.sh validate-task {id} {plan}` |
-| Checkpoint | `plan-checkpoint.sh save {plan_id}` |
-| Resume after compaction | `plan-checkpoint.sh restore {plan_id}` |
+| Update DB after task | `cvg task update {id} done "summary"` |
+| Run Thor | `cvg task validate {id} {plan}` |
+| Checkpoint | `cvg checkpoint save {plan_id}` |
+| Resume after compaction | `cvg checkpoint restore {plan_id}` |
 
 ## For Single Fixes (No Plan Needed)
 
