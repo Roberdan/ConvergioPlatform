@@ -1,7 +1,7 @@
 import { test, expect, MOCK } from './fixtures';
 
 /** Multi-plan mission data for Kanban board testing. */
-const KANBAN_MISSION = {
+export const KANBAN_MISSION = {
   plans: [
     {
       plan: { id: 301, name: 'DB migration v5', status: 'todo', tasks_done: 0, tasks_total: 4, human_summary: 'Schema upgrade', execution_host: '', execution_peer: '', parallel_mode: null, project_id: 'proj-1', project_name: 'VirtualBPM', project_path: '/tmp' },
@@ -128,73 +128,6 @@ test.describe('Plan Kanban Board', () => {
     }
   });
 
-  // --- Drag & Drop ---
-
-  test('drag card from Pipeline to Executing shows start dialog (not direct API)', async ({ page }) => {
-    const todoCard = page.locator('#kanban-todo .kanban-card').first();
-    const doingCol = page.locator('.kanban-col[data-status="doing"]');
-
-    // No API should fire — drag to doing opens start dialog
-    let apiCalled = false;
-    page.on('request', (req) => {
-      if (req.url().includes('/api/plan-status') && req.method() === 'POST') apiCalled = true;
-    });
-
-    await todoCard.dragTo(doingCol);
-    await page.waitForTimeout(400);
-
-    // Start dialog modal should appear
-    await expect(page.locator('.modal-overlay')).toBeVisible();
-    await expect(page.locator('.modal-title')).toContainText('Start #301');
-    expect(apiCalled).toBe(false);
-
-    // Dismiss dialog
-    await page.locator('.modal-close').click();
-  });
-
-  test('drag card from Executing to Pipeline triggers confirm and API', async ({ page }) => {
-    page.on('dialog', (d) => d.accept());
-    const doingCard = page.locator('#kanban-doing .kanban-card').first();
-    const todoCol = page.locator('.kanban-col[data-status="todo"]');
-
-    const [request] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes('/api/plan-status') && req.method() === 'POST'),
-      doingCard.dragTo(todoCol),
-    ]);
-    const body = JSON.parse(request.postData()!);
-    expect(body.status).toBe('todo');
-  });
-
-  test('API POST body has correct shape (doing→todo drag)', async ({ page }) => {
-    page.on('dialog', (d) => d.accept());
-    const doingCard = page.locator('#kanban-doing .kanban-card').first();
-    const todoCol = page.locator('.kanban-col[data-status="todo"]');
-
-    const [request] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes('/api/plan-status')),
-      doingCard.dragTo(todoCol),
-    ]);
-    const body = JSON.parse(request.postData()!);
-    expect(body).toHaveProperty('plan_id');
-    expect(body).toHaveProperty('status');
-    expect(typeof body.plan_id).toBe('number');
-  });
-
-  // --- Empty State ---
-
-  test('empty columns show "No plans" message', async ({ page, mockApis }) => {
-    await mockApis({ mission: { plans: [] } });
-    await page.goto('/');
-    await page.waitForSelector('#plan-kanban-widget', { timeout: 5000 });
-    await page.waitForTimeout(1000);
-
-    const empties = page.locator('.kanban-empty');
-    await expect(empties).toHaveCount(4, { timeout: 10000 });
-    for (let i = 0; i < 4; i++) {
-      await expect(empties.nth(i)).toContainText('No plans');
-    }
-  });
-
   // --- Sorting ---
 
   test('multiple doing plans render in order', async ({ page }) => {
@@ -202,7 +135,6 @@ test.describe('Plan Kanban Board', () => {
     await expect(doingCards).toHaveCount(2);
     const firstId = await doingCards.nth(0).getAttribute('data-plan-id');
     const secondId = await doingCards.nth(1).getAttribute('data-plan-id');
-    // Both cards should be doing plans (300, 303)
     expect(['300', '303']).toContain(firstId);
     expect(['300', '303']).toContain(secondId);
     expect(firstId).not.toBe(secondId);
@@ -213,40 +145,5 @@ test.describe('Plan Kanban Board', () => {
     await expect(todoCard).toHaveAttribute('data-status', 'todo');
     const doingCard = page.locator('#kanban-doing .kanban-card').first();
     await expect(doingCard).toHaveAttribute('data-status', 'doing');
-  });
-
-  test('drag-over class applied on dragover', async ({ page }) => {
-    const col = page.locator('.kanban-col[data-status="doing"]');
-    await col.evaluate((el) => {
-      el.dispatchEvent(new DragEvent('dragover', { bubbles: true }));
-    });
-    await expect(col).toHaveClass(/drag-over/);
-  });
-
-  // --- Cancel / Trash Buttons ---
-
-  test('cancel/trash button exists on todo card', async ({ page }) => {
-    const todoCard = page.locator('#kanban-todo .kanban-card').first();
-    await expect(todoCard.locator('.kanban-trash-btn')).toHaveCount(1);
-    await expect(todoCard.locator('.kanban-trash-btn svg')).toBeAttached();
-  });
-
-  test('cancel/trash button exists on doing card', async ({ page }) => {
-    const doingCard = page.locator('#kanban-doing .kanban-card').first();
-    await expect(doingCard.locator('.kanban-trash-btn')).toHaveCount(1);
-  });
-
-  test('cancel/trash button does NOT exist on done card', async ({ page }) => {
-    const doneCard = page.locator('#kanban-done .kanban-card').first();
-    await expect(doneCard.locator('.kanban-trash-btn')).toHaveCount(0);
-  });
-
-  test('clicking cancel button opens confirmation modal (not native dialog)', async ({ page }) => {
-    const trashBtn = page.locator('#kanban-todo .kanban-trash-btn').first();
-    await trashBtn.click();
-    await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 2000 });
-    await expect(page.locator('.modal-title')).toContainText('Cancel Plan');
-    // Dismiss
-    await page.locator('.modal-close').click();
   });
 });
