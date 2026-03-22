@@ -26,6 +26,7 @@ pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
 pub mod api_plan_db_query_fmt;
 pub mod api_plan_db_review;
+pub mod api_tracking;
 pub mod api_plans;
 pub mod api_runs;
 pub mod api_runs_handlers;
@@ -59,6 +60,8 @@ mod api_ipc_tests;
 mod api_tests;
 #[cfg(test)]
 mod ws_pty_tests;
+#[cfg(test)]
+mod api_tracking_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

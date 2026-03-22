@@ -17,7 +17,7 @@ fn non_get_route_count_matches_python_port_contract() {
             + DELETE_ROUTES.len()
             + SSE_ROUTES.len()
             + WS_ROUTES.len(),
-        67
+        71
     );
 }
 

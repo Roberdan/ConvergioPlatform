@@ -26,6 +26,7 @@ use super::api_plan_db_lifecycle;
 use super::api_plan_db_ops;
 use super::api_plan_db_query;
 use super::api_plan_db_review;
+use super::api_tracking;
 use super::api_plans;
 use super::api_runs;
 use super::api_workers;
@@ -88,6 +89,7 @@ pub fn build_router_with_db(
         .merge(api_plan_db_ops::router())
         .merge(api_plan_db_review::router())
         .merge(api_plan_db_checkpoint::router())
+        .merge(api_tracking::router())
         .merge(api_workers::router())
         .merge(api_evolution::router())
         .merge(api_runs::router())

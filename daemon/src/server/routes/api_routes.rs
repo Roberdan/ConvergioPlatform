@@ -128,6 +128,10 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/runs/:id/pause",
     "/api/runs/:id/resume",
     "/api/ingest",
+    "/api/tracking/tokens",
+    "/api/tracking/agent-activity",
+    "/api/tracking/session-state",
+    "/api/tracking/compaction",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",
