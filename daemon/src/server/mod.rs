@@ -11,6 +11,7 @@ pub mod api_heartbeat_handlers;
 pub mod api_ideas;
 pub mod api_ideas_handlers;
 pub mod api_metrics;
+pub mod api_metrics_queries;
 pub mod api_ipc;
 pub mod api_mesh;
 pub mod api_notify;
@@ -46,6 +47,8 @@ pub mod ws_pty;
 mod api_agents_legacy_tests;
 #[cfg(test)]
 mod api_runs_tests;
+#[cfg(test)]
+mod api_runs_tests_lifecycle;
 #[cfg(test)]
 mod api_ideas_tests;
 #[cfg(test)]
