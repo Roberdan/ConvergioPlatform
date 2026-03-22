@@ -1,5 +1,20 @@
 # Changelog
 
+## [v13.0.0] - 22 Marzo 2026
+
+### Added
+- Deliverable management: `cvg deliverable create/approve/version` with filesystem output and consent gates
+- Project CLI: `cvg project create/list/show` with platform path conventions
+- Project audit: `cvg audit --project` CLI + `/api/audit/:project` endpoint with output to project folder
+- Agent auto-creation from skill declarations (`requires-agents` field)
+- Skill dependency fields: `requires-plugins` and `requires-agents` in skill.yaml
+- `cvg skill enable` command for activating skills with dependency resolution
+- ADR-0202: Deliverable Management Architecture
+
+### Changed
+- Audit output now writes to project-scoped folder instead of global output
+- Skill protocol extended with plugin and agent dependency declarations
+
 ## [v12.1.1] - 22 Marzo 2026
 
 ### Fixed

@@ -329,6 +329,36 @@ curl -s http://localhost:8420/api/review | jq .
 sqlite3 "$DASHBOARD_DB" ".tables" | grep plan_reviews
 ```
 
+## Problem: Deliverable not found
+
+**Symptom:** `cvg deliverable approve <id>` returns "deliverable not found" or 404
+**Cause:** Deliverable was created in a different project scope, or the ID is wrong
+**Fix:**
+```bash
+# List deliverables for the project
+cvg deliverable list --project <project_id>
+# Check if deliverable exists in DB
+cvg deliverable show <id>
+# If created in a worktree, ensure daemon is running (deliverables are DB-backed)
+./daemon/start.sh
+```
+
+## Problem: Permission denied writing deliverable to filesystem
+
+**Symptom:** `cvg deliverable create` fails with "permission denied" writing to `data/deliverables/`
+**Cause:** The `data/deliverables/` directory does not exist or has wrong permissions
+**Fix:**
+```bash
+# Create the deliverables directory
+mkdir -p data/deliverables
+# Check permissions
+ls -la data/
+# Ensure daemon user can write
+chmod 755 data/deliverables
+# Retry
+cvg deliverable create --plan <plan_id> --type report --path ./output.md
+```
+
 ## Problem: Copilot agent not visible in /api/ipc/agents
 
 **Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty

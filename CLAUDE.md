@@ -25,6 +25,10 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | `cd evolution && npx tsc --noEmit` | Type check evolution |
 | `cd evolution && npx vitest run` | Evolution tests |
 | `cvg plan status convergio` | Plan status |
+| `cvg project create <name>` | Create new project |
+| `cvg project list` | List all projects |
+| `cvg project show <id>` | Show project details |
+| `cvg audit --project <id>` | Run project-scoped audit |
 | `scripts/mesh/mesh-heartbeat.sh` | Check mesh nodes |
 
 ## Architecture

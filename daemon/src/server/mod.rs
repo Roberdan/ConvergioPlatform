@@ -79,6 +79,12 @@ mod ws_pty_tests;
 mod api_tracking_tests;
 #[cfg(test)]
 mod api_deliverables_tests;
+#[cfg(test)]
+mod api_cross_feature_helpers;
+#[cfg(test)]
+mod api_cross_feature_tests;
+#[cfg(test)]
+mod api_cross_feature_plan_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};
