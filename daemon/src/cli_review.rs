@@ -34,10 +34,10 @@ pub enum ReviewCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
-    /// Reset (delete) all reviews for a plan
+    /// Reset (delete) all reviews for a plan (omit plan_id to reset pre-plan state)
     Reset {
-        /// Plan ID
-        plan_id: i64,
+        /// Plan ID (optional — omit to reset without a plan, e.g. before cvg plan create)
+        plan_id: Option<i64>,
         /// Human-readable output instead of JSON
         #[arg(long)]
         human: bool,
@@ -64,7 +64,7 @@ pub async fn handle(cmd: ReviewCommands) {
             ).await;
         }
         ReviewCommands::Reset { plan_id, human, api_url } => {
-            let body = serde_json::json!({ "plan_id": plan_id });
+            let body = serde_json::json!({ "plan_id": plan_id.unwrap_or(0) });
             crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/reset"), &body, human,
             ).await;
@@ -97,9 +97,17 @@ mod tests {
     #[test]
     fn review_reset_variant_exists() {
         let cmd = ReviewCommands::Reset {
-            plan_id: 1, human: true, api_url: "http://localhost:8420".to_string(),
+            plan_id: Some(1), human: true, api_url: "http://localhost:8420".to_string(),
         };
-        assert!(matches!(cmd, ReviewCommands::Reset { plan_id: 1, .. }));
+        assert!(matches!(cmd, ReviewCommands::Reset { plan_id: Some(1), .. }));
+    }
+
+    #[test]
+    fn review_reset_without_plan_id() {
+        let cmd = ReviewCommands::Reset {
+            plan_id: None, human: false, api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, ReviewCommands::Reset { plan_id: None, .. }));
     }
 
     #[test]

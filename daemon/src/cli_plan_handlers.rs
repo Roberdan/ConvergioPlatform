@@ -106,5 +106,12 @@ pub async fn dispatch(cmd: PlanCommands) {
             )
             .await;
         }
+        PlanCommands::Readiness { plan_id, human, api_url } => {
+            crate::cli_http::fetch_and_print(
+                &format!("{api_url}/api/plan-db/readiness/{plan_id}"),
+                human,
+            )
+            .await;
+        }
     }
 }

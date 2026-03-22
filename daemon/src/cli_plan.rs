@@ -114,6 +114,15 @@ pub enum PlanCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Check plan readiness (review, tasks, models)
+    Readiness {
+        /// Plan ID
+        plan_id: i64,
+        #[arg(long)]
+        human: bool,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: PlanCommands) {
@@ -121,130 +130,5 @@ pub async fn handle(cmd: PlanCommands) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn plan_commands_list_variant_exists() {
-        let cmd = PlanCommands::List {
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::List { .. }));
-    }
-
-    #[test]
-    fn plan_commands_tree_variant_exists() {
-        let cmd = PlanCommands::Tree {
-            plan_id: 42,
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Tree { plan_id: 42, .. }));
-    }
-
-    #[test]
-    fn plan_commands_show_variant_exists() {
-        let cmd = PlanCommands::Show {
-            plan_id: 1,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Show { .. }));
-    }
-
-    #[test]
-    fn plan_commands_drift_variant_exists() {
-        let cmd = PlanCommands::Drift {
-            plan_id: 5,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Drift { .. }));
-    }
-
-    #[test]
-    fn plan_commands_validate_variant_exists() {
-        let cmd = PlanCommands::Validate {
-            plan_id: 10,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Validate { .. }));
-    }
-
-    #[test]
-    fn plan_commands_create_variant_exists() {
-        let with_src = PlanCommands::Create {
-            project_id: "convergio".to_string(),
-            name: "Migration Plan".to_string(),
-            source_file: Some("/tmp/spec.yaml".to_string()),
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(with_src, PlanCommands::Create { .. }));
-        // Verify None source_file is accepted
-        let without_src = PlanCommands::Create {
-            project_id: "convergio".to_string(),
-            name: "Quick Plan".to_string(),
-            source_file: None,
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        if let PlanCommands::Create { source_file, .. } = &without_src {
-            assert!(source_file.is_none());
-        }
-    }
-
-    #[test]
-    fn plan_commands_import_variant_exists() {
-        let cmd = PlanCommands::Import {
-            plan_id: 100,
-            spec_file: "/tmp/spec.yaml".to_string(),
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Import { plan_id: 100, .. }));
-    }
-
-    #[test]
-    fn plan_commands_start_variant_exists() {
-        let cmd = PlanCommands::Start {
-            plan_id: 200,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Start { plan_id: 200, .. }));
-    }
-
-    #[test]
-    fn plan_commands_complete_variant_exists() {
-        let cmd = PlanCommands::Complete {
-            plan_id: 300,
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Complete { plan_id: 300, .. }));
-    }
-
-    #[test]
-    fn plan_commands_cancel_variant_exists() {
-        let cmd = PlanCommands::Cancel {
-            plan_id: 400,
-            reason: "Requirements changed".to_string(),
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Cancel { plan_id: 400, .. }));
-    }
-
-    #[test]
-    fn plan_commands_approve_variant_exists() {
-        let cmd = PlanCommands::Approve {
-            plan_id: 500,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, PlanCommands::Approve { plan_id: 500, .. }));
-    }
-}
+#[path = "cli_plan_tests.rs"]
+mod tests;
