@@ -55,22 +55,22 @@ Plan creation and orchestration with strict approval, Thor gates, and per-task r
 After generating the spec YAML, you MUST complete ALL steps before presenting to user:
 
 ```
-1.  planner-create.sh reset
+1.  cvg review reset
 2.  Launch 1 review agent — MUST pass the EXACT spec file path:
     Agent(subagent_type="plan-reviewer", prompt="Review the spec at <EXACT_PATH>. FIRST ACTION: Read <EXACT_PATH>. Do NOT search for other spec files. Write review to /tmp/review-standard.md.")
 3.  Wait for review to complete
-4.  planner-create.sh register-review standard /tmp/review-standard.md
-5.  planner-create.sh check-reviews  ← MUST pass
+4.  cvg review register standard /tmp/review-standard.md
+5.  cvg review check  ← MUST pass
 6.  Apply ALL review fixes to spec YAML (blockers + advisories)
 7.  Verify spec: every task has verify[] array, effort 1-3, model, executor_agent, validator_agent, output_type
-8.  planner-create.sh create <project> "<name>" --source-file <spec>
-9.  planner-create.sh import <plan_id> <spec.yaml>
+8.  cvg plan create <project> "<name>" --source-file <spec>
+9.  cvg plan import <plan_id> <spec.yaml>
     ← import now auto-validates: test_criteria, effort range, review linkage, worktree creation
-10. planner-create.sh readiness <plan_id>  ← MUST pass with 0 errors
+10. cvg plan readiness <plan_id>  ← MUST pass with 0 errors
 11. Present plan summary for user approval
 ```
 
-NEVER present the plan before step 10 passes. NEVER write to DB without `planner-create.sh`.
+NEVER present the plan before step 10 passes. NEVER write to DB without `cvg plan`.
 If import reports errors, FIX THEM before readiness check. If readiness fails, FIX before presenting.
 _Why: Plan 616 — reviews skipped. Plan 677 — presented as ready but had no worktree, no review linkage, missing test_criteria. Executor correctly blocked._
 
@@ -79,13 +79,13 @@ _Why: Plan 616 — reviews skipped. Plan 677 — presented as ready but had no w
 @reference/operational/plan-db-schema.md
 
 - NEVER guess DB column names — check `@reference/operational/plan-db-schema.md`
-- NEVER use `plan-db.sh create/import` directly — always `planner-create.sh`
-- NEVER INSERT INTO tasks manually — use `planner-create.sh import`
-- If import fails: run `plan-db.sh execution-tree {id}`, check wave/task counts, debug import — do NOT manually INSERT
+- NEVER use `cvg plan create/import` directly — always `cvg review` + `cvg plan`
+- NEVER INSERT INTO tasks manually — use `cvg plan import`
+- If import fails: run `cvg plan execution-tree {id}`, check wave/task counts, debug import — do NOT manually INSERT
 - _Why: Plan 616 — manual INSERT skipped triggers, broke counters._
 
 ## Minimal Execution Contract
 - Import spec (`.yaml` preferred) with explicit `verify` arrays.
-- Start with `plan-db.sh start {plan_id}` only after approval.
+- Start with `cvg plan start {plan_id}` only after approval.
 - Execute with `/execute {plan_id}`.
 - Complete only after Thor + CI/PR closure evidence.
