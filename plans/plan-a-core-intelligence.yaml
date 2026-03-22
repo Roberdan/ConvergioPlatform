@@ -1,0 +1,869 @@
+user_request: |
+  Plan A — Convergio Core Intelligence. Foundation plan making all subsequent work cheaper,
+  faster, more reliable. Seven features: cvg Rust Native CLI completion, planner enforcement
+  in daemon, agent management via daemon, Thor deterministic gates, test model routing,
+  Constitution v2.1, context optimization (rules consolidation).
+
+constraints:
+  - id: C-01
+    text: "Daemon is single source of truth for ALL state — zero fallback, no direct sqlite3"
+    type: technical
+    verify: "! grep -r 'sqlite3 ' daemon/src/ scripts/"
+  - id: C-02
+    text: "Max 250 lines per Rust source file — split if exceeds"
+    type: technical
+    verify: "find daemon/src -name '*.rs' -exec sh -c 'test $(wc -l < \"$1\") -le 250' _ {} \\; -print"
+  - id: C-03
+    text: "CLI outputs JSON by default, --human flag for human-readable tables"
+    type: technical
+    verify: "cd daemon && cargo test --lib cli"
+  - id: C-04
+    text: "Integration tests use axum test harness (in-memory DB, no running daemon)"
+    type: process
+    verify: "cd daemon && cargo test --test integration"
+  - id: C-05
+    text: "NEVER touch daemon/src/cli/ directory — that is convergiomesh-cli, separate concern"
+    type: technical
+    verify: "git diff --name-only | grep -v '^daemon/src/cli/' || true"
+  - id: C-06
+    text: "MPL-2.0 license headers on all new files"
+    type: compliance
+    verify: "grep -l 'Copyright (c) 2026 Roberto' daemon/src/cli_plan.rs"
+  - id: C-07
+    text: "NON-NEGOTIABLE rules in compaction-preservation.md MUST survive consolidation"
+    type: process
+    verify: "test -f claude-config/rules/compaction-preservation.md"
+
+requirements:
+  - id: F-01
+    text: "cvg plan create/import/start/complete/cancel subcommands in Rust CLI with daemon API endpoints"
+    wave: W2
+  - id: F-02
+    text: "cvg wave create/merge + cvg bus who/msg/read/broadcast + operational CLI commands"
+    wave: W2
+  - id: F-03
+    text: "All CLI modules use shared crate::cli_http helpers (DRY) + bash wrapper deleted"
+    wave: W1
+  - id: F-04
+    text: "Daemon enforces plan lifecycle: review must exist before create, plan before import, approval before start"
+    wave: W3
+  - id: F-05
+    text: "Smart import infers model, validator, effort from task type. Test tasks auto-route to opus/sonnet"
+    wave: W3
+  - id: F-06
+    text: "Readiness check endpoint blocks /execute if gates fail (review, worktree, approval)"
+    wave: W3
+  - id: F-07
+    text: "Plan completion metric = merge-based (waves merged / total waves), not task-based"
+    wave: W3
+  - id: F-08
+    text: "Agent CRUD in daemon: cvg agent sync/enable/disable/list/create with API endpoints"
+    wave: W4
+  - id: F-09
+    text: "Multi-provider transpiler: single agent in DB transpiled to claude-code .md + copilot-cli .md"
+    wave: W4
+  - id: F-10
+    text: "Agent catalog populated from .github/agents/, /solve triage suggests agents per domain"
+    wave: W4
+  - id: F-11
+    text: "Mechanical validation gates in daemon: verify commands, credential scan, pattern check, line count, git hygiene"
+    wave: W5
+  - id: F-12
+    text: "cvg task validate runs mechanical gates first, REJECT without invoking Thor if any fail"
+    wave: W5
+  - id: F-13
+    text: "Constitution v2.1: zero tech debt, zero outdated docs, root cause fixes, testable flows, plan done=merged, capable model tests"
+    wave: W1
+  - id: F-14
+    text: "Rules consolidated from 16 to ~11 files. Merge enforcement+workflow, deduplicate compliance+ethical. ~30% token reduction"
+    wave: W1
+
+waves:
+  - id: W1
+    name: "Foundation — Constitution, Rules, DRY CLI"
+    tasks:
+      - id: T1-01
+        title: |
+          Update CONSTITUTION.md to v2.1.0. Add 6 new principles from Plan A requirements:
+          1. Zero tolerance for technical debt (Article V enhancement)
+          2. Zero tolerance for outdated documentation (Article V enhancement)
+          3. Fix at root cause, never workaround (Article V enhancement)
+          4. Every fix must be part of a testable setup/rollback flow (Article VI enhancement)
+          5. Plan not done until ALL PRs merged (Article VI enhancement)
+          6. Tests written by capable models only — opus/sonnet, never haiku/mini (Article V enhancement)
+          Update version to 2.1.0, update date to current, add version history entry.
+          Keep file under 250 lines. Preserve all existing articles and NON-NEGOTIABLE markers.
+        files:
+          - CONSTITUTION.md
+        verify:
+          - "grep 'Version.*2.1.0' CONSTITUTION.md"
+          - "grep -c 'NON-NEGOTIABLE' CONSTITUTION.md | awk '{if($1 >= 2) exit 0; else exit 1}'"
+          - "test $(wc -l < CONSTITUTION.md) -le 250"
+        priority: P1
+        type: documentation
+        model: gpt-5.3-codex
+        effort_level: 1
+        output_type: pr
+        validator_agent: thor
+      - id: T1-02
+        title: |
+          Consolidate rules — part 1: merge rule files.
+          1. MERGE enforcement.md + workflow-enforced.md → enforcement.md
+             - Keep ALL workflow steps, blocks, commands from both
+             - Table format, no prose duplication
+          2. MERGE ethical-guidelines.md + compliance.md → compliance.md
+             - Keep unique ethical content (inclusive language, environmental, honesty)
+          3. MERGE problem-resolution.md into docs-troubleshooting.md
+             - Keep mandatory search order table, anti-patterns table
+          4. MERGE token-budget.md into code-standards.md (add Token Budget section)
+          5. Verify ALL NON-NEGOTIABLE markers preserved per compaction-preservation.md
+          6. Delete merged source files (workflow-enforced.md, ethical-guidelines.md,
+             problem-resolution.md, token-budget.md)
+          After merge: 16 - 4 deleted = 12 files. Each under 2000 tokens / 8KB.
+        files:
+          - claude-config/rules/enforcement.md
+          - claude-config/rules/workflow-enforced.md
+          - claude-config/rules/compliance.md
+          - claude-config/rules/ethical-guidelines.md
+          - claude-config/rules/docs-troubleshooting.md
+        verify:
+          - "test $(find claude-config/rules -name '*.md' | wc -l) -le 12"
+          - "test ! -f claude-config/rules/workflow-enforced.md"
+          - "test ! -f claude-config/rules/ethical-guidelines.md"
+          - "grep -q 'NON-NEGOTIABLE' claude-config/rules/enforcement.md"
+          - "grep -q 'GDPR' claude-config/rules/compliance.md"
+          - "test $(wc -c < claude-config/rules/enforcement.md) -le 8192"
+        priority: P1
+        type: refactor
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+      - id: T1-03
+        title: |
+          Consolidate rules — part 2: update references + DRY CLI.
+          1. Update @references in claude-config/CLAUDE.md and .claude/CLAUDE.md
+             to reflect merged files (remove refs to deleted files)
+          2. DRY CLI HTTP helpers: migrate ALL modules with local fetch_and_print/post_and_print
+             to use shared crate::cli_http::{fetch_and_print, post_and_print, print_value}.
+             Files with duplicate helpers: cli_plan.rs, cli_wave.rs, cli_agent.rs,
+             cli_task.rs, cli_support.rs (5 files).
+             Pattern: cli_checkpoint.rs and cli_review.rs already use crate::cli_http.
+          3. Run cargo test to verify no regressions
+        files:
+          - claude-config/CLAUDE.md
+          - .claude/CLAUDE.md
+          - daemon/src/cli_plan.rs
+          - daemon/src/cli_wave.rs
+          - daemon/src/cli_agent.rs
+        verify:
+          - "! grep 'async fn fetch_and_print' daemon/src/cli_plan.rs"
+          - "! grep 'async fn fetch_and_print' daemon/src/cli_agent.rs"
+          - "! grep 'async fn fetch_and_print' daemon/src/cli_wave.rs"
+          - "! grep 'async fn fetch_and_print' daemon/src/cli_task.rs"
+          - "! grep 'async fn fetch_and_print' daemon/src/cli_support.rs"
+          - "grep 'crate::cli_http' daemon/src/cli_plan.rs"
+          - "grep 'crate::cli_http' daemon/src/cli_task.rs"
+          - "cd daemon && cargo test --lib"
+        priority: P1
+        type: refactor
+        model: gpt-5.3-codex
+        effort_level: 1
+        output_type: pr
+        validator_agent: thor
+  - id: W2
+    name: "CLI Completion — Plan/Wave/Bus POST Subcommands"
+    depends_on: W1
+    tasks:
+      - id: T2-01
+        title: |
+          Add POST-based plan subcommands to cli_plan.rs. Wire to EXISTING daemon API
+          endpoints in api_plan_db_lifecycle/handlers.rs:
+          - POST /api/plan-db/create — already exists
+          - POST /api/plan-db/start/:plan_id — already exists
+          - POST /api/plan-db/complete/:plan_id — already exists
+          - POST /api/plan-db/cancel/:plan_id — already exists
+          - POST /api/plan-db/approve/:plan_id — already exists
+
+          New PlanCommands enum variants:
+          1. Create { project_id: String, name: String, source_file: Option<String> }
+             → POST /api/plan-db/create
+          2. Import { plan_id: i64, spec_file: String }
+             → Read spec_file from disk, POST /api/plan-db/import (existing endpoint)
+          3. Start { plan_id: i64 }
+             → POST /api/plan-db/start/{plan_id}
+          4. Complete { plan_id: i64 }
+             → POST /api/plan-db/complete/{plan_id}
+          5. Cancel { plan_id: i64, reason: String }
+             → POST /api/plan-db/cancel/{plan_id}
+          6. Approve { plan_id: i64 }
+             → POST /api/plan-db/approve/{plan_id}
+          7. Readiness { plan_id: i64 }
+             → GET /api/plan-db/readiness/{plan_id} (placeholder, full logic in W3)
+          8. Status { project_id: String }
+             → GET /api/plan-db/status/{project_id}
+
+          NEW API endpoints needed (not in lifecycle):
+          - GET /api/plan-db/readiness/{plan_id} → placeholder returning {ready: true, gates: []}
+          - GET /api/plan-db/status/{project_id} → thin wrapper on existing list query
+
+          Use crate::cli_http for all HTTP calls. --human + --api_url flags.
+          Add unit tests for each new variant.
+          Keep cli_plan.rs under 250 lines — split into cli_plan_handlers.rs if needed.
+        files:
+          - daemon/src/cli_plan.rs
+          - daemon/src/server/api_plan_db.rs
+        verify:
+          - "grep 'Create' daemon/src/cli_plan.rs"
+          - "grep 'Import' daemon/src/cli_plan.rs"
+          - "grep 'Start' daemon/src/cli_plan.rs"
+          - "grep 'Complete' daemon/src/cli_plan.rs"
+          - "grep 'Cancel' daemon/src/cli_plan.rs"
+          - "cd daemon && cargo test --lib cli_plan"
+          - "cd daemon && cargo check"
+          - "test $(wc -l < daemon/src/cli_plan.rs) -le 250"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+      - id: T2-02
+        title: |
+          Add wave create/merge subcommands to cli_wave.rs + bus subcommands.
+          Wave new variants:
+          1. Create { plan_id: i64, wave_id: String, name: String }
+             → POST /api/plan-db/wave/create with body {plan_id, wave_id, name} (NEW API endpoint)
+             API: insert into waves table, set status='pending', compute position from existing waves.
+          2. Merge { plan_id: i64, wave_id: i64 }
+             → POST /api/plan-db/wave/merge with body {plan_id, wave_id} (NEW API endpoint)
+             API: validate all tasks done, set wave status='merging', return {ready: bool, pr_url}.
+             Note: actual git merge stays in agent skill, daemon just tracks state.
+
+          Add new Bus command group to cli_commands.rs (Commands::Bus):
+          3. Bus Who → GET /api/ipc/agents (list active agents)
+          4. Bus Send { from, to, message } → POST /api/ipc/send
+          5. Bus Read { name } → GET /api/ipc/messages?agent={name}
+          6. Bus Broadcast { from, message } → POST /api/ipc/broadcast
+
+          Create daemon/src/cli_bus.rs for bus handlers.
+          Add new API endpoints in daemon/src/server/ for wave create/merge.
+          Register Bus in Commands enum in cli_commands.rs.
+          Use crate::cli_http for all HTTP calls.
+        files:
+          - daemon/src/cli_wave.rs
+          - daemon/src/cli_bus.rs
+          - daemon/src/cli_commands.rs
+          - daemon/src/server/api_plan_db.rs
+        verify:
+          - "grep 'Create' daemon/src/cli_wave.rs"
+          - "grep 'Merge' daemon/src/cli_wave.rs"
+          - "test -f daemon/src/cli_bus.rs"
+          - "grep 'Bus' daemon/src/cli_commands.rs"
+          - "grep 'wave/create' daemon/src/server/api_plan_db.rs"
+          - "cd daemon && cargo test --lib cli_wave"
+          - "cd daemon && cargo test --lib cli_bus"
+          - "cd daemon && cargo check"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+      - id: T2-03
+        title: |
+          Add operational CLI subcommands that currently live only in bash wrapper.
+          1. Extend Commands::Mesh with subcommands:
+             - Heartbeat → GET /api/heartbeat/status
+             - Status → GET /api/mesh/status
+          2. Extend Commands::Session (in cli_ops.rs) if not already complete:
+             - Check → equivalent of session-check.sh (GET /api/dashboard/session)
+          3. Add Commands::Metrics group (or extend existing):
+             - Summary → GET /api/metrics/summary
+             - Runs → GET /api/runs (already in cli_run.rs List, skip if duplicate)
+             - Run { id } → GET /api/runs/{id} (already in cli_run.rs, skip if duplicate)
+             - Collect → POST /api/metrics/collect (trigger telemetry snapshot)
+          4. Add Commands::Alert:
+             - List → GET /api/dashboard/notifications
+          5. Ensure all use crate::cli_http. Add tests for each new variant.
+          NOTE: metrics/runs overlap with cli_run.rs — check before duplicating, maybe just alias.
+        files:
+          - daemon/src/cli_ops.rs
+          - daemon/src/cli_commands.rs
+          - daemon/src/main.rs
+        verify:
+          - "grep 'Heartbeat' daemon/src/cli_ops.rs"
+          - "grep 'metrics' daemon/src/cli_commands.rs"
+          - "cd daemon && cargo test --lib cli_ops"
+          - "cd daemon && cargo check"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+      - id: T2-04
+        title: |
+          Delete bash wrapper and finalize CLI migration.
+          1. Delete scripts/platform/convergio (the 210-line bash wrapper)
+          2. Delete scripts/platform/convergio-run-ops.sh (sourced by wrapper)
+          3. Delete scripts/platform/convergio-daemon-ops.sh (sourced by wrapper)
+          4. Keep scripts/platform/convergio-bus.sh (still used by hooks until IPC is native)
+          5. Keep scripts/platform/convergio-toggle.sh (simple on/off, can stay)
+          6. Keep scripts/platform/convergio-metrics.sh (until fully replaced)
+          7. Keep scripts/platform/convergio-learnings.sh (until fully replaced)
+          8. Update setup.sh / bootstrap to create cvg symlink → daemon binary instead of bash wrapper
+          9. Update CLAUDE.md commands table: `cvg <subcommand>` instead of `convergio <subcommand>`
+          10. Verify: `cd daemon && cargo build --release` produces working binary
+          11. Verify: symlink cvg → binary, test `cvg plan list --human`, `cvg wave context 1 --human`
+        files:
+          - scripts/platform/convergio
+          - scripts/platform/convergio-run-ops.sh
+          - scripts/platform/convergio-daemon-ops.sh
+          - CLAUDE.md
+          - claude-config/CLAUDE.md
+        verify:
+          - "test ! -f scripts/platform/convergio"
+          - "test ! -f scripts/platform/convergio-run-ops.sh"
+          - "test ! -f scripts/platform/convergio-daemon-ops.sh"
+          - "grep 'cvg' CLAUDE.md"
+          - "cd daemon && cargo build --release"
+        priority: P1
+        type: chore
+        model: gpt-5.3-codex
+        effort_level: 1
+        output_type: pr
+        validator_agent: thor
+
+  - id: W3
+    name: "Planner Enforcement — Lifecycle, Smart Import, Readiness"
+    depends_on: W2
+    tasks:
+      - id: T3-01
+        title: |
+          Implement plan lifecycle enforcement in daemon. The daemon API endpoints must enforce:
+          1. POST /api/plan-db/create: REJECT 409 if no approved review exists for plan_id
+             (check plan_reviews table for verdict='approved' or 'proceed')
+          2. POST /api/plan-db/import: REJECT 409 if plan doesn't exist or plan.status != 'todo'
+          3. POST /api/plan-db/plan/start: REJECT 409 if:
+             a. No spec imported (tasks_total == 0)
+             b. No approved review
+             c. Readiness check fails (delegate to readiness handler)
+          4. POST /api/plan-db/task/update to 'done': existing Thor trigger stays, add check for
+             test output evidence (if task.type == 'test', require output_data not null)
+
+          Implementation: Add guard functions in daemon/src/server/ that run before
+          the route handlers. Use inline checks at handler start.
+          Create daemon/src/server/plan_lifecycle_guards.rs with:
+          - require_review(plan_id, db) -> Result<(), ApiError>
+          - require_plan_exists(plan_id, db) -> Result<Plan, ApiError>
+          - require_plan_todo(plan_id, db) -> Result<(), ApiError>
+
+          Error format: {error: {code: "REVIEW_REQUIRED", message: "...", requestId, timestamp}}
+          Tests: integration tests with axum test harness verifying each guard.
+        files:
+          - daemon/src/server/plan_lifecycle_guards.rs
+          - daemon/src/server/api_plan_db.rs
+          - daemon/src/server/mod.rs
+        verify:
+          - "test -f daemon/src/server/plan_lifecycle_guards.rs"
+          - "grep 'require_review' daemon/src/server/plan_lifecycle_guards.rs"
+          - "grep 'REVIEW_REQUIRED' daemon/src/server/plan_lifecycle_guards.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib plan_lifecycle_guards"
+          - "test $(wc -l < daemon/src/server/plan_lifecycle_guards.rs) -le 250"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 3
+        output_type: pr
+        validator_agent: thor
+      - id: T3-02
+        title: |
+          Enhance smart import to infer model, validator, effort, and test routing.
+          1. In the import handler (POST /api/plan-db/import), after parsing spec YAML:
+             a. For each task, if model is missing or 'default':
+                - type=test → model='claude-opus-4.6' (capable models for tests)
+                - type=documentation → model='gpt-5.3-codex'
+                - type=feature with effort=3 → model='gpt-5.3-codex'
+                - type=feature with effort<=2 → model='gpt-5.3-codex'
+                - All code tasks default to 'gpt-5.3-codex'
+             b. For each task, if validator_agent is missing:
+                - output_type=pr → 'thor'
+                - output_type=document → 'doc-validator'
+                - output_type=analysis → 'strategy-validator'
+                - output_type=design → 'design-validator'
+                - output_type=legal_opinion → 'compliance-validator'
+                - default → 'thor'
+             c. For each task, if effort is missing: default to 2
+             d. For each task, if output_type is missing: default to 'pr'
+             e. For each task, if test_criteria is empty: derive from verify[] array
+
+          2. Accept YAML directly (already works if parsing is in place). Verify the daemon
+             import handler reads YAML, not just JSON. If it currently only accepts JSON,
+             add YAML parsing with serde_yaml.
+
+          3. Return import summary: {imported: N, inferred: {model: N, validator: N, effort: N}}
+
+          Add serde_yaml to Cargo.toml if not already present.
+        files:
+          - daemon/src/server/api_plan_db.rs
+          - daemon/Cargo.toml
+        verify:
+          - "grep 'serde_yaml\\|serde-yaml' daemon/Cargo.toml"
+          - "grep 'test.*opus\\|test.*sonnet' daemon/src/server/api_plan_db.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib import"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+      - id: T3-03
+        title: |
+          Implement readiness check endpoint and merge-based plan completion metric.
+
+          1. Readiness check: GET /api/plan-db/readiness/{plan_id}
+             Returns {ready: bool, errors: [], warnings: [], gates: [
+               {name: "review_approved", passed: bool, reason: "..."},
+               {name: "spec_imported", passed: bool, reason: "..."},
+               {name: "worktree_exists", passed: bool, reason: "..."},
+               {name: "all_tasks_have_verify", passed: bool, reason: "..."},
+               {name: "all_tasks_have_model", passed: bool, reason: "..."},
+             ]}
+             ready=true only if ALL gates pass and errors is empty.
+
+          2. Wire readiness into cvg plan readiness CLI (placeholder added in T2-01):
+             Replace placeholder handler with actual call to readiness endpoint.
+
+          3. Merge-based completion: modify plan completion percentage calculation.
+             Current: tasks_done / tasks_total
+             New: waves_merged / waves_total (where waves_merged = waves with status='done')
+             Add columns to plans table: waves_total, waves_merged (INTEGER, default 0)
+             Add trigger: when wave status → 'done', increment plans.waves_merged
+             Update plan show/list endpoints to include merge-based percentage.
+
+          4. Update cvg plan start to call readiness check first:
+             If readiness returns ready=false, REJECT with gate details.
+
+          Create daemon/src/server/api_readiness.rs for the handler.
+        files:
+          - daemon/src/server/api_readiness.rs
+          - daemon/src/server/api_plan_db.rs
+          - daemon/src/server/mod.rs
+          - daemon/src/db/mod.rs
+          - daemon/src/cli_plan.rs
+        verify:
+          - "test -f daemon/src/server/api_readiness.rs"
+          - "grep 'waves_merged' daemon/src/db/mod.rs"
+          - "grep 'readiness' daemon/src/server/mod.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib readiness"
+          - "test $(wc -l < daemon/src/server/api_readiness.rs) -le 250"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+  - id: W4
+    name: "Agent Management — CRUD, Transpiler, Catalog"
+    depends_on: W3
+    tasks:
+      - id: T4-01
+        title: |
+          Implement agent CRUD in daemon API + CLI. The agent_catalog table already exists in DB.
+          Schema: name (PK), category, description, model, tools (JSON), skills (JSON), source_repo.
+
+          NEW API endpoints:
+          1. POST /api/agents/sync {project: String, source_dir: String}
+             - Scan source_dir for *.agent.md files
+             - Parse YAML frontmatter (name, description, model, tools)
+             - Upsert into agent_catalog table
+             - Return {synced: N, added: N, updated: N}
+
+          2. POST /api/agents/enable {name: String, project_dir: String}
+             - Read agent from agent_catalog
+             - Generate .md file in project_dir/.github/agents/{name}.agent.md
+             - Use stored prompt + metadata
+             - Return {enabled: name, path: "..."}
+
+          3. POST /api/agents/disable {name: String, project_dir: String}
+             - Delete project_dir/.github/agents/{name}.agent.md
+             - Return {disabled: name}
+
+          4. GET /api/agents/list?category={cat}
+             - Return all agents from agent_catalog, optionally filtered by category
+             - Already partially exists at /api/agents — enhance with catalog data
+
+          5. POST /api/agents/create {name, category, description, model, tools, prompt}
+             - Validate name uniqueness, model in allowed list, tools valid
+             - Check prompt for Constitution compliance (basic: must reference CONSTITUTION.md)
+             - Insert into agent_catalog
+             - Return {created: name}
+
+          NEW CLI (cli_agent.rs additions):
+          - Sync { project: String, source_dir: Option<String> }
+          - Enable { name: String, project_dir: Option<String> }
+          - Disable { name: String, project_dir: Option<String> }
+          - Create { name: String, category: String, description: String, model: String }
+
+          Create daemon/src/server/api_agent_catalog.rs for new handlers.
+          IMPORTANT: agent_catalog table does NOT exist yet in daemon DB.
+          Create migration: add CREATE TABLE IF NOT EXISTS agent_catalog (
+            name TEXT PRIMARY KEY, category TEXT, description TEXT,
+            model TEXT, tools TEXT, skills TEXT, source_repo TEXT,
+            constitution_version TEXT, version TEXT,
+            created_at DATETIME DEFAULT (datetime('now')),
+            updated_at DATETIME DEFAULT (datetime('now'))
+          ) to daemon/src/db/mod.rs init_tables function.
+        files:
+          - daemon/src/cli_agent.rs
+          - daemon/src/server/api_agent_catalog.rs
+          - daemon/src/server/mod.rs
+          - daemon/src/db/mod.rs
+          - daemon/src/cli_commands.rs
+        verify:
+          - "grep 'Sync' daemon/src/cli_agent.rs"
+          - "grep 'Enable' daemon/src/cli_agent.rs"
+          - "grep 'Disable' daemon/src/cli_agent.rs"
+          - "grep 'Create' daemon/src/cli_agent.rs"
+          - "test -f daemon/src/server/api_agent_catalog.rs"
+          - "grep 'agent_catalog' daemon/src/db/mod.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib cli_agent"
+          - "test $(wc -l < daemon/src/cli_agent.rs) -le 250"
+          - "test $(wc -l < daemon/src/server/api_agent_catalog.rs) -le 250"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 3
+        output_type: pr
+        validator_agent: thor
+      - id: T4-02
+        title: |
+          Implement multi-provider transpiler. One agent in DB → N provider format files.
+
+          1. Create daemon/src/transpiler.rs module:
+             - pub fn transpile_claude_code(agent: &AgentCatalog) -> String
+               Generates Claude Code .agent.md format with YAML frontmatter (name, description, model, tools)
+               and markdown body with role, conventions, constraints.
+             - pub fn transpile_copilot_cli(agent: &AgentCatalog) -> String
+               Generates GitHub Copilot CLI .md format (different frontmatter schema).
+             - pub fn transpile_generic_llm(agent: &AgentCatalog) -> String
+               Generates plain markdown system prompt (no frontmatter).
+
+          2. Enhance cli_skill.rs Transpile subcommand (already exists for skills):
+             - Add agent transpilation alongside skill transpilation
+             - Or add new Transpile variant to AgentCommands in cli_agent.rs
+
+          3. Add API endpoint: POST /api/agents/transpile {name, provider: "claude-code"|"copilot-cli"|"generic-llm"}
+             - Read from agent_catalog, call transpile function, return generated content
+             - Optionally write to disk if output_dir provided
+
+          4. Wire into cvg agent sync: after sync, auto-generate .md files for the default provider (claude-code).
+
+          5. Unit tests: verify each transpiler produces valid output for a sample agent.
+             Test that claude-code output has valid YAML frontmatter.
+             Test that copilot-cli output matches expected format.
+        files:
+          - daemon/src/transpiler.rs
+          - daemon/src/cli_agent.rs
+          - daemon/src/server/api_agent_catalog.rs
+          - daemon/src/main.rs
+        verify:
+          - "test -f daemon/src/transpiler.rs"
+          - "grep 'transpile_claude_code' daemon/src/transpiler.rs"
+          - "grep 'transpile_copilot_cli' daemon/src/transpiler.rs"
+          - "grep 'Transpile' daemon/src/cli_agent.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib transpiler"
+          - "test $(wc -l < daemon/src/transpiler.rs) -le 250"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 3
+        output_type: pr
+        validator_agent: thor
+      - id: T4-03
+        title: |
+          Populate agent_catalog from .github/agents/ and integrate with /solve triage.
+
+          1. Create daemon/src/server/api_agent_triage.rs:
+             - POST /api/agents/triage {problem_description: String, domain: Option<String>}
+             - Query agent_catalog for agents matching domain/category
+             - Return ranked list: [{name, category, description, relevance_score}]
+             - Scoring: exact domain match = 1.0, partial keyword match = 0.5, default = 0.1
+             - Max 15 agents returned (aligned with "10-15 per project" target)
+
+          2. Run initial catalog population:
+             - Create daemon/src/db/seed_agents.rs with a function seed_default_agents(db)
+             - Parse all .github/agents/*.agent.md files
+             - Insert into agent_catalog with category derived from agent description
+             - Categories: technical, leadership, pm, design, data, core (from agent-discovery.md)
+             - Call seed function on daemon startup if agent_catalog is empty
+
+          3. CLI: cvg agent triage "problem description"
+             → POST /api/agents/triage, display ranked suggestions
+
+          4. Update /solve skill to call triage endpoint during Phase 1 (discovery).
+        files:
+          - daemon/src/server/api_agent_triage.rs
+          - daemon/src/db/seed_agents.rs
+          - daemon/src/server/mod.rs
+          - daemon/src/cli_agent.rs
+          - daemon/src/db/mod.rs
+        verify:
+          - "test -f daemon/src/server/api_agent_triage.rs"
+          - "test -f daemon/src/db/seed_agents.rs"
+          - "grep 'triage' daemon/src/server/api_agent_triage.rs"
+          - "grep 'seed_default_agents' daemon/src/db/seed_agents.rs"
+          - "grep 'Triage' daemon/src/cli_agent.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib seed_agents"
+          - "cd daemon && cargo test --lib triage"
+        priority: P1
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+  - id: W5
+    name: "Thor Deterministic — Mechanical Gates + Split Validation"
+    depends_on: W4
+    tasks:
+      - id: T5-01
+        title: |
+          Implement mechanical validation gates in daemon. These run before Thor (AI) and are
+          100% deterministic — no LLM needed.
+
+          Create daemon/src/validation/mechanical_gates.rs:
+          1. gate_verify_commands(task) -> GateResult
+             - Run each command in task.verify[] array
+             - Return pass/fail with output for each command
+          2. gate_credential_scan(changed_files) -> GateResult
+             - Regex scan for: API keys (sk-*, AKIA*), passwords (password=, secret=),
+               tokens (token=, bearer), private keys (BEGIN.*PRIVATE)
+             - Allowlist: test files, example.com domains
+          3. gate_pattern_check(changed_files) -> GateResult
+             - Check for todo!() stubs in Rust
+             - Check for // TODO, // FIXME without issue reference
+             - Check for console.log in non-test JS
+             - Check for empty catch blocks
+          4. gate_file_existence(task.files) -> GateResult
+             - Verify all files in task.files[] exist on disk
+          5. gate_line_count(changed_files) -> GateResult
+             - Verify no file exceeds 250 lines
+          6. gate_git_hygiene(worktree_path) -> GateResult
+             - Clean working tree (no untracked/modified)
+             - No merge commits (linear history)
+             - Conventional commit messages on branch
+
+          pub struct GateResult { name: String, passed: bool, reason: String, details: Vec<String> }
+          pub fn run_all_mechanical_gates(task, worktree) -> Vec<GateResult>
+
+          Unit tests for each gate with positive and negative cases.
+        files:
+          - daemon/src/validation/mechanical_gates.rs
+          - daemon/src/validation/mod.rs
+          - daemon/src/main.rs
+        verify:
+          - "test -f daemon/src/validation/mechanical_gates.rs"
+          - "test -f daemon/src/validation/mod.rs"
+          - "grep 'gate_verify_commands' daemon/src/validation/mechanical_gates.rs"
+          - "grep 'gate_credential_scan' daemon/src/validation/mechanical_gates.rs"
+          - "grep 'gate_pattern_check' daemon/src/validation/mechanical_gates.rs"
+          - "grep 'gate_line_count' daemon/src/validation/mechanical_gates.rs"
+          - "grep 'gate_git_hygiene' daemon/src/validation/mechanical_gates.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib mechanical_gates"
+          - "test $(wc -l < daemon/src/validation/mechanical_gates.rs) -le 250"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 3
+        output_type: pr
+        validator_agent: thor
+      - id: T5-02
+        title: |
+          Split cvg task validate flow: mechanical gates first, Thor only if all pass.
+
+          1. Modify POST /api/plan-db/validate-task/{task}/{plan} handler:
+             a. Run run_all_mechanical_gates(task, worktree) from validation module
+             b. If ANY gate fails: return 422 with {
+                  status: "REJECTED",
+                  phase: "mechanical",
+                  gates: [GateResult...],
+                  thor_invoked: false
+                }
+             c. If ALL gates pass: proceed to existing Thor validation flow
+                Return {
+                  status: "APPROVED" | "REJECTED",
+                  phase: "thor",
+                  mechanical_gates: [GateResult...],
+                  thor_report: {...},
+                  thor_invoked: true
+                }
+
+          2. Update cli_task.rs Validate handler to display mechanical gate results:
+             - If mechanical REJECTED: show gate failures, suggest fixes, exit 1
+             - If Thor REJECTED: show Thor report, exit 1
+             - If APPROVED: show summary, exit 0
+
+          3. Update POST /api/plans/{plan_id}/validate (wave-level validation):
+             - Run mechanical gates for ALL tasks in wave first
+             - If any task has mechanical failures: REJECT wave without Thor
+             - Only invoke Thor if all tasks pass mechanical
+
+          4. Log validation results to validation_reports table (if exists) or add to task output_data.
+        files:
+          - daemon/src/server/api_plan_db.rs
+          - daemon/src/cli_task.rs
+          - daemon/src/validation/mod.rs
+        verify:
+          - "grep 'mechanical' daemon/src/server/api_plan_db.rs"
+          - "grep 'thor_invoked' daemon/src/server/api_plan_db.rs"
+          - "grep 'mechanical' daemon/src/cli_task.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test --lib cli_task"
+        priority: P0
+        type: feature
+        model: gpt-5.3-codex
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+      - id: T5-03
+        title: |
+          Integration tests for mechanical gates and the full validation split flow.
+
+          Create daemon/tests/integration/validation_tests.rs:
+          1. test_credential_scan_detects_api_key()
+             - Create temp file with "sk-test123..." content
+             - Run gate_credential_scan → expect fail
+          2. test_credential_scan_allows_test_file()
+             - Create temp test file with "sk-test123..."
+             - Run gate_credential_scan → expect pass (allowlisted)
+          3. test_line_count_rejects_long_file()
+             - Create 300-line temp file
+             - Run gate_line_count → expect fail
+          4. test_pattern_check_detects_todo_stub()
+             - Create temp .rs file with todo!()
+             - Run gate_pattern_check → expect fail
+          5. test_verify_commands_run_successfully()
+             - Task with verify: ["true", "test 1 -eq 1"]
+             - Run gate_verify_commands → expect pass
+          6. test_verify_commands_fail_on_bad_command()
+             - Task with verify: ["false"]
+             - Run gate_verify_commands → expect fail
+          7. test_full_validation_rejects_mechanical_without_thor()
+             - Use axum test harness with in-memory DB
+             - Create plan+task with credential violation
+             - POST validate → expect REJECTED, phase=mechanical, thor_invoked=false
+          8. test_full_validation_proceeds_to_thor_on_clean()
+             - Use axum test harness
+             - Create clean plan+task
+             - POST validate → expect phase=thor (or pass if Thor mocked)
+
+          Also create daemon/tests/integration/mod.rs if not exists.
+          Use tempfile crate for temp dirs, axum::test for HTTP harness.
+        files:
+          - daemon/tests/integration/validation_tests.rs
+          - daemon/tests/integration/mod.rs
+        verify:
+          - "test -f daemon/tests/integration/validation_tests.rs"
+          - "grep 'credential_scan_detects' daemon/tests/integration/validation_tests.rs"
+          - "grep 'mechanical_without_thor' daemon/tests/integration/validation_tests.rs"
+          - "cd daemon && cargo test --test integration validation"
+        priority: P1
+        type: test
+        model: claude-opus-4.6
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+
+  - id: WF
+    name: "Final — Tests, Docs, PR"
+    depends_on: W5
+    tasks:
+      - id: TF-tests
+        title: |
+          Full integration test suite for all Plan A features.
+          1. Create daemon/tests/integration/cli_integration_tests.rs:
+             - Test cvg plan create → import → start → complete lifecycle via HTTP
+             - Test wave create → merge lifecycle
+             - Test agent sync → enable → disable → list lifecycle
+             - Test readiness check with missing gates
+             - Test lifecycle enforcement blocks (create without review, start without import)
+          2. Create daemon/tests/integration/smart_import_tests.rs:
+             - Test YAML spec import with missing model → inferred
+             - Test test task → opus model auto-routing
+             - Test validator inference by output_type
+          3. Verify all existing tests still pass: cargo test (full suite)
+          4. Add cargo test to CI if not already there
+        files:
+          - daemon/tests/integration/cli_integration_tests.rs
+          - daemon/tests/integration/smart_import_tests.rs
+        verify:
+          - "test -f daemon/tests/integration/cli_integration_tests.rs"
+          - "test -f daemon/tests/integration/smart_import_tests.rs"
+          - "cd daemon && cargo test"
+        priority: P0
+        type: test
+        model: claude-opus-4.6
+        effort_level: 2
+        output_type: pr
+        validator_agent: thor
+
+      - id: TF-doc
+        title: |
+          Update documentation for Plan A changes.
+          1. TROUBLESHOOTING.md: Add entries for new CLI commands, common errors
+          2. docs/adr/NNNN-core-intelligence.md: ADR for Plan A decisions
+             - Decision: CLI POST subcommands via daemon HTTP API
+             - Decision: Lifecycle enforcement in daemon guards
+             - Decision: Mechanical gates before Thor
+             - Decision: Agent catalog as source of truth, files as cache
+             - Decision: Rules consolidation from 16 to ~11
+          3. CHANGELOG.md: Add Plan A version entry with all features
+          4. Update CLAUDE.md commands table with new cvg subcommands
+          5. Version bump in daemon/Cargo.toml
+        files:
+          - TROUBLESHOOTING.md
+          - CHANGELOG.md
+          - daemon/Cargo.toml
+        verify:
+          - "grep -q 'Core Intelligence\\|Plan A' TROUBLESHOOTING.md"
+          - "grep -q 'Core Intelligence\\|Plan A' CHANGELOG.md"
+          - "test -d docs/adr"
+        priority: P1
+        type: documentation
+        model: gpt-5.3-codex
+        effort_level: 1
+        output_type: pr
+        validator_agent: thor
+
+      - id: TF-pr
+        title: |
+          Create PR for Plan A — Convergio Core Intelligence.
+          1. Verify all tests pass: cd daemon && cargo test
+          2. Verify cargo clippy clean: cd daemon && cargo clippy -- -D warnings
+          3. Verify cargo fmt: cd daemon && cargo fmt --check
+          4. Create PR with:
+             - Title: "feat: Plan A — Convergio Core Intelligence"
+             - Summary: CLI completion, planner enforcement, agent management, Thor split,
+               Constitution v2.1, rules consolidation
+             - Test plan: cargo test (unit + integration)
+          5. Verify PR checks pass
+        files:
+          - .github/
+        verify:
+          - "cd daemon && cargo test"
+          - "cd daemon && cargo clippy -- -D warnings"
+          - "cd daemon && cargo fmt --check"
+        priority: P0
+        type: chore
+        model: gpt-5.3-codex
+        effort_level: 1
+        output_type: pr
+        validator_agent: thor

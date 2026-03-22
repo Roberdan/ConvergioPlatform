@@ -5,16 +5,24 @@ use super::api_plan_db_import_parsers::TaskSpec;
 
 /// Apply smart defaults to tasks in-place before DB insert.
 /// Rules:
-///   - model: feature/fix→codex, planning/analysis→opus, docs/doc→sonnet, chore→haiku
+///   - output_type: default to "pr" if absent
+///   - model: test/planning/analysis/review→claude-opus-4.6, all other code→gpt-5.3-codex
 ///   - validator_agent: pr→thor, document→doc-validator, analysis→strategy-validator,
 ///     design→design-validator, legal_opinion→compliance-validator
 ///   - verify: if files present and verify empty, generate `test -f <file>` per file
-///   - effort_level: 1 file→1, 2-4→2, 5+→3 (type also factors in: chore→1, planning→3)
+///   - effort_level: default 2; 1 file→1, 2-4→2, 5+→3; planning/analysis floor 2
 pub fn apply_defaults(task: &mut TaskSpec) {
+    apply_output_type_default(task);
     apply_model_default(task);
     apply_validator_default(task);
     apply_verify_default(task);
     apply_effort_default(task);
+}
+
+fn apply_output_type_default(task: &mut TaskSpec) {
+    if task.output_type.is_none() {
+        task.output_type = Some("pr".to_string());
+    }
 }
 
 fn apply_model_default(task: &mut TaskSpec) {
@@ -24,12 +32,13 @@ fn apply_model_default(task: &mut TaskSpec) {
     task.model = Some(infer_model(&task.task_type).to_string());
 }
 
+/// Canonical model IDs per platform model routing spec.
+/// test/planning/analysis/review need capable reasoning → claude-opus-4.6
+/// documentation and all other code tasks → gpt-5.3-codex
 pub fn infer_model(task_type: &str) -> &'static str {
     match task_type {
-        "feature" | "fix" | "bug" | "refactor" | "test" | "config" => "codex",
-        "planning" | "analysis" | "review" => "opus",
-        "documentation" | "docs" | "doc" => "sonnet",
-        _ => "haiku", // chore, other
+        "test" | "planning" | "analysis" | "review" => "claude-opus-4.6",
+        _ => "gpt-5.3-codex",
     }
 }
 
@@ -67,20 +76,20 @@ fn apply_effort_default(task: &mut TaskSpec) {
     task.effort_level = Some(infer_effort(&task.task_type, task.files.len()));
 }
 
+/// Default effort is 2. File count adjusts: 1 file→1, 2-4→2, 5+→3.
+/// Planning/analysis have a floor of 2.
 pub fn infer_effort(task_type: &str, file_count: usize) -> i64 {
-    // Type override: planning/analysis always medium-high
-    let type_effort = match task_type {
+    let type_floor = match task_type {
         "planning" | "analysis" => 2i64,
-        "chore" => 1i64,
-        _ => 0, // defer to file count
+        _ => 0,
     };
     let file_effort = match file_count {
-        0 | 1 => 1i64,
+        0 => 2i64, // no files specified → default medium
+        1 => 1,
         2..=4 => 2,
         _ => 3,
     };
-    // Take the higher of type-based and file-based effort
-    type_effort.max(file_effort)
+    type_floor.max(file_effort)
 }
 
 #[cfg(test)]

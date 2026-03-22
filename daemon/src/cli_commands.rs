@@ -3,10 +3,12 @@
 // Kept in a separate module so main.rs stays under 250 lines.
 
 use crate::cli_agent;
+use crate::cli_bus;
 use crate::cli_checkpoint;
 use crate::cli_kb;
 use crate::cli_lock;
 use crate::cli_ops;
+use crate::cli_project;
 use crate::cli_plan;
 use crate::cli_review;
 use crate::cli_run;
@@ -116,15 +118,48 @@ pub enum Commands {
         #[command(subcommand)]
         command: cli_review::ReviewCommands,
     },
-    /// Audit project for violations: file sizes, token budget, copyright, constitution files
+    /// Audit project for violations: file sizes, token budget, copyright, constitution files.
+    /// With --project, runs a full project audit via daemon API instead.
     Audit {
         /// Project root to audit (defaults to current directory)
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Run project-level audit (solve sessions, plans, tasks, runs, KB learnings)
+        #[arg(long)]
+        project: Option<String>,
+        /// Write report to project output directory
+        #[arg(long)]
+        output: bool,
+        /// Skip interactive confirmation (for --output)
+        #[arg(long)]
+        yes: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
     },
     /// Skill commands (lint, transpile) — replaces skill-lint.sh and skill-transpile-*.sh
     Skill {
         #[command(subcommand)]
         command: cli_skill::SkillCommands,
+    },
+    /// IPC bus commands (who/send/read/broadcast)
+    Bus {
+        #[command(subcommand)]
+        command: cli_bus::BusCommands,
+    },
+    /// Project management commands (cvg project create/list/show)
+    Project {
+        #[command(subcommand)]
+        command: cli_project::ProjectCommands,
+    },
+    /// Metrics commands (summary, collect)
+    Metrics {
+        #[command(subcommand)]
+        command: cli_ops::MetricsCommands,
+    },
+    /// Alert / notification commands (list)
+    Alert {
+        #[command(subcommand)]
+        command: cli_ops::AlertCommands,
     },
 }

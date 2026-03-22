@@ -139,3 +139,83 @@ fn plan_db_lifecycle_cancel_cascades() {
         .unwrap();
     assert_eq!(status, "cancelled");
 }
+
+#[test]
+fn noncode_plan_blocked_by_unapproved_deliverables() {
+    let db = setup_db();
+    let conn = db.connection();
+
+    // Add deliverables table
+    conn.execute_batch(
+        "CREATE TABLE deliverables (
+             id INTEGER PRIMARY KEY, task_id INTEGER, project_id TEXT,
+             name TEXT, output_type TEXT, output_path TEXT,
+             status TEXT DEFAULT 'pending', version INTEGER DEFAULT 1,
+             approved_by TEXT, approved_at TEXT,
+             created_at TEXT, updated_at TEXT
+         );",
+    )
+    .expect("deliverables table");
+
+    // Create a doing plan with one done task
+    conn.execute(
+        "INSERT INTO plans (project_id, name, status) VALUES ('test', 'Doc Plan', 'doing')",
+        [],
+    )
+    .unwrap();
+    let plan_id: i64 = conn
+        .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+        .unwrap();
+
+    conn.execute(
+        "INSERT INTO tasks (plan_id, task_id, title, status, project_id) \
+         VALUES (?1, 'T1', 'Write report', 'done', 'test')",
+        rusqlite::params![plan_id],
+    )
+    .unwrap();
+    let task_db_id: i64 = conn
+        .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+        .unwrap();
+
+    // Deliverable linked to task, not yet approved
+    conn.execute(
+        "INSERT INTO deliverables (task_id, project_id, name, output_type, status) \
+         VALUES (?1, 'test', 'report', 'document', 'pending')",
+        rusqlite::params![task_db_id],
+    )
+    .unwrap();
+
+    // Count unapproved non-pr deliverables (should block completion)
+    let unapproved: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM deliverables d \
+             JOIN tasks t ON d.task_id = t.id \
+             WHERE t.plan_id = ?1 AND t.status = 'done' \
+             AND COALESCE(d.output_type, '') != 'pr' \
+             AND d.status != 'approved'",
+            rusqlite::params![plan_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(unapproved, 1, "unapproved deliverable should block completion");
+
+    // Approve the deliverable
+    conn.execute(
+        "UPDATE deliverables SET status = 'approved' WHERE task_id = ?1",
+        rusqlite::params![task_db_id],
+    )
+    .unwrap();
+
+    let unapproved: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM deliverables d \
+             JOIN tasks t ON d.task_id = t.id \
+             WHERE t.plan_id = ?1 AND t.status = 'done' \
+             AND COALESCE(d.output_type, '') != 'pr' \
+             AND d.status != 'approved'",
+            rusqlite::params![plan_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(unapproved, 0, "after approval, completion should be unblocked");
+}

@@ -5,5 +5,9 @@
 export CONVERGIO_PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 export PATH="$CONVERGIO_PLATFORM_DIR/scripts/platform:$PATH"
 
-convergioOn()  { convergio on; }
-convergioOff() { convergio off; }
+# Ensure cvg symlink exists (daemon binary with argv[0] detection)
+_CVG_BIN="$CONVERGIO_PLATFORM_DIR/daemon/target/release/convergio-platform-daemon"
+if [ -x "$_CVG_BIN" ] && ! command -v cvg &>/dev/null; then
+  ln -sf "$_CVG_BIN" "$CONVERGIO_PLATFORM_DIR/scripts/platform/cvg"
+fi
+unset _CVG_BIN

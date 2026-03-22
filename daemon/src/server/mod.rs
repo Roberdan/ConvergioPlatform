@@ -1,8 +1,13 @@
+pub mod api_agent_catalog;
+pub mod api_agent_triage;
 pub mod api_agents;
+pub mod api_audit;
 pub mod api_chat;
 pub mod api_ingest;
 pub mod api_coordinator;
 pub mod api_dashboard;
+pub mod api_deliverables;
+pub mod api_deliverables_handlers;
 pub mod api_evolution;
 pub mod api_github;
 pub mod api_github_handlers;
@@ -22,11 +27,15 @@ pub mod api_plan_db_import;
 pub mod api_plan_db_import_defaults;
 pub mod api_plan_db_import_parsers;
 pub mod api_plan_db_lifecycle;
+pub mod plan_lifecycle_guards;
+#[cfg(test)]
+mod plan_lifecycle_guards_tests;
 pub mod api_plan_db_checkpoint;
 pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
 pub mod api_plan_db_query_fmt;
 pub mod api_plan_db_review;
+pub mod api_readiness;
 pub mod api_tracking;
 pub mod api_plans;
 pub mod api_runs;
@@ -49,6 +58,8 @@ pub mod ws_brain;
 pub mod ws_pty;
 
 #[cfg(test)]
+mod api_agent_catalog_tests;
+#[cfg(test)]
 mod api_agents_legacy_tests;
 #[cfg(test)]
 mod api_ideas_tests_filter;
@@ -66,6 +77,14 @@ mod api_tests;
 mod ws_pty_tests;
 #[cfg(test)]
 mod api_tracking_tests;
+#[cfg(test)]
+mod api_deliverables_tests;
+#[cfg(test)]
+mod api_cross_feature_helpers;
+#[cfg(test)]
+mod api_cross_feature_tests;
+#[cfg(test)]
+mod api_cross_feature_plan_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

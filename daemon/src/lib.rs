@@ -5,5 +5,7 @@ pub mod hooks;
 pub mod ipc;
 pub mod lock;
 pub mod mesh;
+pub mod platform_paths;
 pub mod server;
 pub mod tui;
+pub mod validation;

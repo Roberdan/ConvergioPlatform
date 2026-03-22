@@ -4,10 +4,14 @@ pub use api_routes::{
     DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES,
 };
 
+use super::api_agent_catalog;
+use super::api_agent_triage;
 use super::api_agents;
+use super::api_audit;
 use super::api_chat;
 use super::api_ingest;
 use super::api_coordinator;
+use super::api_deliverables;
 use super::api_dashboard;
 use super::api_evolution;
 use super::api_github;
@@ -26,6 +30,7 @@ use super::api_plan_db_lifecycle;
 use super::api_plan_db_ops;
 use super::api_plan_db_query;
 use super::api_plan_db_review;
+use super::api_readiness;
 use super::api_tracking;
 use super::api_plans;
 use super::api_runs;
@@ -72,6 +77,8 @@ pub fn build_router_with_db(
         .merge(api_dashboard::router())
         .merge(api_ideas::router())
         .merge(api_plans::router())
+        .merge(api_agent_catalog::router())
+        .merge(api_agent_triage::router())
         .merge(api_agents::router())
         .merge(api_mesh::router())
         .merge(api_peers::router())
@@ -89,12 +96,15 @@ pub fn build_router_with_db(
         .merge(api_plan_db_ops::router())
         .merge(api_plan_db_review::router())
         .merge(api_plan_db_checkpoint::router())
+        .merge(api_readiness::router())
         .merge(api_tracking::router())
         .merge(api_workers::router())
         .merge(api_evolution::router())
         .merge(api_runs::router())
         .merge(api_metrics::router())
         .merge(api_ingest::router())
+        .merge(api_deliverables::router())
+        .merge(api_audit::router())
         .route("/api/chat/stream/:sid", get(sse::chat_stream_sse))
         .route("/api/mesh/action/stream", get(sse::mesh_action_sse))
         .route("/api/mesh/fullsync", get(sse::mesh_action_sse))

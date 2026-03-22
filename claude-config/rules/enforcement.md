@@ -1,4 +1,4 @@
-<!-- v3.1.0 -->
+<!-- v4.0.0 — Merged: enforcement + workflow-enforced -->
 # Enforcement
 
 ## Workflow
@@ -7,21 +7,44 @@
 
 > `/prompt` is deprecated — absorbed into `/solve` phase 4 (requirements clarification). Direct `/planner` without `/solve` = BLOCKED (for standard/full triage).
 
-| Step | How | Blocked |
-|---|---|---|
-| Triage | `/solve` (full triage + requirements) | Direct /planner without /solve |
-| Plan | `Skill(skill="planner")` | EnterPlanMode |
-| Review | 1x `Agent(plan-reviewer)` → `cvg review register` | Skipping review |
-| DB | `cvg review create` + `cvg plan import` (after review passes) | cvg plan create/import, manual INSERT |
-| Execute | `Skill(skill="execute")` | Direct edits |
-| Done | `cvg task update {id} done` | cvg task update done (direct) |
-| Thor | `cvg plan validate` (Opus, per-wave only) | Advance/merge without Thor |
-| Merge | `cvg wave merge` | Unresolved PR comments |
-| Close | `cvg plan complete` | Pending tasks |
-| Calibrate | `cvg plan calibrate-estimates` (auto after close) | Skipping calibration |
-| Post-mortem | `Agent(plan-post-mortem)` → `cvg plan add-learning` | No learnings extracted |
+## Step-by-Step (HOOK-ENFORCED — skip ANY = BLOCKED)
 
-Single fixes: direct edit OK.
+| Step | What | How | Blocked |
+|---|---|---|---|
+| 1 | Triage | `/solve` (full triage + requirements) | Direct /planner without /solve |
+| 2 | Plan | `Skill(skill="planner")` **on Opus** | EnterPlanMode |
+| 3 | Review | 1x `Agent(plan-reviewer)` → `cvg review register` | Skipping review |
+| 4 | DB | `cvg review create` + `cvg plan import` (after review passes) | cvg plan create/import, manual INSERT |
+| 5 | Execute | `Skill(skill="execute", args="{id}")` | Direct file edits during plan |
+| 6 | Done | `cvg task update {id} done` | cvg task update done (direct, non-safe path) |
+| 7 | Thor task | `cvg task validate {id} {plan}` | Wave advance without Thor |
+| 8 | Thor wave | `cvg plan validate {wave_id}` | Merge without wave Thor |
+| 9 | Merge | `cvg wave merge {plan} {wave}` | Unresolved PR comments |
+| 10 | Close | `cvg plan complete {plan_id}` | Pending tasks |
+| 11 | Calibrate | `cvg plan calibrate-estimates` (auto after close) | Skipping calibration |
+| 12 | Post-mortem | `Agent(plan-post-mortem)` → `cvg plan add-learning` | No learnings extracted |
+
+Single fixes: direct edit OK. Hook only blocks during active plan execution.
+
+## Block Messages
+
+| Violation | Block message |
+|---|---|
+| Edit/Write during active plan without task-executor | "Use Skill(execute) — direct edits during plans are blocked" |
+| `cvg task update done` without running tests | "Show test output before marking done" |
+| Declaring "done" without Thor | "Run cvg task validate first" |
+| Advancing wave without all tasks Thor-validated | "N tasks still in submitted status" |
+| Merging with unresolved PR comments | "Resolve all PR threads first" |
+| Skipping checkpoint after task | "Run cvg checkpoint save first" |
+
+## Quick Recovery
+
+| "I forgot to..." | Just run |
+|---|---|
+| Update DB after task | `cvg task update {id} done "summary"` |
+| Run Thor | `cvg task validate {id} {plan}` |
+| Checkpoint | `cvg checkpoint save {plan_id}` |
+| Resume after compaction | `cvg checkpoint restore {plan_id}` |
 
 ## Guardian
 

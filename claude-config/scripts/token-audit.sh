@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 # token-audit.sh: Check instruction file sizes against token budget
-# See rules/token-budget.md for limits
+# See rules/code-standards.md (Token Budget section) for limits
 
 CLAUDE_DIR="${HOME}/.claude"
 WARN_ONLY="${WARN_ONLY:-true}"

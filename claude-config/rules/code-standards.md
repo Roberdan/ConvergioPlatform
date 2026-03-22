@@ -1,5 +1,4 @@
-<!-- v1.0.0 — Merged: code-quality + zero-debt + file-size-limits + token-budget -->
-
+<!-- v2.0.0 — Merged: code-standards + token-budget -->
 # Code Standards
 
 ## Style
@@ -47,3 +46,18 @@
 
 - Max 250 lines/file. Split if exceeds
 - CLAUDE.md/AGENTS.md: max 4000 tokens | rules/*.md: max 2000 | skills/agents: max 1500
+
+## Token Budget
+
+| Instruction Type | Max Tokens | Max Bytes |
+|---|---|---|
+| CLAUDE.md | 4000 | 16KB |
+| AGENTS.md | 4000 | 16KB |
+| rules/*.md | 2000 | 8KB |
+| skills/*/SKILL.md | 1500 | 6KB |
+| agents/*/*.md | 1500 | 6KB |
+| copilot-agents/*.md | 1500 | 6KB |
+
+Enforcement: Pre-commit hook `token-audit.sh` checks byte sizes. Over-budget = WARN (soft gate).
+
+Reduction strategies: (1) Tables over prose (2) One-line rules, pipe-separated (3) `@reference/` includes over inline (4) No preambles/filler (5) Code examples: max 5 lines

@@ -49,6 +49,20 @@ pub enum TaskCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Approve the deliverable linked to a task
+    Approve {
+        /// Task DB ID
+        task_id: i64,
+        /// Approver name or comment
+        #[arg(long)]
+        comment: Option<String>,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: TaskCommands) {
@@ -59,131 +73,96 @@ pub async fn handle(cmd: TaskCommands) {
                 "status": status,
                 "summary": summary,
             });
-            post_and_print(&format!("{api_url}/api/plan-db/task/update"), &body, human).await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/task/update"), &body, human).await;
         }
         TaskCommands::Validate { task_id, plan_id, human, api_url } => {
-            fetch_and_print(
-                &format!("{api_url}/api/plan-db/validate-task/{task_id}/{plan_id}"),
-                human,
-            )
-            .await;
+            let url = format!("{api_url}/api/plan-db/validate-task/{task_id}/{plan_id}");
+            match reqwest::get(&url).await {
+                Ok(resp) => match resp.json::<serde_json::Value>().await {
+                    Ok(val) => {
+                        if human {
+                            print_mechanical_human(&val);
+                        } else {
+                            println!("{val}");
+                        }
+                        // Exit 1 if mechanical gates rejected
+                        let rejected = val
+                            .get("mechanical")
+                            .and_then(|m| m.get("status"))
+                            .and_then(serde_json::Value::as_str)
+                            == Some("REJECTED");
+                        if rejected {
+                            std::process::exit(1);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("error parsing response: {e}");
+                        std::process::exit(2);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("error connecting to daemon: {e}");
+                    std::process::exit(2);
+                }
+            }
         }
         TaskCommands::KbSearch { query, limit, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/kb-search?q={query}&limit={limit}"),
                 human,
             )
             .await;
         }
+        TaskCommands::Approve { task_id, comment, human, api_url } => {
+            crate::cli_task_approve::handle(task_id, comment, human, &api_url).await;
+        }
     }
 }
 
-/// Fetch a GET endpoint and print result as JSON or human-readable.
-async fn fetch_and_print(url: &str, human: bool) {
-    match reqwest::get(url).await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
+/// Human-readable output for mechanical gate validation results.
+fn print_mechanical_human(val: &serde_json::Value) {
+    let mechanical = match val.get("mechanical") {
+        Some(m) => m,
+        None => {
+            println!("{}", serde_json::to_string_pretty(val).unwrap_or_default());
+            return;
+        }
+    };
+
+    let status = mechanical
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("UNKNOWN");
+    let note = mechanical
+        .get("note")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+
+    println!("Mechanical Validation: {status}");
+    println!();
+
+    if let Some(gates) = mechanical.get("gates").and_then(|g| g.as_array()) {
+        for gate in gates {
+            let name = gate.get("gate").and_then(|g| g.as_str()).unwrap_or("?");
+            let passed = gate.get("passed").and_then(|p| p.as_bool()).unwrap_or(false);
+            let icon = if passed { "PASS" } else { "FAIL" };
+            println!("  [{icon}] {name}");
+            if let Some(details) = gate.get("details").and_then(|d| d.as_array()) {
+                for d in details {
+                    if let Some(s) = d.as_str() {
+                        println!("         {s}");
+                    }
                 }
             }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
         }
     }
-}
 
-/// POST JSON body to an endpoint and print result.
-async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
-    let client = reqwest::Client::new();
-    match client.post(url).json(body).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
-    }
-}
-
-fn print_value(val: &serde_json::Value, human: bool) {
-    if human {
-        println!("{}", serde_json::to_string_pretty(val)
-            .unwrap_or_else(|_| val.to_string()));
-    } else {
-        println!("{val}");
+    if !note.is_empty() {
+        println!();
+        println!("{note}");
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn task_commands_update_variant_exists() {
-        let cmd = TaskCommands::Update {
-            task_id: 100,
-            status: "done".to_string(),
-            summary: Some("finished".to_string()),
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, TaskCommands::Update { task_id: 100, .. }));
-    }
-
-    #[test]
-    fn task_commands_validate_variant_exists() {
-        let cmd = TaskCommands::Validate {
-            task_id: 1,
-            plan_id: 685,
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, TaskCommands::Validate { plan_id: 685, .. }));
-    }
-
-    #[test]
-    fn task_commands_kb_search_variant_exists() {
-        let cmd = TaskCommands::KbSearch {
-            query: "test".to_string(),
-            limit: 5,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, TaskCommands::KbSearch { .. }));
-    }
-
-    #[test]
-    fn print_value_json_compact() {
-        let val = serde_json::json!({"ok": true, "data": [1, 2]});
-        // Compact: no newlines in outer structure
-        let compact = val.to_string();
-        assert!(!compact.is_empty());
-    }
-
-    #[test]
-    fn print_value_json_pretty() {
-        let val = serde_json::json!({"ok": true});
-        let pretty = serde_json::to_string_pretty(&val).unwrap();
-        assert!(pretty.contains('\n'));
-    }
-}
+#[path = "cli_task_tests.rs"]
+mod tests;

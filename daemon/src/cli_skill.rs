@@ -3,6 +3,12 @@
 use clap::Subcommand;
 use std::path::PathBuf;
 
+// Re-export validation helpers so transpile module and tests keep working
+pub(crate) use crate::cli_skill_validate::{
+    capitalise, name_format_valid, semver_ge, strip_h1, version_format_valid,
+    yaml_get, yaml_get_list,
+};
+
 pub(crate) const MIN_CONSTITUTION_VERSION: &str = "2.0.0";
 pub(crate) const TOKEN_BUDGET_BYTES: u64 = 6144;
 const REQUIRED_FIELDS: &[&str] = &[
@@ -37,6 +43,17 @@ pub enum SkillCommands {
         #[arg(long)]
         human: bool,
     },
+    /// Enable a skill and auto-activate its required agents/plugins
+    Enable {
+        /// Path to the skill directory
+        skill_dir: PathBuf,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+    },
 }
 
 pub async fn handle(cmd: SkillCommands) {
@@ -47,10 +64,13 @@ pub async fn handle(cmd: SkillCommands) {
         SkillCommands::Transpile { skill_dir, output_dir, provider, human } => {
             crate::cli_skill_transpile::handle_transpile(&skill_dir, &output_dir, &provider, human);
         }
+        SkillCommands::Enable { skill_dir, api_url, human } => {
+            crate::cli_skill_enable::handle(&skill_dir, &api_url, human).await;
+        }
     }
 }
 
-// ── Lint ──────────────────────────────────────────────────────────────────────
+// -- Lint --------------------------------------------------------------------
 
 fn handle_lint(skill_dir: &PathBuf, human: bool, all: bool) {
     if all {
@@ -130,43 +150,9 @@ pub(crate) fn lint_one(skill_dir: &PathBuf) -> LintResult {
 
     if yaml_path.is_file() {
         let yaml_content = std::fs::read_to_string(&yaml_path).unwrap_or_default();
-        let missing: Vec<&str> = REQUIRED_FIELDS.iter()
-            .filter(|&&f| yaml_get(&yaml_content, f).is_none()).copied().collect();
-        if missing.is_empty() {
-            msgs.push(format!("[PASS] {name}: required fields present"));
-        } else {
-            msgs.push(format!("[FAIL] {name}: required fields missing: {}", missing.join(", ")));
-            failed = true;
-        }
-
-        match yaml_get(&yaml_content, "constitution-version") {
-            None => { msgs.push(format!("[FAIL] {name}: constitution-version not set")); failed = true; }
-            Some(ver) => {
-                if semver_ge(&ver, MIN_CONSTITUTION_VERSION) {
-                    msgs.push(format!("[PASS] {name}: constitution version {ver} >= {MIN_CONSTITUTION_VERSION}"));
-                } else {
-                    msgs.push(format!("[FAIL] {name}: constitution version {ver} < {MIN_CONSTITUTION_VERSION}"));
-                    failed = true;
-                }
-            }
-        }
-
-        match yaml_get(&yaml_content, "copyright") {
-            Some(_) => msgs.push(format!("[PASS] {name}: copyright present")),
-            None => { msgs.push(format!("[FAIL] {name}: copyright field missing or empty")); failed = true; }
-        }
-
-        match yaml_get(&yaml_content, "name") {
-            Some(n) if name_format_valid(&n) => msgs.push(format!("[PASS] {name}: name format valid ({n})")),
-            Some(n) => { msgs.push(format!("[FAIL] {name}: name format invalid ({n}), must match ^[a-z][a-z0-9-]*$")); failed = true; }
-            None => { msgs.push(format!("[FAIL] {name}: name field missing")); failed = true; }
-        }
-
-        match yaml_get(&yaml_content, "version") {
-            Some(v) if version_format_valid(&v) => msgs.push(format!("[PASS] {name}: version format valid ({v})")),
-            Some(v) => { msgs.push(format!("[FAIL] {name}: version format invalid ({v}), must be semver")); failed = true; }
-            None => { msgs.push(format!("[FAIL] {name}: version field missing")); failed = true; }
-        }
+        lint_yaml_fields(&name, &yaml_content, &mut msgs, &mut failed);
+        lint_requires_plugins(&name, &yaml_content, &mut msgs, &mut failed);
+        lint_requires_agents(&name, &yaml_content, &mut msgs, &mut failed);
     }
 
     if md_path.is_file() {
@@ -186,62 +172,70 @@ pub(crate) fn lint_one(skill_dir: &PathBuf) -> LintResult {
     LintResult { skill: name, ok: !failed, messages: msgs }
 }
 
-// ── Helpers (pub(crate) for transpile module) ─────────────────────────────────
-/// Extract a scalar YAML value (single-level key: value, unquoted or quoted).
-pub(crate) fn yaml_get(content: &str, key: &str) -> Option<String> {
-    for line in content.lines() {
-        if let Some(rest) = line.strip_prefix(&format!("{key}:")) {
-            let val = rest.trim().trim_matches('"').trim_matches('\'').to_string();
-            if !val.is_empty() { return Some(val); }
+fn lint_yaml_fields(name: &str, yaml: &str, msgs: &mut Vec<String>, failed: &mut bool) {
+    let missing: Vec<&str> = REQUIRED_FIELDS.iter()
+        .filter(|&&f| yaml_get(yaml, f).is_none()).copied().collect();
+    if missing.is_empty() {
+        msgs.push(format!("[PASS] {name}: required fields present"));
+    } else {
+        msgs.push(format!("[FAIL] {name}: required fields missing: {}", missing.join(", ")));
+        *failed = true;
+    }
+    match yaml_get(yaml, "constitution-version") {
+        None => { msgs.push(format!("[FAIL] {name}: constitution-version not set")); *failed = true; }
+        Some(ver) => {
+            if semver_ge(&ver, MIN_CONSTITUTION_VERSION) {
+                msgs.push(format!("[PASS] {name}: constitution version {ver} >= {MIN_CONSTITUTION_VERSION}"));
+            } else {
+                msgs.push(format!("[FAIL] {name}: constitution version {ver} < {MIN_CONSTITUTION_VERSION}"));
+                *failed = true;
+            }
         }
     }
-    None
-}
-
-/// Compare semver strings: returns true if `ver >= min`.
-pub(crate) fn semver_ge(ver: &str, min: &str) -> bool {
-    let parse = |s: &str| -> (u32, u32, u32) {
-        let p: Vec<u32> = s.split('.').filter_map(|p| p.parse().ok()).collect();
-        (p.first().copied().unwrap_or(0), p.get(1).copied().unwrap_or(0), p.get(2).copied().unwrap_or(0))
-    };
-    parse(ver) >= parse(min)
-}
-
-/// Validate skill name format: ^[a-z][a-z0-9-]*$
-pub(crate) fn name_format_valid(name: &str) -> bool {
-    let mut chars = name.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_lowercase() => {}
-        _ => return false,
+    match yaml_get(yaml, "copyright") {
+        Some(_) => msgs.push(format!("[PASS] {name}: copyright present")),
+        None => { msgs.push(format!("[FAIL] {name}: copyright field missing or empty")); *failed = true; }
     }
-    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    match yaml_get(yaml, "name") {
+        Some(n) if name_format_valid(&n) => msgs.push(format!("[PASS] {name}: name format valid ({n})")),
+        Some(n) => { msgs.push(format!("[FAIL] {name}: name format invalid ({n}), must match ^[a-z][a-z0-9-]*$")); *failed = true; }
+        None => { msgs.push(format!("[FAIL] {name}: name field missing")); *failed = true; }
+    }
+    match yaml_get(yaml, "version") {
+        Some(v) if version_format_valid(&v) => msgs.push(format!("[PASS] {name}: version format valid ({v})")),
+        Some(v) => { msgs.push(format!("[FAIL] {name}: version format invalid ({v}), must be semver")); *failed = true; }
+        None => { msgs.push(format!("[FAIL] {name}: version field missing")); *failed = true; }
+    }
 }
 
-/// Validate semver format: ^[0-9]+\.[0-9]+\.[0-9]+$
-pub(crate) fn version_format_valid(ver: &str) -> bool {
-    let parts: Vec<&str> = ver.split('.').collect();
-    parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
-}
-
-/// Strip a leading H1 line from Markdown body.
-pub(crate) fn strip_h1(md: &str) -> String {
-    let mut lines = md.lines();
-    match lines.next() {
-        Some(first) if first.starts_with("# ") => lines.collect::<Vec<_>>().join("\n"),
-        Some(first) => {
-            let rest: Vec<_> = lines.collect();
-            if rest.is_empty() { first.to_string() } else { format!("{first}\n{}", rest.join("\n")) }
+/// Validate requires-plugins: if present, must be non-empty list of strings.
+fn lint_requires_plugins(name: &str, yaml: &str, msgs: &mut Vec<String>, failed: &mut bool) {
+    if let Some(plugins) = yaml_get_list(yaml, "requires-plugins") {
+        if plugins.is_empty() {
+            msgs.push(format!("[FAIL] {name}: requires-plugins is empty (remove field or add entries)"));
+            *failed = true;
+        } else {
+            msgs.push(format!("[PASS] {name}: requires-plugins valid ({} entries)", plugins.len()));
         }
-        None => String::new(),
     }
 }
 
-/// Capitalise first character of a string.
-pub(crate) fn capitalise(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+/// Validate requires-agents: each must match ^[a-z][a-z0-9-]*$.
+fn lint_requires_agents(name: &str, yaml: &str, msgs: &mut Vec<String>, failed: &mut bool) {
+    if let Some(agents) = yaml_get_list(yaml, "requires-agents") {
+        if agents.is_empty() {
+            msgs.push(format!("[FAIL] {name}: requires-agents is empty (remove field or add entries)"));
+            *failed = true;
+        } else {
+            let invalid: Vec<&String> = agents.iter().filter(|a| !name_format_valid(a)).collect();
+            if invalid.is_empty() {
+                msgs.push(format!("[PASS] {name}: requires-agents valid ({} entries)", agents.len()));
+            } else {
+                let bad = invalid.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ");
+                msgs.push(format!("[FAIL] {name}: requires-agents invalid names: {bad} (must match ^[a-z][a-z0-9-]*$)"));
+                *failed = true;
+            }
+        }
     }
 }
 

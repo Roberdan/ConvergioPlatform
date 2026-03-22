@@ -26,7 +26,16 @@ async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, Ap
         &conn,
         "SELECT p.id, p.name, p.status, p.project_id, p.execution_host, \
          p.worktree_path, p.description, p.human_summary, p.parallel_mode, \
-         p.tasks_total, p.tasks_done, p.created_at, p.started_at \
+         p.tasks_total, p.tasks_done, p.created_at, p.started_at, \
+         COALESCE(p.waves_total, 0) AS waves_total, \
+         COALESCE(p.waves_merged, 0) AS waves_merged, \
+         CASE WHEN COALESCE(p.waves_total, 0) > 0 \
+           THEN COALESCE(p.waves_merged, 0) * 100 / p.waves_total \
+           ELSE 0 END AS merge_pct, \
+         (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
+           WHERE t.plan_id = p.id AND d.status = 'approved') AS deliverables_approved, \
+         (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
+           WHERE t.plan_id = p.id AND COALESCE(d.output_type, '') != 'pr') AS deliverables_total \
          FROM plans p \
          WHERE p.status NOT IN ('completed', 'cancelled') \
          ORDER BY p.id DESC",
@@ -80,17 +89,22 @@ async fn handle_drift_check(
     })))
 }
 
-/// GET /api/plan-db/validate-task/:task_id/:plan_id — task validation info
+/// GET /api/plan-db/validate-task/:task_id/:plan_id — mechanical validation
+///
+/// Runs deterministic mechanical gates (status, test_criteria, file checks).
+/// Thor AI validation runs at wave level, not per-task.
 async fn handle_validate_task(
     State(state): State<ServerState>,
     Path((task_id, plan_id)): Path<(i64, i64)>,
 ) -> Result<Json<Value>, ApiError> {
+    use crate::validation::mechanical_gates;
+
     let conn = state.get_conn()?;
     let conn = &conn;
 
     let task = query_one(
         conn,
-        "SELECT id, task_id, title, status, test_criteria, \
+        "SELECT id, task_id, title, status, test_criteria, notes, \
          validated_at, validated_by, validation_report, \
          started_at, completed_at \
          FROM tasks WHERE id = ?1 AND plan_id = ?2",
@@ -102,6 +116,22 @@ async fn handle_validate_task(
         .get("status")
         .and_then(Value::as_str)
         .unwrap_or("unknown");
+    let test_criteria = task.get("test_criteria").and_then(Value::as_str);
+    let notes = task.get("notes").and_then(Value::as_str);
+
+    // Parse verify commands from notes (newline-separated)
+    let verify_cmds: Vec<&str> = notes
+        .map(|n| n.lines().filter(|l| !l.trim().is_empty()).collect())
+        .unwrap_or_default();
+
+    // Run mechanical gates (no file paths stored in DB — use empty slice)
+    let result = mechanical_gates::validate_task(
+        status,
+        test_criteria,
+        &[],
+        &verify_cmds,
+    );
+
     let is_validated = task.get("validated_by").is_some()
         && !task
             .get("validated_by")
@@ -110,8 +140,9 @@ async fn handle_validate_task(
             .is_empty();
 
     Ok(Json(json!({
-        "ok": true,
+        "ok": result.all_passed(),
         "task": task,
+        "mechanical": result,
         "is_validated": is_validated,
         "can_complete": status == "submitted" || is_validated,
     })))

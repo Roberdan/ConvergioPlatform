@@ -3,17 +3,17 @@
 ## Problem: cvg command not found
 
 **Symptom:** `cvg plan list` or any `cvg` subcommand returns "command not found"
-**Cause:** `cvg` symlink not yet created by setup, or `~/.claude/scripts` not on `$PATH`
+**Cause:** `cvg` symlink not yet created by setup, or `scripts/platform/` not on `$PATH`
 **Fix:**
 ```bash
-# Verify setup wired the symlink
-ls -la ~/.claude/scripts/cvg || echo "symlink missing"
-# Run setup to create it
-./setup.sh
+# Run setup to create symlink
+scripts/platform/setup-claude-symlinks.sh
+# Or source aliases (adds scripts/platform/ to PATH, creates symlink on-demand)
+source scripts/platform/convergio-aliases.sh
 # Or create manually
-ln -sf "$HOME/GitHub/ConvergioPlatform/scripts/platform/convergio" "$HOME/.claude/scripts/cvg"
+ln -sf "$(pwd)/daemon/target/release/convergio-platform-daemon" scripts/platform/cvg
 # Verify
-cvg --version
+cvg --help
 ```
 
 ## Problem: cvg subcommand fails with "daemon not reachable"
@@ -265,6 +265,98 @@ bash -x scripts/platform/skill-transpile-claude.sh claude-config/skills/solve/ /
 ```bash
 bash scripts/platform/convergio-db-migrate-solve.sh migrate
 sqlite3 "$DASHBOARD_DB" ".tables" | grep solve
+```
+
+## Problem: cvg review reset fails with "required argument PLAN_ID"
+
+**Symptom:** `cvg review reset` errors because plan_id is required, but reset is called before the plan exists in DB (planner workflow step 1)
+**Cause:** Fixed in v12.1.1 — plan_id is now optional. Omit it to reset pre-plan state (defaults to plan_id=0).
+**Fix:**
+```bash
+# Rebuild daemon if on older version
+cd daemon && cargo build --release
+# Now works without plan_id
+cvg review reset
+# Or with plan_id
+cvg review reset 688
+```
+
+## Problem: cvg plan readiness not found
+
+**Symptom:** `cvg plan readiness 688` returns "unrecognized subcommand" but the API endpoint works
+**Cause:** Fixed in v12.1.1 — CLI subcommand was missing, only API endpoint `/api/plan-db/readiness/:id` existed.
+**Fix:**
+```bash
+# Rebuild daemon
+cd daemon && cargo build --release
+# Now works
+cvg plan readiness 688
+```
+
+## Plan A — Convergio Core Intelligence
+
+### Problem: cvg command not found after source changes
+
+**Symptom:** `cvg` returns "command not found" after editing daemon source
+**Cause:** Binary not rebuilt after source changes
+**Fix:**
+```bash
+cd daemon && cargo build --release && ln -sf target/release/convergio-platform-daemon ~/.local/bin/cvg
+```
+
+### Problem: Daemon returns 405 on review/checkpoint endpoints
+
+**Symptom:** `cvg review register` or `cvg checkpoint save` returns HTTP 405 Method Not Allowed
+**Cause:** Running daemon is older version than source (endpoints added in v12.1.0)
+**Fix:**
+```bash
+# Rebuild and restart
+cd daemon && cargo build --release
+./daemon/start.sh
+# Verify new endpoints respond
+curl -s http://localhost:8420/api/review | jq .
+```
+
+### Problem: plan_reviews table not found
+
+**Symptom:** Review operations fail with "no such table: plan_reviews"
+**Cause:** Migration not applied (old daemon version running)
+**Fix:**
+```bash
+# Restart daemon — migrations auto-apply on startup
+./daemon/start.sh
+# Verify table exists
+sqlite3 "$DASHBOARD_DB" ".tables" | grep plan_reviews
+```
+
+## Problem: Deliverable not found
+
+**Symptom:** `cvg deliverable approve <id>` returns "deliverable not found" or 404
+**Cause:** Deliverable was created in a different project scope, or the ID is wrong
+**Fix:**
+```bash
+# List deliverables for the project
+cvg deliverable list --project <project_id>
+# Check if deliverable exists in DB
+cvg deliverable show <id>
+# If created in a worktree, ensure daemon is running (deliverables are DB-backed)
+./daemon/start.sh
+```
+
+## Problem: Permission denied writing deliverable to filesystem
+
+**Symptom:** `cvg deliverable create` fails with "permission denied" writing to `data/deliverables/`
+**Cause:** The `data/deliverables/` directory does not exist or has wrong permissions
+**Fix:**
+```bash
+# Create the deliverables directory
+mkdir -p data/deliverables
+# Check permissions
+ls -la data/
+# Ensure daemon user can write
+chmod 755 data/deliverables
+# Retry
+cvg deliverable create --plan <plan_id> --type report --path ./output.md
 ```
 
 ## Problem: Copilot agent not visible in /api/ipc/agents

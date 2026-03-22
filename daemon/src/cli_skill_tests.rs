@@ -113,66 +113,7 @@ copyright: Roberto D'Angelo, 2026\n").unwrap();
     assert!(result.messages.iter().any(|m| m.contains("[FAIL]") && m.contains("name format invalid")));
 }
 
-#[test]
-fn yaml_get_extracts_unquoted() {
-    let content = "name: my-skill\nversion: 1.0.0\n";
-    assert_eq!(yaml_get(content, "name"), Some("my-skill".into()));
-    assert_eq!(yaml_get(content, "version"), Some("1.0.0".into()));
-}
-
-#[test]
-fn yaml_get_extracts_quoted() {
-    let content = "version: \"2.3.0\"\ncopyright: 'Roberto D Angelo'\n";
-    assert_eq!(yaml_get(content, "version"), Some("2.3.0".into()));
-    assert_eq!(yaml_get(content, "copyright"), Some("Roberto D Angelo".into()));
-}
-
-#[test]
-fn yaml_get_missing_key_returns_none() {
-    assert_eq!(yaml_get("name: foo\n", "missing"), None);
-}
-
-#[test]
-fn semver_ge_comparisons() {
-    assert!(semver_ge("2.0.0", "2.0.0"));
-    assert!(semver_ge("3.0.0", "2.0.0"));
-    assert!(semver_ge("2.1.0", "2.0.0"));
-    assert!(!semver_ge("1.9.9", "2.0.0"));
-    assert!(!semver_ge("1.0.0", "2.0.0"));
-}
-
-#[test]
-fn name_format_valid_cases() {
-    assert!(name_format_valid("my-skill"));
-    assert!(name_format_valid("skill123"));
-    assert!(!name_format_valid("MySkill"));
-    assert!(!name_format_valid("-bad"));
-    assert!(!name_format_valid(""));
-}
-
-#[test]
-fn version_format_valid_cases() {
-    assert!(version_format_valid("1.0.0"));
-    assert!(version_format_valid("10.22.333"));
-    assert!(!version_format_valid("1.0"));
-    assert!(!version_format_valid("v1.0.0"));
-    assert!(!version_format_valid("1.0.0-beta"));
-}
-
-#[test]
-fn strip_h1_removes_title_line() {
-    let md = "# my-skill\n\nDoes things.\n";
-    let stripped = strip_h1(md);
-    assert!(!stripped.contains("# my-skill"), "H1 should be stripped");
-    assert!(stripped.contains("Does things."));
-}
-
-#[test]
-fn capitalise_first_char() {
-    assert_eq!(capitalise("planner"), "Planner");
-    assert_eq!(capitalise("my-skill"), "My-skill");
-    assert_eq!(capitalise(""), "");
-}
+// Helper tests (yaml_get, semver_ge, name_format_valid, etc.) live in cli_skill_validate::tests
 
 #[test]
 fn transpile_claude_creates_file() {
@@ -226,25 +167,62 @@ fn transpile_generic_creates_system_prompt() {
     assert!(content.contains("## Instructions"));
 }
 
-#[test]
-fn skill_commands_lint_variant_exists() {
-    use std::path::PathBuf;
-    let cmd = SkillCommands::Lint {
-        skill_dir: PathBuf::from("/tmp/skill"),
-        human: false,
-        all: false,
-    };
-    assert!(matches!(cmd, SkillCommands::Lint { .. }));
+fn make_skill_with_yaml(dir: &std::path::Path, extra_yaml: &str) {
+    fs::write(dir.join("skill.yaml"), format!("\
+name: test-skill\nversion: 1.0.0\ndescription: A skill\ndomain: testing\n\
+constitution-version: 2.0.0\nlicense: MPL-2.0\ncopyright: Roberto D'Angelo, 2026\n{extra_yaml}")).unwrap();
+    fs::write(dir.join("SKILL.md"), "# test-skill\n\nContent.\n").unwrap();
 }
 
 #[test]
-fn skill_commands_transpile_variant_exists() {
-    use std::path::PathBuf;
-    let cmd = SkillCommands::Transpile {
+fn lint_requires_plugins_valid_passes() {
+    let tmp = TempDir::new().unwrap();
+    let sd = tmp.path().join("plug-skill");
+    fs::create_dir(&sd).unwrap();
+    make_skill_with_yaml(&sd, "requires-plugins: [mcp-github, mcp-slack]\n");
+    let result = lint_one(&sd);
+    assert!(result.ok, "messages: {:?}", result.messages);
+    assert!(result.messages.iter().any(|m| m.contains("requires-plugins valid")));
+}
+
+#[test]
+fn lint_requires_agents_valid_passes() {
+    let tmp = TempDir::new().unwrap();
+    let sd = tmp.path().join("agent-skill");
+    fs::create_dir(&sd).unwrap();
+    make_skill_with_yaml(&sd, "requires-agents:\n  - my-agent\n  - another-agent\n");
+    let result = lint_one(&sd);
+    assert!(result.ok, "messages: {:?}", result.messages);
+    assert!(result.messages.iter().any(|m| m.contains("requires-agents valid")));
+}
+
+#[test]
+fn lint_requires_agents_invalid_name_fails() {
+    let tmp = TempDir::new().unwrap();
+    let sd = tmp.path().join("bad-agent-skill");
+    fs::create_dir(&sd).unwrap();
+    make_skill_with_yaml(&sd, "requires-agents:\n  - BadAgent\n  - ok-agent\n");
+    let result = lint_one(&sd);
+    assert!(!result.ok);
+    assert!(result.messages.iter().any(|m| m.contains("requires-agents invalid")));
+}
+
+#[test]
+fn lint_no_requires_fields_still_passes() {
+    let tmp = TempDir::new().unwrap();
+    let sd = tmp.path().join("no-req-skill");
+    fs::create_dir(&sd).unwrap();
+    make_skill_with_yaml(&sd, "");
+    let result = lint_one(&sd);
+    assert!(result.ok, "messages: {:?}", result.messages);
+}
+
+#[test]
+fn skill_commands_enable_variant_exists() {
+    let cmd = SkillCommands::Enable {
         skill_dir: PathBuf::from("/tmp/skill"),
-        output_dir: PathBuf::from("/tmp/out"),
-        provider: "claude-code".into(),
+        api_url: "http://localhost:8420".into(),
         human: false,
     };
-    assert!(matches!(cmd, SkillCommands::Transpile { .. }));
+    assert!(matches!(cmd, SkillCommands::Enable { .. }));
 }

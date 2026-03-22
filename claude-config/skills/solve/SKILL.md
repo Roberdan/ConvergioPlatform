@@ -33,6 +33,8 @@ Mandatory question areas:
 - What would "solved" look like concretely?
 - What constraints exist (time, dependencies, backward compat)?
 
+If the project has `input_path` set, mention available input documents to the user (e.g. "I see input documents in `<path>` — these will be analyzed during research").
+
 ### Phase 5 — Parallel Research
 
 Launch up to 4 Explore agents in parallel:
@@ -44,7 +46,19 @@ Launch up to 4 Explore agents in parallel:
 | consumers | Who calls what — callers, importers, API clients |
 | prior-art | KB search, past plans, learnings |
 
-If regulated domain: add `compliance` Explore agent. Wait for ALL agents before proceeding.
+If regulated domain: add `compliance` Explore agent. If the project has `input_path` set, add `input-docs` Explore agent focused on input folder contents (summarize key documents, extract requirements, flag ambiguities). Wait for ALL agents before proceeding.
+
+Note: agents write deliverables to the project output folder via the `cvg` API (`POST /api/deliverables`), never by writing directly to disk.
+
+### Phase 5b — Agent Auto-Creation
+
+After triage, if the API response includes `suggest_creation: true` (best score < 0.3):
+
+1. Show the scaffold hint from the response to the user
+2. Ask: "No existing agent matches well. Create a new one from this scaffold?"
+3. On confirm: `POST /api/agents/scaffold` with `{name, category, description, domain}` to get markdown
+4. Then: `cvg agent create <name> --category <cat> --description <desc>` + `cvg agent sync`
+5. Re-run triage to verify the new agent now scores above threshold
 
 ### Phase 6 — F-xx Extraction
 

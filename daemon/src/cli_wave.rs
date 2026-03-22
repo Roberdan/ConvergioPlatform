@@ -30,6 +30,34 @@ pub enum WaveCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Create a new wave for a plan
+    Create {
+        /// Plan ID
+        plan_id: i64,
+        /// Wave ID (human-readable, e.g. W1, W2)
+        wave_id: String,
+        /// Wave name/description
+        name: String,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Merge a completed wave (track merge state)
+    Merge {
+        /// Plan ID
+        plan_id: i64,
+        /// Wave DB ID
+        wave_id: i64,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
     /// Validate a wave (Thor gate — Opus only, wave-level)
     Validate {
         /// Wave DB ID
@@ -52,10 +80,29 @@ pub async fn handle(cmd: WaveCommands) {
                 "wave_id": wave_id,
                 "status": status,
             });
-            post_and_print(&format!("{api_url}/api/plan-db/wave/update"), &body, human).await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/wave/update"), &body, human).await;
+        }
+        WaveCommands::Create { plan_id, wave_id, name, human, api_url } => {
+            let body = serde_json::json!({
+                "plan_id": plan_id,
+                "wave_id": wave_id,
+                "name": name,
+            });
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/plan-db/wave/create"), &body, human,
+            ).await;
+        }
+        WaveCommands::Merge { plan_id, wave_id, human, api_url } => {
+            let body = serde_json::json!({
+                "plan_id": plan_id,
+                "wave_id": wave_id,
+            });
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/plan-db/wave/merge"), &body, human,
+            ).await;
         }
         WaveCommands::Context { plan_id, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/context/{plan_id}"),
                 human,
             )
@@ -67,69 +114,13 @@ pub async fn handle(cmd: WaveCommands) {
                 "wave_id": wave_id,
                 "scope": "wave",
             });
-            post_and_print(
+            crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plans/{plan_id}/validate"),
                 &body,
                 human,
             )
             .await;
         }
-    }
-}
-
-/// Fetch a GET endpoint and print result as JSON or human-readable.
-async fn fetch_and_print(url: &str, human: bool) {
-    match reqwest::get(url).await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
-    }
-}
-
-/// POST JSON body to an endpoint and print result.
-async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
-    let client = reqwest::Client::new();
-    match client.post(url).json(body).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
-    }
-}
-
-fn print_value(val: &serde_json::Value, human: bool) {
-    if human {
-        println!("{}", serde_json::to_string_pretty(val)
-            .unwrap_or_else(|_| val.to_string()));
-    } else {
-        println!("{val}");
     }
 }
 
@@ -167,6 +158,24 @@ mod tests {
             api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, WaveCommands::Validate { wave_id: 3, .. }));
+    }
+
+    #[test]
+    fn wave_commands_create_variant_exists() {
+        let cmd = WaveCommands::Create {
+            plan_id: 687, wave_id: "W1".to_string(), name: "Foundation".to_string(),
+            human: false, api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, WaveCommands::Create { plan_id: 687, .. }));
+    }
+
+    #[test]
+    fn wave_commands_merge_variant_exists() {
+        let cmd = WaveCommands::Merge {
+            plan_id: 687, wave_id: 2088,
+            human: false, api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, WaveCommands::Merge { wave_id: 2088, .. }));
     }
 
     #[test]

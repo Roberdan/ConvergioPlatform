@@ -1,5 +1,6 @@
 use super::api_plan_db_import_defaults::apply_defaults;
 use super::api_plan_db_import_parsers::parse_waves;
+use super::plan_lifecycle_guards;
 use super::state::{ApiError, ServerState};
 use axum::extract::State;
 use axum::routing::post;
@@ -26,7 +27,11 @@ async fn handle_import(
     let conn = state.get_conn()?;
     let conn = &conn;
 
-    // Verify plan exists
+    // Guard: plan must exist and be in importable state (draft/todo/approved)
+    plan_lifecycle_guards::require_plan_importable(plan_id, conn)
+        .map_err(ApiError::conflict)?;
+
+    // Verify plan exists and get project_id
     let project_id: String = conn
         .query_row(
             "SELECT project_id FROM plans WHERE id = ?1",
@@ -35,6 +40,41 @@ async fn handle_import(
         )
         .map_err(|_| ApiError::bad_request(format!("plan {plan_id} not found")))?;
 
+    // Clean up any orphan waves from previous failed imports
+    conn.execute(
+        "DELETE FROM waves WHERE plan_id = ?1 AND tasks_total = 0",
+        rusqlite::params![plan_id],
+    )
+    .ok(); // best-effort cleanup
+
+    // Use transaction so partial failures don't leave orphan waves
+    conn.execute_batch("SAVEPOINT import_spec")
+        .map_err(|e| ApiError::internal(format!("savepoint failed: {e}")))?;
+
+    let result = do_import(conn, plan_id, &project_id, &mut waves);
+    match result {
+        Ok(r) => {
+            conn.execute_batch("RELEASE import_spec").ok();
+            Ok(Json(json!({
+                "ok": true,
+                "plan_id": plan_id,
+                "waves_created": r.0,
+                "tasks_created": r.1,
+            })))
+        }
+        Err(e) => {
+            conn.execute_batch("ROLLBACK TO import_spec").ok();
+            Err(e)
+        }
+    }
+}
+
+fn do_import(
+    conn: &rusqlite::Connection,
+    plan_id: i64,
+    project_id: &str,
+    waves: &mut Vec<super::api_plan_db_import_parsers::WaveSpec>,
+) -> Result<(usize, usize), ApiError> {
     let mut waves_created = 0usize;
     let mut tasks_created = 0usize;
     let mut tasks_total = 0i64;
@@ -120,20 +160,17 @@ async fn handle_import(
         .map_err(|e| ApiError::internal(format!("wave count update failed: {e}")))?;
     }
 
-    // Update plan task total
+    // Update plan task total and waves_total
     conn.execute(
-        "UPDATE plans SET tasks_total = tasks_total + ?1, updated_at = datetime('now') \
-         WHERE id = ?2",
-        rusqlite::params![tasks_total, plan_id],
+        "UPDATE plans SET tasks_total = tasks_total + ?1, \
+         waves_total = COALESCE(waves_total, 0) + ?2, \
+         updated_at = datetime('now') \
+         WHERE id = ?3",
+        rusqlite::params![tasks_total, waves_created as i64, plan_id],
     )
     .map_err(|e| ApiError::internal(format!("plan count update failed: {e}")))?;
 
-    Ok(Json(json!({
-        "ok": true,
-        "plan_id": plan_id,
-        "waves_created": waves_created,
-        "tasks_created": tasks_created,
-    })))
+    Ok((waves_created, tasks_created))
 }
 
 #[cfg(test)]

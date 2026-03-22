@@ -77,3 +77,57 @@ fn print_value_json_pretty() {
     let pretty = serde_json::to_string_pretty(&val).unwrap();
     assert!(pretty.contains('\n'));
 }
+
+// --- Session Check ---
+
+#[test]
+fn session_check_variant_exists() {
+    let cmd = SessionCommands::Check { human: false, api_url: "http://localhost:8420".to_string() };
+    assert!(matches!(cmd, SessionCommands::Check { human: false, .. }));
+}
+
+#[test]
+fn session_check_url() {
+    let url = format!("{}/api/dashboard", "http://localhost:8420");
+    assert_eq!(url, "http://localhost:8420/api/dashboard");
+}
+
+// --- Metrics ---
+
+#[test]
+fn metrics_summary_variant_exists() {
+    let cmd = MetricsCommands::Summary { human: false, api_url: "http://localhost:8420".to_string() };
+    assert!(matches!(cmd, MetricsCommands::Summary { human: false, .. }));
+}
+
+#[test]
+fn metrics_summary_url() {
+    let url = format!("{}/api/metrics/summary", "http://localhost:8420");
+    assert_eq!(url, "http://localhost:8420/api/metrics/summary");
+}
+
+#[test]
+fn metrics_collect_variant_exists() {
+    let cmd = MetricsCommands::Collect { human: true, api_url: "http://localhost:8420".to_string() };
+    assert!(matches!(cmd, MetricsCommands::Collect { human: true, .. }));
+}
+
+#[test]
+fn metrics_collect_url() {
+    let url = format!("{}/api/metrics/collect", "http://localhost:8420");
+    assert_eq!(url, "http://localhost:8420/api/metrics/collect");
+}
+
+// --- Alerts ---
+
+#[test]
+fn alert_list_variant_exists() {
+    let cmd = AlertCommands::List { human: false, api_url: "http://localhost:8420".to_string() };
+    assert!(matches!(cmd, AlertCommands::List { human: false, .. }));
+}
+
+#[test]
+fn alert_list_url() {
+    let url = format!("{}/api/notifications", "http://localhost:8420");
+    assert_eq!(url, "http://localhost:8420/api/notifications");
+}

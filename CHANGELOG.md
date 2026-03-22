@@ -1,5 +1,53 @@
 # Changelog
 
+## [v13.0.0] - 22 Marzo 2026
+
+### Added
+- Deliverable management: `cvg deliverable create/approve/version` with filesystem output and consent gates
+- Project CLI: `cvg project create/list/show` with platform path conventions
+- Project audit: `cvg audit --project` CLI + `/api/audit/:project` endpoint with output to project folder
+- Agent auto-creation from skill declarations (`requires-agents` field)
+- Skill dependency fields: `requires-plugins` and `requires-agents` in skill.yaml
+- `cvg skill enable` command for activating skills with dependency resolution
+- ADR-0202: Deliverable Management Architecture
+
+### Changed
+- Audit output now writes to project-scoped folder instead of global output
+- Skill protocol extended with plugin and agent dependency declarations
+
+## [v12.1.1] - 22 Marzo 2026
+
+### Fixed
+- `cvg review reset` now accepts optional plan_id (was required, broke planner workflow pre-plan)
+- `cvg plan readiness` CLI subcommand added (was API-only, agents couldn't execute workflow step 10)
+- `cvg` symlink setup/rollback scripts updated (setup-claude-symlinks.sh, revert-claude-symlinks.sh, convergio-aliases.sh)
+- Tests extracted to cli_plan_tests.rs to keep cli_plan.rs under 250 lines
+
+## [v12.1.0] - 22 Marzo 2026
+
+### Added
+- cvg plan create/import/start/complete/cancel/approve CLI subcommands
+- cvg wave create/merge subcommands
+- cvg bus who/send/read/broadcast (IPC commands)
+- cvg agent sync/enable/disable/catalog/create/transpile/triage
+- cvg metrics summary/collect, cvg alert list, cvg session check
+- Plan lifecycle guards (review-create-import-approve-start enforcement)
+- Smart import: auto-infer model, validator, effort from task type
+- Readiness check endpoint with gates
+- Merge-based plan completion metric (waves_merged/waves_total)
+- Agent catalog table + multi-provider transpiler
+- Agent triage endpoint with keyword scoring
+- Mechanical validation gates (credential scan, pattern check, line count, verify commands)
+- Thor split: mechanical first, AI judgment at wave level only
+
+### Changed
+- Constitution updated to v2.1.0 (6 new principles)
+- Rules consolidated from 16 to 12 files (~25% token reduction)
+- DRY CLI: all modules use shared crate::cli_http helpers
+
+### Removed
+- Bash wrapper (scripts/platform/convergio) replaced by Rust CLI
+
 ## [v5.0.0] - 2026-03-22
 
 ### Added — Convergio Core Consolidation (Plan #685)

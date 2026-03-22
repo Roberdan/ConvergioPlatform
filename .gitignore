@@ -161,8 +161,9 @@ claude-config/commands/commands
 claude-config/reference/reference
 claude-config/rules/rules
 
-# Compiled binaries
+# Compiled binaries and symlinks
 scripts/platform/convergio-menubar
+scripts/platform/cvg
 
 # Sensitive/binary dotfile backups
 claude-config/config/dotfiles-backup/**/development_credentials
