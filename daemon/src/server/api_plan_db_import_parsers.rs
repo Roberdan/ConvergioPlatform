@@ -6,6 +6,8 @@ use serde_json::Value;
 #[derive(Deserialize)]
 pub struct WaveSpec {
     pub id: String,
+    /// Wave name. Also accepts `title` as alias.
+    #[serde(alias = "title")]
     pub name: String,
     #[serde(default)]
     pub depends_on: Option<String>,
@@ -22,6 +24,8 @@ fn default_hours() -> i64 {
 #[derive(Deserialize)]
 pub struct TaskSpec {
     pub id: String,
+    /// Primary task title. Also accepts `do` or `summary` as aliases.
+    #[serde(alias = "do", alias = "summary")]
     pub title: String,
     #[serde(default = "default_priority")]
     pub priority: String,
