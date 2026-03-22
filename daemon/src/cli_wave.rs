@@ -30,6 +30,34 @@ pub enum WaveCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Create a new wave for a plan
+    Create {
+        /// Plan ID
+        plan_id: i64,
+        /// Wave ID (human-readable, e.g. W1, W2)
+        wave_id: String,
+        /// Wave name/description
+        name: String,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Merge a completed wave (track merge state)
+    Merge {
+        /// Plan ID
+        plan_id: i64,
+        /// Wave DB ID
+        wave_id: i64,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
     /// Validate a wave (Thor gate — Opus only, wave-level)
     Validate {
         /// Wave DB ID
@@ -53,6 +81,25 @@ pub async fn handle(cmd: WaveCommands) {
                 "status": status,
             });
             crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/wave/update"), &body, human).await;
+        }
+        WaveCommands::Create { plan_id, wave_id, name, human, api_url } => {
+            let body = serde_json::json!({
+                "plan_id": plan_id,
+                "wave_id": wave_id,
+                "name": name,
+            });
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/plan-db/wave/create"), &body, human,
+            ).await;
+        }
+        WaveCommands::Merge { plan_id, wave_id, human, api_url } => {
+            let body = serde_json::json!({
+                "plan_id": plan_id,
+                "wave_id": wave_id,
+            });
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/plan-db/wave/merge"), &body, human,
+            ).await;
         }
         WaveCommands::Context { plan_id, human, api_url } => {
             crate::cli_http::fetch_and_print(
@@ -111,6 +158,24 @@ mod tests {
             api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, WaveCommands::Validate { wave_id: 3, .. }));
+    }
+
+    #[test]
+    fn wave_commands_create_variant_exists() {
+        let cmd = WaveCommands::Create {
+            plan_id: 687, wave_id: "W1".to_string(), name: "Foundation".to_string(),
+            human: false, api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, WaveCommands::Create { plan_id: 687, .. }));
+    }
+
+    #[test]
+    fn wave_commands_merge_variant_exists() {
+        let cmd = WaveCommands::Merge {
+            plan_id: 687, wave_id: 2088,
+            human: false, api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, WaveCommands::Merge { wave_id: 2088, .. }));
     }
 
     #[test]
