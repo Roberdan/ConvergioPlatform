@@ -1,0 +1,26 @@
+# Skill Protocol v1.0
+name: solve
+version: 1.0.0
+description: "Problem understanding, triage, and consultant-style entry point"
+domain: workflow
+constitution-version: 2.0.0
+license: MPL-2.0
+copyright: "Roberto D'Angelo 2026"
+repo: ConvergioPlatform
+tools:
+  - Agent
+  - Read
+  - Grep
+  - Glob
+  - Write
+  - Edit
+model: claude-opus-4.6
+min-context: 32000
+arguments: none
+triggers:
+  - "/solve"
+  - "help me understand"
+provider-formats:
+  - claude-code
+  - copilot-cli
+  - generic-llm

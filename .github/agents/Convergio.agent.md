@@ -1,3 +1,4 @@
+<!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 ---
 name: Convergio
 description: "ConvergioPlatform expert — daemon, mesh, dashboard, evolution engine, DB, node management"

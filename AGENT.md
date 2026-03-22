@@ -1,7 +1,8 @@
+<!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # ConvergioPlatform — Agent Reference
 
 > Unified control plane: daemon + dashboard + evolution engine. v1.0.0
-> Repo: github.com/Roberdan/ConvergioPlatform
+> Repo: github.com/Roberdan/ConvergioPlatform | Author: Roberto D'Angelo
 > Expert: @Convergio (see `.github/agents/Convergio.agent.md`)
 
 ## Quick Commands

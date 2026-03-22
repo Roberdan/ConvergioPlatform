@@ -82,6 +82,31 @@
             "description": "Theme group name (e.g., 'security', 'quality', 'infra'). Waves with same theme share one branch+PR. Planner assigns based on domain affinity."
           },
           "precondition": { "type": "object" },
+          "acceptance_invariants": {
+            "type": "array",
+            "description": "Machine-verifiable success criteria for the wave",
+            "items": {
+              "type": "object",
+              "required": ["description", "verify"],
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "description": "Human-readable description of what must be true"
+                },
+                "verify": {
+                  "type": "string",
+                  "description": "CLI command that exits 0 on success"
+                },
+                "defined_by": {
+                  "type": "string",
+                  "enum": ["user", "solve", "collaborative"],
+                  "default": "collaborative",
+                  "description": "Who defined this invariant"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
           "tasks": {
             "type": "array",
             "minItems": 1,

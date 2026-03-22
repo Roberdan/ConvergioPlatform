@@ -35,8 +35,33 @@
 | pr_number, pr_url | TEXT | | PR tracking |
 | precondition | TEXT | | JSON preconditions |
 | merge_mode | TEXT | | 'sync' default |
+| acceptance_invariants | TEXT | | JSON array — machine-verifiable success criteria (spec field only; stored as JSON in import) |
 
 **Trigger**: `wave_auto_complete` — wave→'merging' when tasks_done = tasks_total
+
+### Wave acceptance_invariants (spec field)
+
+Per-wave array in `plan-spec-schema.json`. Each item:
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| description | string | yes | Human-readable statement of what must be true |
+| verify | string | yes | CLI command — exits 0 on success, non-zero on failure |
+| defined_by | enum | no | `user` \| `solve` \| `collaborative` (default: `collaborative`) |
+
+Example:
+
+```json
+"acceptance_invariants": [
+  {
+    "description": "acceptance_invariants field present in schema",
+    "verify": "grep -q 'acceptance_invariants' claude-config/config/plan-spec-schema.json",
+    "defined_by": "user"
+  }
+]
+```
+
+Thor uses these as gate criteria when validating a wave.
 
 ### tasks
 

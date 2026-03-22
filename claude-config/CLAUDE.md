@@ -1,10 +1,11 @@
-<!-- v4.0.0 -->
+<!-- v4.1.0 -->
 
 # Claude Config
 
 **Identity**: Principal Software Engineer | ISE Fundamentals | Sonnet 4.6 (coordinator) · Opus 4.6 (planning) · Haiku 4.5 (utility)
 **Style**: Concise, action-first, no emojis | Datetime: DD Mese YYYY, HH:MM CET
 **Shell**: zsh. Prefer `Read` tool over Bash. NEVER pipe to `tail`/`head`/`grep`/`cat` — hooks block.
+**Token Economy**: optimize instructions for agent consumption, minimize token waste.
 
 ## Language (NON-NEGOTIABLE)
 
@@ -33,7 +34,7 @@ Code/comments/docs: English | Conversation: Italian or English | Override: expli
 
 | Phase | Canonical Model ID | Agent |
 |---|---|---|
-| Prompt/Requirements | `claude-opus-4.6` | `@prompt` |
+| Triage/Requirements | `claude-opus-4.6` | `/solve` (deprecated: `@prompt`) |
 | Planning | `claude-opus-4.6-1m` | `@planner` |
 | Plan review (×1) | `claude-sonnet-4.6` | plan-reviewer |
 | Execution/TDD | `gpt-5.3-codex` | `@execute` |
@@ -43,7 +44,9 @@ Code/comments/docs: English | Conversation: Italian or English | Override: expli
 
 ## Workflow (HOOK-ENFORCED — see `rules/enforcement.md` for full table)
 
-`/prompt` → `/planner` (Opus) → 1 review (Sonnet) → DB → `/execute {id}` (Codex) → thor (Sonnet) → merge → done
+`/solve` → `/planner` (Opus) → 1 review (Sonnet) → DB → `/execute {id}` (Codex) → thor (Sonnet) → merge → done
+
+> `/prompt` deprecated — absorbed into `/solve` phase 4.
 
 After every task: checkpoint → update DB. Thor runs per-wave only (Opus). Planner: MUST be Opus. Reviews: Sonnet. Execute: Codex.
 

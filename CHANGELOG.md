@@ -1,5 +1,32 @@
 # Changelog
 
+## [v4.0.0] - 2026-03-22
+
+### Added
+- CONSTITUTION.md v2.0.0 — 10 articles governing all agents (Constitution, Token Economy, No Professional Advice)
+- AgenticManifesto.md — core philosophy (ported from MyConvergio)
+- LEGAL_NOTICE.md — comprehensive agentic AI legal notice with attorney-review flags
+- SECURITY.md + CONTRIBUTING.md with legal references and CLA
+- /solve skill — 10-phase consultant entry point replacing /prompt
+- solve_sessions DB migration for decision audit trail
+- Persuasion guardrails rule — blocks 10 AI rationalization patterns
+- Skill Protocol v1.0 — universal skill format (skill.yaml + SKILL.md)
+- 3 transpilers: Claude Code, Copilot CLI, Generic LLM
+- skill-lint.sh — CI validation for universal skills
+- 7 universal skills: solve, planner, execute, research, check, prepare, release
+- AGENTS.md catalog — all agents organized by domain
+- acceptance_invariants field in plan spec schema
+- 7 rules migrated from MyConvergio (ethical-guidelines, api-development, problem-resolution, agent-discovery, token-budget, lean-coordinator, workflow-enforced)
+
+### Changed
+- CLAUDE.md v1.2.0 — added Governance section, Constitution priority
+- enforcement.md — /solve as mandatory first step, /prompt deprecated
+- MyConvergio restructured as community skills marketplace (Apache 2.0)
+- README.md — standalone product documentation
+
+### Removed
+- copilot-agents/ directory from MyConvergio (85 files, replaced by transpilers)
+
 ## [3.4.0] - 2026-03-21
 
 ### Added
