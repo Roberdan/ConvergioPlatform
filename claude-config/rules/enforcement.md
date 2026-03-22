@@ -68,3 +68,4 @@ Done = tested+committed+evidence. Each F-xx: [x]. User approves closure.
 **Verify paths**: New files use glob/find. _Plan 100028._
 **Pre-merge**: `pre-merge-gate.sh`. `task-file-tracker.sh`. _Plan v21._
 **Compaction**: Self-contained specs. Checkpoint after EVERY task (`cvg checkpoint save`). _Plan 382._
+**Wave execution**: Waves MUST be sequential — W1 merge → W2 start. NEVER parallel waves. Parallelize WITHIN waves (independent tasks on separate files). Each wave starts from main with previous wave merged. _Why: Session 2026-03-22 — parallel waves caused merge conflicts, rebase failures, inconsistent state across worktrees._
