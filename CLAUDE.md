@@ -1,7 +1,16 @@
-<!-- v1.1.0 -->
+<!-- v1.2.0 -->
+<!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # ConvergioPlatform
 
 Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
+
+## Governance
+
+Constitution articles are NON-NEGOTIABLE. All agents bound.
+
+@CONSTITUTION.md
+@AgenticManifesto.md
+@LEGAL_NOTICE.md
 
 ## Commands
 
@@ -49,6 +58,7 @@ Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 - Comments: WHY not WHAT, <5% density
 - Evolution: standalone core, thin adapters, PR-only governance
 - Mesh: Tailscale + HMAC-SHA256
+- Token economy: optimize instructions for agent consumption, minimize waste
 
 ## AI Agents
 

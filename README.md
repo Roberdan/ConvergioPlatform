@@ -1,3 +1,4 @@
+<!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # ConvergioPlatform
 
 A **virtual organization** powered by AI. Give it a problem — it assembles a team of specialized agents, coordinates them across any model/tool/machine, and delivers the result. Like renting an entire agency.

@@ -1,3 +1,4 @@
+<!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 ---
 name: ConvergioLLM
 description: "Local LLM infrastructure — oMLX, LiteLLM, model lifecycle, proxy routing, Apple Silicon"
