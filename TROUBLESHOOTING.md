@@ -182,6 +182,46 @@ sqlite3 "$DASHBOARD_DB" ".tables" | grep evolution
 # If missing, the GET call above creates it; retry dashboard
 ```
 
+## Problem: /solve not recognized as a skill
+
+**Symptom:** Typing `/solve` returns "unknown skill" or no activation
+**Cause:** `claude-config/commands/solve.md` not present or not symlinked
+**Fix:**
+```bash
+test -f claude-config/commands/solve.md && echo "OK" || echo "MISSING"
+ls claude-config/commands/*.md | grep solve
+```
+
+## Problem: skill-lint.sh fails on valid skill
+
+**Symptom:** `skill-lint.sh` reports FAIL on a skill that looks correct
+**Cause:** YAML parsing uses grep/awk — sensitive to formatting. Fields must be `key: value` (space after colon).
+**Fix:**
+```bash
+grep 'constitution-version:' claude-config/skills/solve/skill.yaml  # must have space after colon
+bash scripts/platform/skill-lint.sh claude-config/skills/solve/
+```
+
+## Problem: Transpiler produces empty output
+
+**Symptom:** `skill-transpile-claude.sh` creates an empty .md file
+**Cause:** skill.yaml or SKILL.md not found in the given directory, or missing required fields
+**Fix:**
+```bash
+ls claude-config/skills/solve/skill.yaml claude-config/skills/solve/SKILL.md
+bash -x scripts/platform/skill-transpile-claude.sh claude-config/skills/solve/ /tmp/test
+```
+
+## Problem: solve_sessions table not found
+
+**Symptom:** /solve phase 9 fails with "no such table: solve_sessions"
+**Cause:** Migration not run yet
+**Fix:**
+```bash
+bash scripts/platform/convergio-db-migrate-solve.sh migrate
+sqlite3 "$DASHBOARD_DB" ".tables" | grep solve
+```
+
 ## Problem: Copilot agent not visible in /api/ipc/agents
 
 **Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty
