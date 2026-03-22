@@ -29,8 +29,10 @@ mod transpiler;
 use clap::Parser;
 use cli_commands::Commands;
 use ipc_handler::DaemonCommands;
+use rusqlite::Connection;
 use std::env;
 use std::io::Read;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -158,6 +160,24 @@ async fn dispatch(command: Commands) {
                 crsqlite_path,
                 local_only,
             } => {
+                // Open a shared DB connection for the background sync loop.
+                // The mesh service opens its own connections; this Arc<Mutex<Connection>>
+                // is used solely by the CRDT background_sync loop (T3b-01).
+                let resolved_db = db_path
+                    .clone()
+                    .unwrap_or_else(ipc_handler::default_db_path);
+                let sync_conn = match Connection::open(&resolved_db) {
+                    Ok(c) => Arc::new(Mutex::new(c)),
+                    Err(e) => {
+                        eprintln!("background_sync: cannot open db {resolved_db:?}: {e}");
+                        std::process::exit(2);
+                    }
+                };
+                let sync_interval =
+                    claude_core::background_sync::resolve_interval_secs(None);
+                let _sync_handle =
+                    claude_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
+
                 ipc_handler::run_daemon(
                     bind_ip, port, peers_conf, db_path, crsqlite_path, local_only,
                 )
