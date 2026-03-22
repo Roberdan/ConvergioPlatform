@@ -1,3 +1,4 @@
+use super::api_plan_db_import_defaults::apply_defaults;
 use super::api_plan_db_import_parsers::parse_waves;
 use super::state::{ApiError, ServerState};
 use axum::extract::State;
@@ -20,7 +21,7 @@ async fn handle_import(
         .ok_or_else(|| ApiError::bad_request("missing plan_id"))?;
 
     // Parse waves from spec (support raw YAML string or JSON object)
-    let waves = parse_waves(&body)?;
+    let mut waves = parse_waves(&body)?;
 
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -38,7 +39,7 @@ async fn handle_import(
     let mut tasks_created = 0usize;
     let mut tasks_total = 0i64;
 
-    for (pos, wave) in waves.iter().enumerate() {
+    for (pos, wave) in waves.iter_mut().enumerate() {
         conn.execute(
             "INSERT INTO waves (plan_id, project_id, wave_id, name, status, \
              position, depends_on, estimated_hours) \
@@ -62,18 +63,30 @@ async fn handle_import(
         waves_created += 1;
         let wave_task_count = wave.tasks.len() as i64;
 
-        for task in &wave.tasks {
+        for task in &mut wave.tasks {
+            // Apply smart defaults before insert (model, validator, verify, effort)
+            apply_defaults(task);
+
             let criteria_json = task
                 .test_criteria
                 .as_ref()
                 .map(|v| v.to_string())
                 .unwrap_or_default();
 
+            // Serialize verify commands as newline-separated string for storage
+            let verify_str = if task.verify.is_empty() {
+                None
+            } else {
+                Some(task.verify.join("\n"))
+            };
+
             conn.execute(
                 "INSERT INTO tasks (plan_id, project_id, wave_id_fk, wave_id, \
                  task_id, title, status, priority, type, description, \
-                 test_criteria, model, assignee) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?9, ?10, ?11, ?12)",
+                 test_criteria, model, assignee, output_type, validator_agent, \
+                 effort_level, notes) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?9, ?10, ?11, ?12, \
+                 ?13, ?14, ?15, ?16)",
                 rusqlite::params![
                     plan_id,
                     project_id,
@@ -87,6 +100,10 @@ async fn handle_import(
                     criteria_json,
                     task.model,
                     task.assignee,
+                    task.output_type,
+                    task.validator_agent,
+                    task.effort_level,
+                    verify_str,
                 ],
             )
             .map_err(|e| ApiError::internal(format!("task insert failed: {e}")))?;
@@ -148,7 +165,9 @@ mod tests {
                      wave_id_fk INTEGER, wave_id TEXT, task_id TEXT,
                      title TEXT, status TEXT DEFAULT 'pending',
                      priority TEXT, type TEXT, description TEXT,
-                     test_criteria TEXT, model TEXT, assignee TEXT
+                     test_criteria TEXT, model TEXT, assignee TEXT,
+                     output_type TEXT, validator_agent TEXT,
+                     effort_level INTEGER DEFAULT 1, notes TEXT
                  );
                  INSERT INTO projects (id, name) VALUES ('test', 'Test');
                  INSERT INTO plans (id, project_id, name) VALUES (1, 'test', 'Plan A');",

@@ -1,10 +1,12 @@
 mod cli_agent;
 mod cli_agents;
+mod cli_audit;
 mod cli_commands;
 mod cli_kb;
 mod cli_ops;
 mod cli_plan;
 mod cli_run;
+mod cli_skill;
 mod cli_support;
 mod cli_task;
 mod cli_wave;
@@ -183,5 +185,7 @@ async fn dispatch(command: Commands) {
         Commands::Checkpoint { command } => cli_support::handle_checkpoint(command).await,
         Commands::Lock { command } => cli_support::handle_lock(command).await,
         Commands::Review { command } => cli_support::handle_review(command).await,
+        Commands::Audit { path } => cli_audit::handle(path),
+        Commands::Skill { command } => cli_skill::handle(command).await,
     }
 }

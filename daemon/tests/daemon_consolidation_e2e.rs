@@ -43,7 +43,9 @@ fn setup_app() -> (axum::Router, TempDir) {
              test_criteria TEXT, model TEXT, notes TEXT,
              tokens INTEGER DEFAULT 0, output_data TEXT, executor_host TEXT,
              started_at TEXT, completed_at TEXT,
-             validated_at TEXT, validated_by TEXT, validation_report TEXT
+             validated_at TEXT, validated_by TEXT, validation_report TEXT,
+             output_type TEXT DEFAULT 'pr', validator_agent TEXT DEFAULT 'thor',
+             effort_level INTEGER DEFAULT 1
          );
          CREATE TABLE peer_heartbeats (
              peer_name TEXT PRIMARY KEY, last_seen REAL,

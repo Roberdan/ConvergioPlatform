@@ -7,12 +7,15 @@ use crate::cli_kb;
 use crate::cli_ops;
 use crate::cli_plan;
 use crate::cli_run;
+use crate::cli_skill;
 use crate::cli_support;
 use crate::cli_task;
 use crate::cli_wave;
 use crate::ipc_handler::{DaemonCommands, IpcCommands};
 use clap::Subcommand;
 use std::path::PathBuf;
+
+// cli_audit is referenced via Commands::Audit below; imported in main.rs dispatch.
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
@@ -110,5 +113,16 @@ pub enum Commands {
     Review {
         #[command(subcommand)]
         command: cli_support::ReviewCommands,
+    },
+    /// Audit project for violations: file sizes, token budget, copyright, constitution files
+    Audit {
+        /// Project root to audit (defaults to current directory)
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// Skill commands (lint, transpile) — replaces skill-lint.sh and skill-transpile-*.sh
+    Skill {
+        #[command(subcommand)]
+        command: cli_skill::SkillCommands,
     },
 }
