@@ -1,7 +1,7 @@
 # Legal Notice — ConvergioPlatform
 
 **Copyright (c) 2026 Roberto D'Angelo. All rights reserved.**
-**Not affiliated with or endorsed by Microsoft Corporation.**
+**not affiliated with or endorsed by Microsoft Corporation.**
 
 Licensed under the Mozilla Public License 2.0 (MPL-2.0).
 This file supplements the license with additional notices required for agentic AI software.
