@@ -1,5 +1,26 @@
 # Changelog
 
+## [v14.0.0] - 22 Marzo 2026
+
+### Added
+- Plugin activation: `cvg skill enable/disable` manages Claude Code plugins via settings.json
+- Domain-aware tool activation: `/solve` Phase 1b detects problem domain, suggests skills
+- Domain CLI: `cvg domain list/map` for configurable domain-skill mappings
+- CRDT background sync: automatic peer replication on daemon startup (30s default)
+- CRDT HTTP endpoints: `/api/crdt/status`, `/api/crdt/peers`, `/api/crdt/force-sync`
+- Peer health tracking: unreachable detection after 3 consecutive failures
+- MyConvergio `setup.sh`: multi-provider bootstrap with `--rollback` and `--dry-run`
+- Skill lint CI: GitHub Action validates skill contributions on PR
+- Import auto-defaults: `verify[]` auto-populates `test_criteria` field
+
+### Changed
+- mesh-sync.sh scope reduced to git config/scripts only (DB sync via CRDT)
+- API task update now writes `notes` and `test_criteria` fields correctly
+- `cvg plan validate` uses POST (was GET), syncs wave/plan counters
+
+### Removed
+- copilot-sync.sh — replaced by `setup.sh` + `cvg agent sync`
+
 ## [v13.0.0] - 22 Marzo 2026
 
 ### Added
