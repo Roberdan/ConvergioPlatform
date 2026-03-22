@@ -8,6 +8,7 @@ mod cli_kb;
 mod cli_lock;
 mod cli_ops;
 mod cli_plan;
+mod cli_plan_handlers;
 mod cli_review;
 mod cli_run;
 mod cli_skill;
