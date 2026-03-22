@@ -624,6 +624,7 @@ dependencies = [
  "r2d2_sqlite",
  "rand 0.10.0",
  "ratatui",
+ "regex",
  "reqwest",
  "rmp-serde",
  "rusqlite",

@@ -62,11 +62,35 @@ pub async fn handle(cmd: TaskCommands) {
             crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/task/update"), &body, human).await;
         }
         TaskCommands::Validate { task_id, plan_id, human, api_url } => {
-            crate::cli_http::fetch_and_print(
-                &format!("{api_url}/api/plan-db/validate-task/{task_id}/{plan_id}"),
-                human,
-            )
-            .await;
+            let url = format!("{api_url}/api/plan-db/validate-task/{task_id}/{plan_id}");
+            match reqwest::get(&url).await {
+                Ok(resp) => match resp.json::<serde_json::Value>().await {
+                    Ok(val) => {
+                        if human {
+                            print_mechanical_human(&val);
+                        } else {
+                            println!("{val}");
+                        }
+                        // Exit 1 if mechanical gates rejected
+                        let rejected = val
+                            .get("mechanical")
+                            .and_then(|m| m.get("status"))
+                            .and_then(serde_json::Value::as_str)
+                            == Some("REJECTED");
+                        if rejected {
+                            std::process::exit(1);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("error parsing response: {e}");
+                        std::process::exit(2);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("error connecting to daemon: {e}");
+                    std::process::exit(2);
+                }
+            }
         }
         TaskCommands::KbSearch { query, limit, human, api_url } => {
             crate::cli_http::fetch_and_print(
@@ -75,6 +99,50 @@ pub async fn handle(cmd: TaskCommands) {
             )
             .await;
         }
+    }
+}
+
+/// Human-readable output for mechanical gate validation results.
+fn print_mechanical_human(val: &serde_json::Value) {
+    let mechanical = match val.get("mechanical") {
+        Some(m) => m,
+        None => {
+            println!("{}", serde_json::to_string_pretty(val).unwrap_or_default());
+            return;
+        }
+    };
+
+    let status = mechanical
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("UNKNOWN");
+    let note = mechanical
+        .get("note")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+
+    println!("Mechanical Validation: {status}");
+    println!();
+
+    if let Some(gates) = mechanical.get("gates").and_then(|g| g.as_array()) {
+        for gate in gates {
+            let name = gate.get("gate").and_then(|g| g.as_str()).unwrap_or("?");
+            let passed = gate.get("passed").and_then(|p| p.as_bool()).unwrap_or(false);
+            let icon = if passed { "PASS" } else { "FAIL" };
+            println!("  [{icon}] {name}");
+            if let Some(details) = gate.get("details").and_then(|d| d.as_array()) {
+                for d in details {
+                    if let Some(s) = d.as_str() {
+                        println!("         {s}");
+                    }
+                }
+            }
+        }
+    }
+
+    if !note.is_empty() {
+        println!();
+        println!("{note}");
     }
 }
 
@@ -129,5 +197,48 @@ mod tests {
         let val = serde_json::json!({"ok": true});
         let pretty = serde_json::to_string_pretty(&val).unwrap();
         assert!(pretty.contains('\n'));
+    }
+
+    #[test]
+    fn mechanical_human_output_handles_approved() {
+        let val = serde_json::json!({
+            "ok": true,
+            "mechanical": {
+                "status": "APPROVED",
+                "phase": "mechanical",
+                "gates": [
+                    {"gate": "status_check", "passed": true, "details": []},
+                    {"gate": "test_criteria", "passed": true, "details": []},
+                ],
+                "thor_invoked": false,
+                "note": "mechanical gates passed, Thor validation at wave level"
+            }
+        });
+        // Verify it does not panic
+        print_mechanical_human(&val);
+    }
+
+    #[test]
+    fn mechanical_human_output_handles_rejected() {
+        let val = serde_json::json!({
+            "ok": false,
+            "mechanical": {
+                "status": "REJECTED",
+                "phase": "mechanical",
+                "gates": [
+                    {"gate": "status_check", "passed": false, "details": ["status is 'pending', expected 'submitted'"]},
+                ],
+                "thor_invoked": false,
+                "note": "mechanical gates failed"
+            }
+        });
+        print_mechanical_human(&val);
+    }
+
+    #[test]
+    fn mechanical_human_output_handles_missing_mechanical() {
+        let val = serde_json::json!({"ok": true});
+        // Falls back to pretty-print
+        print_mechanical_human(&val);
     }
 }
