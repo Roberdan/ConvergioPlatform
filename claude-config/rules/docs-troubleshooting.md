@@ -1,5 +1,4 @@
-<!-- v1.0.0 — Merged: documentation-standards + problem-resolution -->
-
+<!-- v2.0.0 — Merged: docs-troubleshooting + problem-resolution -->
 # Documentation & Troubleshooting
 
 ## Code Docs
@@ -14,6 +13,25 @@ Every wave → ADR. Thor Gate 9. CHANGELOG: `## [vX.Y.Z] - date` → `### Added|
 
 Every repo root. Update every plan. Format: `## Problem:` → `**Symptom/Cause/Fix**:`.
 
-## Problem Resolution (NON-NEGOTIABLE)
+## Problem Resolution Protocol (NON-NEGOTIABLE)
 
-BEFORE fixing errors: (1) Repo TROUBLESHOOTING.md (2) Repo ADRs (3) Global KB `plan-db.sh kb-search` (4) Global troubleshooting (5) Web/Explore. NEVER fix without steps 1-2. Update TROUBLESHOOTING.md after new resolution.
+BEFORE fixing errors, agents MUST follow this search order:
+
+| Step | Source | Command/Action | Skip if |
+|---|---|---|---|
+| 1 | Repo `TROUBLESHOOTING.md` | `Read TROUBLESHOOTING.md` (root) | File doesn't exist |
+| 2 | Repo ADRs | `Glob("docs/adr/*.md")` + `Grep(pattern="keyword", path="docs/adr/")` | No `/docs/adr/` dir |
+| 3 | Global KB | `plan-db.sh kb-search "error keywords" --limit 5` | Empty results |
+| 4 | Global troubleshooting | `Read claude-config/` (if relevant docs exist) | Dir doesn't exist |
+| 5 | Web/Explore | `WebSearch` or `Task(subagent_type="Explore")` | Steps 1-4 resolved |
+
+Rules: **NEVER attempt a fix without completing steps 1-2 first** | Cite source when applying fix | Update TROUBLESHOOTING.md after new resolution | KB write: `plan-db.sh kb-write troubleshooting "title" "solution" --tags '["error-type"]'`
+
+## Problem Resolution Anti-Patterns
+
+| WRONG | RIGHT |
+|---|---|
+| Immediately try Stack Overflow fix | Check repo TROUBLESHOOTING.md first |
+| Guess based on error message | Search ADRs for prior decisions on this area |
+| Retry same approach 3 times | Check `plan-db.sh get-failures $PROJECT_ID` for prior failures |
+| Fix without documenting | Add to TROUBLESHOOTING.md after resolution |
