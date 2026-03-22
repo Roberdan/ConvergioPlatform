@@ -267,6 +267,42 @@ bash scripts/platform/convergio-db-migrate-solve.sh migrate
 sqlite3 "$DASHBOARD_DB" ".tables" | grep solve
 ```
 
+## Plan A — Convergio Core Intelligence
+
+### Problem: cvg command not found after source changes
+
+**Symptom:** `cvg` returns "command not found" after editing daemon source
+**Cause:** Binary not rebuilt after source changes
+**Fix:**
+```bash
+cd daemon && cargo build --release && ln -sf target/release/convergio-platform-daemon ~/.local/bin/cvg
+```
+
+### Problem: Daemon returns 405 on review/checkpoint endpoints
+
+**Symptom:** `cvg review register` or `cvg checkpoint save` returns HTTP 405 Method Not Allowed
+**Cause:** Running daemon is older version than source (endpoints added in v12.1.0)
+**Fix:**
+```bash
+# Rebuild and restart
+cd daemon && cargo build --release
+./daemon/start.sh
+# Verify new endpoints respond
+curl -s http://localhost:8420/api/review | jq .
+```
+
+### Problem: plan_reviews table not found
+
+**Symptom:** Review operations fail with "no such table: plan_reviews"
+**Cause:** Migration not applied (old daemon version running)
+**Fix:**
+```bash
+# Restart daemon — migrations auto-apply on startup
+./daemon/start.sh
+# Verify table exists
+sqlite3 "$DASHBOARD_DB" ".tables" | grep plan_reviews
+```
+
 ## Problem: Copilot agent not visible in /api/ipc/agents
 
 **Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty
