@@ -1,5 +1,6 @@
 mod cli_agent;
 mod cli_bus;
+mod cli_domain;
 mod cli_agents;
 mod cli_audit;
 mod cli_audit_project;
@@ -210,5 +211,6 @@ async fn dispatch(command: Commands) {
         Commands::Project { command } => cli_project::handle(command).await,
         Commands::Metrics { command } => cli_ops::handle_metrics(command).await,
         Commands::Alert { command } => cli_ops::handle_alert(command).await,
+        Commands::Domain { command } => cli_domain::dispatch(command).await,
     }
 }
