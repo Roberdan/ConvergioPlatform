@@ -11,7 +11,7 @@ ls -la ~/.claude/scripts/cvg || echo "symlink missing"
 # Run setup to create it
 ./setup.sh
 # Or create manually
-ln -sf "$HOME/GitHub/ConvergioPlatform/scripts/platform/convergio" "$HOME/.claude/scripts/cvg"
+ln -sf "$HOME/GitHub/ConvergioPlatform/daemon/target/release/convergio-daemon" "$HOME/.claude/scripts/cvg"
 # Verify
 cvg --version
 ```

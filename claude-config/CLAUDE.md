@@ -82,7 +82,7 @@ Set `validator_agent` per task in spec.yaml. DB trigger enforces.
 ## Tools & Agents
 
 Priority: LSP → Glob/Grep/Read/Edit → Subagents → Bash (git/npm only).
-Orchestration: `convergio solve` → Ali → /planner → agents → validators → merge.
+Orchestration: `cvg solve` → Ali → /planner → agents → validators → merge.
 
 @reference/operational/core-tools.md
 
