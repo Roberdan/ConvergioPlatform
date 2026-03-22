@@ -52,72 +52,18 @@ pub async fn handle(cmd: AgentCommands) {
                 "name": name,
                 "task_id": task_id,
             });
-            post_and_print(&format!("{api_url}/api/plan-db/agent/start"), &body, human).await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/agent/start"), &body, human).await;
         }
         AgentCommands::Complete { agent_id, summary, human, api_url } => {
             let body = serde_json::json!({
                 "agent_id": agent_id,
                 "summary": summary,
             });
-            post_and_print(&format!("{api_url}/api/plan-db/agent/complete"), &body, human).await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/agent/complete"), &body, human).await;
         }
         AgentCommands::List { human, api_url } => {
-            fetch_and_print(&format!("{api_url}/api/agents"), human).await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/agents"), human).await;
         }
-    }
-}
-
-async fn fetch_and_print(url: &str, human: bool) {
-    match reqwest::get(url).await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
-    }
-}
-
-async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
-    let client = reqwest::Client::new();
-    match client.post(url).json(body).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
-    }
-}
-
-fn print_value(val: &serde_json::Value, human: bool) {
-    if human {
-        println!("{}", serde_json::to_string_pretty(val)
-            .unwrap_or_else(|_| val.to_string()));
-    } else {
-        println!("{val}");
     }
 }
 

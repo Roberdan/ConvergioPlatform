@@ -64,65 +64,35 @@ pub enum PlanCommands {
 pub async fn handle(cmd: PlanCommands) {
     match cmd {
         PlanCommands::List { human, api_url } => {
-            fetch_and_print(&format!("{api_url}/api/plan-db/list"), human).await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/plan-db/list"), human).await;
         }
         PlanCommands::Tree { plan_id, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/execution-tree/{plan_id}"),
                 human,
             )
             .await;
         }
         PlanCommands::Show { plan_id, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/json/{plan_id}"),
                 human,
             )
             .await;
         }
         PlanCommands::Drift { plan_id, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/drift-check/{plan_id}"),
                 human,
             )
             .await;
         }
         PlanCommands::Validate { plan_id, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plans/{plan_id}/validate"),
                 human,
             )
             .await;
-        }
-    }
-}
-
-/// Fetch a GET endpoint and print result as JSON or human-readable.
-async fn fetch_and_print(url: &str, human: bool) {
-    match reqwest::get(url).await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => {
-                    if human {
-                        println!("{}", serde_json::to_string_pretty(&val)
-                            .unwrap_or_else(|_| val.to_string()));
-                    } else {
-                        println!("{val}");
-                    }
-                    if !status.is_success() {
-                        std::process::exit(1);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
         }
     }
 }

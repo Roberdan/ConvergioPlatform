@@ -37,7 +37,7 @@ pub async fn handle_checkpoint(cmd: CheckpointCommands) {
     match cmd {
         CheckpointCommands::Save { plan_id, human, api_url } => {
             let body = serde_json::json!({ "plan_id": plan_id });
-            post_and_print(
+            crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/checkpoint/save"),
                 &body,
                 human,
@@ -45,7 +45,7 @@ pub async fn handle_checkpoint(cmd: CheckpointCommands) {
             .await;
         }
         CheckpointCommands::Restore { plan_id, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/checkpoint/restore?plan_id={plan_id}"),
                 human,
             )
@@ -106,17 +106,17 @@ pub async fn handle_lock(cmd: LockCommands) {
                 "task_id": task_id,
                 "agent": agent,
             });
-            post_and_print(&format!("{api_url}/api/ipc/locks/acquire"), &body, human).await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/locks/acquire"), &body, human).await;
         }
         LockCommands::Release { file_path, task_id, human, api_url } => {
             let body = serde_json::json!({
                 "file_path": file_path,
                 "task_id": task_id,
             });
-            post_and_print(&format!("{api_url}/api/ipc/locks/release"), &body, human).await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/locks/release"), &body, human).await;
         }
         LockCommands::List { human, api_url } => {
-            fetch_and_print(&format!("{api_url}/api/ipc/locks"), human).await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/locks"), human).await;
         }
     }
 }
@@ -176,7 +176,7 @@ pub async fn handle_review(cmd: ReviewCommands) {
                 "verdict": verdict,
                 "suggestions": suggestions,
             });
-            post_and_print(
+            crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/register"),
                 &body,
                 human,
@@ -184,7 +184,7 @@ pub async fn handle_review(cmd: ReviewCommands) {
             .await;
         }
         ReviewCommands::Check { plan_id, human, api_url } => {
-            fetch_and_print(
+            crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/review/check?plan_id={plan_id}"),
                 human,
             )
@@ -192,35 +192,13 @@ pub async fn handle_review(cmd: ReviewCommands) {
         }
         ReviewCommands::Reset { plan_id, human, api_url } => {
             let body = serde_json::json!({ "plan_id": plan_id });
-            post_and_print(
+            crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/reset"),
                 &body,
                 human,
             )
             .await;
         }
-    }
-}
-
-async fn handle_resp(resp: reqwest::Response, human: bool) {
-    let status = resp.status();
-    match resp.json::<serde_json::Value>().await {
-        Ok(val) if human => println!("{}", serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string())),
-        Ok(val) => println!("{val}"),
-        Err(e) => { eprintln!("error parsing response: {e}"); std::process::exit(2); }
-    }
-    if !status.is_success() { std::process::exit(1); }
-}
-async fn fetch_and_print(url: &str, human: bool) {
-    match reqwest::get(url).await {
-        Ok(resp) => handle_resp(resp, human).await,
-        Err(e) => { eprintln!("error connecting to daemon: {e}"); std::process::exit(2); }
-    }
-}
-async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
-    match reqwest::Client::new().post(url).json(body).send().await {
-        Ok(resp) => handle_resp(resp, human).await,
-        Err(e) => { eprintln!("error connecting to daemon: {e}"); std::process::exit(2); }
     }
 }
 
