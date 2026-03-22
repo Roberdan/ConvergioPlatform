@@ -17,7 +17,7 @@
 - ALWAYS parallelize independent tool calls
 - Shell: single-quote URLs with `?`/`&`
 - NEVER `!=` in SQL → use `<>`
-- **NEVER pipe Bash output to `tail`/`head`/`grep`/`cat`** — PreToolUse hook blocks it. Use Grep/Read/Glob tools instead. Example: `plan-db.sh 2>&1 | grep import` → run `plan-db.sh 2>&1` alone, read output directly
+- **NEVER pipe Bash output to `tail`/`head`/`grep`/`cat`** — PreToolUse hook blocks it. Use Grep/Read/Glob tools instead. Example: `cvg plan 2>&1 | grep import` → run `cvg plan 2>&1` alone, read output directly
 
 ## CI/Build (MANDATORY)
 

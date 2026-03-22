@@ -8,7 +8,7 @@ NEVER `git branch`, `git checkout -b`, `git switch -c`. Hooks: `worktree-guard.s
 
 | Need | Use | NEVER |
 |------|-----|-------|
-| Plan work | `wave-worktree.sh create <plan> <wave>` | `git checkout -b plan/xxx` |
+| Plan work | `cvg wave create <plan> <wave>` | `git checkout -b plan/xxx` |
 | Feature branch | `worktree-create.sh <branch> [path]` | `git branch feature/xxx` |
 | Task isolation | `Task(..., isolation="worktree")` | `git checkout -b task-xxx` |
 | Quick fix on main | Direct edit (no branch) | `git checkout -b fix/xxx` |
@@ -17,13 +17,13 @@ NEVER `git branch`, `git checkout -b`, `git switch -c`. Hooks: `worktree-guard.s
 
 Lifecycle: `create → execute → Thor → rebase (update FROM main) → PR → squash merge (INTO main) → cleanup`
 
-`wave-worktree.sh create|merge|cleanup|status <plan_id> <wave_db_id>`. DB: `plan-db.sh get-wave-worktree|set-wave-worktree <id> [path]`.
+`cvg wave create|merge|cleanup|status <plan_id> <wave_db_id>`. DB: `cvg plan get-wave-worktree|set-wave-worktree <id> [path]`.
 
 Wave status: `pending` → `in_progress` → `merging` → `done`. Branch: `plan/{plan_id}-{wave_id}`. DB columns: `worktree_path|branch_name|pr_number|pr_url|merge_mode|theme`.
 
 ### Git Graph Hygiene (NON-NEGOTIABLE)
 
-NEVER `git merge main` into wave branch. To update FROM main: `git rebase origin/main`. To merge PR INTO main: `wave-worktree.sh merge` (squash merge). `wave-worktree.sh merge` auto-rebases before squash.
+NEVER `git merge main` into wave branch. To update FROM main: `git rebase origin/main`. To merge PR INTO main: `cvg wave merge` (squash merge). `cvg wave merge` auto-rebases before squash.
 
 ## Subagent Worktree Isolation
 

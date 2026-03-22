@@ -1,5 +1,50 @@
 # Troubleshooting
 
+## Problem: cvg command not found
+
+**Symptom:** `cvg plan list` or any `cvg` subcommand returns "command not found"
+**Cause:** `cvg` symlink not yet created by setup, or `~/.claude/scripts` not on `$PATH`
+**Fix:**
+```bash
+# Verify setup wired the symlink
+ls -la ~/.claude/scripts/cvg || echo "symlink missing"
+# Run setup to create it
+./setup.sh
+# Or create manually
+ln -sf "$HOME/GitHub/ConvergioPlatform/scripts/platform/convergio" "$HOME/.claude/scripts/cvg"
+# Verify
+cvg --version
+```
+
+## Problem: cvg subcommand fails with "daemon not reachable"
+
+**Symptom:** `cvg plan list` or `cvg task update` exits with "daemon not reachable on :8420"
+**Cause:** The daemon is not running. Since Plan #685 (v5.0.0), all plan/task/wave operations route through the daemon API. Direct sqlite3 calls are no longer used.
+**Fix:**
+```bash
+# Start the daemon
+./daemon/start.sh
+# Verify
+curl -s http://localhost:8420/api/ipc/status | jq .status
+# Retry
+cvg plan list
+```
+Note: read-only commands (`cvg plan list`, `cvg task status`) work in offline mode via local DB cache. Write operations (`cvg task update`, `cvg checkpoint save`) require the daemon.
+
+## Problem: Hooks call sqlite3 directly (pre-Plan-685 hooks)
+
+**Symptom:** Hook output shows `sqlite3: command line tool` traces or WAL corruption warning after concurrent hook execution
+**Cause:** Old hook scripts (pre-Plan-685) called `sqlite3 "$DASHBOARD_DB"` directly. Plan #685 migrated all 21 hooks to `cvg` daemon API calls.
+**Fix:**
+```bash
+# Check which hooks still use sqlite3
+grep -rl 'sqlite3' .claude/settings.json .claude/hooks/ 2>/dev/null
+# If found, re-run bootstrap to install migrated hooks
+./setup.sh
+# Verify zero sqlite3 in active hooks
+grep -c 'sqlite3' .claude/settings.json && echo "STALE HOOKS — run setup.sh"
+```
+
 ## Problem: CLI scripts warn "daemon not running" and fall back to sqlite3
 
 **Symptom:** `convergio-run-ops.sh`, `convergio-metrics.sh`, or `convergio-ingest.sh` prints `WARNING: daemon not reachable on :8420 — falling back to sqlite3 (read-only)` to stderr.

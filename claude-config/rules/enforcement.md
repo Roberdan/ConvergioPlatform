@@ -11,15 +11,15 @@
 |---|---|---|
 | Triage | `/solve` (full triage + requirements) | Direct /planner without /solve |
 | Plan | `Skill(skill="planner")` | EnterPlanMode |
-| Review | 1x `Agent(plan-reviewer)` → `planner-create.sh register-review` | Skipping review |
-| DB | `planner-create.sh create` + `import` (after review passes) | plan-db.sh create/import, manual INSERT |
+| Review | 1x `Agent(plan-reviewer)` → `cvg review register` | Skipping review |
+| DB | `cvg review create` + `cvg plan import` (after review passes) | cvg plan create/import, manual INSERT |
 | Execute | `Skill(skill="execute")` | Direct edits |
-| Done | `plan-db-safe.sh update-task {id} done` | plan-db.sh update-task done |
-| Thor | `validate-wave` (Opus, per-wave only) | Advance/merge without Thor |
-| Merge | `wave-worktree.sh merge` | Unresolved PR comments |
-| Close | `plan-db.sh complete` | Pending tasks |
-| Calibrate | `plan-db.sh calibrate-estimates` (auto after close) | Skipping calibration |
-| Post-mortem | `Agent(plan-post-mortem)` → `plan-db.sh add-learning` | No learnings extracted |
+| Done | `cvg task update {id} done` | cvg task update done (direct) |
+| Thor | `cvg plan validate` (Opus, per-wave only) | Advance/merge without Thor |
+| Merge | `cvg wave merge` | Unresolved PR comments |
+| Close | `cvg plan complete` | Pending tasks |
+| Calibrate | `cvg plan calibrate-estimates` (auto after close) | Skipping calibration |
+| Post-mortem | `Agent(plan-post-mortem)` → `cvg plan add-learning` | No learnings extracted |
 
 Single fixes: direct edit OK.
 
@@ -44,4 +44,4 @@ Done = tested+committed+evidence. Each F-xx: [x]. User approves closure.
 **Learning**: `session-learnings.sh summary` → Analyze→Propose→Apply→Verify. _Thor 10._
 **Verify paths**: New files use glob/find. _Plan 100028._
 **Pre-merge**: `pre-merge-gate.sh`. `task-file-tracker.sh`. _Plan v21._
-**Compaction**: Self-contained specs. Checkpoint after EVERY task. _Plan 382._
+**Compaction**: Self-contained specs. Checkpoint after EVERY task (`cvg checkpoint save`). _Plan 382._

@@ -601,7 +601,7 @@ checksum = "75984efb6ed102a0d42db99afb6c1948f0380d1d91808d5529916e6c08b49d8d"
 
 [[package]]
 name = "convergio-platform-daemon"
-version = "11.6.0"
+version = "12.0.0"
 dependencies = [
  "aes-gcm",
  "anyhow",

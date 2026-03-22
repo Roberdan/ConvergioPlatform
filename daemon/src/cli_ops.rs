@@ -1,0 +1,94 @@
+// Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
+// Mesh and Session subcommands for the cvg CLI — delegates to daemon HTTP API via reqwest.
+// JSON output by default; --human flag for readable text.
+
+use clap::Subcommand;
+
+#[derive(Debug, Subcommand)]
+pub enum MeshCommands {
+    /// Send a heartbeat to the mesh (POST /api/heartbeat)
+    Heartbeat {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Show current mesh status (GET /api/mesh)
+    Status {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Show cluster-level heartbeat status (GET /api/heartbeat/status)
+    ClusterStatus {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SessionCommands {
+    /// Clean up old/stale sessions
+    Reap {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Trigger session recovery
+    Recovery {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+}
+
+pub async fn handle_mesh(cmd: MeshCommands) {
+    match cmd {
+        MeshCommands::Heartbeat { human, api_url } => {
+            // POST with empty body — signals this node is alive
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/heartbeat"), &serde_json::json!({}), human,
+            ).await;
+        }
+        MeshCommands::Status { human, api_url } => {
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/mesh"), human).await;
+        }
+        MeshCommands::ClusterStatus { human, api_url } => {
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/heartbeat/status"), human).await;
+        }
+    }
+}
+
+pub async fn handle_session(cmd: SessionCommands) {
+    match cmd {
+        SessionCommands::Reap { human, api_url } => {
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/sessions/reap"), &serde_json::json!({}), human,
+            ).await;
+        }
+        SessionCommands::Recovery { human, api_url } => {
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/sessions/recovery"), &serde_json::json!({}), human,
+            ).await;
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "cli_ops_tests.rs"]
+mod tests;

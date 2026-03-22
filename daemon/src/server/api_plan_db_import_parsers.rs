@@ -35,6 +35,21 @@ pub struct TaskSpec {
     pub model: Option<String>,
     #[serde(default)]
     pub assignee: Option<String>,
+    /// Output type drives validator_agent inference (pr, document, analysis, design, legal_opinion)
+    #[serde(default)]
+    pub output_type: Option<String>,
+    /// Validator agent override — inferred from output_type if absent
+    #[serde(default)]
+    pub validator_agent: Option<String>,
+    /// Files modified by this task — used to infer verify[] and effort_level
+    #[serde(default)]
+    pub files: Vec<String>,
+    /// Verify commands — auto-generated as `test -f <file>` if files present and verify empty
+    #[serde(default)]
+    pub verify: Vec<String>,
+    /// Effort level (1-3) — inferred from task type + file count if absent
+    #[serde(default)]
+    pub effort_level: Option<i64>,
 }
 
 fn default_priority() -> String {

@@ -19,11 +19,15 @@ pub mod api_peers;
 pub mod api_peers_ext;
 pub mod api_plan_db;
 pub mod api_plan_db_import;
+pub mod api_plan_db_import_defaults;
 pub mod api_plan_db_import_parsers;
 pub mod api_plan_db_lifecycle;
+pub mod api_plan_db_checkpoint;
 pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
 pub mod api_plan_db_query_fmt;
+pub mod api_plan_db_review;
+pub mod api_tracking;
 pub mod api_plans;
 pub mod api_runs;
 pub mod api_runs_handlers;
@@ -39,12 +43,15 @@ pub mod sse_preflight;
 pub mod sse_stream;
 pub mod state;
 pub mod state_init;
+pub mod state_init_canon;
 pub mod ws;
 pub mod ws_brain;
 pub mod ws_pty;
 
 #[cfg(test)]
 mod api_agents_legacy_tests;
+#[cfg(test)]
+mod api_ideas_tests_filter;
 #[cfg(test)]
 mod api_runs_tests;
 #[cfg(test)]
@@ -57,6 +64,8 @@ mod api_ipc_tests;
 mod api_tests;
 #[cfg(test)]
 mod ws_pty_tests;
+#[cfg(test)]
+mod api_tracking_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

@@ -4,21 +4,21 @@
 
 ## Plan & DB
 
-- `plan-db.sh` wraps SQLite. Schema: `reference/operational/plan-db-schema.md`
+- `cvg plan` wraps SQLite. Schema: `reference/operational/plan-db-schema.md`
 - NEVER create plans without `/planner` skill. _Why: Plan 225 — bypassing planner skips DB registration, breaking Thor tracking._
 - Task: `pending|in_progress|submitted|done|blocked|skipped|cancelled`
 - Plan: `todo|doing|done|cancelled` | Wave: `pending|in_progress|done|blocked|merging|cancelled`
-- Lifecycle: `in_progress` → `submitted` (plan-db-safe.sh) → `done` (wave Thor or plan-db-safe.sh)
+- Lifecycle: `in_progress` → `submitted` (cvg task update) → `done` (wave Thor or cvg task update)
 - Thor validates at wave level (Opus), not per-task
 
 | Action | Command |
 |---|---|
-| Create plan | `plan-db.sh create {proj} "Name" --source-file {f} --auto-worktree` |
-| Import spec | `plan-db.sh import {plan_id} spec.yaml` |
-| Mark done | `plan-db-safe.sh update-task {id} done "Summary"` |
-| Validate | `plan-db.sh validate-task {tid} {plan}` |
-| Cancel | `plan-db.sh cancel {plan_id} "reason"` |
-| Debug | `plan-db.sh execution-tree {plan_id}` |
+| Create plan | `cvg plan create {proj} "Name" --source-file {f} --auto-worktree` |
+| Import spec | `cvg plan import {plan_id} spec.yaml` |
+| Mark done | `cvg task update {id} done "Summary"` |
+| Validate | `cvg task validate {tid} {plan}` |
+| Cancel | `cvg plan cancel {plan_id} "reason"` |
+| Debug | `cvg plan execution-tree {plan_id}` |
 
 ## Digest Scripts (NON-NEGOTIABLE)
 
@@ -43,14 +43,14 @@ NEVER `git branch` | `git checkout -b` | `git switch -c`
 
 | Need | Command |
 |---|---|
-| Plan work | `wave-worktree.sh create <plan> <wave>` |
+| Plan work | `cvg wave create <plan> <wave>` |
 | Feature branch | `worktree-create.sh <branch> [path]` |
 | Task isolation | `Task(..., isolation="worktree")` |
 | Quick fix | Direct edit (no branch) |
 
 - Wave: create → execute → Thor → rebase (update FROM main) → PR → squash merge (INTO main) → cleanup
 - NEVER `git merge main` into wave branch → use `git rebase origin/main` to update FROM main
-- PR merge back to main uses **squash merge** via `wave-worktree.sh merge`
+- PR merge back to main uses **squash merge** via `cvg wave merge`
 
 ## Execution
 
@@ -63,7 +63,7 @@ NEVER `git branch` | `git checkout -b` | `git switch -c`
 ### Post-Task (MANDATORY)
 
 1. Checkpoint → verify DB (no per-task Thor — mechanical gates suffice)
-2. Per wave: Thor validate-wave (Opus) → merge → PR comments → cleanup → next wave
+2. Per wave: Thor `cvg plan validate` (Opus) → `cvg wave merge` → PR comments → cleanup → next wave
 
 ### Closure (NON-NEGOTIABLE)
 

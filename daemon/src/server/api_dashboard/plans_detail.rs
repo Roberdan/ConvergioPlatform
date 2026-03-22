@@ -1,4 +1,5 @@
 // plans_detail: tasks, projects, notifications, plan status update handlers
+use super::super::api_plan_db_ops::handlers::canonicalize_project_path;
 use super::super::state::{query_rows, ApiError, ServerState};
 use axum::extract::State;
 use axum::Json;
@@ -74,7 +75,10 @@ pub async fn api_project_create(
     if name.is_empty() {
         return Err(ApiError::bad_request("name is required"));
     }
-    let path = body
+    // Resolve symlinks and normalise case via canonicalize so paths stored
+    // in the DB are always absolute real paths (fixes macOS case-sensitivity).
+    // Fall back to the raw value when the path does not exist yet.
+    let raw_path = body
         .path
         .as_deref()
         .map(str::trim)
@@ -87,6 +91,10 @@ pub async fn api_project_create(
                 .filter(|value| !value.is_empty())
                 .map(str::to_string)
         });
+    let path = raw_path
+        .as_deref()
+        .and_then(canonicalize_project_path)
+        .or(raw_path);
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())

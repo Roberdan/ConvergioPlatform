@@ -1,5 +1,6 @@
 // DB migration and schema init extracted from state.rs (250-line split).
 use super::state::ApiError;
+use super::state_init_canon::canonicalize_existing_project_paths;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
@@ -29,14 +30,11 @@ const AGENT_ACTIVITY_COLUMNS: &[(&str, &str)] = &[
 
 fn table_columns(conn: &Connection, table: &str) -> Result<HashSet<String>, ApiError> {
     let sql = format!("PRAGMA table_info({table})");
-    let mut stmt = conn
-        .prepare(&sql)
+    let mut stmt = conn.prepare(&sql)
         .map_err(|err| ApiError::internal(format!("table info prepare failed: {err}")))?;
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(1))
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))
         .map_err(|err| ApiError::internal(format!("table info query failed: {err}")))?;
-    let columns = rows
-        .collect::<rusqlite::Result<Vec<_>>>()
+    let columns = rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|err| ApiError::internal(format!("table info decode failed: {err}")))?;
     Ok(columns.into_iter().collect())
 }
@@ -47,13 +45,9 @@ pub fn ensure_agent_activity_schema(conn: &Connection) -> Result<(), ApiError> {
 
     let mut columns = table_columns(conn, "agent_activity")?;
     for (name, spec) in AGENT_ACTIVITY_COLUMNS {
-        if columns.contains(*name) {
-            continue;
-        }
-        conn.execute_batch(&format!(
-            "ALTER TABLE agent_activity ADD COLUMN {name} {spec}"
-        ))
-        .map_err(|err| ApiError::internal(format!("agent_activity alter failed: {err}")))?;
+        if columns.contains(*name) { continue; }
+        conn.execute_batch(&format!("ALTER TABLE agent_activity ADD COLUMN {name} {spec}"))
+            .map_err(|err| ApiError::internal(format!("agent_activity alter failed: {err}")))?;
         columns.insert((*name).to_string());
     }
 
@@ -77,27 +71,23 @@ pub fn ensure_agent_activity_schema(conn: &Connection) -> Result<(), ApiError> {
          UPDATE agent_activity SET started_at = COALESCE(NULLIF(started_at,''), datetime('now')) WHERE started_at IS NULL OR started_at = '';
          DELETE FROM agent_activity WHERE id NOT IN (SELECT MAX(id) FROM agent_activity GROUP BY agent_id);
          CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_activity_agent_id ON agent_activity(agent_id);",
-    )
-    .map_err(|err| ApiError::internal(format!("agent_activity repair failed: {err}")))?;
+    ).map_err(|err| ApiError::internal(format!("agent_activity repair failed: {err}")))?;
 
     Ok(())
 }
 
 const MIGRATIONS: &[&str] = &[
-    // Daemon consolidation tables
     "CREATE TABLE IF NOT EXISTS daemon_config (key TEXT PRIMARY KEY NOT NULL, value TEXT, updated_at TEXT DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS coordinator_events (id INTEGER PRIMARY KEY, event_type TEXT NOT NULL DEFAULT '', payload TEXT, source_node TEXT, handled_at TEXT DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS notification_queue (id INTEGER PRIMARY KEY, severity TEXT DEFAULT 'info', title TEXT NOT NULL DEFAULT '', message TEXT, plan_id INTEGER, link TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')), delivered_at TEXT)",
     "CREATE INDEX IF NOT EXISTS idx_notification_queue_status ON notification_queue(status)",
     "CREATE INDEX IF NOT EXISTS idx_coordinator_events_type ON coordinator_events(event_type)",
-    // Tables
     "CREATE TABLE IF NOT EXISTS agent_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, wave_id TEXT, task_id TEXT, agent_name TEXT, agent_role TEXT, model TEXT, peer_name TEXT, status TEXT DEFAULT 'running', started_at TEXT DEFAULT (datetime('now')), last_heartbeat TEXT, current_task TEXT)",
     "CREATE TABLE IF NOT EXISTS nightly_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, job_name TEXT DEFAULT 'guardian', started_at DATETIME DEFAULT CURRENT_TIMESTAMP, finished_at DATETIME, host TEXT, status TEXT NOT NULL CHECK(status IN ('running','ok','action_required','failed')), sentry_unresolved INTEGER DEFAULT 0, github_open_issues INTEGER DEFAULT 0, processed_items INTEGER DEFAULT 0, fixed_items INTEGER DEFAULT 0, branch_name TEXT, pr_url TEXT, summary TEXT, report_json TEXT)",
     "CREATE TABLE IF NOT EXISTS nightly_job_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, description TEXT, schedule TEXT NOT NULL DEFAULT '0 3 * * *', script_path TEXT NOT NULL, target_host TEXT DEFAULT 'local', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS github_events (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, event_type TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS earned_skills (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, domain TEXT, content TEXT NOT NULL, confidence TEXT DEFAULT 'low', hit_count INTEGER DEFAULT 0, source TEXT DEFAULT 'earned', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS plan_commits (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, commit_sha TEXT, commit_message TEXT, lines_added INTEGER DEFAULT 0, lines_removed INTEGER DEFAULT 0, files_changed INTEGER DEFAULT 0, authored_at TEXT, created_at TEXT DEFAULT (datetime('now')))",
-    // Performance indexes — agent_activity
     "CREATE INDEX IF NOT EXISTS idx_agent_activity_status ON agent_activity(status)",
     "CREATE INDEX IF NOT EXISTS idx_agent_activity_plan ON agent_activity(plan_id)",
     "CREATE INDEX IF NOT EXISTS idx_agent_activity_task ON agent_activity(task_db_id)",
@@ -105,11 +95,9 @@ const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_agent_activity_status_started ON agent_activity(status, started_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_agent_activity_status_completed ON agent_activity(status, completed_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_agent_activity_model ON agent_activity(model)",
-    // Performance indexes — agent_runs
     "CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at ON agent_runs(started_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status)",
     "CREATE INDEX IF NOT EXISTS idx_agent_runs_peer ON agent_runs(peer_name)",
-    // Performance indexes — mesh/events/tokens
     "CREATE INDEX IF NOT EXISTS idx_nightly_jobs_started ON nightly_jobs(started_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_mesh_events_created_at ON mesh_events(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_mesh_events_status ON mesh_events(status)",
@@ -118,13 +106,11 @@ const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_github_events_plan_status ON github_events(plan_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_plan_commits_plan_id ON plan_commits(plan_id)",
     "CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name COLLATE NOCASE)",
-    // Ideas tables
     "CREATE TABLE IF NOT EXISTS ideas (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT, tags TEXT, priority TEXT DEFAULT 'P2' CHECK(priority IN ('P0','P1','P2','P3')), status TEXT DEFAULT 'draft' CHECK(status IN ('draft','elaborating','ready','promoted','archived')), project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, links TEXT, plan_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS idea_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
     "CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status)",
     "CREATE INDEX IF NOT EXISTS idx_ideas_project ON ideas(project_id)",
     "CREATE INDEX IF NOT EXISTS idx_idea_notes_idea ON idea_notes(idea_id)",
-    // ALTER TABLE migrations
     "ALTER TABLE nightly_jobs ADD COLUMN job_name TEXT DEFAULT 'guardian'",
     "ALTER TABLE nightly_jobs ADD COLUMN log_stdout TEXT",
     "ALTER TABLE nightly_jobs ADD COLUMN log_stderr TEXT",
@@ -160,6 +146,7 @@ pub fn init_db_and_pool(
         if let Err(err) = crate::db::migrations::run(&conn) {
             eprintln!("[migration] execution_runs migration failed: {err:?}");
         }
+        canonicalize_existing_project_paths(&conn);
         let mut ok = 0;
         let mut skip = 0;
         for sql in MIGRATIONS {
@@ -170,26 +157,19 @@ pub fn init_db_and_pool(
                     if msg.contains("duplicate column") || msg.contains("already exists") {
                         skip += 1;
                     } else {
-                        let preview: String = sql.chars().take(50).collect();
-                        eprintln!("[migration] ERROR on '{preview}...': {e}");
+                        eprintln!("[migration] ERROR on '{}'...: {e}", &sql.chars().take(50).collect::<String>());
                     }
                 }
             }
         }
-        // Verify critical tables exist
         let check = conn.prepare(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_activity'",
         );
-        let exists = check
-            .map(|mut s| s.exists([]))
-            .unwrap_or(Ok(false))
-            .unwrap_or(false);
+        let exists = check.map(|mut s| s.exists([])).unwrap_or(Ok(false)).unwrap_or(false);
         if !exists {
             eprintln!("[migration] CRITICAL: agent_activity table missing after migration!");
         }
-        eprintln!(
-            "[migration] {ok} applied, {skip} skipped (already exist), agent_activity={exists}"
-        );
+        eprintln!("[migration] {ok} applied, {skip} skipped (already exist), agent_activity={exists}");
     }
     let manager = SqliteConnectionManager::file(db_path).with_init(|conn| {
         conn.execute_batch(

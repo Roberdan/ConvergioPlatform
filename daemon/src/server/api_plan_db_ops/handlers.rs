@@ -5,10 +5,25 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+/// Resolve a project path via std::fs::canonicalize so symlinks and case
+/// variations (macOS HFS+/APFS) are normalised before being persisted.
+///
+/// Returns None when the path is empty or does not exist — callers store
+/// the raw value in that case so they remain backward compatible.
+pub fn canonicalize_project_path(raw: &str) -> Option<String> {
+    if raw.is_empty() {
+        return None;
+    }
+    std::fs::canonicalize(raw)
+        .ok()
+        .and_then(|p| p.into_os_string().into_string().ok())
+}
+
 pub fn router() -> Router<ServerState> {
     Router::new()
         .route("/api/plan-db/wave/update", post(handle_wave_update))
         .route("/api/plan-db/kb-search", get(handle_kb_search))
+        .route("/api/plan-db/kb-write", post(handle_kb_write))
 }
 
 /// POST /api/plan-db/wave/update — update wave status
@@ -144,5 +159,56 @@ pub async fn handle_kb_search(
         "results": results,
         "query": params.q,
         "count": results.len(),
+    })))
+}
+
+/// POST /api/plan-db/kb-write — insert or update a knowledge_base entry
+/// Body: {domain, title, content, tags?, confidence?}
+pub async fn handle_kb_write(
+    State(state): State<ServerState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let domain = body
+        .get("domain")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ApiError::bad_request("missing domain"))?;
+    let title = body
+        .get("title")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ApiError::bad_request("missing title"))?;
+    let content = body
+        .get("content")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ApiError::bad_request("missing content"))?;
+
+    let conn = state.get_conn()?;
+
+    // Try upsert; fall back to plain INSERT if unique constraint is absent
+    conn.execute(
+        "INSERT INTO knowledge_base (domain, title, content, created_at, hit_count) \
+         VALUES (?1, ?2, ?3, datetime('now'), 0) \
+         ON CONFLICT(domain, title) DO UPDATE SET \
+           content = excluded.content, \
+           hit_count = hit_count + 1",
+        rusqlite::params![domain, title, content],
+    )
+    .or_else(|_| {
+        conn.execute(
+            "INSERT INTO knowledge_base (domain, title, content, created_at, hit_count) \
+             VALUES (?1, ?2, ?3, datetime('now'), 0)",
+            rusqlite::params![domain, title, content],
+        )
+    })
+    .map_err(|e| ApiError::internal(format!("kb-write failed: {e}")))?;
+
+    let id: i64 = conn
+        .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    Ok(Json(json!({
+        "ok": true,
+        "id": id,
+        "domain": domain,
+        "title": title,
     })))
 }

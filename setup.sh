@@ -77,13 +77,58 @@ main() {
   echo ""
   bash "$PLATFORM_DIR/scripts/platform/convergio-toggle.sh" on
 
-  # 6. Check daemon binary
+  # 6. Check daemon binary and create CLI symlinks
   echo ""
-  local daemon_bin="$PLATFORM_DIR/daemon/target/release/claude-core"
+  local daemon_bin="$PLATFORM_DIR/daemon/target/release/convergio-platform-daemon"
+  local bin_dir
+  if [[ -d "$HOME/.local/bin" ]] || mkdir -p "$HOME/.local/bin" 2>/dev/null; then
+    bin_dir="$HOME/.local/bin"
+  else
+    bin_dir="/usr/local/bin"
+  fi
+
   if [[ -x "$daemon_bin" ]]; then
     ok "Daemon: $daemon_bin"
+
+    # Create convergio symlink
+    if [[ -L "$bin_dir/convergio" ]] || [[ -f "$bin_dir/convergio" ]]; then
+      ok "Symlink: $bin_dir/convergio (already exists)"
+    else
+      ln -sf "$daemon_bin" "$bin_dir/convergio"
+      ok "Symlink: $bin_dir/convergio → $daemon_bin"
+    fi
+
+    # Create cvg symlink (short alias)
+    if [[ -L "$bin_dir/cvg" ]] || [[ -f "$bin_dir/cvg" ]]; then
+      ok "Symlink: $bin_dir/cvg (already exists)"
+    else
+      ln -sf "$daemon_bin" "$bin_dir/cvg"
+      ok "Symlink: $bin_dir/cvg → $daemon_bin"
+    fi
+
+    # Verify both commands respond (non-fatal — binary may need DB to be fully functional)
+    if "$bin_dir/convergio" --version &>/dev/null || "$bin_dir/convergio" version &>/dev/null; then
+      ok "Verify: convergio responds"
+    else
+      warn "Verify: convergio did not respond to version (may need daemon running)"
+    fi
+    if "$bin_dir/cvg" --version &>/dev/null || "$bin_dir/cvg" version &>/dev/null; then
+      ok "Verify: cvg responds"
+    else
+      warn "Verify: cvg did not respond to version (may need daemon running)"
+    fi
+
+    # Ensure bin_dir is in PATH hint (only in .zshenv for ~/.local/bin)
+    if [[ "$bin_dir" == "$HOME/.local/bin" ]]; then
+      local path_export='export PATH="$HOME/.local/bin:$PATH"'
+      if ! grep -q '.local/bin' "$profile" 2>/dev/null; then
+        echo "$path_export" >> "$profile"
+        ok "PATH: $bin_dir added to $profile"
+      fi
+    fi
   else
-    warn "Daemon: not built (run: cd daemon && cargo build --release)"
+    warn "Daemon: not built — run: cd daemon && cargo build --release"
+    warn "Symlinks skipped: build daemon first, then re-run setup.sh"
   fi
 
   echo ""
@@ -94,6 +139,7 @@ main() {
   echo "  convergio solve ...  — give Ali a problem"
   echo "  convergio on/off     — enable/disable overlay"
   echo "  convergio status     — check state"
+  echo "  cvg plan status      — plan status (short alias)"
   echo ""
   echo "To disable completely:"
   echo "  convergio off                         — remove ~/.claude/ symlinks"
