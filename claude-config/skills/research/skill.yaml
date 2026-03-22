@@ -1,0 +1,27 @@
+# Skill Protocol v1.0
+name: research
+version: 2.0.0
+description: "Investigation and analysis phase producing a single authoritative research document"
+domain: workflow
+constitution-version: 2.0.0
+license: MPL-2.0
+copyright: "Roberto D'Angelo 2026"
+repo: ConvergioPlatform
+tools:
+  - Agent
+  - Bash
+  - Read
+  - Write
+  - Glob
+  - Grep
+model: claude-sonnet-4.6
+min-context: 32000
+arguments: optional
+triggers:
+  - "/research"
+  - "research this"
+  - "investigate"
+provider-formats:
+  - claude-code
+  - copilot-cli
+  - generic-llm

@@ -1,0 +1,26 @@
+# Skill Protocol v1.0
+name: prepare
+version: 2.0.0
+description: "Project bootstrap: detect stack, generate CLAUDE.md, create .claudeignore, register project"
+domain: workflow
+constitution-version: 2.0.0
+license: MPL-2.0
+copyright: "Roberto D'Angelo 2026"
+repo: ConvergioPlatform
+tools:
+  - Bash
+  - Read
+  - Write
+  - Glob
+model: claude-sonnet-4.6
+min-context: 16000
+arguments: optional
+triggers:
+  - "/prepare"
+  - "prepare project"
+  - "bootstrap project"
+  - "register project"
+provider-formats:
+  - claude-code
+  - copilot-cli
+  - generic-llm

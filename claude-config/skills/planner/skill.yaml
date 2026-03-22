@@ -1,0 +1,36 @@
+# Skill Protocol v1.0
+name: planner
+version: 2.7.0
+description: "Plan creation and orchestration with approval gates, Thor validation, and per-task routing"
+domain: workflow
+constitution-version: 2.0.0
+license: MPL-2.0
+copyright: "Roberto D'Angelo 2026"
+repo: ConvergioPlatform
+tools:
+  - Agent
+  - Bash
+  - Read
+  - Write
+  - Glob
+  - Grep
+model: claude-opus-4.6
+min-context: 200000
+arguments: optional
+triggers:
+  - "/planner"
+  - "create a plan"
+  - "plan this"
+provider-formats:
+  - claude-code
+  - copilot-cli
+  - generic-llm
+# NOTE: Original command references @reference/commands/planner/core-workflow.md,
+# @reference/commands/planner/quality-gates.md,
+# @reference/commands/planner/merge-and-intelligence.md,
+# @planner-modules/parallelization-modes.md,
+# @planner-modules/model-strategy.md,
+# @planner-modules/knowledge-codification.md,
+# @reference/operational/universal-orchestration.md,
+# @reference/operational/plan-db-schema.md —
+# transpilers must inject these as provider-specific includes.

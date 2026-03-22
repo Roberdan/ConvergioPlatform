@@ -1,0 +1,31 @@
+# Skill Protocol v1.0
+name: execute
+version: 2.3.0
+description: "Automated plan task execution with per-task routing, Thor gates, and CI batch fix"
+domain: workflow
+constitution-version: 2.0.0
+license: MPL-2.0
+copyright: "Roberto D'Angelo 2026"
+repo: ConvergioPlatform
+tools:
+  - Agent
+  - Bash
+  - Read
+  - Write
+  - Glob
+  - Grep
+model: claude-sonnet-4.6
+min-context: 32000
+arguments: required
+triggers:
+  - "/execute"
+  - "/execute {{plan_id}}"
+provider-formats:
+  - claude-code
+  - copilot-cli
+  - generic-llm
+# NOTE: Original command references @reference/commands/execute/initialize-and-readiness.md,
+# @reference/commands/execute/task-routing-and-tracking.md,
+# @reference/commands/execute/validation-merge-completion.md,
+# @commands/execute-modules/error-handling.md —
+# transpilers must inject these as provider-specific includes.

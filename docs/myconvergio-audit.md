@@ -180,3 +180,99 @@ Generated: 2026-03-22 | MyConvergio: 1335 files | ConvergioPlatform: 1417 files
 | Already migrated (common to both) | 15 |
 | To migrate (hooks, agents, commands, scripts/lib, ADRs, config) | ~250 |
 | Stay in MyConvergio (Copilot, legacy dashboards, backups, systemd) | ~1070 |
+
+## Removed: copilot-agents/
+
+Removed in W4 (T4-06) — 2026-03-22. These 85 Copilot CLI agent wrappers are superseded by the universal skill protocol + transpilers created in W3.
+
+**Rationale**: The transpiler approach generates provider-specific agent formats on demand from canonical `.claude/agents/` source files. Maintaining 85 hand-crafted wrappers in parallel is redundant and creates drift risk.
+
+| File | Category |
+|---|---|
+| adversarial-debugger.agent.md | technical_development |
+| ali-chief-of-staff.agent.md | leadership_strategy |
+| amy-cfo.agent.md | leadership_strategy |
+| andrea-customer-success-manager.agent.md | business_operations |
+| angela-da.agent.md | specialized_experts |
+| anna-executive-assistant.agent.md | business_operations |
+| antonio-strategy-expert.agent.md | leadership_strategy |
+| app-release-manager-execution.agent.md | release_management |
+| app-release-manager.agent.md | release_management |
+| ava-analytics-insights-virtuoso.agent.md | specialized_experts |
+| baccio-tech-architect.agent.md | technical_development |
+| behice-cultural-coach.agent.md | specialized_experts |
+| check.agent.md | core_utility (workflow wrapper) |
+| coach-team-coach.agent.md | specialized_experts |
+| code-reviewer.agent.md | technical_development |
+| compliance-checker.agent.md | compliance_legal |
+| dan-engineering-gm.agent.md | leadership_strategy |
+| dario-debugger.agent.md | technical_development |
+| dario-debugger.lean.agent.md | technical_development (lean variant) |
+| dave-change-management-specialist.agent.md | business_operations |
+| davide-project-manager.agent.md | business_operations |
+| deep-repo-auditor.agent.md | technical_development |
+| diana-performance-dashboard.agent.md | specialized_experts |
+| domik-mckinsey-strategic-decision-maker.agent.md | leadership_strategy |
+| dr-enzo-healthcare-compliance-manager.agent.md | compliance_legal |
+| ecosystem-sync.agent.md | release_management |
+| elena-legal-compliance-expert.agent.md | compliance_legal |
+| enrico-business-process-engineer.agent.md | business_operations |
+| ethan-da.agent.md | specialized_experts |
+| evan-ic6da.agent.md | specialized_experts |
+| execute.agent.md | core_utility (workflow wrapper) |
+| EXECUTION_DISCIPLINE.agent.md | core_utility |
+| fabio-sales-business-development.agent.md | business_operations |
+| feature-release-manager.agent.md | release_management |
+| fiona-market-analyst.agent.md | specialized_experts |
+| giulia-hr-talent-acquisition.agent.md | specialized_experts |
+| guardian-ai-security-validator.agent.md | compliance_legal |
+| jenny-inclusive-accessibility-champion.agent.md | specialized_experts |
+| jony-creative-director.agent.md | design_ux |
+| knowledge-base.agent.md | core_utility |
+| luca-security-expert.agent.md | compliance_legal |
+| luke-program-manager.agent.md | business_operations |
+| marcello-pm.agent.md | business_operations |
+| marco-devops-engineer.agent.md | technical_development |
+| marcus-context-memory-keeper.agent.md | core_utility |
+| matteo-strategic-business-architect.agent.md | leadership_strategy |
+| michael-vc.agent.md | specialized_experts |
+| oliver-pm.agent.md | business_operations |
+| omri-data-scientist.agent.md | technical_development |
+| optimize-project.agent.md | core_utility |
+| otto-performance-optimizer.agent.md | technical_development |
+| paolo-best-practices-enforcer.agent.md | technical_development |
+| plan-business-advisor.agent.md | core_utility |
+| plan-post-mortem.agent.md | core_utility |
+| plan-reviewer.agent.md | core_utility |
+| planner.agent.md | core_utility (workflow wrapper) |
+| po-prompt-optimizer.agent.md | core_utility |
+| pr-comment-resolver.agent.md | technical_development |
+| prompt.agent.md | core_utility (workflow wrapper) |
+| research-report-generator.agent.md | research_report |
+| rex-code-reviewer.agent.md | technical_development |
+| riccardo-storyteller.agent.md | specialized_experts |
+| sam-startupper.agent.md | specialized_experts |
+| sara-ux-ui-designer.agent.md | design_ux |
+| satya-board-of-directors.agent.md | leadership_strategy |
+| sentinel-ecosystem-guardian.agent.md | core_utility |
+| socrates-first-principles-reasoning.agent.md | core_utility |
+| sofia-marketing-strategist.agent.md | business_operations |
+| sophia-govaffairs.agent.md | compliance_legal |
+| stefano-design-thinking-facilitator.agent.md | design_ux |
+| steve-executive-communication-strategist.agent.md | business_operations |
+| strategic-planner-git.agent.md | core_utility (planner module) |
+| strategic-planner-templates.agent.md | core_utility (planner module) |
+| strategic-planner-thor.agent.md | core_utility (planner module) |
+| strategic-planner.agent.md | core_utility |
+| task-executor-tdd.agent.md | core_utility |
+| task-executor.agent.md | core_utility |
+| taskmaster-strategic-task-decomposition-master.agent.md | core_utility |
+| tdd-executor.agent.md | core_utility |
+| thor-quality-assurance-guardian.agent.md | core_utility |
+| thor-validation-gates.agent.md | core_utility |
+| validate.agent.md | core_utility (workflow wrapper) |
+| wanda-workflow-orchestrator.agent.md | core_utility |
+| wiz-investor-venture-capital.agent.md | specialized_experts |
+| xavier-coordination-patterns.agent.md | core_utility |
+
+**Total removed**: 85 files

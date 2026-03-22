@@ -1,0 +1,23 @@
+# Skill Protocol v1.0
+name: check
+version: 1.0.0
+description: "Session state recap: git status, active plans, open PRs, warnings, next steps"
+domain: workflow
+constitution-version: 2.0.0
+license: MPL-2.0
+copyright: "Roberto D'Angelo 2026"
+repo: ConvergioPlatform
+tools:
+  - Bash
+  - Read
+model: claude-sonnet-4.6
+min-context: 16000
+arguments: none
+triggers:
+  - "/check"
+  - "check session"
+  - "session status"
+provider-formats:
+  - claude-code
+  - copilot-cli
+  - generic-llm

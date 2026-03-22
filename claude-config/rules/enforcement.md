@@ -1,12 +1,15 @@
-<!-- v3.0.0 -->
+<!-- v3.1.0 -->
 # Enforcement
 
 ## Workflow
 
-`GOAL → /planner (Opus) → DB → /execute {id} → thor/wave (Opus) → merge → done`
+`GOAL → /solve → /planner (Opus) → DB → /execute {id} → thor/wave (Opus) → merge → done`
+
+> `/prompt` is deprecated — absorbed into `/solve` phase 4 (requirements clarification). Direct `/planner` without `/solve` = BLOCKED (for standard/full triage).
 
 | Step | How | Blocked |
 |---|---|---|
+| Triage | `/solve` (full triage + requirements) | Direct /planner without /solve |
 | Plan | `Skill(skill="planner")` | EnterPlanMode |
 | Review | 1x `Agent(plan-reviewer)` → `planner-create.sh register-review` | Skipping review |
 | DB | `planner-create.sh create` + `import` (after review passes) | plan-db.sh create/import, manual INSERT |
