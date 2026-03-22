@@ -141,13 +141,22 @@ async fn api_plan_db_integration_full_lifecycle() {
     assert_eq!(resp["waves_created"], 1);
     assert_eq!(resp["tasks_created"], 2);
 
-    // 3. Approve
+    // 3. Register review (required by lifecycle guard before start)
+    let (status, _resp) = post_json(
+        &app,
+        "/api/plan-db/review/register",
+        json!({"plan_id": plan_id, "reviewer_agent": "plan-reviewer", "verdict": "approved"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // 4. Approve
     let (status, resp) =
         post_json(&app, &format!("/api/plan-db/approve/{plan_id}"), json!({})).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(resp["status"], "approved");
 
-    // 4. Start
+    // 5. Start
     let (status, resp) = post_json(&app, &format!("/api/plan-db/start/{plan_id}"), json!({})).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(resp["status"], "doing");

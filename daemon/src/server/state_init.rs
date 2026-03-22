@@ -127,6 +127,7 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE agent_activity ADD COLUMN parent_session TEXT",
     "ALTER TABLE plans ADD COLUMN waves_total INTEGER DEFAULT 0",
     "ALTER TABLE plans ADD COLUMN waves_merged INTEGER DEFAULT 0",
+    "CREATE TABLE IF NOT EXISTS plan_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, reviewer_agent TEXT NOT NULL, verdict TEXT NOT NULL, suggestions TEXT, raw_report TEXT, reviewed_at TEXT NOT NULL DEFAULT (datetime('now')))",
 ];
 
 /// Run DB migrations and return a connection pool for `db_path`.
