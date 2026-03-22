@@ -57,8 +57,6 @@ convergio daemon menubar           # status icon in menu bar (◉/◎)
 convergio solve "your goal"        # Ali takes over
 ```
 
-Disable anytime: `convergioOff`. Re-enable: `convergioOn`. Full revert: `revert-claude-symlinks.sh --env`.
-
 ## Convergio CLI
 
 ```bash
@@ -67,6 +65,10 @@ convergio solve "problem" --autonomous   # no approval needed
 convergio solve "problem" --approve-each # approve every step
 convergio solve "problem" --context doc.pdf  # attach document context
 convergio stop [run_id]                  # abort execution
+convergio pause [run_id]                 # suspend, preserve state
+convergio resume [run_id]                # resume paused run
+convergio metrics run <id>               # per-run cost, duration, agents
+convergio metrics runs                   # list all execution runs
 
 convergio planner                        # launch as planner (Claude Opus)
 convergio executor pippo --tool copilot  # "pippo" on Copilot (GPT Codex)
@@ -226,7 +228,7 @@ Tailscale P2P, HMAC-SHA256, CRDT DB sync. `convergio heartbeat` to check all nod
 ## Testing
 
 ```bash
-cd daemon && cargo test                 # Rust daemon (140 modules)
+cd daemon && cargo test                 # Rust daemon (478 tests, 140 modules)
 cd evolution && npx vitest run          # Evolution engine (43 tests)
 convergio status                        # CLI + daemon + symlinks
 convergio org stats                     # organizational telemetry
