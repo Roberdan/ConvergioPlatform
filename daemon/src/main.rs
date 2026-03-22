@@ -1,3 +1,6 @@
+mod cli_plan;
+mod cli_task;
+mod cli_wave;
 mod ipc_handler;
 
 use clap::{Parser, Subcommand};
@@ -61,11 +64,26 @@ enum Commands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Plan management commands (cvg plan <subcommand>)
+    Plan {
+        #[command(subcommand)]
+        command: cli_plan::PlanCommands,
+    },
+    /// Task management commands (cvg task <subcommand>)
+    Task {
+        #[command(subcommand)]
+        command: cli_task::TaskCommands,
+    },
+    /// Wave management commands (cvg wave <subcommand>)
+    Wave {
+        #[command(subcommand)]
+        command: cli_wave::WaveCommands,
+    },
 }
 
 #[tokio::main]
 async fn main() {
-    // argv[0] detection for agent-ipc symlink
+    // argv[0] detection: agent-ipc symlink routes to `ipc`, cvg symlink routes to `plan/task/wave`
     let args: Vec<String> = env::args().collect();
     let cli = if args
         .first()
@@ -75,6 +93,19 @@ async fn main() {
         let mut new_args = vec![args[0].clone(), "ipc".to_string()];
         new_args.extend(args[1..].to_vec());
         Cli::parse_from(new_args)
+    } else if args
+        .first()
+        .map(|a| {
+            let base = std::path::Path::new(a)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            base == "cvg"
+        })
+        .unwrap_or(false)
+    {
+        // cvg plan/task/wave <args> — pass through as-is (subcommand is first real arg)
+        Cli::parse()
     } else {
         Cli::parse()
     };
@@ -189,6 +220,15 @@ async fn main() {
                         std::process::exit(2);
                     }
                 }
+            }
+            Commands::Plan { command } => {
+                cli_plan::handle(command).await;
+            }
+            Commands::Task { command } => {
+                cli_task::handle(command).await;
+            }
+            Commands::Wave { command } => {
+                cli_wave::handle(command).await;
             }
         }
         return;

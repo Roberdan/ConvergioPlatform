@@ -20,10 +20,12 @@ use super::api_notify;
 use super::api_peers;
 use super::api_peers_ext;
 use super::api_plan_db;
+use super::api_plan_db_checkpoint;
 use super::api_plan_db_import;
 use super::api_plan_db_lifecycle;
 use super::api_plan_db_ops;
 use super::api_plan_db_query;
+use super::api_plan_db_review;
 use super::api_plans;
 use super::api_runs;
 use super::api_workers;
@@ -84,6 +86,8 @@ pub fn build_router_with_db(
         .merge(api_plan_db_query::router())
         .merge(api_plan_db_import::router())
         .merge(api_plan_db_ops::router())
+        .merge(api_plan_db_review::router())
+        .merge(api_plan_db_checkpoint::router())
         .merge(api_workers::router())
         .merge(api_evolution::router())
         .merge(api_runs::router())

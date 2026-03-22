@@ -1,4 +1,4 @@
-mod handlers;
+pub(crate) mod handlers;
 pub use handlers::router;
 
 #[cfg(test)]
@@ -124,5 +124,68 @@ mod tests {
             )
             .unwrap();
         assert!(!exists);
+    }
+
+    #[test]
+    fn plan_db_kb_write_inserts_entry() {
+        let db = setup_db();
+        let conn = db.connection();
+
+        conn.execute(
+            "INSERT INTO knowledge_base (domain, title, content, created_at, hit_count) \
+             VALUES (?1, ?2, ?3, datetime('now'), 0)",
+            rusqlite::params!["testing", "KB write test", "Content for write"],
+        )
+        .unwrap();
+
+        let row = query_one(
+            conn,
+            "SELECT domain, title, content FROM knowledge_base WHERE title = ?1",
+            rusqlite::params!["KB write test"],
+        )
+        .expect("query")
+        .expect("row");
+
+        assert_eq!(row.get("domain").and_then(|v| v.as_str()), Some("testing"));
+        assert_eq!(
+            row.get("content").and_then(|v| v.as_str()),
+            Some("Content for write")
+        );
+    }
+
+    // Path canonicalization tests — F-13
+    // Verify canonicalize_project_path resolves symlinks and normalises
+    // case-sensitivity bugs on macOS HFS+/APFS volumes.
+
+    #[test]
+    fn canonicalize_path_resolves_existing_dir() {
+        // /tmp is a symlink on macOS → /private/tmp; canonicalize must resolve it.
+        let result = super::handlers::canonicalize_project_path("/tmp");
+        let canon = result.expect("must succeed for existing /tmp");
+        assert!(canon.starts_with('/'), "canonical path must be absolute: {canon}");
+        // On macOS /tmp is a symlink; the canonical form must differ.
+        assert_ne!(canon, "/tmp", "/tmp symlink must be resolved to its real path");
+    }
+
+    #[test]
+    fn canonicalize_path_returns_none_for_nonexistent() {
+        // Non-existent paths must return None so callers store the raw path gracefully.
+        let result = super::handlers::canonicalize_project_path("/this/path/does/not/exist/xyz");
+        assert!(result.is_none(), "non-existent path must return None, got {result:?}");
+    }
+
+    #[test]
+    fn canonicalize_path_returns_none_for_empty() {
+        let result = super::handlers::canonicalize_project_path("");
+        assert!(result.is_none(), "empty path must return None");
+    }
+
+    #[test]
+    fn canonicalize_path_handles_home_dir() {
+        // HOME must exist and canonicalize successfully.
+        if let Ok(home) = std::env::var("HOME") {
+            let result = super::handlers::canonicalize_project_path(&home);
+            assert!(result.is_some(), "HOME must canonicalize: {home}");
+        }
     }
 }
