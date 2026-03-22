@@ -3,17 +3,17 @@
 ## Problem: cvg command not found
 
 **Symptom:** `cvg plan list` or any `cvg` subcommand returns "command not found"
-**Cause:** `cvg` symlink not yet created by setup, or `~/.claude/scripts` not on `$PATH`
+**Cause:** `cvg` symlink not yet created by setup, or `scripts/platform/` not on `$PATH`
 **Fix:**
 ```bash
-# Verify setup wired the symlink
-ls -la ~/.claude/scripts/cvg || echo "symlink missing"
-# Run setup to create it
-./setup.sh
+# Run setup to create symlink
+scripts/platform/setup-claude-symlinks.sh
+# Or source aliases (adds scripts/platform/ to PATH, creates symlink on-demand)
+source scripts/platform/convergio-aliases.sh
 # Or create manually
-ln -sf "$HOME/GitHub/ConvergioPlatform/daemon/target/release/convergio-daemon" "$HOME/.claude/scripts/cvg"
+ln -sf "$(pwd)/daemon/target/release/convergio-platform-daemon" scripts/platform/cvg
 # Verify
-cvg --version
+cvg --help
 ```
 
 ## Problem: cvg subcommand fails with "daemon not reachable"
@@ -265,6 +265,32 @@ bash -x scripts/platform/skill-transpile-claude.sh claude-config/skills/solve/ /
 ```bash
 bash scripts/platform/convergio-db-migrate-solve.sh migrate
 sqlite3 "$DASHBOARD_DB" ".tables" | grep solve
+```
+
+## Problem: cvg review reset fails with "required argument PLAN_ID"
+
+**Symptom:** `cvg review reset` errors because plan_id is required, but reset is called before the plan exists in DB (planner workflow step 1)
+**Cause:** Fixed in v12.1.1 — plan_id is now optional. Omit it to reset pre-plan state (defaults to plan_id=0).
+**Fix:**
+```bash
+# Rebuild daemon if on older version
+cd daemon && cargo build --release
+# Now works without plan_id
+cvg review reset
+# Or with plan_id
+cvg review reset 688
+```
+
+## Problem: cvg plan readiness not found
+
+**Symptom:** `cvg plan readiness 688` returns "unrecognized subcommand" but the API endpoint works
+**Cause:** Fixed in v12.1.1 — CLI subcommand was missing, only API endpoint `/api/plan-db/readiness/:id` existed.
+**Fix:**
+```bash
+# Rebuild daemon
+cd daemon && cargo build --release
+# Now works
+cvg plan readiness 688
 ```
 
 ## Plan A — Convergio Core Intelligence

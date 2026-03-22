@@ -1,5 +1,13 @@
 # Changelog
 
+## [v12.1.1] - 22 Marzo 2026
+
+### Fixed
+- `cvg review reset` now accepts optional plan_id (was required, broke planner workflow pre-plan)
+- `cvg plan readiness` CLI subcommand added (was API-only, agents couldn't execute workflow step 10)
+- `cvg` symlink setup/rollback scripts updated (setup-claude-symlinks.sh, revert-claude-symlinks.sh, convergio-aliases.sh)
+- Tests extracted to cli_plan_tests.rs to keep cli_plan.rs under 250 lines
+
 ## [v12.1.0] - 22 Marzo 2026
 
 ### Added
