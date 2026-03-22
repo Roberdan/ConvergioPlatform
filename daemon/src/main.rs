@@ -17,6 +17,7 @@ mod cli_skill_transpile;
 mod cli_task;
 mod cli_wave;
 mod ipc_handler;
+mod transpiler;
 
 use clap::Parser;
 use cli_commands::Commands;

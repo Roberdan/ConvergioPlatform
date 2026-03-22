@@ -1,3 +1,5 @@
+pub mod api_agent_catalog;
+pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_chat;
 pub mod api_ingest;
@@ -52,6 +54,8 @@ pub mod ws;
 pub mod ws_brain;
 pub mod ws_pty;
 
+#[cfg(test)]
+mod api_agent_catalog_tests;
 #[cfg(test)]
 mod api_agents_legacy_tests;
 #[cfg(test)]

@@ -4,6 +4,8 @@ pub use api_routes::{
     DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES,
 };
 
+use super::api_agent_catalog;
+use super::api_agent_triage;
 use super::api_agents;
 use super::api_chat;
 use super::api_ingest;
@@ -73,6 +75,8 @@ pub fn build_router_with_db(
         .merge(api_dashboard::router())
         .merge(api_ideas::router())
         .merge(api_plans::router())
+        .merge(api_agent_catalog::router())
+        .merge(api_agent_triage::router())
         .merge(api_agents::router())
         .merge(api_mesh::router())
         .merge(api_peers::router())

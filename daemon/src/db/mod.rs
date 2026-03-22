@@ -3,6 +3,7 @@ pub mod crdt;
 pub mod migrations;
 mod models;
 mod queries;
+pub mod seed_agents;
 mod service;
 
 pub use models::{
