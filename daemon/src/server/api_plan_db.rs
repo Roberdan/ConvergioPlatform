@@ -103,7 +103,7 @@ async fn handle_get_json(
 }
 
 /// POST /api/plan-db/task/update — update task status
-/// Body: {"task_id": N, "status": "...", "notes": "..."}
+/// Body: {"task_id": N, "status": "...", "notes": "...", "test_criteria": "..."}
 async fn handle_task_update(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -119,6 +119,7 @@ async fn handle_task_update(
     let notes = body.get("notes").and_then(Value::as_str).unwrap_or("");
     let tokens = body.get("tokens").and_then(Value::as_i64).unwrap_or(0);
     let validated_by = body.get("validated_by").and_then(Value::as_str);
+    let test_criteria = body.get("test_criteria").and_then(Value::as_str);
 
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -141,16 +142,22 @@ async fn handle_task_update(
         return Err(ApiError::bad_request(format!("task {task_id} not found")));
     }
 
-    // Store notes in description if provided
+    // Update notes field (verify command source for mechanical gates validator)
     if !notes.is_empty() {
         conn.execute(
-            "UPDATE tasks SET description = \
-             CASE WHEN description IS NULL OR description = '' \
-               THEN ?1 ELSE description || char(10) || ?1 END \
-             WHERE id = ?2",
+            "UPDATE tasks SET notes = ?1 WHERE id = ?2",
             rusqlite::params![notes, task_id],
         )
         .map_err(|e| ApiError::internal(format!("notes update failed: {e}")))?;
+    }
+
+    // Update test_criteria if provided (mechanical gate: must be non-empty)
+    if let Some(tc) = test_criteria {
+        conn.execute(
+            "UPDATE tasks SET test_criteria = ?1 WHERE id = ?2",
+            rusqlite::params![tc, task_id],
+        )
+        .map_err(|e| ApiError::internal(format!("test_criteria update failed: {e}")))?;
     }
 
     // Push task status change to brain viz via WS

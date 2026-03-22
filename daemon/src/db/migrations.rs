@@ -5,6 +5,22 @@
 use rusqlite::Connection;
 use std::path::PathBuf;
 
+const CREATE_DOMAIN_SKILL_MAP: &str = "
+CREATE TABLE domain_skill_map (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain      TEXT    NOT NULL,
+    skill_name  TEXT    NOT NULL,
+    description TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(domain, skill_name)
+)";
+
+const DOMAIN_SKILL_SEED: &[(&str, &str, &str)] = &[
+    ("healthcare", "research", "Medical research and clinical analysis"),
+    ("deploy",     "release",  "Deployment and release management"),
+    ("design",     "prepare",  "Design preparation and setup"),
+];
+
 const CREATE_EXECUTION_RUNS: &str = "
 CREATE TABLE execution_runs (
     id              INTEGER PRIMARY KEY,
@@ -37,6 +53,7 @@ const INDEXES: &[&str] = &[
 /// so repeated calls are safe.
 pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     ensure_execution_runs(conn)?;
+    ensure_domain_skill_map(conn)?;
     ensure_runs_dir();
     Ok(())
 }
@@ -81,6 +98,23 @@ fn ensure_execution_runs(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+fn ensure_domain_skill_map(conn: &Connection) -> rusqlite::Result<()> {
+    if !table_exists(conn, "domain_skill_map")? {
+        conn.execute_batch(CREATE_DOMAIN_SKILL_MAP)?;
+        eprintln!("[migrations] created domain_skill_map table");
+
+        for (domain, skill_name, description) in DOMAIN_SKILL_SEED {
+            conn.execute(
+                "INSERT INTO domain_skill_map (domain, skill_name, description) \
+                 VALUES (?1, ?2, ?3)",
+                [domain, skill_name, description],
+            )?;
+        }
+        eprintln!("[migrations] seeded domain_skill_map ({} rows)", DOMAIN_SKILL_SEED.len());
+    }
+    Ok(())
+}
+
 /// Ensure data/runs/ exists relative to the executable's project root.
 ///
 /// Uses the `DASHBOARD_DB` env var to locate the project root (parent of
@@ -107,72 +141,5 @@ fn runs_dir_path() -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rusqlite::Connection;
-
-    fn in_memory() -> Connection {
-        Connection::open_in_memory().expect("in-memory db")
-    }
-
-    #[test]
-    fn run_is_idempotent() {
-        let conn = in_memory();
-        run(&conn).expect("first run");
-        run(&conn).expect("second run — must be idempotent");
-    }
-
-    #[test]
-    fn execution_runs_schema_is_correct() {
-        let conn = in_memory();
-        run(&conn).expect("migration");
-
-        // Table must exist
-        assert!(table_exists(&conn, "execution_runs").unwrap());
-
-        // Insert a minimal row and verify it round-trips
-        conn.execute(
-            "INSERT INTO execution_runs (goal) VALUES (?1)",
-            ["verify schema"],
-        )
-        .expect("insert");
-
-        let status: String = conn
-            .query_row(
-                "SELECT status FROM execution_runs WHERE goal='verify schema'",
-                [],
-                |r| r.get(0),
-            )
-            .expect("select");
-        assert_eq!(status, "running");
-    }
-
-    #[test]
-    fn execution_runs_status_constraint_rejects_invalid() {
-        let conn = in_memory();
-        run(&conn).expect("migration");
-
-        let result = conn.execute(
-            "INSERT INTO execution_runs (goal, status) VALUES (?1, ?2)",
-            ["test goal", "invalid_status"],
-        );
-        assert!(result.is_err(), "CHECK constraint must reject invalid status");
-    }
-
-    #[test]
-    fn indexes_exist_after_migration() {
-        let conn = in_memory();
-        run(&conn).expect("migration");
-
-        for name in &[
-            "idx_execution_runs_status",
-            "idx_execution_runs_plan_id",
-            "idx_execution_runs_started_at",
-        ] {
-            assert!(
-                index_exists(&conn, name).unwrap(),
-                "index {name} must exist"
-            );
-        }
-    }
-}
+#[path = "migrations_tests.rs"]
+mod tests;

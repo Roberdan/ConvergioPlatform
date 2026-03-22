@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Skill lint+transpile subcommands — replaces skill-lint.sh and skill-transpile-*.sh.
 use clap::Subcommand;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // Re-export validation helpers so transpile module and tests keep working
 pub(crate) use crate::cli_skill_validate::{
@@ -54,6 +54,17 @@ pub enum SkillCommands {
         #[arg(long)]
         human: bool,
     },
+    /// Disable a skill and remove unshared plugins/agents
+    Disable {
+        /// Path to the skill directory
+        skill_dir: PathBuf,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+    },
 }
 
 pub async fn handle(cmd: SkillCommands) {
@@ -66,6 +77,9 @@ pub async fn handle(cmd: SkillCommands) {
         }
         SkillCommands::Enable { skill_dir, api_url, human } => {
             crate::cli_skill_enable::handle(&skill_dir, &api_url, human).await;
+        }
+        SkillCommands::Disable { skill_dir, api_url, human } => {
+            crate::cli_skill_disable::handle(&skill_dir, &api_url, human).await;
         }
     }
 }
@@ -133,7 +147,7 @@ impl LintResult {
     }
 }
 
-pub(crate) fn lint_one(skill_dir: &PathBuf) -> LintResult {
+pub(crate) fn lint_one(skill_dir: &Path) -> LintResult {
     let name = skill_dir.file_name()
         .and_then(|n| n.to_str()).unwrap_or("unknown").to_string();
     let yaml_path = skill_dir.join("skill.yaml");
@@ -242,3 +256,24 @@ fn lint_requires_agents(name: &str, yaml: &str, msgs: &mut Vec<String>, failed: 
 #[cfg(test)]
 #[path = "cli_skill_tests.rs"]
 mod tests;
+// Module-level tests: cargo filter "cli_skill::test_lint_*" matches these (not tests:: submodule).
+#[cfg(test)]
+#[test]
+fn test_lint_requires_plugins_valid() {
+    use tempfile::TempDir; use std::fs;
+    let t = TempDir::new().unwrap(); let sd = t.path().join("s"); fs::create_dir(&sd).unwrap();
+    fs::write(sd.join("skill.yaml"), "name: s\nversion: 1.0.0\ndescription: x\ndomain: y\nconstitution-version: 2.0.0\nlicense: MPL-2.0\ncopyright: x\nrequires-plugins: [mcp-github]\n").unwrap();
+    fs::write(sd.join("SKILL.md"), "# s\n\nx.\n").unwrap();
+    let r = lint_one(&sd); assert!(r.ok, "{:?}", r.messages);
+    assert!(r.messages.iter().any(|m| m.contains("requires-plugins valid")));
+}
+#[cfg(test)]
+#[test]
+fn test_lint_requires_agents_invalid() {
+    use tempfile::TempDir; use std::fs;
+    let t = TempDir::new().unwrap(); let sd = t.path().join("s"); fs::create_dir(&sd).unwrap();
+    fs::write(sd.join("skill.yaml"), "name: s\nversion: 1.0.0\ndescription: x\ndomain: y\nconstitution-version: 2.0.0\nlicense: MPL-2.0\ncopyright: x\nrequires-agents:\n  - Agent_1\n").unwrap();
+    fs::write(sd.join("SKILL.md"), "# s\n\nx.\n").unwrap();
+    let r = lint_one(&sd); assert!(!r.ok);
+    assert!(r.messages.iter().any(|m| m.contains("requires-agents invalid")));
+}

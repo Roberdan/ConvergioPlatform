@@ -1,11 +1,84 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Skill enable subcommand — reads skill.yaml, activates required agents and suggests plugins.
+// Skill enable subcommand — reads skill.yaml, activates required agents and plugins.
 
 use crate::cli_skill_validate::{yaml_get_list, agent_name_valid};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-/// Enable a skill: parse requires-agents + requires-plugins, activate agents, print summary.
-pub async fn handle(skill_dir: &PathBuf, api_url: &str, human: bool) {
+/// Result of activating plugins into settings.json.
+pub struct PluginActivationResult {
+    pub added: Vec<String>,
+    pub skipped: Vec<String>,
+}
+
+/// Read .claude/settings.json, add plugins from requires-plugins that are not already present,
+/// write back. Creates the file (and parent dir) if absent. Returns counts of added/skipped.
+/// If requires-plugins is empty or absent, returns Ok with empty vecs and does NOT touch disk.
+pub fn activate_plugins(
+    yaml_content: &str,
+    claude_dir: &Path,
+) -> Result<PluginActivationResult, String> {
+    let plugins = yaml_get_list(yaml_content, "requires-plugins").unwrap_or_default();
+    if plugins.is_empty() {
+        return Ok(PluginActivationResult { added: vec![], skipped: vec![] });
+    }
+
+    let settings_path = claude_dir.join("settings.json");
+    let mut settings: serde_json::Value = if settings_path.is_file() {
+        let raw = std::fs::read_to_string(&settings_path)
+            .map_err(|e| format!("read {}: {e}", settings_path.display()))?;
+        serde_json::from_str(&raw)
+            .map_err(|e| format!("parse {}: {e}", settings_path.display()))?
+    } else {
+        serde_json::json!({})
+    };
+
+    let allowed = settings
+        .get_mut("allowedPlugins")
+        .and_then(|v| v.as_array_mut());
+
+    let mut added = Vec::new();
+    let mut skipped = Vec::new();
+
+    if let Some(arr) = allowed {
+        let existing: Vec<String> = arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+        for plugin in &plugins {
+            if existing.contains(plugin) {
+                skipped.push(plugin.clone());
+            } else {
+                arr.push(serde_json::Value::String(plugin.clone()));
+                added.push(plugin.clone());
+            }
+        }
+    } else {
+        // Key absent or not an array — replace/create it
+        let arr: Vec<serde_json::Value> = plugins
+            .iter()
+            .map(|p| serde_json::Value::String(p.clone()))
+            .collect();
+        settings["allowedPlugins"] = serde_json::Value::Array(arr);
+        added = plugins.clone();
+    }
+
+    if !added.is_empty() {
+        // Ensure parent dir exists (handles first-run with no .claude dir)
+        if let Some(parent) = settings_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("create dir {}: {e}", parent.display()))?;
+        }
+        let pretty = serde_json::to_string_pretty(&settings)
+            .map_err(|e| format!("serialize settings: {e}"))?;
+        std::fs::write(&settings_path, pretty)
+            .map_err(|e| format!("write {}: {e}", settings_path.display()))?;
+    }
+
+    Ok(PluginActivationResult { added, skipped })
+}
+
+/// Enable a skill: parse requires-agents + requires-plugins, activate agents and plugins.
+pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
     let yaml_path = skill_dir.join("skill.yaml");
     if !yaml_path.is_file() {
         eprintln!("skill.yaml not found in {}", skill_dir.display());
@@ -17,7 +90,6 @@ pub async fn handle(skill_dir: &PathBuf, api_url: &str, human: bool) {
     };
 
     let agents = yaml_get_list(&yaml_content, "requires-agents").unwrap_or_default();
-    let plugins = yaml_get_list(&yaml_content, "requires-plugins").unwrap_or_default();
 
     let mut agents_enabled: usize = 0;
     for agent_name in &agents {
@@ -43,20 +115,42 @@ pub async fn handle(skill_dir: &PathBuf, api_url: &str, human: bool) {
         }
     }
 
-    if human {
-        if !plugins.is_empty() {
-            println!("\nSuggested plugins (install manually):");
-            for plugin in &plugins {
-                println!("  - {plugin}");
-            }
+    // Activate plugins in ~/.claude/settings.json
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
+    let claude_dir = home.join(".claude");
+    let plugin_result = match activate_plugins(&yaml_content, &claude_dir) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("warning: plugin activation failed: {e}");
+            PluginActivationResult { added: vec![], skipped: vec![] }
         }
-        println!("\nSummary: {agents_enabled} agents enabled, {} plugins suggested", plugins.len());
+    };
+
+    if human {
+        for p in &plugin_result.added {
+            println!("activated plugin: {p}");
+        }
+        for p in &plugin_result.skipped {
+            println!("plugin already active (skipped): {p}");
+        }
+        println!(
+            "\nSummary: {agents_enabled} agents enabled, {} plugins activated, {} plugins already active",
+            plugin_result.added.len(),
+            plugin_result.skipped.len()
+        );
     } else {
+        let plugins = yaml_get_list(&yaml_content, "requires-plugins").unwrap_or_default();
         println!("{}", serde_json::json!({
             "ok": true,
             "agents_enabled": agents_enabled,
             "agents_total": agents.len(),
-            "plugins_suggested": plugins,
+            "plugins_activated": plugin_result.added,
+            "plugins_skipped": plugin_result.skipped,
+            "plugins_total": plugins.len(),
         }));
     }
 }
+
+#[cfg(test)]
+#[path = "cli_skill_enable_tests.rs"]
+mod tests;

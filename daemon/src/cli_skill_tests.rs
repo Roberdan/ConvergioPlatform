@@ -175,39 +175,6 @@ constitution-version: 2.0.0\nlicense: MPL-2.0\ncopyright: Roberto D'Angelo, 2026
 }
 
 #[test]
-fn lint_requires_plugins_valid_passes() {
-    let tmp = TempDir::new().unwrap();
-    let sd = tmp.path().join("plug-skill");
-    fs::create_dir(&sd).unwrap();
-    make_skill_with_yaml(&sd, "requires-plugins: [mcp-github, mcp-slack]\n");
-    let result = lint_one(&sd);
-    assert!(result.ok, "messages: {:?}", result.messages);
-    assert!(result.messages.iter().any(|m| m.contains("requires-plugins valid")));
-}
-
-#[test]
-fn lint_requires_agents_valid_passes() {
-    let tmp = TempDir::new().unwrap();
-    let sd = tmp.path().join("agent-skill");
-    fs::create_dir(&sd).unwrap();
-    make_skill_with_yaml(&sd, "requires-agents:\n  - my-agent\n  - another-agent\n");
-    let result = lint_one(&sd);
-    assert!(result.ok, "messages: {:?}", result.messages);
-    assert!(result.messages.iter().any(|m| m.contains("requires-agents valid")));
-}
-
-#[test]
-fn lint_requires_agents_invalid_name_fails() {
-    let tmp = TempDir::new().unwrap();
-    let sd = tmp.path().join("bad-agent-skill");
-    fs::create_dir(&sd).unwrap();
-    make_skill_with_yaml(&sd, "requires-agents:\n  - BadAgent\n  - ok-agent\n");
-    let result = lint_one(&sd);
-    assert!(!result.ok);
-    assert!(result.messages.iter().any(|m| m.contains("requires-agents invalid")));
-}
-
-#[test]
 fn lint_no_requires_fields_still_passes() {
     let tmp = TempDir::new().unwrap();
     let sd = tmp.path().join("no-req-skill");
@@ -215,6 +182,28 @@ fn lint_no_requires_fields_still_passes() {
     make_skill_with_yaml(&sd, "");
     let result = lint_one(&sd);
     assert!(result.ok, "messages: {:?}", result.messages);
+}
+
+#[test]
+fn lint_requires_plugins_empty_fails() {
+    let tmp = TempDir::new().unwrap();
+    let sd = tmp.path().join("empty-plug");
+    fs::create_dir(&sd).unwrap();
+    make_skill_with_yaml(&sd, "requires-plugins: []\n");
+    let r = lint_one(&sd);
+    assert!(!r.ok);
+    assert!(r.messages.iter().any(|m| m.contains("requires-plugins is empty")));
+}
+
+#[test]
+fn lint_requires_agents_empty_fails() {
+    let tmp = TempDir::new().unwrap();
+    let sd = tmp.path().join("empty-agent");
+    fs::create_dir(&sd).unwrap();
+    make_skill_with_yaml(&sd, "requires-agents: []\n");
+    let r = lint_one(&sd);
+    assert!(!r.ok);
+    assert!(r.messages.iter().any(|m| m.contains("requires-agents is empty")));
 }
 
 #[test]

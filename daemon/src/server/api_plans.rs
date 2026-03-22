@@ -20,10 +20,40 @@ async fn handle_plan_validate(
     let conn = state.get_conn()?;
     let count = conn
         .execute(
-            "UPDATE tasks SET status='done', validated_at=CURRENT_TIMESTAMP, validated_by='forced-admin' WHERE plan_id=?1 AND status='submitted'",
+            "UPDATE tasks SET status='done', validated_at=CURRENT_TIMESTAMP, \
+             validated_by='forced-admin' \
+             WHERE plan_id=?1 AND status='submitted'",
             rusqlite::params![plan_id],
         )
         .map_err(|err| ApiError::internal(format!("validate failed: {err}")))?;
+
+    // Sync wave counters: count done tasks per wave
+    conn.execute_batch(&format!(
+        "UPDATE waves SET tasks_done = (\
+           SELECT COUNT(*) FROM tasks \
+           WHERE tasks.wave_id_fk = waves.id AND tasks.status = 'done'\
+         ) WHERE plan_id = {plan_id}"
+    ))
+    .map_err(|err| ApiError::internal(format!("wave counter sync failed: {err}")))?;
+
+    // Sync plan counter: sum all done tasks
+    conn.execute(
+        "UPDATE plans SET tasks_done = (\
+           SELECT COUNT(*) FROM tasks WHERE plan_id = ?1 AND status = 'done'\
+         ) WHERE id = ?1",
+        rusqlite::params![plan_id],
+    )
+    .map_err(|err| ApiError::internal(format!("plan counter sync failed: {err}")))?;
+
+    // Auto-complete waves where all tasks are done
+    conn.execute(
+        "UPDATE waves SET status = 'done', completed_at = datetime('now') \
+         WHERE plan_id = ?1 AND tasks_done = tasks_total AND tasks_total > 0 \
+         AND status != 'done'",
+        rusqlite::params![plan_id],
+    )
+    .map_err(|err| ApiError::internal(format!("wave auto-complete failed: {err}")))?;
+
     Ok(Json(
         json!({"ok": true, "plan_id": plan_id, "validated": count}),
     ))

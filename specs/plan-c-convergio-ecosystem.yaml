@@ -1,0 +1,671 @@
+user_request: >
+  Plan C — Convergio Ecosystem. Plugin integration (daemon-driven skill enable with
+  requires-plugins activation), domain-aware tool activation (/solve detects domain,
+  suggests skills), MyConvergio setup/rollback (new setup.sh, kill copilot-sync.sh,
+  community governance CI), CRDT automatic background sync (daemon always-on,
+  transparent peer replication). Optimized for Copilot agent execution.
+
+constraints:
+  - id: C-01
+    text: "Every task max 1-2 files touched — Copilot execution constraint"
+    type: process
+    verify: "git diff --name-only | wc -l | awk '{if($1>3) exit 1}'"
+  - id: C-02
+    text: "No todo!(), TODO, FIXME, or empty handlers — zero stubs"
+    type: technical
+    verify: "! grep -rn 'todo!\\|TODO\\|FIXME' daemon/src/"
+  - id: C-03
+    text: "Tests written by Opus/Sonnet only — Constitution Art. V"
+    type: process
+  - id: C-04
+    text: "Daemon is single source of truth — no direct sqlite3 access"
+    type: technical
+    verify: "! grep -rn 'sqlite3 ' scripts/"
+  - id: C-05
+    text: "Max 250 lines per file — split if exceeds"
+    type: technical
+    verify: "find daemon/src -name '*.rs' -exec sh -c 'wc -l < \"$1\" | awk \"{if(\\$1>250) exit 1}\"' _ {} \\;"
+  - id: C-06
+    text: "Multi-provider native — no Claude-specific assumptions in setup"
+    type: technical
+  - id: C-07
+    text: "MCP NOT deployed — domain activation via cvg skill enable, not MCP servers"
+    type: technical
+    verify: "! grep -q 'mcpServers' .claude/settings.json"
+
+requirements:
+  - id: F-01
+    text: "cvg skill enable <name> activates plugins declared in requires-plugins via settings.json write"
+    wave: W1
+  - id: F-02
+    text: "cvg skill enable <name> auto-enables agents declared in requires-agents (partial — enhance)"
+    wave: W1
+  - id: F-03
+    text: "cvg skill disable <name> removes plugins/agents not used by other active skills"
+    wave: W1
+  - id: F-04
+    text: "Skill lint validates requires-plugins and requires-agents (format, naming, existence)"
+    wave: W1
+  - id: F-05
+    text: "skill-protocol.md updated with requires-* field reference"
+    wave: W1
+  - id: F-06
+    text: "At least 1 existing skill declares requires-plugins as reference implementation"
+    wave: W1
+  - id: F-07
+    text: "/solve phase 1 detects problem domain (healthcare, deploy, design, etc.)"
+    wave: W2
+  - id: F-08
+    text: "/solve suggests skills/tools to activate via cvg skill enable per domain"
+    wave: W2
+  - id: F-09
+    text: "Domain detection configurable: cvg domain list, cvg domain map <domain> <skill>"
+    wave: W2
+  - id: F-10
+    text: "/solve shows user what will be activated and asks confirmation (HITL)"
+    wave: W2
+  - id: F-11
+    text: "New setup.sh configures Claude Code + Copilot CLI + generic LLM from MyConvergio"
+    wave: W4
+  - id: F-12
+    text: "setup.sh --rollback removes installed configuration via manifest"
+    wave: W4
+  - id: F-13
+    text: "Setup uses cvg agent sync --provider <X> for provider-specific generation"
+    wave: W4
+  - id: F-14
+    text: "Eliminate copilot-sync.sh — replaced by setup.sh + cvg agent sync"
+    wave: W4
+  - id: F-15
+    text: "Community governance: CLA in CONTRIBUTING.md, cvg skill lint in CI (GitHub Action)"
+    wave: W4
+  - id: F-16
+    text: "setup.sh works standalone without daemon (fallback HTTP -> file-based)"
+    wave: W4
+  - id: F-17
+    text: "Daemon background task: sync CRDT with known peers at configurable interval (default 30s)"
+    wave: W3
+  - id: F-18
+    text: "Transparent sync: no manual commands, daemon running = syncing"
+    wave: W3
+  - id: F-19
+    text: "HTTP endpoints: /api/crdt/status, /api/crdt/force-sync, /api/crdt/peers"
+    wave: W3
+  - id: F-20
+    text: "Health check: peer unreachable after N cycles -> marked unreachable in mesh_sync_stats"
+    wave: W3
+  - id: F-21
+    text: "Graceful degradation: WAL-only if crsqlite unavailable + health endpoint reports mode"
+    wave: W3
+  - id: F-22
+    text: "Eliminate mesh-sync.sh for DB sync — keep only for git config sync"
+    wave: W4
+
+acceptance_invariants:
+  - description: "Skill enable activates plugins in settings.json"
+    verify: "cargo test -p convergio-platform-daemon -- cli_skill_enable"
+    defined_by: solve
+  - description: "Skill lint validates requires-* fields"
+    verify: "cargo test -p convergio-platform-daemon -- cli_skill::test_lint"
+    defined_by: solve
+  - description: "Skill protocol docs include requires-plugins"
+    verify: "grep -q 'requires-plugins' claude-config/reference/operational/skill-protocol.md"
+    defined_by: solve
+  - description: "At least one skill declares requires-plugins"
+    verify: "grep -rq 'requires-plugins:' claude-config/skills/*/skill.yaml"
+    defined_by: solve
+  - description: "Domain skill map table exists"
+    verify: "cargo test -p convergio-platform-daemon -- domain_skill_map"
+    defined_by: solve
+  - description: "CRDT HTTP endpoints registered"
+    verify: "grep -q '/api/crdt/' daemon/src/server/routes/api_routes.rs"
+    defined_by: solve
+  - description: "Background sync loop implemented"
+    verify: "cargo test -p convergio-platform-daemon -- background_sync"
+    defined_by: solve
+  - description: "setup.sh exists and runs dry-run"
+    verify: "test -f scripts/setup.sh && bash scripts/setup.sh --dry-run"
+    defined_by: solve
+  - description: "copilot-sync.sh removed"
+    verify: "! test -f scripts/copilot-sync.sh"
+    defined_by: solve
+  - description: "Skill lint CI action exists"
+    verify: "test -f .github/workflows/skill-lint.yml"
+    defined_by: solve
+
+waves:
+  # ── W1: Plugin Infrastructure (C1) ──────────────────────────────
+  - id: W1
+    name: "Plugin Infrastructure — Daemon-Driven Skill Activation"
+    theme: plugin-infra
+    merge_mode: sync
+    acceptance_invariants:
+      - description: "cvg skill enable activates plugins + agents"
+        verify: "cargo test -p convergio-platform-daemon -- cli_skill_enable"
+      - description: "Skill lint catches invalid requires-* fields"
+        verify: "cargo test -p convergio-platform-daemon -- cli_skill::test_lint"
+      - description: "skill-protocol.md documents requires-* fields"
+        verify: "grep -q 'requires-plugins' claude-config/reference/operational/skill-protocol.md"
+    tasks:
+      - id: T1-01
+        title: >
+          Enhance cli_skill_enable.rs to activate Claude Code plugins. After enabling
+          agents (existing logic), read requires-plugins from skill.yaml. For each plugin,
+          read .claude/settings.json, add plugin to allowedPlugins array if not present,
+          write back. Use serde_json for safe read/modify/write. Add integration test:
+          enable a skill with requires-plugins, verify settings.json updated.
+          File: daemon/src/cli_skill_enable.rs (enhance existing 63-line file).
+        files:
+          - "daemon/src/cli_skill_enable.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- cli_skill_enable::test_enable_activates_plugins"
+          - "cargo test -p convergio-platform-daemon -- cli_skill_enable"
+        ref: "F-01, F-02"
+        priority: P0
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/cli_skill.rs"
+
+      - id: T1-02
+        title: >
+          Add cvg skill disable <name> subcommand. Create daemon/src/cli_skill_disable.rs.
+          Read the skill's requires-plugins and requires-agents. For each, check if any
+          OTHER active skill also requires it (scan all skill.yaml files in skills dir).
+          If not shared, remove from settings.json allowedPlugins and POST /api/agents/disable.
+          Add SkillCommands::Disable variant in cli_skill.rs dispatch. Test: disable skill,
+          verify plugin removed only if not shared by another skill.
+        files:
+          - "daemon/src/cli_skill_disable.rs"
+          - "daemon/src/cli_skill.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- cli_skill_disable::test_disable_removes_unshared"
+          - "cargo test -p convergio-platform-daemon -- cli_skill_disable::test_disable_keeps_shared"
+        ref: "F-03"
+        priority: P1
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/cli_skill.rs"
+          - "daemon/src/main.rs"
+
+      - id: T1-03
+        title: >
+          Verify and harden existing lint_requires_plugins() and lint_requires_agents()
+          in cli_skill.rs (lines 212-240). These functions already exist — read them first.
+          Ensure: if field present, must be non-empty array; each plugin must be non-empty
+          string; each agent must match ^[a-z][a-z0-9-]*$. If absent: OK (optional fields).
+          Add tests for: valid list passes, empty list fails, invalid agent name fails,
+          missing field passes. Verify existing tests cover these cases, add only missing ones.
+        files:
+          - "daemon/src/cli_skill.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- cli_skill::test_lint_requires_plugins_valid"
+          - "cargo test -p convergio-platform-daemon -- cli_skill::test_lint_requires_agents_invalid"
+        ref: "F-04"
+        priority: P1
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/cli_skill.rs"
+
+      - id: T1-04
+        title: >
+          Update skill-protocol.md field reference table (lines 62-77) to include
+          requires-plugins and requires-agents fields with type, constraints, and example.
+          Add research skill (claude-config/skills/research/skill.yaml) as reference
+          implementation: add requires-plugins: [frontend-design] field. Verify lint passes.
+        files:
+          - "claude-config/reference/operational/skill-protocol.md"
+          - "claude-config/skills/research/skill.yaml"
+        verify:
+          - "grep -q 'requires-plugins' claude-config/reference/operational/skill-protocol.md"
+          - "grep -q 'requires-plugins' claude-config/skills/research/skill.yaml"
+          - "cd /Users/Roberdan/GitHub/ConvergioPlatform && daemon/target/release/convergio-platform-daemon skill lint claude-config/skills/research"
+        ref: "F-05, F-06"
+        priority: P1
+        type: documentation
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+
+  # ── W2: Domain-Aware Tool Activation (C2) ───────────────────────
+  - id: W2
+    name: "Domain-Aware Tool Activation"
+    theme: domain-activation
+    merge_mode: sync
+    precondition:
+      wave_done: W1
+    acceptance_invariants:
+      - description: "Domain skill map CRUD works"
+        verify: "cargo test -p convergio-platform-daemon -- domain_skill_map"
+      - description: "cvg domain list returns JSON"
+        verify: "cargo test -p convergio-platform-daemon -- cli_domain::test_list"
+    tasks:
+      - id: T2-01
+        title: >
+          Add domain_skill_map migration to daemon/src/db/migrations.rs (single file, not
+          directory — this project uses one migrations.rs file with numbered SQL blocks).
+          Table: domain_skill_map (id INTEGER PK, domain TEXT NOT NULL, skill_name TEXT
+          NOT NULL, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(domain, skill_name)). Seed: healthcare->research, deploy->release,
+          design->prepare. Read migrations.rs first to follow existing pattern.
+          Test: migration runs, table exists, seed data queryable.
+        files:
+          - "daemon/src/db/migrations.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- migrations::test_domain_skill_map_migration"
+          - "cargo test -p convergio-platform-daemon -- domain_skill_map"
+        ref: "F-09"
+        priority: P0
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/cli_domain.rs"
+
+      - id: T2-02
+        title: >
+          Create daemon/src/cli_domain.rs with two subcommands: `cvg domain list`
+          (returns all domain->skill mappings as JSON) and `cvg domain map <domain> <skill>`
+          (inserts mapping, errors if skill dir doesn't exist). Add DomainCommands enum,
+          wire into Commands in main.rs dispatch. Test: list returns seeded data,
+          map adds new entry, map rejects nonexistent skill.
+        files:
+          - "daemon/src/cli_domain.rs"
+          - "daemon/src/main.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- cli_domain::test_list"
+          - "cargo test -p convergio-platform-daemon -- cli_domain::test_map_valid"
+          - "cargo test -p convergio-platform-daemon -- cli_domain::test_map_invalid_skill"
+        ref: "F-09"
+        priority: P0
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/main.rs"
+
+      - id: T2-03
+        title: >
+          Update /solve skill (claude-config/skills/solve/SKILL.md) Phase 1 to add
+          domain detection. After reading user request, extract keywords and query
+          `cvg domain list` to find matching domains. If matches found, present to user:
+          "Detected domain: <X>. Suggested skills: <Y>. Enable with cvg skill enable <Z>?
+          [y/N]". Only proceed with activation after user confirmation (HITL).
+          Add domain_keywords mapping inline: healthcare=[medical,patient,clinical,HIPAA],
+          deploy=[vercel,deploy,release,CI/CD], design=[UI,UX,wireframe,mockup].
+        files:
+          - "claude-config/skills/solve/SKILL.md"
+        verify:
+          - "grep -q 'domain' claude-config/skills/solve/SKILL.md"
+          - "grep -q 'cvg domain list' claude-config/skills/solve/SKILL.md"
+          - "grep -q 'confirmation' claude-config/skills/solve/SKILL.md"
+        ref: "F-07, F-08, F-10"
+        priority: P1
+        type: feature
+        output_type: pr
+        model: claude-opus-4.6
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+
+  # ── W3: CRDT Background Sync (C4) — parallel with W2 ───────────
+  - id: W3
+    name: "CRDT Automatic Background Sync"
+    theme: crdt-sync
+    merge_mode: sync
+    precondition:
+      wave_done: W1
+    acceptance_invariants:
+      - description: "CRDT HTTP endpoints respond"
+        verify: "grep -q '/api/crdt/' daemon/src/server/routes/api_routes.rs"
+      - description: "Background sync loop tested"
+        verify: "cargo test -p convergio-platform-daemon -- background_sync"
+      - description: "Peer health tracking works"
+        verify: "cargo test -p convergio-platform-daemon -- crdt::peer_health"
+    tasks:
+      - id: T3-01
+        title: >
+          Create daemon/src/server/api_crdt.rs with three HTTP handlers:
+          GET /api/crdt/status (returns {mode: "crdt"|"wal-only", tables: 57, last_sync: ...}),
+          POST /api/crdt/force-sync (triggers immediate sync with all peers, returns SyncSummary[]),
+          GET /api/crdt/peers (returns peer list with health status from mesh_sync_stats).
+          Register routes in api_routes.rs GET_ROUTES and POST_ROUTES arrays.
+          ALSO add `mod api_crdt;` to daemon/src/server/mod.rs to wire the new module.
+          Test: each endpoint returns expected JSON shape.
+        files:
+          - "daemon/src/server/api_crdt.rs"
+          - "daemon/src/server/routes/api_routes.rs"
+        consumers:
+          - "daemon/src/server/mod.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- api_crdt::test_status"
+          - "cargo test -p convergio-platform-daemon -- api_crdt::test_peers"
+          - "grep -q '/api/crdt/status' daemon/src/server/routes/api_routes.rs"
+        ref: "F-19, F-21"
+        priority: P0
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/server/routes/api_routes.rs"
+          - "daemon/src/server/mod.rs"
+
+      - id: T3-02
+        title: >
+          Create daemon/src/background_sync.rs implementing the CRDT background sync loop.
+          Function: spawn_sync_loop(db: Arc<Mutex<Connection>>, interval_secs: u64) -> JoinHandle.
+          Uses tokio::spawn + tokio::time::interval. Each tick: get peer list from
+          mesh_sync_stats table, call sync_with_peer() for each online peer, update
+          mesh_sync_stats with results. Configurable interval via CONVERGIO_SYNC_INTERVAL_SECS
+          env var (default 30). Do NOT wire into main.rs yet (T3-04 handles wiring to
+          avoid merge conflict with W2's T2-02 which also touches main.rs).
+          Test: spawn loop, verify it calls sync after interval (mock peer).
+        files:
+          - "daemon/src/background_sync.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- background_sync::test_loop_calls_sync"
+          - "cargo test -p convergio-platform-daemon -- background_sync::test_interval_configurable"
+        ref: "F-17, F-18"
+        priority: P0
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/main.rs"
+
+      - id: T3-03
+        title: >
+          Add peer health tracking to CRDT sync. In daemon/src/db/crdt/sync.rs, after
+          sync_with_peer() fails (SSH error or timeout), increment a failure counter in
+          mesh_sync_stats. New column: consecutive_failures INTEGER DEFAULT 0, status TEXT
+          DEFAULT 'online'. After 3 consecutive failures, mark peer as 'unreachable'.
+          On successful sync, reset counter to 0 and status to 'online'.
+          Migration for new columns. background_sync.rs skips unreachable peers.
+          GET /api/crdt/peers returns status field. Test: 3 failures -> unreachable,
+          success -> online.
+        files:
+          - "daemon/src/db/crdt/sync.rs"
+          - "daemon/src/background_sync.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon -- crdt::peer_health::test_unreachable_after_3"
+          - "cargo test -p convergio-platform-daemon -- crdt::peer_health::test_reset_on_success"
+        ref: "F-20"
+        priority: P1
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/background_sync.rs"
+          - "daemon/src/server/api_crdt.rs"
+
+  # ── W3b: Wiring Wave (resolves W2/W3 parallel main.rs conflict) ──
+  - id: W3b
+    name: "Main.rs Wiring — Domain CLI + Background Sync"
+    theme: wiring
+    merge_mode: batch
+    precondition:
+      wave_done: [W2, W3]
+    tasks:
+      - id: T3b-01
+        title: >
+          Wire background_sync into daemon startup. In main.rs Daemon command handler
+          (lines 150-163), after mesh initialization, call background_sync::spawn_sync_loop()
+          with the shared DB handle and configured interval. Add `mod background_sync;`
+          declaration at top of main.rs. This task runs AFTER W2 (which added Domain to
+          main.rs) and W3 (which created background_sync.rs) to avoid merge conflicts.
+          Verify: cargo build compiles, daemon --help shows all subcommands.
+        files:
+          - "daemon/src/main.rs"
+        verify:
+          - "cargo build -p convergio-platform-daemon"
+          - "grep -q 'background_sync' daemon/src/main.rs"
+          - "grep -q 'Domain' daemon/src/main.rs"
+        ref: "F-17, F-18"
+        priority: P0
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+        consumers:
+          - "daemon/src/main.rs"
+
+  # ── W4: MyConvergio Setup + Cleanup (C3) ────────────────────────
+  - id: W4
+    name: "MyConvergio Setup/Rollback + Community Governance"
+    theme: myconvergio
+    merge_mode: sync
+    precondition:
+      wave_done: W3b
+    acceptance_invariants:
+      - description: "setup.sh runs dry-run successfully"
+        verify: "bash scripts/setup.sh --dry-run"
+      - description: "setup.sh rollback runs dry-run successfully"
+        verify: "bash scripts/setup.sh --rollback --dry-run"
+      - description: "copilot-sync.sh removed"
+        verify: "! test -f scripts/copilot-sync.sh && ! test -f .claude/scripts/copilot-sync.sh"
+      - description: "Skill lint CI exists"
+        verify: "test -f .github/workflows/skill-lint.yml"
+    tasks:
+      - id: T4-01
+        title: >
+          Create scripts/setup.sh — MyConvergio multi-provider bootstrap. set -euo pipefail.
+          Detects installed providers: Claude Code (check ~/.claude/), Copilot CLI
+          (check ~/.copilot/ or command -v copilot), generic LLM (--provider flag).
+          For each detected provider: runs cvg agent sync --provider <X> if daemon available,
+          falls back to file-based transpiler scripts if daemon unavailable (F-16).
+          Creates install manifest at ~/.convergio/install-manifest.json recording what
+          was installed (provider, files, timestamps). Supports --dry-run (prints actions
+          without executing). Supports --provider <name> to force single provider.
+          Test: --dry-run outputs valid JSON manifest, no files modified.
+        files:
+          - "scripts/setup.sh"
+        verify:
+          - "bash scripts/setup.sh --dry-run 2>&1 | grep -q 'manifest'"
+          - "bash -n scripts/setup.sh"
+          - "shellcheck scripts/setup.sh"
+        ref: "F-11, F-13, F-16"
+        priority: P0
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+
+      - id: T4-02
+        title: >
+          Add --rollback to scripts/setup.sh. Reads ~/.convergio/install-manifest.json.
+          For each installed file: removes it. For each symlink: unlinks.
+          Validates manifest exists before rollback (error if missing). Supports --dry-run
+          (prints what would be removed without removing). After rollback, deletes manifest.
+          Test: install then rollback leaves system clean, --dry-run doesn't modify.
+        files:
+          - "scripts/setup.sh"
+        verify:
+          - "bash scripts/setup.sh --rollback --dry-run 2>&1 | grep -q 'remove\\|unlink'"
+          - "bash -n scripts/setup.sh"
+        ref: "F-12"
+        priority: P1
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+
+      - id: T4-03
+        title: >
+          Create .github/workflows/skill-lint.yml — GitHub Action that runs on PRs
+          touching claude-config/skills/**. Steps: checkout, install Rust toolchain,
+          build daemon (or download release binary), run `convergio-platform-daemon skill lint`
+          on each modified skill directory. Fail PR if lint fails. Also validates
+          CONTRIBUTING.md CLA section exists (grep for "Contributor License").
+          Test: workflow YAML is valid, references correct binary path.
+        files:
+          - ".github/workflows/skill-lint.yml"
+        verify:
+          - "test -f .github/workflows/skill-lint.yml"
+          - "grep -q 'skill lint' .github/workflows/skill-lint.yml"
+          - "grep -q 'Contributor License' CONTRIBUTING.md || grep -q 'Contributor License' docs/CONTRIBUTING.md"
+        ref: "F-15"
+        priority: P1
+        type: config
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+
+      - id: T4-04
+        title: >
+          Cleanup: remove copilot-sync.sh from all locations (scripts/copilot-sync.sh,
+          .claude/scripts/copilot-sync.sh, scripts/mesh/copilot-sync.sh — use git rm).
+          Update scripts/mesh/mesh-sync.sh to add header comment: "DB sync handled by
+          CRDT (daemon background). This script syncs git config/scripts only." Remove
+          any mesh-sync.sh references to DB sync operations. Update CHANGELOG.md with
+          deprecation note.
+        files:
+          - "scripts/mesh/mesh-sync.sh"
+          - "CHANGELOG.md"
+        verify:
+          - "! test -f scripts/copilot-sync.sh"
+          - "! test -f .claude/scripts/copilot-sync.sh"
+          - "! test -f scripts/mesh/copilot-sync.sh"
+          - "grep -q 'copilot-sync.sh' CHANGELOG.md"
+        ref: "F-14, F-22"
+        priority: P2
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+
+  # ── WF: Closure Wave ────────────────────────────────────────────
+  - id: WF
+    name: "Final Validation, Docs, PR, Deploy"
+    theme: closure
+    merge_mode: sync
+    precondition:
+      wave_done: [W2, W3, W3b, W4]
+    acceptance_invariants:
+      - description: "All tests pass"
+        verify: "cd /Users/Roberdan/GitHub/ConvergioPlatform && cargo test -p convergio-platform-daemon"
+      - description: "VERSION matches CHANGELOG"
+        verify: "head -1 VERSION.md | grep -qF \"$(grep -m1 '## \\[' CHANGELOG.md | grep -oP '\\d+\\.\\d+\\.\\d+')\""
+    tasks:
+      - id: TF-tests
+        title: >
+          Run full test suite: cargo test -p convergio-platform-daemon. Verify all new
+          tests pass (cli_skill_enable, cli_skill_disable, cli_domain, api_crdt,
+          background_sync, crdt::peer_health, domain_skill_map). Fix any failures.
+          Run shellcheck on scripts/setup.sh. Verify bash -n on all modified scripts.
+        files:
+          - "daemon/src/lib.rs"
+        verify:
+          - "cargo test -p convergio-platform-daemon"
+          - "shellcheck scripts/setup.sh"
+        ref: "F-01 through F-22"
+        priority: P0
+        type: test
+        output_type: pr
+        model: claude-sonnet-4.6
+        effort: 2
+        executor_agent: task-executor
+        validator_agent: thor
+
+      - id: TF-doc
+        title: >
+          Update CHANGELOG.md with Plan C entries under new version header.
+          Sections: Added (plugin activation, domain tool activation, CRDT background sync,
+          setup.sh multi-provider), Changed (mesh-sync.sh scope reduced to git-only),
+          Removed (copilot-sync.sh). Update VERSION.md with new minor version.
+          Write ADR for Plan C: docs/adr/XXXX-convergio-ecosystem.md (domain activation
+          pattern, CRDT background sync decision, MyConvergio setup architecture).
+        files:
+          - "CHANGELOG.md"
+          - "VERSION.md"
+          - "docs/adr/"
+        verify:
+          - "grep -q 'domain-aware' CHANGELOG.md || grep -q 'Domain' CHANGELOG.md"
+          - "test -f docs/adr/*ecosystem*.md || test -f docs/adr/*convergio-ecosystem*.md"
+        ref: "F-01 through F-22"
+        priority: P0
+        type: documentation
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: doc-validator
+
+      - id: TF-pr
+        title: >
+          Create PR from plan worktree branch to main. Title: "feat: Plan C — Convergio
+          Ecosystem (plugin activation, domain tools, CRDT sync, setup.sh)".
+          Body: summary of all waves, F-xx coverage table, test evidence.
+          Ensure CI green. Resolve any PR comments.
+        files: []
+        verify:
+          - "gh pr view --json state -q '.state' | grep -q 'OPEN\\|MERGED'"
+        ref: "F-01 through F-22"
+        priority: P0
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor
+
+      - id: TF-04
+        title: >
+          Verify daemon binary builds with new features. Run: cargo build --release.
+          Verify binary includes new subcommands: convergio-platform-daemon skill disable --help,
+          convergio-platform-daemon domain --help. Verify CRDT endpoints respond on
+          running daemon (curl localhost:8420/api/crdt/status). Verify setup.sh --dry-run
+          works end-to-end.
+        files: []
+        verify:
+          - "cargo build -p convergio-platform-daemon --release"
+          - "daemon/target/release/convergio-platform-daemon skill --help | grep -q 'disable'"
+          - "daemon/target/release/convergio-platform-daemon domain --help"
+        ref: "F-01 through F-22"
+        priority: P0
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        effort: 1
+        executor_agent: task-executor
+        validator_agent: thor

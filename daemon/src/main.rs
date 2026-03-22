@@ -15,6 +15,7 @@ mod cli_plan_handlers;
 mod cli_review;
 mod cli_run;
 mod cli_skill;
+mod cli_skill_disable;
 mod cli_skill_enable;
 mod cli_skill_transpile;
 mod cli_skill_validate;

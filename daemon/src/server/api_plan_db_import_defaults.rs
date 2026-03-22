@@ -16,6 +16,7 @@ pub fn apply_defaults(task: &mut TaskSpec) {
     apply_model_default(task);
     apply_validator_default(task);
     apply_verify_default(task);
+    apply_test_criteria_default(task);
     apply_effort_default(task);
 }
 
@@ -67,6 +68,17 @@ fn apply_verify_default(task: &mut TaskSpec) {
         return;
     }
     task.verify = task.files.iter().map(|f| format!("test -f {f}")).collect();
+}
+
+/// If test_criteria is absent and verify has commands, generate test_criteria
+/// from verify array as "cmd1 AND cmd2 AND ...". This ensures mechanical gates
+/// can validate tasks imported with verify[] but no explicit test_criteria.
+fn apply_test_criteria_default(task: &mut TaskSpec) {
+    if task.test_criteria.is_some() || task.verify.is_empty() {
+        return;
+    }
+    let joined = task.verify.join(" AND ");
+    task.test_criteria = Some(serde_json::Value::String(joined));
 }
 
 fn apply_effort_default(task: &mut TaskSpec) {

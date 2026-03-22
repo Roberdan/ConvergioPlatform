@@ -75,6 +75,8 @@ provider-formats:                    # transpiler targets
 | `arguments` | enum | yes | none \| required \| optional |
 | `triggers` | list | yes | Slash command and natural language patterns |
 | `provider-formats` | list | yes | Transpiler targets |
+| `requires-plugins` | array of strings | optional | Claude Code plugins required by this skill. Auto-activated by cvg skill enable. |
+| `requires-agents` | array of strings | optional | Agents auto-enabled via cvg agent enable when skill is activated. Each must match ^[a-z][a-z0-9-]*$. |
 
 ## SKILL.md Format
 

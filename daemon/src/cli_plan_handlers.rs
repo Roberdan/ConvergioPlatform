@@ -31,8 +31,10 @@ pub async fn dispatch(cmd: PlanCommands) {
             .await;
         }
         PlanCommands::Validate { plan_id, human, api_url } => {
-            crate::cli_http::fetch_and_print(
+            let body = serde_json::json!({});
+            crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plans/{plan_id}/validate"),
+                &body,
                 human,
             )
             .await;

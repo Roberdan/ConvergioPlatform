@@ -25,3 +25,5 @@ provider-formats:
   - claude-code
   - copilot-cli
   - generic-llm
+requires-plugins:
+  - frontend-design
