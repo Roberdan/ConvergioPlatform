@@ -49,6 +49,20 @@ pub enum TaskCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Approve the deliverable linked to a task
+    Approve {
+        /// Task DB ID
+        task_id: i64,
+        /// Approver name or comment
+        #[arg(long)]
+        comment: Option<String>,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: TaskCommands) {
@@ -99,6 +113,9 @@ pub async fn handle(cmd: TaskCommands) {
             )
             .await;
         }
+        TaskCommands::Approve { task_id, comment, human, api_url } => {
+            crate::cli_task_approve::handle(task_id, comment, human, &api_url).await;
+        }
     }
 }
 
@@ -147,98 +164,5 @@ fn print_mechanical_human(val: &serde_json::Value) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn task_commands_update_variant_exists() {
-        let cmd = TaskCommands::Update {
-            task_id: 100,
-            status: "done".to_string(),
-            summary: Some("finished".to_string()),
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, TaskCommands::Update { task_id: 100, .. }));
-    }
-
-    #[test]
-    fn task_commands_validate_variant_exists() {
-        let cmd = TaskCommands::Validate {
-            task_id: 1,
-            plan_id: 685,
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, TaskCommands::Validate { plan_id: 685, .. }));
-    }
-
-    #[test]
-    fn task_commands_kb_search_variant_exists() {
-        let cmd = TaskCommands::KbSearch {
-            query: "test".to_string(),
-            limit: 5,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, TaskCommands::KbSearch { .. }));
-    }
-
-    #[test]
-    fn print_value_json_compact() {
-        let val = serde_json::json!({"ok": true, "data": [1, 2]});
-        // Compact: no newlines in outer structure
-        let compact = val.to_string();
-        assert!(!compact.is_empty());
-    }
-
-    #[test]
-    fn print_value_json_pretty() {
-        let val = serde_json::json!({"ok": true});
-        let pretty = serde_json::to_string_pretty(&val).unwrap();
-        assert!(pretty.contains('\n'));
-    }
-
-    #[test]
-    fn mechanical_human_output_handles_approved() {
-        let val = serde_json::json!({
-            "ok": true,
-            "mechanical": {
-                "status": "APPROVED",
-                "phase": "mechanical",
-                "gates": [
-                    {"gate": "status_check", "passed": true, "details": []},
-                    {"gate": "test_criteria", "passed": true, "details": []},
-                ],
-                "thor_invoked": false,
-                "note": "mechanical gates passed, Thor validation at wave level"
-            }
-        });
-        // Verify it does not panic
-        print_mechanical_human(&val);
-    }
-
-    #[test]
-    fn mechanical_human_output_handles_rejected() {
-        let val = serde_json::json!({
-            "ok": false,
-            "mechanical": {
-                "status": "REJECTED",
-                "phase": "mechanical",
-                "gates": [
-                    {"gate": "status_check", "passed": false, "details": ["status is 'pending', expected 'submitted'"]},
-                ],
-                "thor_invoked": false,
-                "note": "mechanical gates failed"
-            }
-        });
-        print_mechanical_human(&val);
-    }
-
-    #[test]
-    fn mechanical_human_output_handles_missing_mechanical() {
-        let val = serde_json::json!({"ok": true});
-        // Falls back to pretty-print
-        print_mechanical_human(&val);
-    }
-}
+#[path = "cli_task_tests.rs"]
+mod tests;

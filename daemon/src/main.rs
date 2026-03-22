@@ -2,6 +2,7 @@ mod cli_agent;
 mod cli_bus;
 mod cli_agents;
 mod cli_audit;
+mod cli_audit_project;
 mod cli_checkpoint;
 mod cli_commands;
 mod cli_http;
@@ -14,8 +15,11 @@ mod cli_plan_handlers;
 mod cli_review;
 mod cli_run;
 mod cli_skill;
+mod cli_skill_enable;
 mod cli_skill_transpile;
+mod cli_skill_validate;
 mod cli_task;
+mod cli_task_approve;
 mod cli_wave;
 mod ipc_handler;
 mod transpiler;
@@ -193,7 +197,13 @@ async fn dispatch(command: Commands) {
         Commands::Checkpoint { command } => cli_checkpoint::handle(command).await,
         Commands::Lock { command } => cli_lock::handle(command).await,
         Commands::Review { command } => cli_review::handle(command).await,
-        Commands::Audit { path } => cli_audit::handle(path),
+        Commands::Audit { path, project, output, yes, api_url } => {
+            if let Some(project_id) = project {
+                cli_audit_project::handle(&project_id, output, yes, &api_url).await;
+            } else {
+                cli_audit::handle(path);
+            }
+        }
         Commands::Skill { command } => cli_skill::handle(command).await,
         Commands::Bus { command } => cli_bus::handle(command).await,
         Commands::Project { command } => cli_project::handle(command).await,

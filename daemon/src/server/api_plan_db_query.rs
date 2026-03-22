@@ -31,7 +31,11 @@ async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, Ap
          COALESCE(p.waves_merged, 0) AS waves_merged, \
          CASE WHEN COALESCE(p.waves_total, 0) > 0 \
            THEN COALESCE(p.waves_merged, 0) * 100 / p.waves_total \
-           ELSE 0 END AS merge_pct \
+           ELSE 0 END AS merge_pct, \
+         (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
+           WHERE t.plan_id = p.id AND d.status = 'approved') AS deliverables_approved, \
+         (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
+           WHERE t.plan_id = p.id AND COALESCE(d.output_type, '') != 'pr') AS deliverables_total \
          FROM plans p \
          WHERE p.status NOT IN ('completed', 'cancelled') \
          ORDER BY p.id DESC",

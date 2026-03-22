@@ -89,7 +89,10 @@ pub(super) async fn handle_start(
 }
 
 /// POST /api/plan-db/complete/:plan_id — set status=completed
-/// Guard: all tasks must be done/cancelled/skipped
+/// Guard: all tasks must be done/cancelled/skipped.
+/// For non-code plans (all tasks output_type != 'pr'), completion requires
+/// all deliverables approved. Mixed plans require both PRs merged AND
+/// non-code deliverables approved.
 pub(super) async fn handle_complete(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -110,6 +113,26 @@ pub(super) async fn handle_complete(
     if pending > 0 {
         return Err(ApiError::bad_request(format!(
             "plan {plan_id} has {pending} incomplete tasks"
+        )));
+    }
+
+    // Check non-code deliverables: any deliverable linked to a non-pr task
+    // must be approved before plan can complete
+    let unapproved = query_one(
+        conn,
+        "SELECT COUNT(*) AS c FROM deliverables d \
+         JOIN tasks t ON d.task_id = t.id \
+         WHERE t.plan_id = ?1 AND t.status = 'done' \
+         AND COALESCE(d.output_type, '') != 'pr' \
+         AND d.status != 'approved'",
+        rusqlite::params![plan_id],
+    )?
+    .and_then(|v| v.get("c").and_then(Value::as_i64))
+    .unwrap_or(0);
+
+    if unapproved > 0 {
+        return Err(ApiError::bad_request(format!(
+            "plan {plan_id} has {unapproved} unapproved non-code deliverables"
         )));
     }
 

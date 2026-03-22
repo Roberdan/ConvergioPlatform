@@ -79,6 +79,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/runs",
     "/api/runs/:id",
     "/api/ingest/formats",
+    "/api/audit/project/:project_id",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -89,6 +90,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/agents/disable",
     "/api/agents/create",
     "/api/agents/triage",
+    "/api/agents/scaffold",
     "/api/chat/session",
     "/api/chat/message",
     "/api/chat/approve",

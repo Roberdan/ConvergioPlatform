@@ -70,7 +70,11 @@ async fn handle_get_json(
          COALESCE(waves_merged, 0) AS waves_merged, \
          CASE WHEN COALESCE(waves_total, 0) > 0 \
            THEN COALESCE(waves_merged, 0) * 100 / waves_total \
-           ELSE 0 END AS merge_pct \
+           ELSE 0 END AS merge_pct, \
+         (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
+           WHERE t.plan_id = plans.id AND d.status = 'approved') AS deliverables_approved, \
+         (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
+           WHERE t.plan_id = plans.id AND COALESCE(d.output_type, '') != 'pr') AS deliverables_total \
          FROM plans WHERE id = ?1",
         rusqlite::params![plan_id],
     )?

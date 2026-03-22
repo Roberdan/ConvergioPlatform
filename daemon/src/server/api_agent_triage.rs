@@ -8,6 +8,9 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+/// When best triage score is below this, suggest creating a new agent.
+const SUGGEST_CREATION_THRESHOLD: f64 = 0.3;
+
 #[derive(Debug, Deserialize)]
 pub struct TriageRequest {
     pub problem_description: String,
@@ -50,8 +53,19 @@ pub fn score_agent(agent: &AgentRow, words: &[String], domain: &Option<String>) 
     0.1
 }
 
+/// Request body for POST /api/agents/scaffold.
+#[derive(Debug, Deserialize)]
+pub struct ScaffoldRequest {
+    pub name: String,
+    pub category: Option<String>,
+    pub description: Option<String>,
+    pub domain: Option<String>,
+}
+
 pub fn router() -> Router<ServerState> {
-    Router::new().route("/api/agents/triage", post(handle_triage))
+    Router::new()
+        .route("/api/agents/triage", post(handle_triage))
+        .route("/api/agents/scaffold", post(handle_scaffold))
 }
 
 async fn handle_triage(
@@ -107,6 +121,9 @@ async fn handle_triage(
     scored.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(15);
 
+    // Snapshot for threshold check before consuming via into_iter
+    let scored_snapshot = scored.clone();
+
     let suggestions: Vec<Value> = scored
         .into_iter()
         .map(|(name, category, description, score)| {
@@ -119,7 +136,47 @@ async fn handle_triage(
         })
         .collect();
 
-    Ok(Json(json!({ "ok": true, "suggestions": suggestions })))
+    let best_score = scored_snapshot.first().map(|s| s.3).unwrap_or(0.0);
+    let suggest_creation = best_score < SUGGEST_CREATION_THRESHOLD;
+    let mut result = json!({ "ok": true, "suggestions": suggestions, "suggest_creation": suggest_creation });
+
+    if suggest_creation {
+        // Provide a scaffold hint derived from the problem description
+        let suggested_name = body.problem_description
+            .split_whitespace().take(3)
+            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+            .collect::<Vec<_>>().join("-");
+        result["scaffold_hint"] = json!({
+            "name": if suggested_name.is_empty() { "new-agent".to_string() } else { suggested_name },
+            "category": body.domain.clone().unwrap_or_else(|| "general".to_string()),
+            "description": body.problem_description.clone(),
+            "domain": body.domain.clone().unwrap_or_else(|| "general".to_string()),
+        });
+    }
+
+    Ok(Json(result))
+}
+
+/// POST /api/agents/scaffold — generate an agent .md template from metadata.
+async fn handle_scaffold(
+    Json(body): Json<ScaffoldRequest>,
+) -> Result<Json<Value>, ApiError> {
+    if body.name.trim().is_empty() {
+        return Err(ApiError::bad_request("name is required"));
+    }
+    let category = body.category.as_deref().unwrap_or("general");
+    let description = body.description.as_deref().unwrap_or("TODO: describe this agent");
+    let domain = body.domain.as_deref().unwrap_or("general");
+
+    let markdown = format!(
+        "---\nname: {name}\ndescription: \"{description}\"\nmodel: claude-sonnet-4-6\ntools:\n  - view\n  - edit\n  - bash\n---\n\n# {name}\n\n**Role:** {description}\n\n## Domain\n\n{domain}\n\n## Category\n\n{category}\n\n## Capabilities\n\n- TODO: list key capabilities\n\n## Constraints\n\n- Follow the Convergio Constitution\n- Max 250 lines per file\n",
+        name = body.name.trim(),
+        description = description,
+        domain = domain,
+        category = category,
+    );
+
+    Ok(Json(json!({ "ok": true, "name": body.name.trim(), "markdown": markdown })))
 }
 
 #[cfg(test)]
@@ -181,5 +238,13 @@ mod tests {
         let words = vec![];
         let domain = Some("CORE".to_string());
         assert!((score_agent(&agent, &words, &domain) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn suggest_creation_threshold_is_below_point_three() {
+        // Default score (0.1) is below threshold (0.3) — should suggest creation
+        assert!(0.1 < SUGGEST_CREATION_THRESHOLD);
+        // Partial match (0.5) is above threshold — should not suggest creation
+        assert!(0.5 >= SUGGEST_CREATION_THRESHOLD);
     }
 }

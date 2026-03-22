@@ -1,6 +1,7 @@
 pub mod api_agent_catalog;
 pub mod api_agent_triage;
 pub mod api_agents;
+pub mod api_audit;
 pub mod api_chat;
 pub mod api_ingest;
 pub mod api_coordinator;
