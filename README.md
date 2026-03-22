@@ -32,6 +32,19 @@ convergio daemon install           # auto-start on boot
 convergio solve "your goal"        # Ali assembles a team and solves
 ```
 
+The `cvg` CLI (short alias) provides direct access to all daemon operations:
+
+```bash
+cvg plan list                              # list active plans
+cvg task update 8792 done "Summary"        # mark task done
+cvg wave merge 685 2075                    # merge wave to main
+cvg checkpoint save 685                    # save plan state
+cvg kb search "error keywords"             # search knowledge base
+cvg agent list                             # list active agents
+cvg audit --path .                         # audit project for violations
+cvg skill lint path/to/skill.yaml          # validate skill definition
+```
+
 Common options:
 
 ```bash
@@ -40,7 +53,7 @@ convergio solve "problem" --approve-each    # approve every step
 convergio solve "problem" --context doc.pdf # attach document context
 convergio pause [run_id]                    # suspend, preserve state
 convergio resume [run_id]                  # resume paused run
-convergio metrics runs                      # list all execution runs
+cvg run list                                # list all execution runs
 convergio stop [run_id]                     # abort execution
 ```
 
@@ -50,7 +63,7 @@ convergio stop [run_id]                     # abort execution
 
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
-| **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI (107 modules) |
+| **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI, `cvg` CLI (120+ modules) |
 | **Dashboard** | `dashboard/` | JS | Control Room on Maranello Luce Design — plans, mesh, chat, brain, approvals |
 | **Evolution** | `evolution/` | TS | Self-improvement: telemetry → proposals → experiments |
 | **Scripts** | `scripts/` | Bash | Mesh ops, platform tooling, document ingestion |
@@ -72,7 +85,7 @@ Daemon stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde · hmac+
 
 ```bash
 cd daemon && cargo build --release   # build daemon
-cd daemon && cargo test              # run daemon tests (478 tests)
+cd daemon && cargo test              # run daemon tests (570+ tests)
 cd evolution && npx tsc --noEmit     # type-check evolution
 cd evolution && npx vitest run       # run evolution tests (43 tests)
 cd dashboard && ./start.sh           # serve dashboard at :8420
