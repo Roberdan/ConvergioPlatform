@@ -23,11 +23,14 @@ pub mod api_plan_db_import_defaults;
 pub mod api_plan_db_import_parsers;
 pub mod api_plan_db_lifecycle;
 pub mod plan_lifecycle_guards;
+#[cfg(test)]
+mod plan_lifecycle_guards_tests;
 pub mod api_plan_db_checkpoint;
 pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
 pub mod api_plan_db_query_fmt;
 pub mod api_plan_db_review;
+pub mod api_readiness;
 pub mod api_tracking;
 pub mod api_plans;
 pub mod api_runs;

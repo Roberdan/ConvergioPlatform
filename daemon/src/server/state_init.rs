@@ -125,6 +125,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE nightly_job_definitions ADD COLUMN run_fixes INTEGER DEFAULT 1",
     "ALTER TABLE nightly_job_definitions ADD COLUMN timeout_sec INTEGER DEFAULT 5400",
     "ALTER TABLE agent_activity ADD COLUMN parent_session TEXT",
+    "ALTER TABLE plans ADD COLUMN waves_total INTEGER DEFAULT 0",
+    "ALTER TABLE plans ADD COLUMN waves_merged INTEGER DEFAULT 0",
 ];
 
 /// Run DB migrations and return a connection pool for `db_path`.

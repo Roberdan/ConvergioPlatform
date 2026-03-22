@@ -54,6 +54,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/plan-db/drift-check/:plan_id",
     "/api/plan-db/validate-task/:task_id/:plan_id",
     "/api/plan-db/kb-search",
+    "/api/plan-db/readiness/:plan_id",
     "/api/plan-db/review/check",
     "/api/plan-db/checkpoint/restore",
     "/api/peers/coordinator",

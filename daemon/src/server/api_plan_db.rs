@@ -65,7 +65,12 @@ async fn handle_get_json(
     let plan = query_one(
         conn,
         "SELECT id, name, status, tasks_total, tasks_done, \
-         execution_host, created_at, started_at, completed_at \
+         execution_host, created_at, started_at, completed_at, \
+         COALESCE(waves_total, 0) AS waves_total, \
+         COALESCE(waves_merged, 0) AS waves_merged, \
+         CASE WHEN COALESCE(waves_total, 0) > 0 \
+           THEN COALESCE(waves_merged, 0) * 100 / waves_total \
+           ELSE 0 END AS merge_pct \
          FROM plans WHERE id = ?1",
         rusqlite::params![plan_id],
     )?

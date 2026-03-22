@@ -125,11 +125,13 @@ async fn handle_import(
         .map_err(|e| ApiError::internal(format!("wave count update failed: {e}")))?;
     }
 
-    // Update plan task total
+    // Update plan task total and waves_total
     conn.execute(
-        "UPDATE plans SET tasks_total = tasks_total + ?1, updated_at = datetime('now') \
-         WHERE id = ?2",
-        rusqlite::params![tasks_total, plan_id],
+        "UPDATE plans SET tasks_total = tasks_total + ?1, \
+         waves_total = COALESCE(waves_total, 0) + ?2, \
+         updated_at = datetime('now') \
+         WHERE id = ?3",
+        rusqlite::params![tasks_total, waves_created as i64, plan_id],
     )
     .map_err(|e| ApiError::internal(format!("plan count update failed: {e}")))?;
 

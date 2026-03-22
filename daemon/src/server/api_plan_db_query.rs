@@ -26,7 +26,12 @@ async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, Ap
         &conn,
         "SELECT p.id, p.name, p.status, p.project_id, p.execution_host, \
          p.worktree_path, p.description, p.human_summary, p.parallel_mode, \
-         p.tasks_total, p.tasks_done, p.created_at, p.started_at \
+         p.tasks_total, p.tasks_done, p.created_at, p.started_at, \
+         COALESCE(p.waves_total, 0) AS waves_total, \
+         COALESCE(p.waves_merged, 0) AS waves_merged, \
+         CASE WHEN COALESCE(p.waves_total, 0) > 0 \
+           THEN COALESCE(p.waves_merged, 0) * 100 / p.waves_total \
+           ELSE 0 END AS merge_pct \
          FROM plans p \
          WHERE p.status NOT IN ('completed', 'cancelled') \
          ORDER BY p.id DESC",

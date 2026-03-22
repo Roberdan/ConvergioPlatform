@@ -88,10 +88,11 @@ pub async fn handle_wave_update(
         .and_then(|v| v.get("plan_id").and_then(Value::as_i64));
 
         if let Some(pid) = plan_id {
-            // Recount done tasks for the plan
+            // Recount done tasks and increment waves_merged
             conn.execute(
                 "UPDATE plans SET tasks_done = \
                  (SELECT COUNT(*) FROM tasks WHERE plan_id = ?1 AND status = 'done'), \
+                 waves_merged = COALESCE(waves_merged, 0) + 1, \
                  updated_at = datetime('now') WHERE id = ?1",
                 rusqlite::params![pid],
             )
