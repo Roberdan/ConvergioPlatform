@@ -55,6 +55,50 @@ pub enum SessionCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Check session / dashboard health (GET /api/dashboard)
+    Check {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MetricsCommands {
+    /// Show metrics summary (GET /api/metrics/summary)
+    Summary {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Trigger metrics collection (POST /api/metrics/collect)
+    Collect {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AlertCommands {
+    /// List active notifications (GET /api/notifications)
+    List {
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle_mesh(cmd: MeshCommands) {
@@ -84,6 +128,34 @@ pub async fn handle_session(cmd: SessionCommands) {
         SessionCommands::Recovery { human, api_url } => {
             crate::cli_http::post_and_print(
                 &format!("{api_url}/api/sessions/recovery"), &serde_json::json!({}), human,
+            ).await;
+        }
+        SessionCommands::Check { human, api_url } => {
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/dashboard"), human).await;
+        }
+    }
+}
+
+pub async fn handle_metrics(cmd: MetricsCommands) {
+    match cmd {
+        MetricsCommands::Summary { human, api_url } => {
+            crate::cli_http::fetch_and_print(
+                &format!("{api_url}/api/metrics/summary"), human,
+            ).await;
+        }
+        MetricsCommands::Collect { human, api_url } => {
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/metrics/collect"), &serde_json::json!({}), human,
+            ).await;
+        }
+    }
+}
+
+pub async fn handle_alert(cmd: AlertCommands) {
+    match cmd {
+        AlertCommands::List { human, api_url } => {
+            crate::cli_http::fetch_and_print(
+                &format!("{api_url}/api/notifications"), human,
             ).await;
         }
     }

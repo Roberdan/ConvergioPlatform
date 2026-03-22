@@ -3,6 +3,7 @@
 // Kept in a separate module so main.rs stays under 250 lines.
 
 use crate::cli_agent;
+use crate::cli_bus;
 use crate::cli_checkpoint;
 use crate::cli_kb;
 use crate::cli_lock;
@@ -126,5 +127,20 @@ pub enum Commands {
     Skill {
         #[command(subcommand)]
         command: cli_skill::SkillCommands,
+    },
+    /// IPC bus commands (who/send/read/broadcast)
+    Bus {
+        #[command(subcommand)]
+        command: cli_bus::BusCommands,
+    },
+    /// Metrics commands (summary, collect)
+    Metrics {
+        #[command(subcommand)]
+        command: cli_ops::MetricsCommands,
+    },
+    /// Alert / notification commands (list)
+    Alert {
+        #[command(subcommand)]
+        command: cli_ops::AlertCommands,
     },
 }

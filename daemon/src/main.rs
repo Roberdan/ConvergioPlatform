@@ -1,4 +1,5 @@
 mod cli_agent;
+mod cli_bus;
 mod cli_agents;
 mod cli_audit;
 mod cli_checkpoint;
@@ -192,5 +193,8 @@ async fn dispatch(command: Commands) {
         Commands::Review { command } => cli_review::handle(command).await,
         Commands::Audit { path } => cli_audit::handle(path),
         Commands::Skill { command } => cli_skill::handle(command).await,
+        Commands::Bus { command } => cli_bus::handle(command).await,
+        Commands::Metrics { command } => cli_ops::handle_metrics(command).await,
+        Commands::Alert { command } => cli_ops::handle_alert(command).await,
     }
 }
