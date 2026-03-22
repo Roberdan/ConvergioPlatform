@@ -51,5 +51,17 @@ for name in "${!LINKS[@]}"; do
   fi
 done
 
+# Create cvg symlink (daemon binary with argv[0] detection)
+echo ""
+echo "=== cvg CLI symlink ==="
+CVG_BIN="$PLATFORM_DIR/daemon/target/release/convergio-platform-daemon"
+CVG_LINK="$PLATFORM_DIR/scripts/platform/cvg"
+if [ -x "$CVG_BIN" ]; then
+  ln -sf "$CVG_BIN" "$CVG_LINK"
+  echo "  cvg → $CVG_BIN"
+else
+  echo "  SKIP: daemon binary not built. Run: cd daemon && cargo build --release" >&2
+fi
+
 echo ""
 echo "Done. No global ~/.claude/ files modified."

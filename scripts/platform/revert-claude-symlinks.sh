@@ -28,6 +28,13 @@ for name in "${LINKS[@]}"; do
   fi
 done
 
+# Remove cvg symlink
+CVG_LINK="$PLATFORM_DIR/scripts/platform/cvg"
+if [ -L "$CVG_LINK" ]; then
+  rm "$CVG_LINK"
+  echo "  Removed: cvg symlink"
+fi
+
 # Clean DASHBOARD_DB from shell profile (optional, pass --env flag)
 if [[ "${2:-}" == "--env" ]]; then
   for profile in "$HOME/.zshenv" "$HOME/.bashrc"; do
