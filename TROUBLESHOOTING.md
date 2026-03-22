@@ -1,5 +1,22 @@
 # Troubleshooting
 
+## Problem: CLI scripts warn "daemon not running" and fall back to sqlite3
+
+**Symptom:** `convergio-run-ops.sh`, `convergio-metrics.sh`, or `convergio-ingest.sh` prints `WARNING: daemon not reachable on :8420 — falling back to sqlite3 (read-only)` to stderr.
+**Cause:** The daemon is not running. Since v3.4.0, CLI scripts are thin wrappers over daemon HTTP endpoints; they fall back to read-only `sqlite3` queries when the daemon is unreachable.
+**Fix:**
+```bash
+# Check if daemon is running
+curl -s http://localhost:8420/api/ipc/status || echo "NOT RUNNING"
+# Start the daemon
+./daemon/start.sh
+# Verify it responds
+curl -s http://localhost:8420/api/ipc/status | jq .status
+# Re-run your command — write operations (ingest, pause) require the daemon
+convergio-ingest.sh document.pdf ./ingested/
+```
+Note: read-only queries (run history, metrics) work in fallback mode. Write operations (ingest trigger, pause/resume) fail silently in fallback — start the daemon first.
+
 ## Problem: setup.sh fails with "claude-config not found"
 
 **Symptom:** Running `./setup.sh` exits with "ERROR: claude-config not found"

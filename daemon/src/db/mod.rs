@@ -1,5 +1,6 @@
 mod cli;
 pub mod crdt;
+pub mod migrations;
 mod models;
 mod queries;
 mod service;

@@ -12,6 +12,15 @@ _db() { sqlite3 "$DB" "$1" 2>/dev/null; }
 _validate_id() { [[ "$1" =~ ^[0-9]+$ ]] || { echo "Invalid ID: $1 (must be numeric)" >&2; exit 1; }; }
 _validate_days() { [[ "$1" =~ ^[0-9]+$ ]] || { echo "Invalid days value: $1 (must be numeric)" >&2; exit 1; }; }
 
+# _api PATH — curl daemon (default: curl http://localhost:8420/PATH); returns JSON; empty on error
+_api() {
+  local path="$1"
+  curl -sf --connect-timeout 2 "${DAEMON_URL}${path}" 2>/dev/null
+}
+
+# _daemon_up — true if daemon responds to health check on /api/metrics/summary
+_daemon_up() { curl -sf --connect-timeout 2 "${DAEMON_URL}/api/metrics/summary" > /dev/null 2>&1; }
+
 collect_system() {
   local cpu mem
   cpu=$(ps -A -o %cpu | awk '{s+=$1} END {printf "%.1f", s}')
@@ -25,11 +34,9 @@ collect_system() {
 
 collect_agents() {
   local count=0
-  if curl -sf --connect-timeout 1 "$DAEMON_URL/api/ipc/status" > /dev/null 2>&1; then
+  curl -sf --connect-timeout 1 "$DAEMON_URL/api/ipc/status" > /dev/null 2>&1 && \
     count=$(curl -sf "$DAEMON_URL/api/ipc/agents" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('agents',[])))" 2>/dev/null || echo "0")
-  fi
-  _db "INSERT INTO metrics_history (project_id, metric_name, metric_value) VALUES
-    ('agents', 'active_count', $count);"
+  _db "INSERT INTO metrics_history (project_id, metric_name, metric_value) VALUES ('agents', 'active_count', $count);"
   echo "  active_agents=$count"
 }
 
@@ -83,13 +90,28 @@ cmd_collect() {
 
 cmd_report() {
   echo "=== Metrics Report (last 24h) ==="
-  _db "SELECT metric_name, round(avg(metric_value),1) as avg, round(max(metric_value),1) as max, count(*) as samples
-       FROM metrics_history
-       WHERE recorded_at > datetime('now', '-1 day')
-       GROUP BY metric_name
-       ORDER BY metric_name;" | while IFS='|' read -r name avg max samples; do
-    printf "  %-30s avg=%-8s max=%-8s (%s samples)\n" "$name" "$avg" "$max" "$samples"
-  done
+  local json
+  if _daemon_up; then
+    json=$(_api "/api/metrics/summary") || json=""
+    if [ -n "$json" ] && command -v jq > /dev/null 2>&1; then
+      printf "  %-30s %-10s %-10s %s\n" "METRIC" "AVG" "MAX" "SAMPLES"
+      echo "  ────────────────────────────── ────────── ────────── ───────"
+      printf '%s' "$json" | jq -r '
+        .metrics[]? |
+        [.name // "?", (.avg // "N/A" | tostring), (.max // "N/A" | tostring), (.samples // "N/A" | tostring)] |
+        @tsv' 2>/dev/null | while IFS=$'\t' read -r name avg max samples; do
+        printf "  %-30s %-10s %-10s %s\n" "$name" "$avg" "$max" "$samples"
+      done
+      return
+    elif [ -n "$json" ]; then
+      # jq not available — print raw JSON summary
+      printf '%s\n' "$json"
+      return
+    fi
+  fi
+  # Fallback: SQLite
+  _db "SELECT metric_name, round(avg(metric_value),1), round(max(metric_value),1), count(*) FROM metrics_history WHERE recorded_at > datetime('now', '-1 day') GROUP BY metric_name ORDER BY metric_name;" \
+    | while IFS='|' read -r name avg max samples; do printf "  %-30s avg=%-8s max=%-8s (%s samples)\n" "$name" "$avg" "$max" "$samples"; done
 }
 
 cmd_clean() {
@@ -107,85 +129,101 @@ cmd_run() {
   fi
   _validate_id "$run_id"
 
-  # Fetch the execution run row
-  local row
-  row=$(_db "SELECT id, goal, status, plan_id, started_at, completed_at, duration_minutes FROM execution_runs WHERE id = $run_id;")
-  if [ -z "$row" ]; then
-    echo "Run $run_id not found." >&2
-    exit 1
-  fi
+  echo "=== Run #${run_id} ==="
 
-  local run_goal run_status run_plan_id run_started run_completed run_duration
-  IFS='|' read -r _ run_goal run_status run_plan_id run_started run_completed run_duration <<< "$row"
-
-  # Duration: prefer stored value, else compute from timestamps
-  local duration_str="N/A"
-  if [ -n "$run_duration" ] && [ "$run_duration" != "NULL" ]; then
-    duration_str="${run_duration}m"
-  elif [ -n "$run_started" ] && [ -n "$run_completed" ] && [ "$run_completed" != "NULL" ]; then
-    local mins
-    mins=$(_db "SELECT round((julianday('$run_completed') - julianday('$run_started')) * 1440, 1) FROM execution_runs WHERE id = $run_id;")
-    duration_str="${mins}m"
-  fi
-
-  # Cost: sum delegation_log.cost_estimate for same plan_id within run window
-  local cost="0.00"
-  if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "NULL" ]; then
-    local end_bound="${run_completed:-$(date -u '+%Y-%m-%d %H:%M:%S')}"
-    cost=$(_db "SELECT printf('%.4f', coalesce(sum(cost_estimate),0))
-      FROM delegation_log
-      WHERE plan_id = $run_plan_id
-        AND created_at >= '$run_started'
-        AND created_at <= '$end_bound';")
-  fi
-
-  # Distinct agents used (executor_agent from tasks with the same plan_id)
-  local agents="N/A"
-  if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "NULL" ]; then
-    agents=$(_db "SELECT coalesce(group_concat(DISTINCT executor_agent), 'none')
-      FROM tasks WHERE plan_id = $run_plan_id AND executor_agent IS NOT NULL;")
-  fi
-
-  # Tasks completed / total for the plan
-  local tasks_total="0" tasks_done="0" val_pass="N/A"
-  if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "NULL" ]; then
-    tasks_total=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id;")
-    tasks_done=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id AND status IN ('done','submitted');")
-    # Validation pass rate: tasks with non-null validation_report containing 'PASS'
-    local val_total val_passed
-    val_total=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id AND validation_report IS NOT NULL;")
-    val_passed=$(_db "SELECT count(*) FROM tasks WHERE plan_id = $run_plan_id AND validation_report LIKE '%PASS%';")
-    if [ "${val_total:-0}" -gt 0 ]; then
-      val_pass=$(_db "SELECT printf('%d%%', round(100.0 * $val_passed / $val_total));" )
+  # Try daemon API first
+  if _daemon_up; then
+    local json
+    json=$(_api "/api/metrics/run/${run_id}") || json=""
+    if [ -n "$json" ] && command -v jq > /dev/null 2>&1; then
+      printf "  %-12s %s\n" "Goal:"       "$(printf '%s' "$json" | jq -r '.goal      // "N/A"')"
+      printf "  %-12s %s\n" "Status:"     "$(printf '%s' "$json" | jq -r '.status    // "N/A"')"
+      printf "  %-12s %s\n" "Plan ID:"    "$(printf '%s' "$json" | jq -r '.plan_id   // "N/A"')"
+      printf "  %-12s %s\n" "Started:"    "$(printf '%s' "$json" | jq -r '.started_at // "N/A"')"
+      printf "  %-12s %s\n" "Completed:"  "$(printf '%s' "$json" | jq -r '.completed_at // "N/A"')"
+      printf "  %-12s %s\n" "Duration:"   "$(printf '%s' "$json" | jq -r '(.duration_minutes | tostring) + "m" // "N/A"')"
+      printf "  %-12s %s\n" "Cost:"       "\$$(printf '%s' "$json" | jq -r '.cost_usd // "0.00"') USD"
+      printf "  %-12s %s\n" "Agents:"     "$(printf '%s' "$json" | jq -r '.agents // "N/A"')"
+      printf "  %-12s %s\n" "Tasks:"      "$(printf '%s' "$json" | jq -r '(.tasks_done|tostring) + "/" + (.tasks_total|tostring) + " completed"')"
+      printf "  %-12s %s\n" "Val pass:"   "$(printf '%s' "$json" | jq -r '.validation_pass_rate // "N/A"')"
+      return
+    elif [ -n "$json" ]; then
+      printf '%s\n' "$json"
+      return
     fi
   fi
 
-  echo "=== Run #${run_id} ==="
-  echo "  Goal:       ${run_goal:-N/A}"
-  echo "  Status:     ${run_status:-N/A}"
-  echo "  Plan ID:    ${run_plan_id:-N/A}"
-  echo "  Started:    ${run_started:-N/A}"
-  echo "  Completed:  ${run_completed:-N/A}"
-  echo "  Duration:   ${duration_str}"
-  echo "  Cost:       \$${cost} USD"
-  echo "  Agents:     ${agents}"
-  echo "  Tasks:      ${tasks_done}/${tasks_total} completed"
-  echo "  Val pass:   ${val_pass}"
+  # Fallback: SQLite
+  local row
+  row=$(_db "SELECT id, goal, status, plan_id, started_at, completed_at, duration_minutes FROM execution_runs WHERE id = ${run_id};")
+  [ -z "$row" ] && { echo "Run ${run_id} not found." >&2; exit 1; }
+  local run_goal run_status run_plan_id run_started run_completed run_duration
+  IFS='|' read -r _ run_goal run_status run_plan_id run_started run_completed run_duration <<< "$row"
+  local duration_str="N/A" cost="0.00" agents="N/A" tasks_total="0" tasks_done="0" val_pass="N/A"
+  [ -n "$run_duration" ] && [ "$run_duration" != "NULL" ] && duration_str="${run_duration}m"
+  if [ -n "$run_plan_id" ] && [ "$run_plan_id" != "NULL" ]; then
+    local end_bound="${run_completed:-$(date -u '+%Y-%m-%d %H:%M:%S')}"
+    cost=$(_db "SELECT printf('%.4f', coalesce(sum(cost_estimate),0)) FROM delegation_log
+      WHERE plan_id=${run_plan_id} AND created_at>='${run_started}' AND created_at<='${end_bound}';")
+    agents=$(_db "SELECT coalesce(group_concat(DISTINCT executor_agent),'none') FROM tasks
+      WHERE plan_id=${run_plan_id} AND executor_agent IS NOT NULL;")
+    tasks_total=$(_db "SELECT count(*) FROM tasks WHERE plan_id=${run_plan_id};")
+    tasks_done=$(_db "SELECT count(*) FROM tasks WHERE plan_id=${run_plan_id} AND status IN ('done','submitted');")
+    local vt vp
+    vt=$(_db "SELECT count(*) FROM tasks WHERE plan_id=${run_plan_id} AND validation_report IS NOT NULL;")
+    vp=$(_db "SELECT count(*) FROM tasks WHERE plan_id=${run_plan_id} AND validation_report LIKE '%PASS%';")
+    [ "${vt:-0}" -gt 0 ] && val_pass=$(_db "SELECT printf('%d%%', round(100.0*${vp}/${vt}));")
+  fi
+  printf "  %-12s %s\n" "Goal:"      "${run_goal:-N/A}"
+  printf "  %-12s %s\n" "Status:"    "${run_status:-N/A}"
+  printf "  %-12s %s\n" "Plan ID:"   "${run_plan_id:-N/A}"
+  printf "  %-12s %s\n" "Started:"   "${run_started:-N/A}"
+  printf "  %-12s %s\n" "Completed:" "${run_completed:-N/A}"
+  printf "  %-12s %s\n" "Duration:"  "${duration_str}"
+  printf "  %-12s %s\n" "Cost:"      "\$${cost} USD"
+  printf "  %-12s %s\n" "Agents:"    "${agents}"
+  printf "  %-12s %s\n" "Tasks:"     "${tasks_done}/${tasks_total} completed"
+  printf "  %-12s %s\n" "Val pass:"  "${val_pass}"
 }
 
 cmd_runs() {
   echo "=== Execution Runs ==="
-  local rows
-  rows=$(_db "SELECT id, goal, status, plan_id, started_at, completed_at, duration_minutes FROM execution_runs ORDER BY id DESC LIMIT 20;")
+  printf "  %-5s %-10s %-8s %-40s %s\n" "ID" "PLAN" "STATUS" "GOAL" "STARTED"
+  echo "  ───── ────────── ──────── ──────────────────────────────────────── ───────────────────"
 
+  # Try daemon API first
+  if _daemon_up; then
+    local json
+    json=$(_api "/api/runs") || json=""
+    if [ -n "$json" ] && command -v jq > /dev/null 2>&1; then
+      local count
+      count=$(printf '%s' "$json" | jq -r '.runs // [] | length')
+      if [ "$count" -eq 0 ]; then
+        echo "  No execution runs found."
+        return
+      fi
+      printf '%s' "$json" | jq -r '
+        .runs[]? |
+        [(.id | tostring), (.plan_id // "N/A" | tostring), (.status // "N/A"),
+         ((.goal // "N/A") | .[0:40]), (.started_at // "N/A")] |
+        @tsv' 2>/dev/null | while IFS=$'\t' read -r id plan_id status goal started; do
+        printf "  %-5s %-10s %-8s %-40s %s\n" "$id" "$plan_id" "$status" "$goal" "$started"
+      done
+      return
+    elif [ -n "$json" ]; then
+      printf '%s\n' "$json"
+      return
+    fi
+  fi
+
+  # Fallback: SQLite
+  local rows
+  rows=$(_db "SELECT id, goal, status, plan_id, started_at FROM execution_runs ORDER BY id DESC LIMIT 20;")
   if [ -z "$rows" ]; then
     echo "  No execution runs found."
     return
   fi
-
-  printf "  %-5s %-10s %-8s %-40s %s\n" "ID" "PLAN" "STATUS" "GOAL" "STARTED"
-  echo "  ───── ────────── ──────── ──────────────────────────────────────── ───────────────────"
-  while IFS='|' read -r id goal status plan_id started completed duration; do
+  while IFS='|' read -r id goal status plan_id started; do
     local short_goal="${goal:0:40}"
     printf "  %-5s %-10s %-8s %-40s %s\n" "$id" "${plan_id:-N/A}" "$status" "$short_goal" "${started:-N/A}"
   done <<< "$rows"

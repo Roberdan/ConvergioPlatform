@@ -1,5 +1,6 @@
 pub mod api_agents;
 pub mod api_chat;
+pub mod api_ingest;
 pub mod api_coordinator;
 pub mod api_dashboard;
 pub mod api_evolution;
@@ -9,6 +10,8 @@ pub mod api_heartbeat;
 pub mod api_heartbeat_handlers;
 pub mod api_ideas;
 pub mod api_ideas_handlers;
+pub mod api_metrics;
+pub mod api_metrics_queries;
 pub mod api_ipc;
 pub mod api_mesh;
 pub mod api_notify;
@@ -22,6 +25,8 @@ pub mod api_plan_db_ops;
 pub mod api_plan_db_query;
 pub mod api_plan_db_query_fmt;
 pub mod api_plans;
+pub mod api_runs;
+pub mod api_runs_handlers;
 pub mod api_workers;
 pub mod llm_client;
 pub mod mesh_provision;
@@ -40,6 +45,10 @@ pub mod ws_pty;
 
 #[cfg(test)]
 mod api_agents_legacy_tests;
+#[cfg(test)]
+mod api_runs_tests;
+#[cfg(test)]
+mod api_runs_tests_lifecycle;
 #[cfg(test)]
 mod api_ideas_tests;
 #[cfg(test)]

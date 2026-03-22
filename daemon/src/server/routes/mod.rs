@@ -6,6 +6,7 @@ pub use api_routes::{
 
 use super::api_agents;
 use super::api_chat;
+use super::api_ingest;
 use super::api_coordinator;
 use super::api_dashboard;
 use super::api_evolution;
@@ -14,6 +15,7 @@ use super::api_heartbeat;
 use super::api_ideas;
 use super::api_ipc;
 use super::api_mesh;
+use super::api_metrics;
 use super::api_notify;
 use super::api_peers;
 use super::api_peers_ext;
@@ -23,6 +25,7 @@ use super::api_plan_db_lifecycle;
 use super::api_plan_db_ops;
 use super::api_plan_db_query;
 use super::api_plans;
+use super::api_runs;
 use super::api_workers;
 use super::mesh_provision;
 use super::middleware as server_mw;
@@ -83,6 +86,9 @@ pub fn build_router_with_db(
         .merge(api_plan_db_ops::router())
         .merge(api_workers::router())
         .merge(api_evolution::router())
+        .merge(api_runs::router())
+        .merge(api_metrics::router())
+        .merge(api_ingest::router())
         .route("/api/chat/stream/:sid", get(sse::chat_stream_sse))
         .route("/api/mesh/action/stream", get(sse::mesh_action_sse))
         .route("/api/mesh/fullsync", get(sse::mesh_action_sse))

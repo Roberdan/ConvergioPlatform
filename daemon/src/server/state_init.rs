@@ -157,6 +157,9 @@ pub fn init_db_and_pool(
         if let Err(err) = ensure_agent_activity_schema(&conn) {
             eprintln!("[migration] agent_activity schema repair failed: {err:?}");
         }
+        if let Err(err) = crate::db::migrations::run(&conn) {
+            eprintln!("[migration] execution_runs migration failed: {err:?}");
+        }
         let mut ok = 0;
         let mut skip = 0;
         for sql in MIGRATIONS {

@@ -1,3 +1,4 @@
+pub mod background;
 pub mod db;
 pub mod digest;
 pub mod hooks;
