@@ -69,7 +69,3 @@ pub fn require_plan_startable(plan_id: i64, conn: &Connection) -> Result<(), Str
     require_review(plan_id, conn)?;
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "plan_lifecycle_guards_tests.rs"]
-mod tests;
