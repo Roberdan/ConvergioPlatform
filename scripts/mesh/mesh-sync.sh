@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# mesh-sync.sh — Sync all mesh nodes to master's main branch
+# mesh-sync.sh — Sync git config/scripts across mesh nodes
+# DB sync handled by CRDT (daemon background task). This script syncs git only.
 # Usage: mesh-sync.sh [--peer NAME] [--dry-run] [--force]
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

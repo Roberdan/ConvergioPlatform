@@ -1,0 +1,56 @@
+name: Skill Lint
+
+on:
+  pull_request:
+    paths:
+      - 'claude-config/skills/**'
+      - 'CONTRIBUTING.md'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            daemon/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('daemon/Cargo.lock') }}
+
+      - name: Build daemon
+        run: cd daemon && cargo build --release
+
+      - name: Lint modified skills
+        run: |
+          changed=$(git diff --name-only origin/main...HEAD -- claude-config/skills/)
+          if [ -z "$changed" ]; then
+            echo "No skill files changed"
+            exit 0
+          fi
+          dirs=$(echo "$changed" | sed 's|claude-config/skills/\([^/]*\)/.*|\1|' | sort -u)
+          failed=0
+          for skill in $dirs; do
+            dir="claude-config/skills/$skill"
+            if [ -d "$dir" ]; then
+              echo "Linting: $dir"
+              daemon/target/release/convergio-platform-daemon skill lint "$dir" || failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Verify CLA section in CONTRIBUTING.md
+        run: |
+          if ! grep -qi "Contributor License" CONTRIBUTING.md 2>/dev/null; then
+            if ! grep -qi "Contributor License" docs/CONTRIBUTING.md 2>/dev/null; then
+              echo "ERROR: No Contributor License section found in CONTRIBUTING.md"
+              exit 1
+            fi
+          fi
+          echo "CLA section found"
