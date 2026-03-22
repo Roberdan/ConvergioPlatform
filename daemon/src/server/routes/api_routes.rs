@@ -80,6 +80,9 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/runs/:id",
     "/api/ingest/formats",
     "/api/audit/project/:project_id",
+    "/api/domain/list",
+    "/api/crdt/status",
+    "/api/crdt/peers",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -137,6 +140,8 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/runs/:id/pause",
     "/api/runs/:id/resume",
     "/api/ingest",
+    "/api/domain/map",
+    "/api/crdt/force-sync",
     "/api/tracking/tokens",
     "/api/tracking/agent-activity",
     "/api/tracking/session-state",

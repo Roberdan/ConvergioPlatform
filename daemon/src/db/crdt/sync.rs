@@ -120,3 +120,30 @@ impl PlanDb {
 pub fn io_as_sql_error(err: std::io::Error) -> rusqlite::Error {
     rusqlite::Error::ToSqlConversionFailure(Box::new(err))
 }
+
+/// Increment consecutive_failures for a peer.
+///
+/// When the counter reaches 3, the peer is marked 'unreachable' so the
+/// background sync loop (background_sync.rs) stops attempting to contact it.
+pub fn record_sync_failure(conn: &rusqlite::Connection, peer: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE mesh_sync_stats
+            SET consecutive_failures = consecutive_failures + 1,
+                status = CASE WHEN consecutive_failures + 1 >= 3 THEN 'unreachable' ELSE status END
+          WHERE peer_name = ?1",
+        rusqlite::params![peer],
+    )?;
+    Ok(())
+}
+
+/// Reset consecutive_failures to 0 and mark a peer 'online' after a successful sync.
+pub fn record_sync_success(conn: &rusqlite::Connection, peer: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE mesh_sync_stats
+            SET consecutive_failures = 0,
+                status = 'online'
+          WHERE peer_name = ?1",
+        rusqlite::params![peer],
+    )?;
+    Ok(())
+}

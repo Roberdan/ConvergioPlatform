@@ -1,4 +1,5 @@
 pub mod background;
+pub mod background_sync;
 pub mod db;
 pub mod digest;
 pub mod hooks;

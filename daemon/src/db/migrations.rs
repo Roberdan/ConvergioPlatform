@@ -54,6 +54,7 @@ const INDEXES: &[&str] = &[
 pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     ensure_execution_runs(conn)?;
     ensure_domain_skill_map(conn)?;
+    ensure_mesh_sync_stats_columns(conn)?;
     ensure_runs_dir();
     Ok(())
 }
@@ -112,6 +113,41 @@ fn ensure_domain_skill_map(conn: &Connection) -> rusqlite::Result<()> {
         }
         eprintln!("[migrations] seeded domain_skill_map ({} rows)", DOMAIN_SKILL_SEED.len());
     }
+    Ok(())
+}
+
+/// Add peer-health columns to mesh_sync_stats if the table exists but lacks them.
+///
+/// Idempotent: uses PRAGMA table_info to check before issuing ALTER TABLE.
+/// Called every startup so fresh nodes that already have the columns skip cleanly.
+fn ensure_mesh_sync_stats_columns(conn: &Connection) -> rusqlite::Result<()> {
+    if !table_exists(conn, "mesh_sync_stats")? {
+        return Ok(());
+    }
+
+    let columns: Vec<String> = {
+        let mut stmt = conn.prepare("PRAGMA table_info(mesh_sync_stats)")?;
+        let names: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .filter_map(|r| r.ok())
+            .collect();
+        names
+    };
+
+    if !columns.iter().any(|c| c == "consecutive_failures") {
+        conn.execute_batch(
+            "ALTER TABLE mesh_sync_stats ADD COLUMN consecutive_failures INTEGER DEFAULT 0",
+        )?;
+        eprintln!("[migrations] added mesh_sync_stats.consecutive_failures");
+    }
+
+    if !columns.iter().any(|c| c == "status") {
+        conn.execute_batch(
+            "ALTER TABLE mesh_sync_stats ADD COLUMN status TEXT DEFAULT 'online'",
+        )?;
+        eprintln!("[migrations] added mesh_sync_stats.status");
+    }
+
     Ok(())
 }
 
