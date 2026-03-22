@@ -40,6 +40,41 @@ async fn handle_import(
         )
         .map_err(|_| ApiError::bad_request(format!("plan {plan_id} not found")))?;
 
+    // Clean up any orphan waves from previous failed imports
+    conn.execute(
+        "DELETE FROM waves WHERE plan_id = ?1 AND tasks_total = 0",
+        rusqlite::params![plan_id],
+    )
+    .ok(); // best-effort cleanup
+
+    // Use transaction so partial failures don't leave orphan waves
+    conn.execute_batch("SAVEPOINT import_spec")
+        .map_err(|e| ApiError::internal(format!("savepoint failed: {e}")))?;
+
+    let result = do_import(conn, plan_id, &project_id, &mut waves);
+    match result {
+        Ok(r) => {
+            conn.execute_batch("RELEASE import_spec").ok();
+            Ok(Json(json!({
+                "ok": true,
+                "plan_id": plan_id,
+                "waves_created": r.0,
+                "tasks_created": r.1,
+            })))
+        }
+        Err(e) => {
+            conn.execute_batch("ROLLBACK TO import_spec").ok();
+            Err(e)
+        }
+    }
+}
+
+fn do_import(
+    conn: &rusqlite::Connection,
+    plan_id: i64,
+    project_id: &str,
+    waves: &mut Vec<super::api_plan_db_import_parsers::WaveSpec>,
+) -> Result<(usize, usize), ApiError> {
     let mut waves_created = 0usize;
     let mut tasks_created = 0usize;
     let mut tasks_total = 0i64;
@@ -135,12 +170,7 @@ async fn handle_import(
     )
     .map_err(|e| ApiError::internal(format!("plan count update failed: {e}")))?;
 
-    Ok(Json(json!({
-        "ok": true,
-        "plan_id": plan_id,
-        "waves_created": waves_created,
-        "tasks_created": tasks_created,
-    })))
+    Ok((waves_created, tasks_created))
 }
 
 #[cfg(test)]
