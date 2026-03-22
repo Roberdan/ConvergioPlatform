@@ -3,12 +3,14 @@
 // Kept in a separate module so main.rs stays under 250 lines.
 
 use crate::cli_agent;
+use crate::cli_checkpoint;
 use crate::cli_kb;
+use crate::cli_lock;
 use crate::cli_ops;
 use crate::cli_plan;
+use crate::cli_review;
 use crate::cli_run;
 use crate::cli_skill;
-use crate::cli_support;
 use crate::cli_task;
 use crate::cli_wave;
 use crate::ipc_handler::{DaemonCommands, IpcCommands};
@@ -102,17 +104,17 @@ pub enum Commands {
     /// Checkpoint commands (save/restore plan state)
     Checkpoint {
         #[command(subcommand)]
-        command: cli_support::CheckpointCommands,
+        command: cli_checkpoint::CheckpointCommands,
     },
     /// File lock commands (acquire/release/list)
     Lock {
         #[command(subcommand)]
-        command: cli_support::LockCommands,
+        command: cli_lock::LockCommands,
     },
     /// Plan review commands (register/check/reset)
     Review {
         #[command(subcommand)]
-        command: cli_support::ReviewCommands,
+        command: cli_review::ReviewCommands,
     },
     /// Audit project for violations: file sizes, token budget, copyright, constitution files
     Audit {

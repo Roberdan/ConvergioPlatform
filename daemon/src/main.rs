@@ -1,13 +1,17 @@
 mod cli_agent;
 mod cli_agents;
 mod cli_audit;
+mod cli_checkpoint;
 mod cli_commands;
+mod cli_http;
 mod cli_kb;
+mod cli_lock;
 mod cli_ops;
 mod cli_plan;
+mod cli_review;
 mod cli_run;
 mod cli_skill;
-mod cli_support;
+mod cli_skill_transpile;
 mod cli_task;
 mod cli_wave;
 mod ipc_handler;
@@ -182,9 +186,9 @@ async fn dispatch(command: Commands) {
         Commands::Run { command } => cli_run::handle(command).await,
         Commands::Mesh { command } => cli_ops::handle_mesh(command).await,
         Commands::Session { command } => cli_ops::handle_session(command).await,
-        Commands::Checkpoint { command } => cli_support::handle_checkpoint(command).await,
-        Commands::Lock { command } => cli_support::handle_lock(command).await,
-        Commands::Review { command } => cli_support::handle_review(command).await,
+        Commands::Checkpoint { command } => cli_checkpoint::handle(command).await,
+        Commands::Lock { command } => cli_lock::handle(command).await,
+        Commands::Review { command } => cli_review::handle(command).await,
         Commands::Audit { path } => cli_audit::handle(path),
         Commands::Skill { command } => cli_skill::handle(command).await,
     }

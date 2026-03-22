@@ -202,184 +202,28 @@ pub async fn handle_review(cmd: ReviewCommands) {
     }
 }
 
-// --- Shared HTTP helpers ---
-
+async fn handle_resp(resp: reqwest::Response, human: bool) {
+    let status = resp.status();
+    match resp.json::<serde_json::Value>().await {
+        Ok(val) if human => println!("{}", serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string())),
+        Ok(val) => println!("{val}"),
+        Err(e) => { eprintln!("error parsing response: {e}"); std::process::exit(2); }
+    }
+    if !status.is_success() { std::process::exit(1); }
+}
 async fn fetch_and_print(url: &str, human: bool) {
     match reqwest::get(url).await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
+        Ok(resp) => handle_resp(resp, human).await,
+        Err(e) => { eprintln!("error connecting to daemon: {e}"); std::process::exit(2); }
     }
 }
-
 async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
-    let client = reqwest::Client::new();
-    match client.post(url).json(body).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
-    }
-}
-
-fn print_value(val: &serde_json::Value, human: bool) {
-    if human {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(val).unwrap_or_else(|_| val.to_string())
-        );
-    } else {
-        println!("{val}");
+    match reqwest::Client::new().post(url).json(body).send().await {
+        Ok(resp) => handle_resp(resp, human).await,
+        Err(e) => { eprintln!("error connecting to daemon: {e}"); std::process::exit(2); }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // --- Checkpoint ---
-
-    #[test]
-    fn checkpoint_save_variant_exists() {
-        let cmd = CheckpointCommands::Save {
-            plan_id: 685,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, CheckpointCommands::Save { plan_id: 685, .. }));
-    }
-
-    #[test]
-    fn checkpoint_restore_variant_exists() {
-        let cmd = CheckpointCommands::Restore {
-            plan_id: 42,
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, CheckpointCommands::Restore { plan_id: 42, .. }));
-    }
-
-    // --- Lock ---
-
-    #[test]
-    fn lock_acquire_variant_exists() {
-        let cmd = LockCommands::Acquire {
-            file_path: "daemon/src/main.rs".to_string(),
-            task_id: 8796,
-            agent: "task-executor".to_string(),
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, LockCommands::Acquire { task_id: 8796, .. }));
-    }
-
-    #[test]
-    fn lock_release_variant_exists() {
-        let cmd = LockCommands::Release {
-            file_path: "daemon/src/main.rs".to_string(),
-            task_id: 8796,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, LockCommands::Release { task_id: 8796, .. }));
-    }
-
-    #[test]
-    fn lock_list_variant_exists() {
-        let cmd = LockCommands::List {
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, LockCommands::List { human: true, .. }));
-    }
-
-    // --- Review ---
-
-    #[test]
-    fn review_register_variant_exists() {
-        let cmd = ReviewCommands::Register {
-            plan_id: 685,
-            reviewer_agent: "plan-reviewer".to_string(),
-            verdict: "approved".to_string(),
-            suggestions: None,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, ReviewCommands::Register { plan_id: 685, .. }));
-    }
-
-    #[test]
-    fn review_check_variant_exists() {
-        let cmd = ReviewCommands::Check {
-            plan_id: 100,
-            human: false,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, ReviewCommands::Check { plan_id: 100, .. }));
-    }
-
-    #[test]
-    fn review_reset_variant_exists() {
-        let cmd = ReviewCommands::Reset {
-            plan_id: 1,
-            human: true,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, ReviewCommands::Reset { plan_id: 1, .. }));
-    }
-
-    #[test]
-    fn checkpoint_save_body_shape() {
-        let body = serde_json::json!({ "plan_id": 685_i64 });
-        assert_eq!(body["plan_id"], 685);
-    }
-
-    #[test]
-    fn lock_acquire_body_shape() {
-        let body = serde_json::json!({
-            "file_path": "daemon/src/main.rs",
-            "task_id": 8796_i64,
-            "agent": "task-executor",
-        });
-        assert_eq!(body["task_id"], 8796);
-        assert_eq!(body["agent"], "task-executor");
-    }
-
-    #[test]
-    fn review_register_body_shape() {
-        let body = serde_json::json!({
-            "plan_id": 685_i64,
-            "reviewer_agent": "plan-reviewer",
-            "verdict": "approved",
-            "suggestions": serde_json::Value::Null,
-        });
-        assert_eq!(body["verdict"], "approved");
-    }
-}
+#[path = "cli_support_tests.rs"]
+mod tests;

@@ -43,12 +43,15 @@ pub mod sse_preflight;
 pub mod sse_stream;
 pub mod state;
 pub mod state_init;
+pub mod state_init_canon;
 pub mod ws;
 pub mod ws_brain;
 pub mod ws_pty;
 
 #[cfg(test)]
 mod api_agents_legacy_tests;
+#[cfg(test)]
+mod api_ideas_tests_filter;
 #[cfg(test)]
 mod api_runs_tests;
 #[cfg(test)]
