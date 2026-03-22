@@ -22,6 +22,7 @@ pub mod api_plan_db_import;
 pub mod api_plan_db_import_defaults;
 pub mod api_plan_db_import_parsers;
 pub mod api_plan_db_lifecycle;
+pub mod plan_lifecycle_guards;
 pub mod api_plan_db_checkpoint;
 pub mod api_plan_db_ops;
 pub mod api_plan_db_query;

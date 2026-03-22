@@ -1,5 +1,6 @@
 use super::api_plan_db_import_defaults::apply_defaults;
 use super::api_plan_db_import_parsers::parse_waves;
+use super::plan_lifecycle_guards;
 use super::state::{ApiError, ServerState};
 use axum::extract::State;
 use axum::routing::post;
@@ -26,7 +27,11 @@ async fn handle_import(
     let conn = state.get_conn()?;
     let conn = &conn;
 
-    // Verify plan exists
+    // Guard: plan must exist and be in importable state (draft/todo/approved)
+    plan_lifecycle_guards::require_plan_importable(plan_id, conn)
+        .map_err(ApiError::conflict)?;
+
+    // Verify plan exists and get project_id
     let project_id: String = conn
         .query_row(
             "SELECT project_id FROM plans WHERE id = ?1",

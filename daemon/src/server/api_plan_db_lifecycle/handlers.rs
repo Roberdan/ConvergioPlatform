@@ -1,3 +1,4 @@
+use super::super::plan_lifecycle_guards;
 use super::super::state::{query_one, ApiError, ServerState};
 use axum::extract::{Path, State};
 use axum::routing::post;
@@ -59,6 +60,10 @@ pub(super) async fn handle_start(
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
+
+    // Guard: plan must have imported tasks and an approved review
+    plan_lifecycle_guards::require_plan_startable(plan_id, conn)
+        .map_err(ApiError::conflict)?;
 
     let changed = conn
         .execute(
