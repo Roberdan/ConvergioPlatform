@@ -1,10 +1,13 @@
-// Release Agent — event-driven pipeline: quality gates → commit → push → PR → merge.
+// Release Agent — event-driven pipeline: quality gates -> commit -> push -> PR -> merge.
 // Why: Plan 698 T4-01; centralise release lifecycle so agents trigger it programmatically.
 use super::events::{EventLogger, WorkspaceAction};
 use super::git_connector::{GitConnector, MergeMethod};
 use super::quality_gate::QualityGate;
 use crate::server::state_init::ConnPool;
+use crate::workspace::core::WorkspaceError;
 use serde::{Deserialize, Serialize};
+
+type Result<T> = std::result::Result<T, WorkspaceError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReleaseResult {
@@ -27,28 +30,12 @@ impl ReleaseAgent {
         event_logger: EventLogger,
         pool: ConnPool,
     ) -> Self {
-        Self {
-            connector,
-            event_logger,
-            pool,
-        }
+        Self { connector, event_logger, pool }
     }
 
-    /// Full release pipeline: quality gate → commit → push → PR → merge.
-    ///
-    /// Steps:
-    ///   1. Fetch workspace path + branch from DB (must be status='active').
-    ///   2. Run quality gates — abort with Err if any gate fails.
-    ///   3. Commit staged changes.
-    ///   4. Rebase onto origin/main (best-effort).
-    ///   5. Push with force-with-lease.
-    ///   6. Create PR.
-    ///   7. Check PR readiness — return Ok(merged=false) if not ready.
-    ///   8. Squash-merge.
-    ///   9. Update workspace status to 'merged'.
-    pub async fn release(&self, workspace_id: &str, repo_slug: &str) -> Result<ReleaseResult, String> {
-        // 1. Get workspace from DB
-        let conn = self.pool.get().map_err(|e| format!("pool error: {e}"))?;
+    /// Full release pipeline: quality gate -> commit -> push -> PR -> merge.
+    pub async fn release(&self, workspace_id: &str, repo_slug: &str) -> Result<ReleaseResult> {
+        let conn = self.pool.get()?;
         let (path, branch): (String, String) = conn
             .query_row(
                 "SELECT path, branch FROM workspaces \
@@ -56,10 +43,9 @@ impl ReleaseAgent {
                 rusqlite::params![workspace_id],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
-            .map_err(|e| format!("workspace not found: {e}"))?;
+            .map_err(|e| WorkspaceError::NotFound(format!("workspace {workspace_id}: {e}")))?;
         let path = std::path::Path::new(&path);
 
-        // 2. Run quality gates
         let gates = QualityGate::run_all(path);
         let all_passed = gates.iter().all(|g| g.passed);
         let gate_summary = format!(
@@ -69,82 +55,51 @@ impl ReleaseAgent {
         );
         self.event_logger
             .record_event(
-                workspace_id,
-                "release-agent",
-                if all_passed {
-                    WorkspaceAction::QualityGatePass
-                } else {
-                    WorkspaceAction::QualityGateFail
-                },
-                None,
-                Some(&gate_summary),
-                None,
+                workspace_id, "release-agent",
+                if all_passed { WorkspaceAction::QualityGatePass }
+                else { WorkspaceAction::QualityGateFail },
+                None, Some(&gate_summary), None,
             )
             .ok();
 
         if !all_passed {
-            let failures: Vec<String> = gates
-                .iter()
+            let failures: Vec<String> = gates.iter()
                 .filter(|g| !g.passed)
                 .map(|g| format!("{}: {}", g.gate_name, g.message))
                 .collect();
-            return Err(format!("Quality gates failed:\n{}", failures.join("\n")));
+            return Err(WorkspaceError::Validation(format!(
+                "Quality gates failed:\n{}", failures.join("\n")
+            )));
         }
 
-        // 3. Commit
-        let _sha = self.connector.commit(
-            path,
-            &format!("feat: release from workspace {workspace_id}"),
-        )?;
+        let _sha = self.connector
+            .commit(path, &format!("feat: release from workspace {workspace_id}"))
+            .map_err(|e| WorkspaceError::Git(e.to_string()))?;
         self.event_logger
-            .record_event(
-                workspace_id,
-                "release-agent",
-                WorkspaceAction::GitCommit,
-                None,
-                None,
-                None,
-            )
+            .record_event(workspace_id, "release-agent", WorkspaceAction::GitCommit, None, None, None)
             .ok();
 
-        // 4. Rebase onto origin/main — best-effort, may already be up to date
         let _ = self.connector.rebase(path, "origin/main");
 
-        // 5. Push
-        self.connector.push(path, &branch, true)?;
+        self.connector.push(path, &branch, true).map_err(|e| WorkspaceError::Git(e.to_string()))?;
         self.event_logger
-            .record_event(
-                workspace_id,
-                "release-agent",
-                WorkspaceAction::GitPush,
-                None,
-                None,
-                None,
-            )
+            .record_event(workspace_id, "release-agent", WorkspaceAction::GitPush, None, None, None)
             .ok();
 
-        // 6. Create PR
         let pr_body = self.generate_pr_description(workspace_id);
-        let pr = self.connector.create_pr(
-            repo_slug,
-            &branch,
-            "main",
-            &format!("feat: workspace {workspace_id}"),
-            &pr_body,
-        ).await.map_err(|e| e.to_string())?;
+        let pr = self.connector
+            .create_pr(repo_slug, &branch, "main", &format!("feat: workspace {workspace_id}"), &pr_body)
+            .await
+            .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
         self.event_logger
             .record_event(
-                workspace_id,
-                "release-agent",
-                WorkspaceAction::PrCreated,
-                None,
-                Some(&format!("PR #{}", pr.number)),
-                None,
+                workspace_id, "release-agent", WorkspaceAction::PrCreated,
+                None, Some(&format!("PR #{}", pr.number)), None,
             )
             .ok();
 
-        // 7. Check readiness — return unmerged if CI not ready
-        let readiness = self.connector.pr_readiness(repo_slug, pr.number).await.map_err(|e| e.to_string())?;
+        let readiness = self.connector.pr_readiness(repo_slug, pr.number).await
+            .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
         if !readiness.mergeable || !readiness.ci_passed {
             return Ok(ReleaseResult {
                 workspace_id: workspace_id.to_string(),
@@ -155,21 +110,15 @@ impl ReleaseAgent {
             });
         }
 
-        // 8. Squash-merge
-        self.connector
-            .merge_pr(repo_slug, pr.number, MergeMethod::Squash).await.map_err(|e| e.to_string())?;
+        self.connector.merge_pr(repo_slug, pr.number, MergeMethod::Squash).await
+            .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
         self.event_logger
             .record_event(
-                workspace_id,
-                "release-agent",
-                WorkspaceAction::PrMerged,
-                None,
-                Some(&format!("PR #{} merged", pr.number)),
-                None,
+                workspace_id, "release-agent", WorkspaceAction::PrMerged,
+                None, Some(&format!("PR #{} merged", pr.number)), None,
             )
             .ok();
 
-        // 9. Update workspace status — ignore error (audit only)
         conn.execute(
             "UPDATE workspaces SET status = 'merged' WHERE workspace_id = ?1",
             rusqlite::params![workspace_id],
@@ -185,14 +134,12 @@ impl ReleaseAgent {
         })
     }
 
-    /// Build a PR description from workspace_events — lists files changed and agents involved.
+    /// Build a PR description from workspace_events.
     pub fn generate_pr_description(&self, workspace_id: &str) -> String {
-        let events = self
-            .event_logger
+        let events = self.event_logger
             .query_events(workspace_id, Some(50), None)
             .unwrap_or_default();
-        let file_writes: Vec<String> = events
-            .iter()
+        let file_writes: Vec<String> = events.iter()
             .filter(|e| e.action == "file_write")
             .filter_map(|e| e.file_path.clone())
             .collect();

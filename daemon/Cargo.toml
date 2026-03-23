@@ -26,7 +26,6 @@ uuid = { version = "1", features = ["v4"] }
 qrcode = "0.14"
 image = "0.25"
 toml = "0.8"
-anyhow = "1"
 aes-gcm = { version = "0.10", features = ["std"] }
 axum = { version = "0.7", features = ["ws"] }
 clap = { version = "4.5", features = ["derive", "env"] }

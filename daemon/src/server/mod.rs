@@ -153,13 +153,13 @@ pub async fn run(
     bind_addr: &str,
     static_dir: impl Into<PathBuf>,
     crsqlite_path: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), state::ApiError> {
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await
-        .map_err(|e| format!("server listen failed on {bind_addr}: {e}"))?;
+        .map_err(|e| state::ApiError::internal(format!("server listen failed on {bind_addr}: {e}")))?;
     axum::serve(listener, app(static_dir, crsqlite_path).into_make_service())
         .await
-        .map_err(|e| format!("server runtime failed: {e}"))
+        .map_err(|e| state::ApiError::internal(format!("server runtime failed: {e}")))
 }
 
 #[cfg(test)]

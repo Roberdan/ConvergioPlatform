@@ -16,14 +16,16 @@ use tokio_stream::iter;
 
 /// Tailscale hostnames: alphanumeric, dots, hyphens, underscores only.
 /// Rejects shell metacharacters that could be injected into command arguments.
-pub fn validate_peer(peer: &str) -> Result<(), String> {
+pub fn validate_peer(peer: &str) -> Result<(), ApiError> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"^[a-zA-Z0-9._-]+$").expect("valid regex"));
     if peer.is_empty() {
-        return Err("peer name must not be empty".into());
+        return Err(ApiError::bad_request("peer name must not be empty"));
     }
     if !re.is_match(peer) {
-        return Err(format!("invalid peer name: {peer:?}"));
+        return Err(ApiError::bad_request(format!(
+            "invalid peer name: {peer:?}"
+        )));
     }
     Ok(())
 }

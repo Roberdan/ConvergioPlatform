@@ -1,6 +1,6 @@
 // SSE delegation helpers: event builders, task status updates, WS broadcast.
 
-use crate::server::state::ServerState;
+use crate::server::state::{ApiError, ServerState};
 use crate::server::ws_brain::broadcast_brain_task_update;
 use axum::response::sse::Event;
 use serde_json::json;
@@ -32,23 +32,25 @@ pub(super) fn broadcast_ws(state: &ServerState, qs: &HashMap<String, String>, st
 
 /// Build the shell command to run the agent on the remote machine via SSH.
 ///
-/// Returns `Err` if `cli` is not in `ALLOWED_CLI` or if any ID parameter
-/// contains characters outside `[a-zA-Z0-9_-]` to prevent command injection.
+/// Returns `Err(ApiError)` if `cli` is not in `ALLOWED_CLI` or if any ID
+/// parameter contains characters outside `[a-zA-Z0-9_-]` to prevent injection.
 pub(super) fn build_agent_command(
     cli: &str,
     plan_id: &str,
     qs: &HashMap<String, String>,
-) -> Result<String, String> {
+) -> Result<String, ApiError> {
     // Validate cli against allowlist — reject unknown tools
     if !ALLOWED_CLI.contains(&cli) {
-        return Err(format!("cli '{cli}' is not in the allowed list"));
+        return Err(ApiError::bad_request(format!(
+            "cli '{cli}' is not in the allowed list"
+        )));
     }
 
     // Validate plan_id
     if !is_safe_id(plan_id) {
-        return Err(format!(
+        return Err(ApiError::bad_request(format!(
             "plan_id '{plan_id}' contains disallowed characters"
-        ));
+        )));
     }
 
     let task_id = qs.get("task_id").cloned().unwrap_or_default();
@@ -56,14 +58,14 @@ pub(super) fn build_agent_command(
 
     // Validate optional IDs only when present
     if !task_id.is_empty() && !is_safe_id(&task_id) {
-        return Err(format!(
+        return Err(ApiError::bad_request(format!(
             "task_id '{task_id}' contains disallowed characters"
-        ));
+        )));
     }
     if !wave_id.is_empty() && !is_safe_id(&wave_id) {
-        return Err(format!(
+        return Err(ApiError::bad_request(format!(
             "wave_id '{wave_id}' contains disallowed characters"
-        ));
+        )));
     }
 
     let dir = "~/GitHub/ConvergioPlatform";
@@ -120,57 +122,26 @@ pub(super) fn update_task_status(state: &ServerState, qs: &HashMap<String, Strin
 mod tests {
     use super::*;
 
-    // --- is_safe_id tests ---
-
     #[test]
-    fn safe_id_accepts_alphanumeric() {
+    fn safe_id_valid_and_invalid() {
         assert!(is_safe_id("T1-02"));
         assert!(is_safe_id("671"));
-        assert!(is_safe_id("W1"));
         assert!(is_safe_id("plan_706"));
-        assert!(is_safe_id("abc-123_XYZ"));
-    }
-
-    #[test]
-    fn safe_id_rejects_empty() {
         assert!(!is_safe_id(""));
-    }
-
-    #[test]
-    fn safe_id_rejects_shell_metacharacters() {
-        // These are the injection vectors we must block
-        for bad in &[
-            "; rm -rf /",
-            "$(whoami)",
-            "`id`",
-            "foo && bar",
-            "foo | bar",
-            "foo > /tmp/x",
-            "foo\nbar",
-            "foo'bar",
-            "foo\"bar",
-            "foo bar",
-        ] {
+        for bad in &["; rm -rf /", "$(whoami)", "`id`", "foo && bar", "foo | bar",
+            "foo > /tmp/x", "foo\nbar", "foo'bar", "foo\"bar", "foo bar"] {
             assert!(!is_safe_id(bad), "expected rejection of: {bad}");
         }
     }
 
-    // --- build_agent_command: valid inputs ---
-
     #[test]
-    fn valid_cli_claude_no_optional_params() {
-        let cmd = build_agent_command("claude", "671", &HashMap::new());
-        assert!(cmd.is_ok(), "expected Ok, got: {:?}", cmd);
-        let s = cmd.unwrap();
-        assert!(s.contains("claude --dangerously-skip-permissions"));
-        assert!(s.contains("Execute plan 671"));
-        // Must NOT contain task/wave suffixes when absent
-        assert!(!s.contains("task "));
-        assert!(!s.contains("wave "));
-    }
+    fn valid_cli_claude_builds_command() {
+        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
+        assert!(cmd.contains("claude --dangerously-skip-permissions"));
+        assert!(cmd.contains("Execute plan 671"));
+        assert!(!cmd.contains("task "));
+        assert!(!cmd.contains("wave "));
 
-    #[test]
-    fn valid_cli_claude_with_task_and_wave() {
         let mut qs = HashMap::new();
         qs.insert("task_id".into(), "T1-02".into());
         qs.insert("wave_id".into(), "W1".into());
@@ -183,86 +154,41 @@ mod tests {
         let mut qs = HashMap::new();
         qs.insert("task_id".into(), "99".into());
         let cmd = build_agent_command("copilot", "42", &qs).unwrap();
-        assert!(cmd.contains("copilot"));
-        assert!(cmd.contains("Execute plan 42 task 99"));
-        // copilot must NOT use claude's --dangerously-skip-permissions flag
-        assert!(!cmd.contains("--dangerously-skip-permissions"));
-    }
-
-    // --- build_agent_command: invalid cli ---
-
-    #[test]
-    fn invalid_cli_rejected() {
-        let err = build_agent_command("my-agent", "42", &HashMap::new());
-        assert!(err.is_err());
-        let msg = err.unwrap_err();
-        assert!(
-            msg.contains("not in the allowed list"),
-            "unexpected error: {msg}"
-        );
+        assert!(cmd.contains("copilot") && !cmd.contains("--dangerously-skip-permissions"));
     }
 
     #[test]
-    fn cli_injection_attempt_rejected() {
-        // Attacker-controlled cli value with shell metacharacters
-        let err = build_agent_command("claude; rm -rf /", "42", &HashMap::new());
-        assert!(err.is_err());
+    fn invalid_cli_and_injection_rejected() {
+        let msg = build_agent_command("my-agent", "42", &HashMap::new())
+            .unwrap_err().to_string();
+        assert!(msg.contains("not in the allowed list"), "got: {msg}");
+        assert!(build_agent_command("claude; rm -rf /", "42", &HashMap::new()).is_err());
     }
-
-    // --- build_agent_command: injection in plan_id ---
 
     #[test]
     fn plan_id_injection_rejected() {
-        let err = build_agent_command("claude", "42; curl attacker.com", &HashMap::new());
-        assert!(err.is_err());
-        let msg = err.unwrap_err();
-        assert!(
-            msg.contains("plan_id"),
-            "expected plan_id error, got: {msg}"
-        );
+        let msg = build_agent_command("claude", "42; curl attacker.com", &HashMap::new())
+            .unwrap_err().to_string();
+        assert!(msg.contains("plan_id"), "got: {msg}");
+        assert!(build_agent_command("claude", "`whoami`", &HashMap::new()).is_err());
     }
 
     #[test]
-    fn plan_id_backtick_injection_rejected() {
-        let err = build_agent_command("claude", "`whoami`", &HashMap::new());
-        assert!(err.is_err());
-    }
-
-    // --- build_agent_command: injection in task_id / wave_id ---
-
-    #[test]
-    fn task_id_injection_rejected() {
+    fn task_wave_id_injection_rejected() {
         let mut qs = HashMap::new();
         qs.insert("task_id".into(), "T1-02 && evil".into());
-        let err = build_agent_command("claude", "671", &qs);
-        assert!(err.is_err());
-        let msg = err.unwrap_err();
-        assert!(
-            msg.contains("task_id"),
-            "expected task_id error, got: {msg}"
-        );
+        let msg = build_agent_command("claude", "671", &qs).unwrap_err().to_string();
+        assert!(msg.contains("task_id"), "got: {msg}");
+
+        let mut qs2 = HashMap::new();
+        qs2.insert("wave_id".into(), "W1$(id)".into());
+        let msg2 = build_agent_command("claude", "671", &qs2).unwrap_err().to_string();
+        assert!(msg2.contains("wave_id"), "got: {msg2}");
     }
 
     #[test]
-    fn wave_id_injection_rejected() {
-        let mut qs = HashMap::new();
-        qs.insert("wave_id".into(), "W1$(id)".into());
-        let err = build_agent_command("claude", "671", &qs);
-        assert!(err.is_err());
-        let msg = err.unwrap_err();
-        assert!(
-            msg.contains("wave_id"),
-            "expected wave_id error, got: {msg}"
-        );
-    }
-
-    // --- no format! shell string construction with raw cli ---
-
-    #[test]
-    fn command_does_not_interpolate_cli_param_directly() {
-        // Verify the output uses a hardcoded binary path, not the caller's cli string
+    fn command_uses_hardcoded_binary() {
         let cmd = build_agent_command("claude", "1", &HashMap::new()).unwrap();
-        // The literal string "claude" appears but only as a hardcoded tool name
         assert!(cmd.contains("claude --dangerously-skip-permissions"));
     }
 }

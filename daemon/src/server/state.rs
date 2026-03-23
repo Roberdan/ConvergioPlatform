@@ -2,6 +2,7 @@ use super::state_init::init_db_and_pool;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use chrono::Utc;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::types::ValueRef;
@@ -9,6 +10,7 @@ use rusqlite::{Connection, Params, Row};
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use tokio::sync::broadcast;
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct ServerState {
@@ -65,6 +67,20 @@ impl ApiError {
         }
     }
 
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            message: message.into(),
+        }
+    }
+
+    pub fn rate_limited(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            message: message.into(),
+        }
+    }
+
     pub fn conflict(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::CONFLICT,
@@ -80,11 +96,33 @@ impl ApiError {
     }
 }
 
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.status.as_u16(), self.message)
+    }
+}
+
+impl From<String> for ApiError {
+    fn from(message: String) -> Self {
+        Self::internal(message)
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        let request_id = Uuid::new_v4().to_string();
+        let timestamp = Utc::now().to_rfc3339();
         (
             self.status,
-            Json(json!({"ok": false, "error": self.message})),
+            Json(json!({
+                "ok": false,
+                "error": {
+                    "code": self.status.as_u16(),
+                    "message": self.message,
+                    "request_id": request_id,
+                    "timestamp": timestamp,
+                }
+            })),
         )
             .into_response()
     }

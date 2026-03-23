@@ -610,7 +610,6 @@ name = "convergio-platform-daemon"
 version = "13.0.0"
 dependencies = [
  "aes-gcm",
- "anyhow",
  "axum",
  "base64",
  "chacha20poly1305",

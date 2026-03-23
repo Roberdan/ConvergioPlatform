@@ -22,6 +22,12 @@ pub enum WorkspaceError {
     Io(#[from] std::io::Error),
     #[error("workspace not found: {0}")]
     NotFound(String),
+    #[error("validation error: {0}")]
+    Validation(String),
+    #[error("merge error: {0}")]
+    Merge(String),
+    #[error("event log error: {0}")]
+    Event(String),
 }
 
 pub type Result<T> = std::result::Result<T, WorkspaceError>;
@@ -113,7 +119,8 @@ impl WorkspaceManager {
             run_git(&self.repo_root, &["branch", "-D", b]).ok();
         }
         conn.execute(
-            "UPDATE workspaces SET status='deleted', deleted_at=datetime('now') WHERE workspace_id=?1",
+            "UPDATE workspaces SET status='deleted', deleted_at=datetime('now') \
+             WHERE workspace_id=?1",
             params![workspace_id],
         )?;
         Ok(())
@@ -141,7 +148,6 @@ impl WorkspaceManager {
     }
 
     /// Create a feature workspace: git worktree for ad-hoc branch work (not plan-bound).
-    /// Branch resolution order: local → remote → new branch from base_ref/HEAD.
     /// Delegates to feature_workspace module to keep core.rs under 250 lines.
     pub fn create_feature_workspace(
         &self,

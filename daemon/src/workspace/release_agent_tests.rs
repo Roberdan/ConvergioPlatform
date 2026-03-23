@@ -3,7 +3,7 @@
 use super::{ReleaseAgent, ReleaseResult};
 use crate::server::state_init::ConnPool;
 use crate::workspace::events::EventLogger;
-use crate::workspace::git_connector::{AsyncResult, GitConnector, MergeMethod, PrInfo, PrReadiness};
+use crate::workspace::git_connector::{AsyncResult, GitConnector, GitError, MergeMethod, PrInfo, PrReadiness};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::path::Path;
@@ -47,17 +47,17 @@ impl MockConnector {
 }
 
 impl GitConnector for MockConnector {
-    fn commit(&self, _path: &Path, message: &str) -> Result<String, String> {
+    fn commit(&self, _path: &Path, message: &str) -> Result<String, GitError> {
         if let Some(e) = &self.commit_err {
-            return Err(e.clone());
+            return Err(GitError::Git(e.clone()));
         }
         self.commits.lock().unwrap().push(message.to_string());
         Ok("abc1234def5678901234567890123456789012ab".to_string())
     }
 
-    fn push(&self, _path: &Path, branch: &str, fwl: bool) -> Result<(), String> {
+    fn push(&self, _path: &Path, branch: &str, fwl: bool) -> Result<(), GitError> {
         if let Some(e) = &self.push_err {
-            return Err(e.clone());
+            return Err(GitError::Git(e.clone()));
         }
         self.pushes.lock().unwrap().push((branch.to_string(), fwl));
         Ok(())
@@ -110,7 +110,7 @@ impl GitConnector for MockConnector {
         })
     }
 
-    fn rebase(&self, _path: &Path, _onto: &str) -> Result<(), String> {
+    fn rebase(&self, _path: &Path, _onto: &str) -> Result<(), GitError> {
         Ok(()) // best-effort, always ok in tests
     }
 }
@@ -187,9 +187,9 @@ async fn test_release_workspace_not_found() {
     let agent = make_agent(Box::new(MockConnector::new_ok()), pool);
     let result = agent.release("nonexistent", "org/repo").await;
     assert!(result.is_err());
-    let msg = result.unwrap_err();
+    let msg = result.unwrap_err().to_string();
     assert!(
-        msg.contains("workspace not found") || msg.contains("not found"),
+        msg.contains("workspace") || msg.contains("not found"),
         "got: {msg}"
     );
 }
@@ -202,10 +202,9 @@ async fn test_release_full_pipeline_merged() {
     seed_workspace(&pool, "ws-001", &path, "plan/698-w4");
 
     let agent = make_agent(Box::new(MockConnector::new_ok()), pool.clone());
-    // Quality gates may fail (no real repo) — assert no panic and meaningful error if Err
     match agent.release("ws-001", "org/repo").await {
         Ok(r) => assert_eq!(r.workspace_id, "ws-001"),
-        Err(e) => assert!(!e.is_empty(), "error must be descriptive"),
+        Err(e) => assert!(!e.to_string().is_empty(), "error must be descriptive"),
     }
 }
 
@@ -222,8 +221,7 @@ async fn test_release_not_merged_when_ci_pending() {
             assert!(!r.merged, "should not be merged when CI pending");
             assert_eq!(r.workspace_id, "ws-002");
         }
-        // Quality gate may fail (no real repo) — also acceptable
-        Err(e) => assert!(!e.is_empty()),
+        Err(e) => assert!(!e.to_string().is_empty()),
     }
 }
 

@@ -1,6 +1,6 @@
 // Tests for merge_ops module — MockGitConnector verifies pipeline call order.
 use super::*;
-use crate::workspace::git_connector::{AsyncResult, MergeMethod, PrInfo, PrReadiness};
+use crate::workspace::git_connector::{AsyncResult, GitError, MergeMethod, PrInfo, PrReadiness};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::cell::RefCell;
@@ -35,17 +35,17 @@ impl MockGitConnector {
 }
 
 impl GitConnector for MockGitConnector {
-    fn commit(&self, _path: &Path, _message: &str) -> Result<String, String> {
+    fn commit(&self, _path: &Path, _message: &str) -> std::result::Result<String, GitError> {
         self.push_call("commit");
         Ok("abc1234567890123456789012345678901234567890".to_string())
     }
 
-    fn push(&self, _path: &Path, _branch: &str, _force_with_lease: bool) -> Result<(), String> {
+    fn push(&self, _path: &Path, _branch: &str, _force_with_lease: bool) -> std::result::Result<(), GitError> {
         self.push_call("push");
         Ok(())
     }
 
-    fn rebase(&self, _path: &Path, _onto: &str) -> Result<(), String> {
+    fn rebase(&self, _path: &Path, _onto: &str) -> std::result::Result<(), GitError> {
         self.push_call("rebase");
         Ok(())
     }
@@ -156,7 +156,6 @@ async fn merge_pipeline_calls_in_correct_order() {
     let result = merge_wave(1, "example/repo", &connector, &event_logger, &pool).await.unwrap();
 
     let calls = connector.recorded_calls();
-    // Verify order: commit, rebase, push, create_pr, pr_readiness (at least 1), merge_pr
     assert_eq!(calls[0], "commit", "commit must be first");
     assert_eq!(calls[1], "rebase", "rebase must follow commit");
     assert_eq!(calls[2], "push", "push must follow rebase");
@@ -194,13 +193,15 @@ async fn merge_pipeline_updates_waves_table() {
 #[tokio::test]
 async fn merge_pipeline_fails_when_no_workspace() {
     let pool = make_pool_with_schema();
-    // No workspace seeded for wave_db_id=99
     let connector = MockGitConnector::new(true);
     let event_logger = EventLogger::new(pool.clone());
 
-    let err = merge_wave(99, "example/repo", &connector, &event_logger, &pool).await.unwrap_err();
+    let err = merge_wave(99, "example/repo", &connector, &event_logger, &pool)
+        .await
+        .unwrap_err()
+        .to_string();
     assert!(
-        err.contains("no active workspace"),
+        err.contains("wave 99"),
         "expected workspace error, got: {err}"
     );
 }

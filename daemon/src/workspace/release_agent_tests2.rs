@@ -3,7 +3,7 @@
 
 use crate::server::state_init::ConnPool;
 use crate::workspace::events::{EventLogger, WorkspaceAction};
-use crate::workspace::git_connector::{AsyncResult, GitConnector, MergeMethod, PrInfo, PrReadiness};
+use crate::workspace::git_connector::{AsyncResult, GitConnector, GitError, MergeMethod, PrInfo, PrReadiness};
 use crate::workspace::release_agent::ReleaseAgent;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -12,10 +12,10 @@ use std::path::Path;
 struct MockOk;
 
 impl GitConnector for MockOk {
-    fn commit(&self, _path: &Path, _message: &str) -> Result<String, String> {
+    fn commit(&self, _path: &Path, _message: &str) -> Result<String, GitError> {
         Ok("abc123".to_string())
     }
-    fn push(&self, _path: &Path, _branch: &str, _fwl: bool) -> Result<(), String> {
+    fn push(&self, _path: &Path, _branch: &str, _fwl: bool) -> Result<(), GitError> {
         Ok(())
     }
     fn create_pr<'a>(
@@ -53,7 +53,7 @@ impl GitConnector for MockOk {
             })
         })
     }
-    fn rebase(&self, _path: &Path, _onto: &str) -> Result<(), String> {
+    fn rebase(&self, _path: &Path, _onto: &str) -> Result<(), GitError> {
         Ok(())
     }
 }

@@ -10,11 +10,10 @@ use std::time::Duration;
 
 const GITHUB_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Git + GitHub operations interface. Sync for local git commands, async for GitHub API calls.
-/// Pin<Box<dyn Future>> return type enables `dyn GitConnector` without async_trait crate.
+/// Git + GitHub operations interface. Sync methods return GitError, async return GitError via future.
 pub trait GitConnector: Send + Sync {
-    fn commit(&self, path: &Path, message: &str) -> Result<String, String>;
-    fn push(&self, path: &Path, branch: &str, force_with_lease: bool) -> Result<(), String>;
+    fn commit(&self, path: &Path, message: &str) -> Result<String, GitError>;
+    fn push(&self, path: &Path, branch: &str, force_with_lease: bool) -> Result<(), GitError>;
     fn create_pr<'a>(
         &'a self,
         repo: &'a str,
@@ -30,45 +29,45 @@ pub trait GitConnector: Send + Sync {
         method: MergeMethod,
     ) -> AsyncResult<'a, ()>;
     fn pr_readiness<'a>(&'a self, repo: &'a str, pr_number: i64) -> AsyncResult<'a, PrReadiness>;
-    fn rebase(&self, path: &Path, onto: &str) -> Result<(), String>;
+    fn rebase(&self, path: &Path, onto: &str) -> Result<(), GitError>;
 }
 
 pub struct GitHubConnector {
     pub github_token: String,
 }
 
-fn run_git(path: &Path, args: &[&str]) -> Result<String, String> {
+fn run_git(path: &Path, args: &[&str]) -> Result<String, GitError> {
     let output = Command::new("git")
         .args(args)
         .current_dir(path)
         .output()
-        .map_err(|e| format!("git spawn failed: {e}"))?;
+        .map_err(|e| GitError::Git(format!("git spawn failed: {e}")))?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        Err(GitError::Git(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ))
     }
 }
 
 impl GitConnector for GitHubConnector {
-    fn commit(&self, path: &Path, message: &str) -> Result<String, String> {
+    fn commit(&self, path: &Path, message: &str) -> Result<String, GitError> {
         run_git(path, &["add", "-A"])?;
-        // Commit may fail if nothing to commit — propagate error
         run_git(path, &["commit", "-m", message])?;
         run_git(path, &["rev-parse", "HEAD"])
     }
 
-    fn push(&self, path: &Path, branch: &str, force_with_lease: bool) -> Result<(), String> {
+    fn push(&self, path: &Path, branch: &str, force_with_lease: bool) -> Result<(), GitError> {
         let mut args = vec!["push", "-u", "origin", branch];
         if force_with_lease {
-            // Insert before positional args
             args.insert(1, "--force-with-lease");
         }
         run_git(path, &args)?;
         Ok(())
     }
 
-    fn rebase(&self, path: &Path, onto: &str) -> Result<(), String> {
+    fn rebase(&self, path: &Path, onto: &str) -> Result<(), GitError> {
         run_git(path, &["rebase", onto])?;
         Ok(())
     }

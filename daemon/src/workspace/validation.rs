@@ -3,8 +3,11 @@
 // Why: Plan 698 — centralise validation in daemon, remove bash script drift.
 
 use crate::server::state_init::ConnPool;
+use crate::workspace::core::WorkspaceError;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+
+type Result<T> = std::result::Result<T, WorkspaceError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidateTaskResult {
@@ -24,27 +27,23 @@ pub struct ValidateWaveResult {
 pub(crate) const AUTHORISED_VALIDATORS: &[&str] =
     &["thor", "thor-quality-assurance-guardian", "thor-per-wave"];
 
-// Wave validation + sequential checks → validation_rules.rs
+// Wave validation + sequential checks -> validation_rules.rs
 pub use crate::workspace::validation_rules::{check_wave_sequential, validate_wave};
 
-fn pool_err(e: r2d2::Error) -> String {
-    format!("pool error: {e}")
-}
-
-/// Validate a single task: submitted→done, or backfill validated_at on done tasks.
+/// Validate a single task: submitted->done, or backfill validated_at on done tasks.
 /// Only Thor agents may call this. Updates wave/plan tasks_done counters.
 pub fn validate_task(
     task_db_id: i64,
     validated_by: &str,
     pool: &ConnPool,
-) -> Result<ValidateTaskResult, String> {
+) -> Result<ValidateTaskResult> {
     if !AUTHORISED_VALIDATORS.contains(&validated_by) {
-        return Err(format!(
+        return Err(WorkspaceError::Validation(format!(
             "validator '{validated_by}' is not authorized; must be one of: {}",
             AUTHORISED_VALIDATORS.join(", ")
-        ));
+        )));
     }
-    let conn = pool.get().map_err(pool_err)?;
+    let conn = pool.get()?;
     let (old_status, validated_at, wave_id_fk, plan_id): (
         String,
         Option<String>,
@@ -56,7 +55,7 @@ pub fn validate_task(
             params![task_db_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
-        .map_err(|e| format!("task {task_db_id} not found: {e}"))?;
+        .map_err(|e| WorkspaceError::NotFound(format!("task {task_db_id}: {e}")))?;
 
     match old_status.as_str() {
         "submitted" => {
@@ -64,21 +63,18 @@ pub fn validate_task(
                 "UPDATE tasks SET status='done', validated_at=datetime('now'), validated_by=?1,
                  completed_at=COALESCE(completed_at,datetime('now')) WHERE id=?2",
                 params![validated_by, task_db_id],
-            )
-            .map_err(|e| format!("update task: {e}"))?;
+            )?;
             if let Some(wid) = wave_id_fk {
                 conn.execute(
                     "UPDATE waves SET tasks_done=tasks_done+1 WHERE id=?1",
                     params![wid],
-                )
-                .map_err(|e| format!("wave tasks_done: {e}"))?;
+                )?;
             }
             if let Some(pid) = plan_id {
                 conn.execute(
                     "UPDATE plans SET tasks_done=tasks_done+1 WHERE id=?1",
                     params![pid],
-                )
-                .map_err(|e| format!("plan tasks_done: {e}"))?;
+                )?;
             }
             Ok(ValidateTaskResult {
                 task_db_id,
@@ -87,21 +83,19 @@ pub fn validate_task(
             })
         }
         "done" if validated_at.is_none() => {
-            // Backfill stamp for tasks marked done without going through validate_task
             conn.execute(
                 "UPDATE tasks SET validated_at=datetime('now'), validated_by=?1 WHERE id=?2",
                 params![validated_by, task_db_id],
-            )
-            .map_err(|e| format!("backfill validated_at: {e}"))?;
+            )?;
             Ok(ValidateTaskResult {
                 task_db_id,
                 old_status: "done".into(),
                 new_status: "done".into(),
             })
         }
-        other => Err(format!(
+        other => Err(WorkspaceError::Validation(format!(
             "task {task_db_id} has status '{other}'; must be 'submitted' or 'done' to validate"
-        )),
+        ))),
     }
 }
 

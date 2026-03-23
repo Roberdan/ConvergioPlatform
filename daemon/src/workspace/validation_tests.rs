@@ -92,7 +92,6 @@ fn validate_task_submitted_transitions_to_done() {
     assert_eq!(r.new_status, "done");
     assert_eq!(r.task_db_id, task_db_id);
 
-    // Verify DB row was updated
     let conn = pool.get().unwrap();
     let (status, validated_by, validated_at): (String, Option<String>, Option<String>) = conn
         .query_row(
@@ -116,7 +115,7 @@ fn validate_task_rejects_non_thor_validator() {
     let result = validate_task(task_db_id, "agent-smith", &pool);
     assert!(result.is_err(), "expected Err for non-Thor validator");
     assert!(
-        result.unwrap_err().contains("authorized"),
+        result.unwrap_err().to_string().contains("authorized"),
         "error should mention authorization"
     );
 }
@@ -131,7 +130,7 @@ fn validate_task_rejects_non_submitted_status() {
     let result = validate_task(task_db_id, "thor", &pool);
     assert!(result.is_err(), "expected Err for in_progress status");
     assert!(
-        result.unwrap_err().contains("in_progress"),
+        result.unwrap_err().to_string().contains("in_progress"),
         "error should mention the invalid status"
     );
 }
@@ -143,7 +142,6 @@ fn validate_task_done_without_validated_at_gets_stamp() {
     let wave_db_id = insert_wave(&pool, 40, 4, 1, "done");
     let task_db_id = insert_task(&pool, 4, wave_db_id, "done");
 
-    // done + validated_at IS NULL is allowed (backfill scenario)
     let result = validate_task(task_db_id, "thor-per-wave", &pool);
     assert!(
         result.is_ok(),
@@ -176,10 +174,9 @@ fn validate_wave_batch_promotes_submitted_to_done() {
     let result = validate_wave(wave_db_id, "thor-per-wave", &pool);
     assert!(result.is_ok(), "expected Ok, got: {:?}", result.err());
     let r = result.unwrap();
-    assert_eq!(r.tasks_validated, 2); // 2 promoted from submitted
+    assert_eq!(r.tasks_validated, 2);
     assert_eq!(r.wave_status, "done");
 
-    // All tasks in wave must now be done with validated_at
     let missing_count: i64 = pool
         .get()
         .unwrap()
@@ -206,7 +203,7 @@ fn validate_wave_blocks_on_unresolved_tasks() {
         "expected Err for unresolved in_progress task"
     );
     assert!(
-        result.unwrap_err().contains("unresolved"),
+        result.unwrap_err().to_string().contains("unresolved"),
         "error should mention unresolved tasks"
     );
 }
@@ -217,7 +214,7 @@ fn validate_wave_blocks_on_unresolved_tasks() {
 fn check_wave_sequential_allows_first_wave() {
     let pool = make_pool();
     insert_plan(&pool, 7, 0, 0);
-    let wave_db_id = insert_wave(&pool, 70, 7, 1, "pending");
+    let _wave_db_id = insert_wave(&pool, 70, 7, 1, "pending");
 
     let result = check_wave_sequential(7, 1, &pool);
     assert!(result.is_ok(), "first wave should always be allowed");
@@ -246,7 +243,7 @@ fn check_wave_sequential_blocks_when_predecessor_not_done() {
         result.is_err(),
         "should block wave 2 when wave 1 is in_progress"
     );
-    let err = result.unwrap_err();
+    let err = result.unwrap_err().to_string();
     assert!(
         err.contains("must be completed"),
         "error should mention completion requirement, got: {err}"
@@ -255,7 +252,6 @@ fn check_wave_sequential_blocks_when_predecessor_not_done() {
 
 #[test]
 fn check_wave_sequential_blocks_when_predecessor_merging() {
-    // 'merging' is not terminal — only 'done' unblocks the next wave
     let pool = make_pool();
     insert_plan(&pool, 10, 0, 0);
     insert_wave(&pool, 100, 10, 1, "merging");
