@@ -36,6 +36,19 @@ _ssh() { ssh -n -o ConnectTimeout=10 "$TARGET" "export PATH=/opt/homebrew/bin:/u
 info "Step 1/8: Git sync"
 _ssh "cd ~/.claude && git fetch origin main && git reset --hard origin/main" && ok "Git synced" || fail "Git sync failed"
 
+# 1b. Sanitize worker environment (BUG-3, BUG-4, BUG-7 fixes from Plan 706 delegation)
+info "Step 1b/8: Sanitize worker environment"
+# BUG-4: Remove rogue $HOME/.git that blocks all git operations
+_ssh "[ -f \$HOME/.git ] && rm \$HOME/.git && echo 'removed rogue .git' || true"
+# BUG-3: Prune orphan worktree gitdir refs from coordinator sync
+_ssh "for repo in \$HOME/GitHub/ConvergioPlatform; do [ -d \"\$repo/.git/worktrees\" ] && cd \"\$repo\" && git worktree prune 2>/dev/null; done || true"
+# BUG-7: Ensure .zshenv has PATH for non-interactive SSH
+_ssh 'grep -q "homebrew" \$HOME/.zshenv 2>/dev/null || cat > \$HOME/.zshenv << "ZENV"
+export PATH="\$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:\$HOME/.cargo/bin:\$PATH"
+[ -f "\$HOME/.cargo/env" ] && . "\$HOME/.cargo/env"
+ZENV'
+ok "Worker environment sanitized"
+
 # 2. Build binary (unless skipped)
 if ! $SKIP_BUILD; then
   info "Step 2/8: Building convergio-platform-daemon"

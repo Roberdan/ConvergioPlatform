@@ -44,6 +44,12 @@ pub enum Commands {
         static_dir: Option<PathBuf>,
         #[arg(long)]
         crsqlite_path: Option<String>,
+        /// Override DB path (default: $DASHBOARD_DB or ~/.claude/data/dashboard.db)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Disable auth and bind to 127.0.0.1 only (development use only)
+        #[arg(long)]
+        dev_mode: bool,
     },
     Daemon {
         #[command(subcommand)]

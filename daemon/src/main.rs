@@ -142,7 +142,16 @@ async fn dispatch(command: Commands) {
             bind,
             static_dir,
             crsqlite_path,
+            db_path,
+            dev_mode,
         } => {
+            // BUG-2 fix: --db-path flag overrides default; env var is fallback
+            if let Some(ref p) = db_path {
+                std::env::set_var("DASHBOARD_DB", p);
+            }
+            if dev_mode {
+                tracing::warn!("Auth disabled — dev mode");
+            }
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(claude_core::background::run_pause_bridge(db_path));
             ipc_handler::run_serve(bind, static_dir, crsqlite_path).await;

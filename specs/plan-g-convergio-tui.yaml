@@ -1,0 +1,572 @@
+name: "Plan G — Convergio TUI"
+version: "17.0.0"
+project: convergio
+description: >
+  Full terminal UI via ratatui — runs on any terminal, any node, SSH remote.
+  Extend daemon/src/tui/ from 4 views to 9: add Brain ASCII canvas, Cost/Token center,
+  Events stream, Workspace view, Deliverables browser. Replace HTTP polling with
+  WebSocket real-time (/ws/brain). Add --api-url for remote daemon connection.
+  Maranello palette in ANSI 256-color. Restructure modules to stay under 250 lines/file.
+  Scope: daemon/src/tui/ + daemon/Cargo.toml ONLY. Plan F (#706) in parallel — no overlap.
+
+requirements:
+  - id: F-01
+    title: WebSocket single channel
+    description: "Replace HTTP 5s polling with WS client on /ws/brain. Parse brain_event messages (agent_update, session_update, task_update). HTTP fallback on WS failure."
+  - id: F-02
+    title: Brain ASCII canvas
+    description: "Ratatui canvas widget with tree/radial layout. Fixed nodes for sessions, agents, tasks. Maranello colors. ASCII arcs between parent-child. Data from /api/brain + /ws/brain events."
+  - id: F-03
+    title: Cost/Token center
+    description: "Cost breakdown by model, project, date from /api/metrics/cost. Summary stats from /api/metrics/summary. Visual gauges for token consumption. Budget display."
+  - id: F-04
+    title: Events stream
+    description: "Live filterable feed from /api/workspace/events. Columns: timestamp, agent, action, file_path, detail. Filter by agent or action type. Auto-scroll with pause."
+  - id: F-05
+    title: Workspace view
+    description: "Active workspaces from /api/workspace/list. Per-workspace: status, path, branch, plan_id. Quality gate indicators. Release agent status."
+  - id: F-06
+    title: Deliverables browser
+    description: "Deliverables list from /api/deliverables. Columns: name, type, status (pending/approved/rejected), version, project. Filter by status."
+  - id: F-07
+    title: Tab navigation 1-9
+    description: "9 MainView variants. Keys 1-9 switch views. Tab/BackTab cycle. Footer shows all shortcuts. Selection index resets on view switch."
+  - id: F-08
+    title: Remote daemon via --api-url
+    description: "CLI flag --api-url <URL> (default http://localhost:8420). Stored in TuiApp, passed to API client and WS client. Enables controlling remote mesh nodes over SSH."
+  - id: F-09
+    title: Upgrade ratatui for canvas
+    description: "ratatui 0.30 → 0.31+. Add tokio-tungstenite to main dependencies (currently dev-only). Verify cargo check."
+  - id: F-10
+    title: Module restructure
+    description: "Split views.rs (236 lines) → views/ sub-module. Split widgets.rs (236 lines) → widgets/ sub-module. Extract TuiApp from mod.rs (235 lines) → app.rs. Extract data structs → data.rs. Every file under 250 lines."
+  - id: F-11
+    title: Maranello ANSI 256-color palette
+    description: "Existing palette (ACCENT, OK, FAIL, WARN, MUTED) in shared module. Extend with BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY for new views. All views use palette constants."
+  - id: F-12
+    title: Auto-refresh via WebSocket
+    description: "All views update real-time through WS events. TuiApp event loop uses tokio::select! on WS stream + keyboard + render tick. WS reconnect with exponential backoff."
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+  - "find daemon/src/tui/ -name '*.rs' -exec sh -c 'lines=$(wc -l < \"$1\"); if [ \"$lines\" -gt 250 ]; then echo \"$1: $lines lines\"; exit 1; fi' _ {} \\;"
+  - "grep -q 'BrainCanvas' daemon/src/tui/app.rs"
+  - "grep -q 'CostCenter' daemon/src/tui/app.rs"
+  - "grep -q 'EventStream' daemon/src/tui/app.rs"
+  - "grep -q 'WorkspaceView' daemon/src/tui/app.rs"
+  - "grep -q 'Deliverables' daemon/src/tui/app.rs"
+  - "grep -q 'api_url\\|api-url' daemon/src/tui/app.rs"
+  - "grep -q 'tokio-tungstenite' daemon/Cargo.toml"
+  - "grep -rq 'WebSocket\\|ws_connect\\|WsClient' daemon/src/tui/"
+  - "test $(find daemon/src/tui/ -name '*.rs' | wc -l) -ge 12"
+
+waves:
+  - id: W1
+    name: "Foundation — Module Restructure + Dependencies"
+    description: "Split existing files to stay under 250-line limit. Upgrade deps. Add new MainView variants and --api-url. No new views yet — just infrastructure."
+    tasks:
+      - id: T1-01
+        title: >
+          Upgrade ratatui from 0.30 to 0.31+ in daemon/Cargo.toml. Move tokio-tungstenite
+          from dev-dependencies to main dependencies. Add url crate for parsing --api-url.
+          Run cargo check to verify compilation. Run cargo test to verify no regressions.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        f_xx: [F-09]
+        files: [daemon/Cargo.toml, daemon/Cargo.lock]
+        verify:
+          - "grep -q 'tokio-tungstenite' daemon/Cargo.toml"
+          - "grep -v '\\[dev-dependencies\\]' daemon/Cargo.toml | grep -q 'tokio-tungstenite'"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+        test_criteria: "cargo check passes with upgraded ratatui and tokio-tungstenite in main deps"
+
+      - id: T1-02
+        title: >
+          Split daemon/src/tui/views.rs (236 lines) into views/ sub-module directory:
+          (1) views/mod.rs — render_view() dispatcher + view_name() + pub mod declarations.
+          (2) views/plan.rs — plan_kanban() function from widgets, imported via super::widgets.
+          (3) views/task.rs — task_pipeline() function.
+          (4) views/mesh.rs — mesh_status() function.
+          (5) views/agent.rs — agent_org_chart() function.
+          Delete the old views.rs file. Update mod.rs to use `pub mod views` (which now points to views/mod.rs).
+          All existing tests in tests.rs must pass unchanged. Each file under 250 lines.
+        type: refactor
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T1-01]
+        f_xx: [F-10]
+        files: [daemon/src/tui/views.rs, daemon/src/tui/views/mod.rs, daemon/src/tui/views/plan.rs, daemon/src/tui/views/task.rs, daemon/src/tui/views/mesh.rs, daemon/src/tui/views/agent.rs]
+        verify:
+          - "test -d daemon/src/tui/views"
+          - "test -f daemon/src/tui/views/mod.rs"
+          - "test -f daemon/src/tui/views/plan.rs"
+          - "test -f daemon/src/tui/views/mesh.rs"
+          - "test ! -f daemon/src/tui/views.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "find daemon/src/tui/views/ -name '*.rs' -exec sh -c 'test $(wc -l < \"$1\") -le 250' _ {} \\;"
+        test_criteria: "4 view functions in separate files under views/, old views.rs deleted, all tests pass"
+
+      - id: T1-03
+        title: >
+          Split daemon/src/tui/widgets.rs (236 lines) into widgets/ sub-module directory:
+          (1) widgets/mod.rs — Maranello palette constants (ACCENT, OK, FAIL, WARN, MUTED, BG_DARK + new
+          BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY), re-exports, selected_style().
+          (2) widgets/kpi.rs — kpi_strip() function.
+          (3) widgets/shared.rs — progress_bar(), spark() helpers.
+          Delete the old widgets.rs file. Update mod.rs import.
+          All existing tests must pass. Each file under 250 lines.
+        type: refactor
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T1-01]
+        f_xx: [F-10, F-11]
+        files: [daemon/src/tui/widgets.rs, daemon/src/tui/widgets/mod.rs, daemon/src/tui/widgets/kpi.rs, daemon/src/tui/widgets/shared.rs]
+        verify:
+          - "test -d daemon/src/tui/widgets"
+          - "test -f daemon/src/tui/widgets/mod.rs"
+          - "test ! -f daemon/src/tui/widgets.rs"
+          - "grep -q 'BG_SURFACE\\|TEXT_PRIMARY' daemon/src/tui/widgets/mod.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "find daemon/src/tui/widgets/ -name '*.rs' -exec sh -c 'test $(wc -l < \"$1\") -le 250' _ {} \\;"
+        test_criteria: "Palette in widgets/mod.rs with 3 new color constants, helpers split, all tests pass"
+
+      - id: T1-04
+        title: >
+          Refactor daemon/src/tui/mod.rs (235 lines) into smaller modules:
+          (1) Extract all data structs (PlanCard, TaskPipelineItem, MeshNode, AgentOrgNode,
+          KpiData, TuiData) into data.rs. Add new structs: BrainNode{id,label,kind,parent_id,status},
+          CostEntry{model,calls,cost_usd}, CostByDate{date,cost_usd}, CostData{by_model,by_project,by_date,summary},
+          WorkspaceEvent{id,workspace_id,agent,action,file_path,detail,created_at},
+          WorkspaceInfo{workspace_id,path,branch,plan_id,status,created_at},
+          DeliverableInfo{id,name,output_type,status,version,project_id,created_at}.
+          Extend TuiData with brain_nodes, cost, events, workspaces, deliverables fields.
+          (2) Extract TuiApp struct + event loop + key handling + refresh_data into app.rs.
+          Add api_url: String field. Add 5 new MainView variants: BrainCanvas, CostCenter,
+          EventStream, WorkspaceView, Deliverables. Update handle_key for keys 5-9.
+          Update next_view/prev_view to cycle through all 9. Update list_len for new views.
+          Add placeholder render arms (Paragraph with view name, not todo!()).
+          (2b) Parse --api-url from std::env::args() in TuiApp::new(). Pattern:
+          find "--api-url" in args, take next arg as URL. Default "http://localhost:8420".
+          Store in self.api_url. Pass to refresh_data and WS client in later waves.
+          (3) mod.rs becomes thin: pub mod declarations + re-exports only.
+          (4) Update tests.rs: add test for 9-view cycling, test new data struct defaults,
+          test render of placeholder views. Update sample_data with default new fields.
+          Test that api_url defaults correctly when no arg provided.
+          All files under 250 lines.
+        type: refactor
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-02, T1-03]
+        f_xx: [F-07, F-08, F-10]
+        files: [daemon/src/tui/mod.rs, daemon/src/tui/app.rs, daemon/src/tui/data.rs, daemon/src/tui/tests.rs]
+        verify:
+          - "test -f daemon/src/tui/app.rs"
+          - "test -f daemon/src/tui/data.rs"
+          - "grep -q 'BrainCanvas' daemon/src/tui/app.rs"
+          - "grep -q 'CostCenter' daemon/src/tui/app.rs"
+          - "grep -q 'EventStream' daemon/src/tui/app.rs"
+          - "grep -q 'WorkspaceView' daemon/src/tui/app.rs"
+          - "grep -q 'Deliverables' daemon/src/tui/app.rs"
+          - "grep -q 'api_url' daemon/src/tui/app.rs"
+          - "grep -q 'BrainNode' daemon/src/tui/data.rs"
+          - "grep -q 'CostData' daemon/src/tui/data.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "wc -l < daemon/src/tui/mod.rs | awk '{if($1>250) exit 1}'"
+          - "wc -l < daemon/src/tui/app.rs | awk '{if($1>250) exit 1}'"
+          - "wc -l < daemon/src/tui/data.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "9 MainView variants, api_url field, all data structs in data.rs, placeholder renders work, all files under 250 lines"
+
+  - id: W2
+    name: "WebSocket Client + Brain Canvas"
+    description: "Add WS client for real-time updates. Implement Brain ASCII canvas view with ratatui canvas widget."
+    tasks:
+      - id: T2-01
+        title: >
+          Create daemon/src/tui/ws_client.rs — WebSocket client module:
+          (1) WsClient struct with url (ws://host:port/ws/brain), reconnect state, message buffer, auth_token: Option<String>.
+          (2) connect() — tokio-tungstenite WebSocket connection to api_url/ws/brain.
+          Include auth token as Bearer header if present (daemon middleware requires auth on /ws/brain).
+          Read token from CONVERGIO_AUTH_TOKEN env var or --auth-token CLI arg.
+          (3) poll_message() — returns Option<BrainEvent> (parsed from JSON).
+          (4) BrainEvent enum: AgentUpdate{agents}, SessionUpdate{sessions}, TaskUpdate{task_id,status,plan_id}, Heartbeat.
+          (5) Exponential backoff reconnect (base 1s, max 30s, reset on success).
+          (6) HTTP fallback: if WS fails 3 times, fall back to polling /api/brain every 5s.
+          (7) Wire into TuiApp: add ws_client field, update event loop tokio::select! to include
+          WS stream alongside keyboard + render tick. On WS message, update relevant TuiData fields.
+          Remove old HTTP-only poll_tick (replaced by WS + fallback).
+          Write tests: parse each BrainEvent type from JSON fixture, test reconnect backoff logic,
+          test fallback trigger after 3 failures.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01, F-12]
+        files: [daemon/src/tui/ws_client.rs, daemon/src/tui/app.rs, daemon/src/tui/mod.rs]
+        verify:
+          - "test -f daemon/src/tui/ws_client.rs"
+          - "grep -q 'WsClient' daemon/src/tui/ws_client.rs"
+          - "grep -q 'BrainEvent' daemon/src/tui/ws_client.rs"
+          - "grep -q 'ws_client' daemon/src/tui/app.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::ws_client"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "wc -l < daemon/src/tui/ws_client.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "WS client connects, parses 3 event types, backoff works, fallback triggers, wired into event loop"
+
+      - id: T2-02
+        title: >
+          Create daemon/src/tui/views/brain.rs — Brain ASCII canvas view:
+          (1) brain_canvas(data: &TuiData, selected: usize) → renders via ratatui Canvas widget.
+          (2) Layout: radial/tree with 3 rings — center: active sessions, middle: agents, outer: tasks.
+          (3) Each node rendered as colored label (green=running, yellow=submitted, gray=idle, red=failed).
+          (4) ASCII arcs between parent-child (session→agent, agent→task) using Line shape on canvas.
+          (5) Token summary at bottom: per-model token count from TuiData.kpis.
+          (6) Node count display: "Sessions: N | Agents: N | Tasks: N".
+          (7) Selected node highlight (reversed style).
+          Register in views/mod.rs render_view() match arm for MainView::BrainCanvas.
+          Brain view renders from TuiData.brain_nodes (populated by T2-03 fetch + WS).
+          Write test: render brain canvas with sample BrainNode data, assert contains node labels.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-02, F-11]
+        files: [daemon/src/tui/views/brain.rs, daemon/src/tui/views/mod.rs, daemon/src/tui/tests.rs]
+        verify:
+          - "test -f daemon/src/tui/views/brain.rs"
+          - "grep -q 'brain_canvas' daemon/src/tui/views/brain.rs"
+          - "grep -q 'Canvas' daemon/src/tui/views/brain.rs"
+          - "grep -q 'BrainCanvas' daemon/src/tui/views/mod.rs"
+          - "grep -q 'fetch_brain' daemon/src/tui/api.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "wc -l < daemon/src/tui/views/brain.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "Canvas widget renders radial layout, nodes colored by status, arcs drawn, wired in dispatcher"
+
+      - id: T2-03
+        title: >
+          Update api.rs to support --api-url and add fetch_brain():
+          (1) Change base_url() to accept api_url parameter instead of reading env var every call.
+          All fetch_* functions take api_url: &str as first param (or use a struct ApiClient{base_url}).
+          (2) Add fetch_brain(client, api_url) → GET /api/brain → parse sessions array into
+          Vec<BrainNode> with kind=Session, agents into Vec<BrainNode> with kind=Agent.
+          Map parent linkage from agent's session_id. Return (brain_nodes, kpi_update).
+          (3) Update app.rs refresh_data() to pass api_url to all fetch calls.
+          (4) If api.rs exceeds 250 lines after changes, split into api/mod.rs + api/brain.rs.
+          Write test: fetch_brain parses sample JSON correctly.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-01]
+        f_xx: [F-08, F-02]
+        files: [daemon/src/tui/api.rs, daemon/src/tui/app.rs, daemon/src/tui/tests.rs]
+        verify:
+          - "grep -q 'fetch_brain' daemon/src/tui/api.rs || grep -q 'fetch_brain' daemon/src/tui/api/brain.rs"
+          - "grep -q 'api_url\\|base_url' daemon/src/tui/api.rs || grep -q 'ApiClient' daemon/src/tui/api.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "find daemon/src/tui/ -name '*.rs' -path '*/api*' -exec sh -c 'test $(wc -l < \"$1\") -le 250' _ {} \\;"
+        test_criteria: "api_url flows through all fetches, fetch_brain parses correctly, no file over 250 lines"
+
+  - id: W3
+    name: "Cost Center + Events Stream"
+    description: "Implement Cost/Token center and Events stream views with their API clients."
+    tasks:
+      - id: T3-01
+        title: >
+          Create daemon/src/tui/views/cost.rs — Cost/Token center view:
+          (1) cost_center(data: &TuiData, selected: usize) → renders cost breakdown.
+          (2) Top section: summary row — total runs, avg duration, total cost USD.
+          (3) Left column: "By Model" table — model name, call count, cost. Sorted by cost DESC.
+          (4) Right column: "By Date" sparkline — last N days cost trend using spark() helper.
+          (5) Bottom: "By Project" table — project, calls, cost. Sorted by cost DESC.
+          (6) Selected row highlighting in active table.
+          (7) Add fetch_cost(client, api_url) to api.rs or api/cost.rs — GET /api/metrics/cost?days=7
+          → parse into CostData struct. Add fetch_metrics_summary(client, api_url) → GET /api/metrics/summary.
+          (8) Wire into views/mod.rs for MainView::CostCenter.
+          (9) Wire into app.rs refresh_data() to call both fetches, store in TuiData.cost.
+          Write test: render cost view with sample CostData, assert contains "By Model" header.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-03, F-11]
+        files: [daemon/src/tui/views/cost.rs, daemon/src/tui/views/mod.rs, daemon/src/tui/api.rs, daemon/src/tui/app.rs, daemon/src/tui/tests.rs]
+        verify:
+          - "test -f daemon/src/tui/views/cost.rs"
+          - "grep -q 'cost_center' daemon/src/tui/views/cost.rs"
+          - "grep -q 'CostCenter' daemon/src/tui/views/mod.rs"
+          - "grep -q 'fetch_cost\\|fetch_metrics' daemon/src/tui/api.rs || find daemon/src/tui/api/ -name 'cost.rs' | grep -q ."
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "wc -l < daemon/src/tui/views/cost.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "Cost view renders 3 sections (summary, by-model, by-date), API fetches wired, data flows to view"
+
+      - id: T3-02
+        title: >
+          Create daemon/src/tui/views/events.rs — Events stream view:
+          (1) event_stream(data: &TuiData, selected: usize) → renders live event feed.
+          (2) Header: "EVENTS" + filter indicators.
+          (3) Columns: timestamp (HH:MM:SS), agent, action, file_path (truncated), detail.
+          (4) Action coloring: file_write=WARN, git_commit=OK, quality_gate_fail=FAIL, etc.
+          (5) Selected event highlighting.
+          (6) Show event count: "Showing N events".
+          (7) Add fetch_events(client, api_url, workspace_id?, limit) to api.rs or api/events.rs —
+          GET /api/workspace/events?limit=50 → parse into Vec<WorkspaceEvent>.
+          (8) Wire into views/mod.rs for MainView::EventStream.
+          (9) Wire into app.rs refresh_data() to fetch events.
+          (10) Also wire WS events: on any brain_event, if it contains relevant data, update events list.
+          Write test: render events view with sample events, assert contains action names.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T3-01]
+        f_xx: [F-04, F-11, F-12]
+        files: [daemon/src/tui/views/events.rs, daemon/src/tui/views/mod.rs, daemon/src/tui/api.rs, daemon/src/tui/app.rs, daemon/src/tui/tests.rs]
+        verify:
+          - "test -f daemon/src/tui/views/events.rs"
+          - "grep -q 'event_stream' daemon/src/tui/views/events.rs"
+          - "grep -q 'EventStream' daemon/src/tui/views/mod.rs"
+          - "grep -q 'fetch_events' daemon/src/tui/api.rs || find daemon/src/tui/api/ -name 'events.rs' | grep -q ."
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "wc -l < daemon/src/tui/views/events.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "Events view renders table with colored actions, API fetch wired, WS events update list"
+
+      - id: T3-03
+        title: >
+          Integration verification for W3: Run full test suite and verify Cost + Events views
+          are fully wired end-to-end. Verify:
+          (1) Tab to CostCenter (key 6) renders cost data from sample_data().
+          (2) Tab to EventStream (key 7) renders events from sample_data().
+          (3) All 9 views render without panic.
+          (4) WS client still compiles and tests pass.
+          (5) No file in daemon/src/tui/ exceeds 250 lines.
+          (6) Add sample cost + events data to sample_data() in tests.
+          Fix any compilation errors or test failures from T3-01/T3-02 integration.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        depends_on: [T3-01, T3-02]
+        f_xx: [F-03, F-04, F-07]
+        files: [daemon/src/tui/tests.rs, daemon/src/tui/app.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings 2>&1 | grep -v '^$' | tail -1 | grep -qv 'error'"
+          - "find daemon/src/tui/ -name '*.rs' -exec sh -c 'lines=$(wc -l < \"$1\"); if [ \"$lines\" -gt 250 ]; then echo \"FAIL: $1 has $lines lines\"; exit 1; fi' _ {} \\;"
+        test_criteria: "Full suite green, clippy clean, all files under 250 lines, 7 of 9 views render real content"
+
+  - id: W4
+    name: "Workspace + Deliverables + Final Integration"
+    description: "Implement Workspace and Deliverables views. Full integration test across all 9 views."
+    tasks:
+      - id: T4-01
+        title: >
+          Create daemon/src/tui/views/workspace.rs — Workspace view:
+          (1) workspace_view(data: &TuiData, selected: usize) → renders workspace list.
+          (2) Header: "WORKSPACES" + count.
+          (3) Per workspace row: workspace_id (truncated), branch, plan_id, status (colored: active=OK, merged=MUTED, deleted=FAIL).
+          (4) Quality gate indicators if available (from workspace status): green checkmark or red X per gate.
+          (5) Release agent status: pipeline stage indicator.
+          (6) Selected workspace highlighting.
+          (7) Add fetch_workspaces(client, api_url) → GET /api/workspace/list → Vec<WorkspaceInfo>.
+          (8) Wire into views/mod.rs for MainView::WorkspaceView.
+          (9) Wire into app.rs refresh_data().
+          Write test: render with sample workspaces, assert contains workspace_id and status.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-05, F-11]
+        files: [daemon/src/tui/views/workspace.rs, daemon/src/tui/views/mod.rs, daemon/src/tui/api.rs, daemon/src/tui/app.rs, daemon/src/tui/tests.rs]
+        verify:
+          - "test -f daemon/src/tui/views/workspace.rs"
+          - "grep -q 'workspace_view' daemon/src/tui/views/workspace.rs"
+          - "grep -q 'WorkspaceView' daemon/src/tui/views/mod.rs"
+          - "grep -q 'fetch_workspaces' daemon/src/tui/api.rs || find daemon/src/tui/api/ -name '*.rs' -exec grep -l 'fetch_workspaces' {} \\;"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "wc -l < daemon/src/tui/views/workspace.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "Workspace list renders with status colors, quality gate indicators, API wired"
+
+      - id: T4-02
+        title: >
+          Create daemon/src/tui/views/deliverables.rs — Deliverables browser view:
+          (1) deliverables_view(data: &TuiData, selected: usize) → renders deliverable list.
+          (2) Header: "DELIVERABLES" + count.
+          (3) Columns: name, output_type, status (pending=WARN, approved=OK, rejected=FAIL), version, project.
+          (4) Selected deliverable highlighting.
+          (5) Status summary at top: "Pending: N | Approved: N | Rejected: N".
+          (6) Add fetch_deliverables(client, api_url) → GET /api/deliverables → Vec<DeliverableInfo>.
+          (7) Wire into views/mod.rs for MainView::Deliverables.
+          (8) Wire into app.rs refresh_data().
+          Write test: render with sample deliverables, assert contains name and status.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T4-01]
+        f_xx: [F-06, F-11]
+        files: [daemon/src/tui/views/deliverables.rs, daemon/src/tui/views/mod.rs, daemon/src/tui/api.rs, daemon/src/tui/app.rs, daemon/src/tui/tests.rs]
+        verify:
+          - "test -f daemon/src/tui/views/deliverables.rs"
+          - "grep -q 'deliverables_view' daemon/src/tui/views/deliverables.rs"
+          - "grep -q 'Deliverables' daemon/src/tui/views/mod.rs"
+          - "grep -q 'fetch_deliverables' daemon/src/tui/api.rs || find daemon/src/tui/api/ -name '*.rs' -exec grep -l 'fetch_deliverables' {} \\;"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "wc -l < daemon/src/tui/views/deliverables.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "Deliverables list renders with status colors and summary counts, API wired"
+
+      - id: T4-03
+        title: >
+          Full integration test for all 9 views:
+          (1) Update sample_data() with realistic data for ALL 9 views (brain_nodes, cost, events,
+          workspaces, deliverables — use real field names and realistic values per NON-NEGOTIABLE test rules).
+          (2) Add test renders_all_nine_views() — loop through all 9 MainView variants, render each,
+          assert each contains its header text.
+          (3) Add test cycles_all_nine_views() — verify next_view/prev_view cycle through all 9.
+          (4) Add test ws_updates_tui_data() — verify WS BrainEvent updates correct TuiData fields.
+          (5) Verify cargo clippy clean. Verify all files under 250 lines.
+          (6) If any test file exceeds 250 lines, split into tests/mod.rs + tests/views_tests.rs + tests/ws_tests.rs.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T4-01, T4-02]
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-12]
+        files: [daemon/src/tui/tests.rs, daemon/src/tui/data.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::"
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings 2>&1 | grep -v '^$' | tail -1 | grep -qv 'error'"
+          - "find daemon/src/tui/ -name '*.rs' -exec sh -c 'lines=$(wc -l < \"$1\"); if [ \"$lines\" -gt 250 ]; then echo \"FAIL: $1 has $lines lines\"; exit 1; fi' _ {} \\;"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::tests::renders_all_nine_views"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::tests::cycles_all_nine_views"
+        test_criteria: "All 9 views render with real data, all cycle correctly, clippy clean, all files under 250 lines"
+
+  - id: W5
+    name: "Final — Tests + Documentation + PR"
+    description: "Comprehensive test coverage, ADR, CHANGELOG, PR creation, deploy verification."
+    tasks:
+      - id: TF-tests
+        title: >
+          Comprehensive test coverage audit for daemon/src/tui/:
+          (1) Verify each view file has at least 1 render test with realistic data.
+          (2) Verify WS client has tests for: connect logic, each BrainEvent parse, backoff calc, fallback trigger.
+          (3) Verify data.rs structs all implement Default and have construction tests.
+          (4) Verify api.rs fetch functions have JSON parse tests (mock response shapes).
+          (5) Add any missing tests found in audit.
+          (6) Run full suite: cargo test -- tui:: must pass with 0 failures.
+          (7) Run clippy: 0 warnings.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-12]
+        files: [daemon/src/tui/tests.rs, daemon/src/tui/ws_client.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui:: 2>&1 | grep -q 'test result: ok'"
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+        test_criteria: "Full test coverage for all views, WS client, data structs, API parsing. Zero failures, zero clippy warnings."
+
+      - id: TF-doc
+        title: >
+          Documentation updates for Plan G:
+          (1) Write docs/adr/ADR-0111-tui-extension.md: decision to extend TUI with 5 views,
+          WS real-time, module split rationale, ratatui canvas for brain viz.
+          (2) Update CHANGELOG.md: add ## [17.0.0] section with Added entries for each new view.
+          (3) Update TROUBLESHOOTING.md: add TUI section — "TUI won't connect" (check --api-url, daemon running),
+          "Brain view empty" (check /ws/brain, agents registered), "Views show no data" (check daemon API).
+          (4) Update VERSION.md to 17.0.0.
+        type: doc
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 1
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12]
+        files: [docs/adr/ADR-0111-tui-extension.md, CHANGELOG.md, TROUBLESHOOTING.md, VERSION.md]
+        verify:
+          - "test -f docs/adr/ADR-0111-tui-extension.md"
+          - "grep -q '17.0.0' CHANGELOG.md"
+          - "grep -q 'TUI' TROUBLESHOOTING.md"
+          - "grep -q '17.0.0' VERSION.md"
+        test_criteria: "ADR written, CHANGELOG updated, TROUBLESHOOTING has TUI section, VERSION bumped"
+
+      - id: TF-pr
+        title: >
+          Create PR for Plan G:
+          (1) Verify git status clean (no untracked, no unstaged).
+          (2) Rebase on origin/main.
+          (3) Push branch.
+          (4) Create PR with title "feat: Plan G — Convergio TUI (9 views, WS real-time, --api-url)"
+          and body summarizing all F-xx delivered, test count, file count.
+          (5) Verify CI passes.
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        depends_on: [TF-tests, TF-doc]
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12]
+        files: []
+        verify:
+          - "git status --short | wc -l | awk '{if($1>0) exit 1}'"
+          - "git log --oneline -1 | grep -qi 'plan g\\|tui'"
+        test_criteria: "PR created, CI green, branch rebased on main"
+
+      - id: TF-deploy-verify
+        title: >
+          Deploy verification for Plan G:
+          (1) cargo build --release --manifest-path daemon/Cargo.toml
+          (2) Verify binary size is reasonable (< 50MB).
+          (3) Run cargo test --manifest-path daemon/Cargo.toml (full suite, not just tui).
+          (4) Verify VERSION.md matches Cargo.toml version.
+          (5) Verify daemon binary starts TUI mode: timeout 2 ./target/release/convergio-platform-daemon tui --api-url http://localhost:1 || true (exits on connection fail, but proves binary runs).
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        depends_on: [TF-pr]
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12]
+        files: []
+        verify:
+          - "cargo build --release --manifest-path daemon/Cargo.toml"
+          - "cargo test --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/target/release/convergio-platform-daemon || test -f daemon/target/release/convergio_daemon"
+        test_criteria: "Release build succeeds, full test suite passes, binary exists and launches"

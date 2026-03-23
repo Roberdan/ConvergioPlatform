@@ -57,8 +57,25 @@ command -v gh >/dev/null 2>&1 && copilot_ver=$(gh copilot --version 2>/dev/null 
 if [ "$copilot_ver" = "missing" ]; then
   command -v copilot >/dev/null 2>&1 && copilot_ver=$(copilot --version 2>/dev/null | head -1 || echo "missing")
 fi
-printf "SHA=%s\nBRANCH=%s\nCLAUDE_VER=%s\nCLAUDE_LOGGED=%s\nCLAUDE_METHOD=%s\nGH_AUTH=%s\nCOPILOT_VER=%s\n" \
-  "$sha" "$branch" "$claude_ver" "$logged" "$method" "$gh_auth" "$copilot_ver"
+rogue_home_git="false"
+[ -f "$HOME/.git" ] && rogue_home_git="true"
+orphan_worktrees=0
+for repo in "$HOME"/GitHub/ConvergioPlatform; do
+  if [ -d "$repo/.git/worktrees" ]; then
+    for wt in "$repo"/.git/worktrees/*/; do
+      [ -f "${wt}gitdir" ] || continue
+      target=$(cat "${wt}gitdir")
+      [ ! -d "$(dirname "$target")" ] && orphan_worktrees=$((orphan_worktrees + 1))
+    done
+  fi
+done
+has_zshenv="false"
+[ -f "$HOME/.zshenv" ] && grep -q "homebrew" "$HOME/.zshenv" 2>/dev/null && has_zshenv="true"
+cargo_ok="false"
+command -v cargo >/dev/null 2>&1 && cargo_ok="true"
+printf "SHA=%s\nBRANCH=%s\nCLAUDE_VER=%s\nCLAUDE_LOGGED=%s\nCLAUDE_METHOD=%s\nGH_AUTH=%s\nCOPILOT_VER=%s\nROGUE_GIT=%s\nORPHAN_WT=%s\nZSHENV=%s\nCARGO=%s\n" \
+  "$sha" "$branch" "$claude_ver" "$logged" "$method" "$gh_auth" "$copilot_ver" \
+  "$rogue_home_git" "$orphan_worktrees" "$has_zshenv" "$cargo_ok"
 '
 
   if $is_self; then
@@ -68,6 +85,7 @@ printf "SHA=%s\nBRANCH=%s\nCLAUDE_VER=%s\nCLAUDE_LOGGED=%s\nCLAUDE_METHOD=%s\nGH
   fi
 
   local sha branch claude_ver claude_logged claude_method gh_auth copilot_ver
+  local rogue_git orphan_wt has_zshenv cargo_ok
   sha=$(echo "$info" | sed -n 's/^SHA=//p')
   branch=$(echo "$info" | sed -n 's/^BRANCH=//p')
   claude_ver=$(echo "$info" | sed -n 's/^CLAUDE_VER=//p')
@@ -75,6 +93,31 @@ printf "SHA=%s\nBRANCH=%s\nCLAUDE_VER=%s\nCLAUDE_LOGGED=%s\nCLAUDE_METHOD=%s\nGH
   claude_method=$(echo "$info" | sed -n 's/^CLAUDE_METHOD=//p')
   gh_auth=$(echo "$info" | sed -n 's/^GH_AUTH=//p')
   copilot_ver=$(echo "$info" | sed -n 's/^COPILOT_VER=//p')
+  rogue_git=$(echo "$info" | sed -n 's/^ROGUE_GIT=//p')
+  orphan_wt=$(echo "$info" | sed -n 's/^ORPHAN_WT=//p')
+  has_zshenv=$(echo "$info" | sed -n 's/^ZSHENV=//p')
+  cargo_ok=$(echo "$info" | sed -n 's/^CARGO=//p')
+
+  # BUG-4: warn on rogue $HOME/.git
+  if [[ "${rogue_git:-false}" == "true" ]]; then
+    echo "  ⚠ $peer: rogue \$HOME/.git file found — blocks all git operations"
+    ISSUES=$((ISSUES + 1))
+  fi
+  # BUG-3: warn on orphan worktrees
+  if [[ "${orphan_wt:-0}" -gt 0 ]]; then
+    echo "  ⚠ $peer: $orphan_wt orphan worktree(s) with stale gitdir pointers"
+    ISSUES=$((ISSUES + 1))
+  fi
+  # BUG-7: warn on missing .zshenv
+  if [[ "${has_zshenv:-false}" != "true" ]]; then
+    echo "  ⚠ $peer: missing ~/.zshenv — tools may not be in PATH for SSH"
+    ISSUES=$((ISSUES + 1))
+  fi
+  # BUG-5: warn on missing cargo
+  if [[ "${cargo_ok:-false}" != "true" ]]; then
+    echo "  ⚠ $peer: cargo not found — cannot build daemon"
+    ISSUES=$((ISSUES + 1))
+  fi
 
   _emit "$peer" "${sha:-?}" "${branch:-?}" "${claude_ver:-missing}" \
     "$claude_logged" "${claude_method:-none}" "${gh_auth:-none}" "${copilot_ver:-missing}" \
