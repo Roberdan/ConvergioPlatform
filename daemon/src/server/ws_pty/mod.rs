@@ -3,15 +3,16 @@
 pub mod session;
 
 use super::state::ServerState;
-pub(crate) use session::{
-    is_local_peer, peer_ssh_alias, peer_ssh_user, tailscale_resolve, ts_first_ip,
-    ts_name_matches, validate_peer,
-};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::response::Response;
 use serde::Deserialize;
+pub(crate) use session::{
+    is_local_peer, peer_ssh_alias, peer_ssh_user, tailscale_resolve, validate_peer,
+};
 use session::{load_known_peers, MAX_TMUX_SESSION_LEN};
+#[cfg(test)]
+pub(crate) use session::{ts_first_ip, ts_name_matches};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

@@ -1,4 +1,5 @@
 #!/bin/bash
+# DEPRECATED — use daemon API endpoints for task validation instead
 # Task-level validation functions
 
 # Validate a single task by DB id or task_id within a plan

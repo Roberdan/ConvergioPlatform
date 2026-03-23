@@ -10,3 +10,4 @@ pub mod platform_paths;
 pub mod server;
 pub mod tui;
 pub mod validation;
+pub mod workspace;

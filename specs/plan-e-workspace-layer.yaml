@@ -1,0 +1,611 @@
+name: "Plan E — Convergio Workspace Layer"
+version: "16.0.0"
+project: convergio
+description: >
+  Git becomes invisible. Agents work in a daemon-managed workspace, not git directly.
+  Workspace API in daemon, event log, Release Agent (Rust), git as output connector,
+  full bash→Rust migration (worktree-create.sh, wave-worktree.sh, pr-ops.sh, validate-*.sh).
+  Why: Session 2026-03-22/23 — worktree/branch/PR/merge friction caused repeated issues.
+
+requirements:
+  - id: F-01
+    title: Workspace API REST
+    description: "POST /api/workspace/create, /delete, /list, /status. Daemon creates/manages internal worktrees, agents receive opaque workspace_id."
+  - id: F-02
+    title: Hook interception of file ops
+    description: "PreToolUse/PostToolUse hooks register Read/Edit/Write in daemon event log. Agents keep using tools normally."
+  - id: F-03
+    title: Structured event log
+    description: "Table workspace_events (agent, action, file_path, workspace_id, timestamp, metadata). Audit trail independent of git."
+  - id: F-04
+    title: Release Agent Rust module
+    description: "Event-driven module observing quality gate pass → auto-commit → auto-push → auto-PR → auto-merge. Zero bash."
+  - id: F-05
+    title: Git export connector
+    description: "Rust trait GitConnector with GitHub impl. commit/push/create_pr/merge_pr/readiness_check via reqwest + GitHub API."
+  - id: F-06
+    title: Quality gate in workspace
+    description: "Mechanical gates run automatically before git export. Thor judgment invoked by daemon for wave-level."
+  - id: F-07
+    title: Migrate worktree-create.sh → Rust
+    description: "Feature branch worktree creation reimplemented in workspace core module. Script deprecated."
+  - id: F-08
+    title: Migrate wave-worktree.sh → Rust
+    description: "Wave create/merge/cleanup/status reimplemented in Rust. wave-worktree-core.sh eliminated."
+  - id: F-09
+    title: Migrate pr-ops.sh → Rust
+    description: "PR readiness check and squash merge via GitHub API (reqwest), not gh CLI."
+  - id: F-10
+    title: Wave lifecycle in workspace
+    description: "Wave create/execute/validate/merge managed by daemon. Sequential enforcement natural."
+  - id: F-11
+    title: Workspace isolation
+    description: "Each workspace has isolated worktree directory, automatic .env symlinks, cleanup on delete."
+  - id: F-12
+    title: DB schema update
+    description: "Tables workspaces and workspace_events. CRDT-enabled. Indexes for workspace_id, plan_id, agent."
+  - id: F-13
+    title: CLI integration
+    description: "cvg workspace create/delete/list/status/events. Replaces worktree-create.sh and wave-worktree.sh for user."
+  - id: F-14
+    title: Backward compat transitional
+    description: "Old bash scripts emit DEPRECATED warning + redirect to cvg workspace. Hooks updated."
+  - id: F-15
+    title: Non-code deliverables
+    description: "Unified workspace model: code and non-code deliverables use same workspace, event log, export."
+
+acceptance_invariants:
+  - "curl -sf http://localhost:8420/api/workspace/list | jq -e '.workspaces'"
+  - "grep -rq 'pub struct ReleaseAgent' daemon/src/"
+  - "grep -rq 'pub trait GitConnector' daemon/src/"
+  - "sqlite3 data/dashboard.db '.tables' | grep -q 'workspaces'"
+  - "sqlite3 data/dashboard.db '.tables' | grep -q 'workspace_events'"
+  - "cd daemon && cargo check"
+  - "cd daemon && cargo test"
+  - "cd daemon && cargo clippy -- -D warnings"
+
+waves:
+  - id: W1
+    name: "Foundation — DB + Workspace Core + Event Log + API"
+    tasks:
+      - id: T1-01
+        title: >
+          Create DB schema for workspace layer: (1) workspaces table (id INTEGER PK,
+          plan_id INT, wave_db_id INT, workspace_id TEXT UNIQUE, path TEXT, branch TEXT,
+          status TEXT CHECK('active','merged','deleted'), created_at, deleted_at).
+          (2) workspace_events table (id INTEGER PK, workspace_id TEXT FK, agent TEXT,
+          action TEXT, file_path TEXT, detail TEXT, metadata TEXT, created_at).
+          Add both to REQUIRED_CRDT_TABLES in daemon/src/db/crdt/mod.rs.
+          Add CREATE TABLE + indexes to MIGRATIONS in daemon/src/server/state_init.rs.
+          Write unit test verifying tables exist after migration.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 1
+        f_xx: [F-12]
+        verify:
+          - "grep -q 'workspaces' daemon/src/server/state_init.rs"
+          - "grep -q 'workspace_events' daemon/src/server/state_init.rs"
+          - "grep -q '\"workspaces\"' daemon/src/db/crdt/mod.rs"
+          - "grep -q '\"workspace_events\"' daemon/src/db/crdt/mod.rs"
+          - "cd daemon && cargo test -- state_init"
+
+      - id: T1-02
+        title: >
+          Create daemon/src/workspace/mod.rs + core.rs (<250 lines each).
+          Workspace core: (1) WorkspaceManager struct holding DB pool + repo_root path.
+          (2) create_workspace(plan_id, wave_db_id) → creates git worktree in sibling dir
+          (pattern: {repo_root}-ws-{workspace_id}), symlinks .env*, inserts into workspaces table,
+          returns WorkspaceInfo{workspace_id, path, branch}.
+          (3) delete_workspace(workspace_id) → removes worktree dir, deletes git branch,
+          marks status='deleted' in DB.
+          (4) list_workspaces(plan_id?) → Vec<WorkspaceInfo>.
+          (5) get_workspace(workspace_id) → Option<WorkspaceInfo>.
+          Register mod workspace in daemon/src/main.rs.
+          Uses std::process::Command for git worktree add/remove (same pattern as mesh/repos.rs).
+          Write unit tests for all 4 operations using temp dirs.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-01, F-11]
+        verify:
+          - "test -f daemon/src/workspace/mod.rs"
+          - "test -f daemon/src/workspace/core.rs"
+          - "wc -l < daemon/src/workspace/core.rs | awk '{if($1>250) exit 1}'"
+          - "grep -q 'mod workspace' daemon/src/main.rs"
+          - "cd daemon && cargo test -- workspace::core"
+
+      - id: T1-03
+        title: >
+          Create daemon/src/workspace/events.rs (<250 lines).
+          EventLogger struct holding DB pool. Methods:
+          (1) record_event(workspace_id, agent, action, file_path, detail, metadata) → inserts
+          into workspace_events table.
+          (2) query_events(workspace_id, limit?, since?) → Vec<WorkspaceEvent>.
+          (3) query_events_by_agent(agent, limit?) → Vec<WorkspaceEvent>.
+          WorkspaceEvent struct: id, workspace_id, agent, action, file_path, detail, metadata, created_at.
+          Actions enum: FileRead, FileWrite, FileEdit, GitCommit, GitPush, PrCreated, PrMerged,
+          QualityGatePass, QualityGateFail, WorkspaceCreated, WorkspaceDeleted.
+          Write tests for record + query round-trip.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-03]
+        verify:
+          - "test -f daemon/src/workspace/events.rs"
+          - "wc -l < daemon/src/workspace/events.rs | awk '{if($1>250) exit 1}'"
+          - "cd daemon && cargo test -- workspace::events"
+
+      - id: T1-04
+        title: >
+          Create daemon/src/server/api_workspace.rs (<250 lines) with axum handlers:
+          (1) GET /api/workspace/list?plan_id= → list workspaces.
+          (2) POST /api/workspace/create {plan_id, wave_db_id?} → create workspace, return workspace_id.
+          (3) POST /api/workspace/delete {workspace_id} → delete workspace.
+          (4) GET /api/workspace/status/:workspace_id → workspace info + recent events.
+          (5) GET /api/workspace/events?workspace_id=&limit= → event log query.
+          Wire into daemon/src/server/routes/ (add to router builder).
+          Add routes to api_routes.rs GET_ROUTES and POST_ROUTES.
+          Register api_workspace in daemon/src/server/mod.rs.
+          Write integration test: create workspace → record event → query events → delete workspace.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-01, F-03]
+        verify:
+          - "test -f daemon/src/server/api_workspace.rs"
+          - "grep -q 'api_workspace' daemon/src/server/mod.rs"
+          - "grep -q '/api/workspace/list' daemon/src/server/routes/api_routes.rs"
+          - "grep -q '/api/workspace/create' daemon/src/server/routes/api_routes.rs"
+          - "cd daemon && cargo test -- api_workspace"
+
+  - id: W2
+    name: "Git Abstraction + CLI + Hook Interception"
+    tasks:
+      - id: T2-01
+        title: >
+          Create daemon/src/workspace/git_connector.rs (<250 lines) with trait + GitHub impl:
+          (1) pub trait GitConnector: Send + Sync with async methods:
+            - commit(path, message) → Result<String> (commit SHA)
+            - push(path, branch, force_with_lease: bool) → Result<()>
+            - create_pr(repo, branch, base, title, body) → Result<PrInfo{number, url}>
+            - merge_pr(repo, pr_number, merge_method: MergeMethod) → Result<()>
+            - pr_readiness(repo, pr_number) → Result<PrReadiness{mergeable, ci_status, unresolved_threads}>
+            - rebase(path, onto: &str) → Result<()>
+          (2) pub struct GitHubConnector with github_token field.
+            - commit/push/rebase use std::process::Command (spawn git).
+            - create_pr/merge_pr/pr_readiness use reqwest to GitHub REST API v3.
+            - Verify reqwest features in Cargo.toml: "json" and "rustls-tls" must be enabled.
+              If not, add them before implementation.
+          (3) MergeMethod enum: Squash, Merge, Rebase (default Squash).
+          (4) PrReadiness struct with mergeable, ci_passed, pending_checks, unresolved_threads, review_status.
+          Write unit tests for commit/push (with temp git repo) and mock tests for GitHub API calls.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 3
+        f_xx: [F-05, F-09]
+        verify:
+          - "test -f daemon/src/workspace/git_connector.rs"
+          - "grep -q 'pub trait GitConnector' daemon/src/workspace/git_connector.rs"
+          - "grep -q 'pub struct GitHubConnector' daemon/src/workspace/git_connector.rs"
+          - "cd daemon && cargo test -- workspace::git_connector"
+
+      - id: T2-02
+        title: >
+          Extend workspace core with feature-branch creation (migrating worktree-create.sh logic):
+          Add to WorkspaceManager in daemon/src/workspace/core.rs:
+          (1) create_feature_workspace(branch_name, base_ref?) → creates worktree for ad-hoc
+          feature work (not plan-bound). Checks if branch exists locally/remotely, creates if not.
+          Symlinks .env*. Returns WorkspaceInfo.
+          This replaces worktree-create.sh functionality.
+          Add daemon/src/workspace/core_tests.rs (<250 lines) with tests for:
+          - feature workspace creation with new branch
+          - feature workspace creation with existing branch
+          - workspace cleanup removes directory and branch
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-07, F-11]
+        verify:
+          - "grep -q 'create_feature_workspace' daemon/src/workspace/core.rs"
+          - "test -f daemon/src/workspace/core_tests.rs"
+          - "cd daemon && cargo test -- workspace::core_tests"
+
+      - id: T2-03
+        title: >
+          Create daemon/src/cli_workspace.rs (<250 lines) with CLI subcommands:
+          (1) cvg workspace create --plan <id> --wave <id> → POST /api/workspace/create
+          (2) cvg workspace create-feature <branch> → POST /api/workspace/create {feature: true, branch}
+          (3) cvg workspace delete <workspace_id> → POST /api/workspace/delete
+          (4) cvg workspace list [--plan <id>] → GET /api/workspace/list
+          (5) cvg workspace status <workspace_id> → GET /api/workspace/status/:id
+          (6) cvg workspace events <workspace_id> [--limit N] → GET /api/workspace/events
+          Add WorkspaceCommands enum. Wire into Commands enum in cli_commands.rs.
+          Add dispatch in main.rs. JSON default, --human for tables.
+          Write unit tests for command variant construction.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-13]
+        verify:
+          - "test -f daemon/src/cli_workspace.rs"
+          - "grep -q 'Workspace' daemon/src/cli_commands.rs"
+          - "grep -q 'cli_workspace' daemon/src/main.rs"
+          - "cd daemon && cargo test -- cli_workspace"
+
+      - id: T2-04
+        title: >
+          Create hook script claude-config/scripts/workspace-event-hook.sh (<100 lines):
+          Bash hook for PreToolUse/PostToolUse that POSTs to daemon /api/workspace/events/record:
+          (1) On Edit/Write PostToolUse: extract file_path from tool input, POST event with
+              action=FileWrite, agent=$CLAUDE_AGENT, workspace_id detected from cwd.
+          (2) On Read PostToolUse: POST event with action=FileRead (optional, configurable).
+          (3) Workspace detection: check if cwd is inside a workspace path (query /api/workspace/list,
+              match path prefix). If not in workspace, skip silently.
+          (4) Daemon-down safety: use curl --connect-timeout 1 and || true so hook never blocks
+              agent tool calls when daemon is not running.
+          Create daemon/src/server/api_workspace_events.rs (<150 lines): single POST endpoint
+          /api/workspace/events/record {workspace_id, agent, action, file_path, detail?}.
+          Wire endpoint in router. Add to api_routes.rs POST_ROUTES.
+          Write integration test: POST event → GET events → verify recorded.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-02, F-03]
+        verify:
+          - "test -f claude-config/scripts/workspace-event-hook.sh"
+          - "test -f daemon/src/server/api_workspace_events.rs"
+          - "grep -q 'api_workspace_events' daemon/src/server/mod.rs"
+          - "grep -q '/api/workspace/events/record' daemon/src/server/routes/api_routes.rs"
+          - "cd daemon && cargo test -- api_workspace_events"
+
+  - id: W3
+    name: "Wave Lifecycle Migration + Quality Gates"
+    tasks:
+      - id: T3-01
+        title: >
+          Create daemon/src/workspace/wave_ops.rs (<250 lines) — wave workspace lifecycle:
+          (1) create_wave_workspace(plan_id, wave_db_id) → creates workspace using WorkspaceManager,
+              sets branch=plan/{plan_id}-{wave_id}, updates waves table with worktree_path + branch_name.
+              Replaces wave-worktree.sh create command.
+          (2) cleanup_wave_workspace(wave_db_id) → deletes workspace, prunes git refs,
+              updates wave status. Replaces wave-worktree.sh cleanup.
+          (3) wave_workspace_status(wave_db_id) → WorkspaceInfo + git status (clean/dirty).
+          (4) Update cvg wave create CLI to call workspace API instead of bash script.
+          Wire wave_ops into workspace module. Write tests with temp git repos.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-08, F-10]
+        verify:
+          - "test -f daemon/src/workspace/wave_ops.rs"
+          - "grep -q 'create_wave_workspace' daemon/src/workspace/wave_ops.rs"
+          - "cd daemon && cargo test -- workspace::wave_ops"
+
+      - id: T3-02
+        title: >
+          Create daemon/src/workspace/merge_ops.rs (<250 lines) — wave merge via GitConnector:
+          (1) merge_wave(wave_db_id, connector: &dyn GitConnector) → full merge pipeline:
+            a. Stage + commit all changes in workspace
+            b. Rebase onto origin/main
+            c. Push with force-with-lease
+            d. Create PR via connector.create_pr()
+            e. Wait for CI (poll pr_readiness every 10s, timeout 5min)
+            f. Check readiness (mergeable, CI passed, no unresolved threads)
+            g. Squash merge via connector.merge_pr()
+            h. Record all events in workspace_events
+            i. Mark wave status='done' in DB
+          (2) pr_readiness_check(connector, repo, pr_number) → PrReadiness.
+              Replaces pr-ops.sh ready command.
+          This replaces wave-worktree.sh merge + pr-ops.sh merge.
+          Write tests for merge pipeline with mock GitConnector.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 3
+        f_xx: [F-08, F-09, F-10]
+        verify:
+          - "test -f daemon/src/workspace/merge_ops.rs"
+          - "grep -q 'merge_wave' daemon/src/workspace/merge_ops.rs"
+          - "grep -q 'pr_readiness_check' daemon/src/workspace/merge_ops.rs"
+          - "cd daemon && cargo test -- workspace::merge_ops"
+
+      - id: T3-03
+        title: >
+          Create daemon/src/workspace/quality_gate.rs (<250 lines) — mechanical quality gates:
+          (1) QualityGate struct with methods:
+            - check_clean_tree(workspace_path) → gate passes if no unstaged changes
+            - check_file_sizes(workspace_path, max_lines: 250) → scan .rs/.ts files
+            - check_cargo(workspace_path) → cargo check + cargo clippy (if Rust project)
+            - check_tests(workspace_path) → cargo test (if Rust project)
+            - run_all(workspace_path) → Vec<GateResult> with pass/fail per gate
+          (2) GateResult struct: gate_name, passed, message, duration_ms.
+          (3) API endpoint POST /api/workspace/quality-gate {workspace_id} → runs all gates,
+              returns results. Wire in router + api_routes.rs.
+          Replaces pre-merge-gate.sh mechanical checks.
+          Write tests for each gate individually.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-06]
+        verify:
+          - "test -f daemon/src/workspace/quality_gate.rs"
+          - "grep -q 'pub struct QualityGate' daemon/src/workspace/quality_gate.rs"
+          - "grep -q '/api/workspace/quality-gate' daemon/src/server/routes/api_routes.rs"
+          - "cd daemon && cargo test -- workspace::quality_gate"
+
+      - id: T3-04
+        title: >
+          Create daemon/src/workspace/validation.rs (<250 lines) — task/wave validation in Rust:
+          Replaces validate-task.sh and validate-wave.sh:
+          (1) validate_task(task_db_id, validated_by) → enforces submitted→done transition,
+              Thor-only validator allowlist, updates validated_at/validated_by.
+              Reuses existing logic from daemon/src/db/service.rs validate_task() — refactor
+              to call workspace validation module, keep service.rs as thin wrapper.
+          (2) validate_wave(wave_db_id) → checks all tasks done+validated, batch-promotes
+              submitted→done, marks wave done. Same logic as validate-wave.sh.
+          (3) Wave sequential enforcement: before creating wave N+1 workspace, verify wave N
+              is status='done' or 'merged'. Returns error if predecessor not complete.
+          Wire validate_wave into wave merge flow (merge_ops.rs calls it before merge).
+          Write tests for task validation, wave validation, sequential enforcement.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-06, F-10]
+        verify:
+          - "test -f daemon/src/workspace/validation.rs"
+          - "grep -q 'validate_wave' daemon/src/workspace/validation.rs"
+          - "grep -q 'validate_task' daemon/src/workspace/validation.rs"
+          - "cd daemon && cargo test -- workspace::validation"
+
+  - id: W4
+    name: "Release Agent + Non-Code + Deprecation"
+    tasks:
+      - id: T4-01
+        title: >
+          Create daemon/src/workspace/release_agent.rs (<250 lines) — event-driven Release Agent:
+          (1) ReleaseAgent struct with: connector (Box<dyn GitConnector>), quality_gate (QualityGate),
+              event_logger (EventLogger), db_pool.
+          (2) on_quality_gate_pass(workspace_id) → triggered when all quality gates pass:
+            a. commit all changes (connector.commit)
+            b. push branch (connector.push)
+            c. create PR (connector.create_pr) with auto-generated title/body from events
+            d. poll readiness (connector.pr_readiness)
+            e. merge when ready (connector.merge_pr with Squash)
+            f. record all steps in workspace_events
+            g. update wave status to 'merged'
+            h. cleanup workspace
+          (3) generate_pr_description(workspace_id) → builds PR body from workspace_events:
+            lists files changed, agents involved, quality gate results.
+          (4) API endpoint POST /api/workspace/release {workspace_id} → triggers release pipeline.
+          Wire in router + api_routes.rs.
+          Write tests with mock GitConnector for full pipeline.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 3
+        f_xx: [F-04]
+        verify:
+          - "test -f daemon/src/workspace/release_agent.rs"
+          - "grep -q 'pub struct ReleaseAgent' daemon/src/workspace/release_agent.rs"
+          - "grep -q '/api/workspace/release' daemon/src/server/routes/api_routes.rs"
+          - "cd daemon && cargo test -- workspace::release_agent"
+
+      - id: T4-02
+        title: >
+          Extend workspace model for non-code deliverables in daemon/src/workspace/deliverables.rs
+          (<250 lines):
+          (1) Workspace can hold both code artifacts and deliverables (from Plan B deliverables table).
+          (2) create_deliverable_workspace(project_id, task_id?) → workspace without git branch,
+              uses project output_path from projects table instead.
+          (3) record_deliverable_event(workspace_id, deliverable_id, action, detail) → links
+              workspace_events to deliverables table.
+          (4) API: GET /api/workspace/deliverables?workspace_id= → list deliverables in workspace.
+          (5) Integrate with existing deliverables table (join workspace_events with deliverables).
+          Wire in router. Write tests for deliverable workspace lifecycle.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-15]
+        verify:
+          - "test -f daemon/src/workspace/deliverables.rs"
+          - "grep -q '/api/workspace/deliverables' daemon/src/server/routes/api_routes.rs"
+          - "cd daemon && cargo test -- workspace::deliverables"
+
+      - id: T4-03
+        title: >
+          Deprecate bash scripts — add DEPRECATED headers + redirect warnings:
+          (1) worktree-create.sh: add header "# DEPRECATED — use cvg workspace create-feature",
+              emit stderr warning on invocation, then call cvg workspace create-feature internally.
+          (2) wave-worktree.sh: add DEPRECATED header, emit warning, delegate create/merge/cleanup
+              to cvg workspace commands. Keep as thin wrapper during transition.
+          (3) wave-worktree-core.sh: add DEPRECATED header. Functions now just call daemon API.
+          (4) pr-ops.sh: add DEPRECATED header. ready → cvg workspace quality-gate.
+              merge → cvg workspace release.
+          (5) pre-merge-gate.sh: add DEPRECATED header. Delegate to POST /api/workspace/quality-gate.
+          (6) lib/validate-task.sh + lib/validate-wave.sh: add DEPRECATED header. Call daemon API.
+              Note: these are in claude-config/scripts/lib/, verify they exist before editing.
+              If they don't exist, skip this sub-step.
+          (7) wave-worktree-core.sh: same — verify existence in claude-config/scripts/lib/ first.
+          (8) Update hooks/checks_helpers.rs worktree_guard to also accept workspace API paths
+              (allow /api/workspace/* calls through).
+          Write test: run deprecated script → verify warning emitted + correct API called.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-07, F-08, F-09, F-14]
+        verify:
+          - "head -2 claude-config/scripts/worktree-create.sh | grep -qi 'deprecated'"
+          - "head -2 claude-config/scripts/wave-worktree.sh | grep -qi 'deprecated'"
+          - "head -2 claude-config/scripts/pr-ops.sh | grep -qi 'deprecated'"
+          - "head -2 claude-config/scripts/pre-merge-gate.sh | grep -qi 'deprecated'"
+          - "cd daemon && cargo test -- hooks"
+
+      - id: T4-04
+        title: >
+          Wire cvg wave merge/create/validate CLI commands to use workspace layer:
+          (1) Update cli_wave.rs WaveCommands::Create to call POST /api/workspace/create
+              (workspace-backed) instead of legacy wave/create endpoint.
+          (2) Update WaveCommands::Merge to call POST /api/workspace/release
+              (full release pipeline) instead of legacy wave/merge.
+          (3) Update WaveCommands::Validate to call POST /api/workspace/quality-gate first
+              (mechanical), then POST /api/plans/:id/validate (Thor judgment).
+          (4) Add cvg wave release subcommand → alias for workspace release pipeline.
+          (5) Update enforcement.md rules to reference workspace commands instead of bash scripts.
+          Write tests for CLI wiring (variant construction + body shape).
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-10, F-13, F-14]
+        verify:
+          - "grep -q '/api/workspace' daemon/src/cli_wave.rs"
+          - "cd daemon && cargo test -- cli_wave"
+          - "cd daemon && cargo check"
+
+  - id: WF
+    name: "Finalization — Tests + Docs + PR + Verify"
+    tasks:
+      - id: TF-tests
+        title: >
+          Create daemon/src/server/api_workspace_integration_tests.rs (<250 lines):
+          Full end-to-end integration test using axum test harness (in-memory DB):
+          (1) Create workspace → verify workspace_id returned
+          (2) Record events (FileWrite, FileRead) → verify event log
+          (3) Run quality gate → verify gate results
+          (4) Create wave workspace → verify wave linked
+          (5) Trigger release (with mock GitConnector) → verify full pipeline
+          (6) Delete workspace → verify cleanup
+          (7) List workspaces → verify empty after delete
+          (8) Non-code deliverable workspace lifecycle
+          Also run: cargo check, cargo test (full suite), cargo clippy -- -D warnings.
+          Fix any compilation errors or warnings across ALL workspace modules.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 3
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-10, F-11, F-12, F-15]
+        verify:
+          - "test -f daemon/src/server/api_workspace_integration_tests.rs"
+          - "cd daemon && cargo test -- api_workspace_integration"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo clippy -- -D warnings"
+
+      - id: TF-doc
+        title: >
+          Update documentation for Plan E:
+          (1) docs/adr/0108-workspace-layer.md — ADR for workspace layer decision:
+              context (git friction), decision (daemon-managed workspaces), consequences.
+          (2) CHANGELOG.md — add v16.0.0 section: workspace API, Release Agent, git connector,
+              bash→Rust migration, event log, non-code deliverables.
+          (3) VERSION.md — update to 16.0.0.
+          (4) TROUBLESHOOTING.md — add workspace-related problems (workspace won't create,
+              release pipeline stuck, quality gate fails).
+          (5) Update CLAUDE.md architecture table: add Workspace row.
+          (6) Update .github/agents/Convergio.agent.md: add workspace API endpoints, CLI commands.
+          All files must stay under 250 lines after edits.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        f_xx: [F-01, F-04, F-12, F-13]
+        verify:
+          - "test -f docs/adr/0108-workspace-layer.md"
+          - "grep -q '16.0.0' CHANGELOG.md"
+          - "grep -q '16.0.0' VERSION.md"
+          - "grep -q 'workspace' TROUBLESHOOTING.md"
+          - "grep -q 'workspace' CLAUDE.md"
+
+      - id: TF-pr
+        title: >
+          Final pre-PR verification and cleanup:
+          (1) Run full test suite: cd daemon && cargo test
+          (2) Run clippy: cd daemon && cargo clippy -- -D warnings
+          (3) Run cargo fmt -- --check (verify formatting)
+          (4) Verify all 15 F-xx requirements are covered (grep each in code)
+          (5) Verify all acceptance_invariants pass
+          (6) Check all .rs files <=250 lines: find daemon/src/workspace -name '*.rs' | xargs wc -l
+          (7) Verify deprecated scripts have DEPRECATED headers
+          (8) Verify CRDT tables include workspaces + workspace_events
+          Fix any issues found. This task exists to catch anything missed.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 1
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12, F-13, F-14, F-15]
+        verify:
+          - "cd daemon && cargo test"
+          - "cd daemon && cargo clippy -- -D warnings"
+          - "cd daemon && cargo fmt -- --check"
+
+      - id: TF-deploy-verify
+        title: >
+          Build and verify deployment:
+          (1) cd daemon && cargo build --release — verify clean build
+          (2) Start daemon: ./daemon/start.sh & — verify starts on :8420
+          (3) curl -sf http://localhost:8420/api/health — verify healthy
+          (4) curl -sf http://localhost:8420/api/workspace/list — verify workspace API responds
+          (5) cvg workspace list — verify CLI works
+          (6) Verify version: grep '16.0.0' VERSION.md
+          (7) Stop daemon gracefully
+          Document any issues in TROUBLESHOOTING.md.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 1
+        f_xx: [F-01, F-13]
+        verify:
+          - "cd daemon && cargo build --release 2>&1 | tail -1 | grep -qv error"
+          - "grep -q '16.0.0' VERSION.md"

@@ -1,4 +1,5 @@
 #!/bin/bash
+# DEPRECATED — use daemon API endpoints for wave validation instead
 # Wave-level validation functions
 
 # Validate all done tasks in a wave

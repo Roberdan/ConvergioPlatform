@@ -1,18 +1,18 @@
 mod cli_agent;
-mod cli_bus;
-mod cli_domain;
 mod cli_agents;
 mod cli_audit;
 mod cli_audit_project;
+mod cli_bus;
 mod cli_checkpoint;
 mod cli_commands;
+mod cli_domain;
 mod cli_http;
 mod cli_kb;
 mod cli_lock;
 mod cli_ops;
 mod cli_plan;
-mod cli_project;
 mod cli_plan_handlers;
+mod cli_project;
 mod cli_review;
 mod cli_run;
 mod cli_skill;
@@ -23,6 +23,8 @@ mod cli_skill_validate;
 mod cli_task;
 mod cli_task_approve;
 mod cli_wave;
+mod cli_wave_handlers;
+mod cli_workspace;
 mod ipc_handler;
 mod transpiler;
 
@@ -59,18 +61,6 @@ async fn main() {
         let mut new_args = vec![args[0].clone(), "ipc".to_string()];
         new_args.extend(args[1..].to_vec());
         Cli::parse_from(new_args)
-    } else if args
-        .first()
-        .map(|a| {
-            let base = std::path::Path::new(a)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
-            base == "cvg"
-        })
-        .unwrap_or(false)
-    {
-        Cli::parse()
     } else {
         Cli::parse()
     };
@@ -163,9 +153,7 @@ async fn dispatch(command: Commands) {
                 // Open a shared DB connection for the background sync loop.
                 // The mesh service opens its own connections; this Arc<Mutex<Connection>>
                 // is used solely by the CRDT background_sync loop (T3b-01).
-                let resolved_db = db_path
-                    .clone()
-                    .unwrap_or_else(ipc_handler::default_db_path);
+                let resolved_db = db_path.clone().unwrap_or_else(ipc_handler::default_db_path);
                 let sync_conn = match Connection::open(&resolved_db) {
                     Ok(c) => Arc::new(Mutex::new(c)),
                     Err(e) => {
@@ -173,13 +161,17 @@ async fn dispatch(command: Commands) {
                         std::process::exit(2);
                     }
                 };
-                let sync_interval =
-                    claude_core::background_sync::resolve_interval_secs(None);
+                let sync_interval = claude_core::background_sync::resolve_interval_secs(None);
                 let _sync_handle =
                     claude_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
 
                 ipc_handler::run_daemon(
-                    bind_ip, port, peers_conf, db_path, crsqlite_path, local_only,
+                    bind_ip,
+                    port,
+                    peers_conf,
+                    db_path,
+                    crsqlite_path,
+                    local_only,
                 )
                 .await;
             }
@@ -219,7 +211,13 @@ async fn dispatch(command: Commands) {
         Commands::Checkpoint { command } => cli_checkpoint::handle(command).await,
         Commands::Lock { command } => cli_lock::handle(command).await,
         Commands::Review { command } => cli_review::handle(command).await,
-        Commands::Audit { path, project, output, yes, api_url } => {
+        Commands::Audit {
+            path,
+            project,
+            output,
+            yes,
+            api_url,
+        } => {
             if let Some(project_id) = project {
                 cli_audit_project::handle(&project_id, output, yes, &api_url).await;
             } else {
@@ -232,5 +230,6 @@ async fn dispatch(command: Commands) {
         Commands::Metrics { command } => cli_ops::handle_metrics(command).await,
         Commands::Alert { command } => cli_ops::handle_alert(command).await,
         Commands::Domain { command } => cli_domain::dispatch(command).await,
+        Commands::Workspace { command } => cli_workspace::handle(command).await,
     }
 }

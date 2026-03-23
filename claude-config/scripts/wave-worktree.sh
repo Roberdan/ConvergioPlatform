@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# DEPRECATED — use 'cvg workspace create/delete/list/status' instead
 set -euo pipefail
+echo "[DEPRECATED] wave-worktree.sh is deprecated. Use 'cvg workspace' commands instead." >&2
 # wave-worktree.sh v3.3.0 — Wave-level worktree lifecycle management
 # Usage: wave-worktree.sh <command> <plan_id> [wave_db_id]
 # Commands: create, merge, merge-async, pr-sync, cleanup, status

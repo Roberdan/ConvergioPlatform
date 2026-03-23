@@ -14,6 +14,9 @@ fn normalize_path(base: &Path, candidate: &str) -> PathBuf {
     joined.canonicalize().unwrap_or(joined)
 }
 
+// Preferred: workspace operations should use /api/workspace/* endpoints (Rust workspace layer).
+// worktree-create.sh, wave-worktree.sh, and related bash scripts are DEPRECATED thin wrappers
+// kept during transition. New code should call cvg workspace create-feature / cvg workspace release.
 pub fn check_worktree_guard(
     command: &HookCommand,
     context: &CheckContext,

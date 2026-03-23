@@ -30,11 +30,14 @@ const AGENT_ACTIVITY_COLUMNS: &[(&str, &str)] = &[
 
 fn table_columns(conn: &Connection, table: &str) -> Result<HashSet<String>, ApiError> {
     let sql = format!("PRAGMA table_info({table})");
-    let mut stmt = conn.prepare(&sql)
+    let mut stmt = conn
+        .prepare(&sql)
         .map_err(|err| ApiError::internal(format!("table info prepare failed: {err}")))?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(1))
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
         .map_err(|err| ApiError::internal(format!("table info query failed: {err}")))?;
-    let columns = rows.collect::<rusqlite::Result<Vec<_>>>()
+    let columns = rows
+        .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|err| ApiError::internal(format!("table info decode failed: {err}")))?;
     Ok(columns.into_iter().collect())
 }
@@ -45,9 +48,13 @@ pub fn ensure_agent_activity_schema(conn: &Connection) -> Result<(), ApiError> {
 
     let mut columns = table_columns(conn, "agent_activity")?;
     for (name, spec) in AGENT_ACTIVITY_COLUMNS {
-        if columns.contains(*name) { continue; }
-        conn.execute_batch(&format!("ALTER TABLE agent_activity ADD COLUMN {name} {spec}"))
-            .map_err(|err| ApiError::internal(format!("agent_activity alter failed: {err}")))?;
+        if columns.contains(*name) {
+            continue;
+        }
+        conn.execute_batch(&format!(
+            "ALTER TABLE agent_activity ADD COLUMN {name} {spec}"
+        ))
+        .map_err(|err| ApiError::internal(format!("agent_activity alter failed: {err}")))?;
         columns.insert((*name).to_string());
     }
 
@@ -141,6 +148,15 @@ const MIGRATIONS: &[&str] = &[
     // Plan 689 — solve_sessions table
     "CREATE TABLE IF NOT EXISTS solve_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL DEFAULT (datetime('now')), user_input TEXT NOT NULL, constitution_check TEXT, triage_level TEXT CHECK(triage_level IN ('light','standard','full')), clarification_rounds TEXT, research_findings TEXT, problem_statement TEXT, requirements_json TEXT, acceptance_invariants TEXT, routed_to TEXT, decision_audit TEXT, plan_id INTEGER REFERENCES plans(id), project_id TEXT DEFAULT NULL)",
     "CREATE INDEX IF NOT EXISTS idx_solve_sessions_project ON solve_sessions(project_id)",
+    // Plan 698 — workspace layer tables
+    "CREATE TABLE IF NOT EXISTS workspaces (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, wave_db_id INTEGER, workspace_id TEXT UNIQUE NOT NULL, path TEXT NOT NULL, branch TEXT, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','merged','deleted')), created_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)",
+    "CREATE INDEX IF NOT EXISTS idx_workspaces_plan ON workspaces(plan_id)",
+    "CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)",
+    "CREATE INDEX IF NOT EXISTS idx_workspaces_workspace_id ON workspaces(workspace_id)",
+    "CREATE TABLE IF NOT EXISTS workspace_events (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, agent TEXT NOT NULL, action TEXT NOT NULL, file_path TEXT, detail TEXT, metadata TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+    "CREATE INDEX IF NOT EXISTS idx_workspace_events_workspace ON workspace_events(workspace_id)",
+    "CREATE INDEX IF NOT EXISTS idx_workspace_events_agent ON workspace_events(agent)",
+    "CREATE INDEX IF NOT EXISTS idx_workspace_events_created ON workspace_events(created_at DESC)",
 ];
 
 /// Run DB migrations and return a connection pool for `db_path`.
@@ -173,19 +189,26 @@ pub fn init_db_and_pool(
                     if msg.contains("duplicate column") || msg.contains("already exists") {
                         skip += 1;
                     } else {
-                        eprintln!("[migration] ERROR on '{}'...: {e}", &sql.chars().take(50).collect::<String>());
+                        eprintln!(
+                            "[migration] ERROR on '{}'...: {e}",
+                            &sql.chars().take(50).collect::<String>()
+                        );
                     }
                 }
             }
         }
-        let check = conn.prepare(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_activity'",
-        );
-        let exists = check.map(|mut s| s.exists([])).unwrap_or(Ok(false)).unwrap_or(false);
+        let check = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_activity'");
+        let exists = check
+            .map(|mut s| s.exists([]))
+            .unwrap_or(Ok(false))
+            .unwrap_or(false);
         if !exists {
             eprintln!("[migration] CRITICAL: agent_activity table missing after migration!");
         }
-        eprintln!("[migration] {ok} applied, {skip} skipped (already exist), agent_activity={exists}");
+        eprintln!(
+            "[migration] {ok} applied, {skip} skipped (already exist), agent_activity={exists}"
+        );
     }
     let manager = SqliteConnectionManager::file(db_path).with_init(|conn| {
         conn.execute_batch(

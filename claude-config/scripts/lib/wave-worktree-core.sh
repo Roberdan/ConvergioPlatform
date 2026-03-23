@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# DEPRECATED — use 'cvg workspace' commands and /api/workspace/* endpoints instead
 # wave-worktree-core.sh — Shared library for wave-level worktree management
 # Sourced by wave-worktree scripts; requires plan-db-core.sh to be sourced first
 # Version: 1.1.0

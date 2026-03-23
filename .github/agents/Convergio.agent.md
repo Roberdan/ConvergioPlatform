@@ -50,8 +50,13 @@ Stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde+rmp-serde · hm
 | `cd daemon && cargo check` | Type check (~5s) |
 | `cd daemon && cargo test` | Tests |
 | `./daemon/start.sh` | Run |
+| `cvg workspace create <name>` | Create managed workspace |
+| `cvg workspace list` | List active workspaces |
+| `cvg workspace status <id>` | Show workspace status |
+| `cvg workspace events <id>` | Show event log |
+| `cvg workspace delete <id>` | Remove workspace |
 
-API (25 modules): agents · chat · coordinator · dashboard · github · heartbeat · ideas · ipc · mesh · notify · peers · peers_ext · plan_db (import, lifecycle, ops, query) · plans · workers · mesh_provision · sse · ws · ws_pty · runs · metrics · ingest
+API (26 modules): agents · chat · coordinator · dashboard · github · heartbeat · ideas · ipc · mesh · notify · peers · peers_ext · plan_db (import, lifecycle, ops, query) · plans · workers · mesh_provision · sse · ws · ws_pty · runs · metrics · ingest
 
 | New Endpoint | Method | Purpose |
 |---|---|---|
@@ -61,6 +66,15 @@ API (25 modules): agents · chat · coordinator · dashboard · github · heartb
 | `/api/runs/:id/resume` | POST | Resume a paused run |
 | `/api/metrics` | GET | Platform telemetry (latency, cost, agent count) |
 | `/api/ingest` | POST | Trigger document ingestion (PDF/DOCX/XLSX/URL/folder) |
+| `/api/openclaw/agents` | GET | List agents for OpenClaw integration |
+| `/api/openclaw/invoke` | POST | Invoke agent via OpenClaw bridge |
+| `/api/workspace/create` | POST | Create managed workspace (returns workspace_id) |
+| `/api/workspace/delete` | DELETE | Remove workspace and cleanup |
+| `/api/workspace/list` | GET | List active workspaces |
+| `/api/workspace/status` | GET | Workspace status + event summary |
+| `/api/workspace/events` | GET | Workspace event log (CRDT-enabled) |
+| `/api/workspace/quality-gate` | POST | Run quality gate checks |
+| `/api/workspace/release` | POST | Trigger release pipeline (commit→push→PR→merge) |
 
 ## Dashboard
 
@@ -136,6 +150,7 @@ Rebuild: create peers.conf on coordinator → provision each worker → heartbea
 | Node unreachable | `tailscale ping <dns>` · SSH check · heartbeat.sh |
 | DB locked | `dashboard-db-repair.sh` · `PRAGMA integrity_check` |
 | plan-db.sh no DB | Check `$DASHBOARD_DB` · check symlink |
+| OpenClaw plugin fails | Check daemon running, curl /api/health, verify config/openclaw.yaml |
 
 ## Conventions
 

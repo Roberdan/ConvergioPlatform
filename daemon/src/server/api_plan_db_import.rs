@@ -28,8 +28,7 @@ async fn handle_import(
     let conn = &conn;
 
     // Guard: plan must exist and be in importable state (draft/todo/approved)
-    plan_lifecycle_guards::require_plan_importable(plan_id, conn)
-        .map_err(ApiError::conflict)?;
+    plan_lifecycle_guards::require_plan_importable(plan_id, conn).map_err(ApiError::conflict)?;
 
     // Verify plan exists and get project_id
     let project_id: String = conn
@@ -73,7 +72,7 @@ fn do_import(
     conn: &rusqlite::Connection,
     plan_id: i64,
     project_id: &str,
-    waves: &mut Vec<super::api_plan_db_import_parsers::WaveSpec>,
+    waves: &mut [super::api_plan_db_import_parsers::WaveSpec],
 ) -> Result<(usize, usize), ApiError> {
     let mut waves_created = 0usize;
     let mut tasks_created = 0usize;

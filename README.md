@@ -43,6 +43,9 @@ cvg kb search "error keywords"             # search knowledge base
 cvg agent list                             # list active agents
 cvg audit --path .                         # audit project for violations
 cvg skill lint path/to/skill.yaml          # validate skill definition
+cvg workspace list                         # list active workspaces
+cvg workspace create --plan 698 --wave 1   # create workspace for wave
+cvg workspace create-feature my-branch     # create feature workspace
 ```
 
 Common options:
@@ -63,7 +66,8 @@ convergio stop [run_id]                     # abort execution
 
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
-| **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI, `cvg` CLI (120+ modules) |
+| **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI, `cvg` CLI (130+ modules) |
+| **Workspace** | `daemon/src/workspace/` | Rust | Agent workspace isolation, git abstraction, Release Agent, quality gates, event log |
 | **Dashboard** | `dashboard/` | JS | Control Room on Maranello Luce Design — plans, mesh, chat, brain, approvals |
 | **Evolution** | `evolution/` | TS | Self-improvement: telemetry → proposals → experiments |
 | **Scripts** | `scripts/` | Bash | Mesh ops, platform tooling, document ingestion |
@@ -85,7 +89,7 @@ Daemon stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde · hmac+
 
 ```bash
 cd daemon && cargo build --release   # build daemon
-cd daemon && cargo test              # run daemon tests (570+ tests)
+cd daemon && cargo test              # run daemon tests (900+ tests)
 cd evolution && npx tsc --noEmit     # type-check evolution
 cd evolution && npx vitest run       # run evolution tests (43 tests)
 cd dashboard && ./start.sh           # serve dashboard at :8420
@@ -113,6 +117,45 @@ See [AGENTS.md](AGENTS.md) for the full catalog — 89 agents across 12 domains.
 | Compliance | 5 | Elena legal, Luca security, Dr. Enzo healthcare |
 
 All agents support: Claude Code, Copilot CLI, OpenCode, local LLMs.
+
+---
+
+## OpenClaw Bridge
+
+Convergio agents are accessible via 30+ messaging platforms (WhatsApp, Telegram, Slack, Discord, etc.) through the [OpenClaw](https://openclaw.ai) bridge.
+
+```bash
+# Generate SKILL.md files for OpenClaw
+bash scripts/platform/convergio-openclaw-skills.sh
+
+# Daemon exposes bridge API
+curl http://localhost:8420/api/openclaw/agents    # list agents
+curl -X POST http://localhost:8420/api/openclaw/invoke \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Review my code for security issues"}'
+```
+
+All requests route to Ali orchestrator, who dispatches to the right specialist. See [`integrations/openclaw-bridge/`](integrations/openclaw-bridge/) for the TypeScript plugin source.
+
+---
+
+## Workspace Layer
+
+Git is invisible to agents. The daemon manages workspaces internally — agents edit files normally, hooks register operations in the event log, and the Release Agent automates the git export pipeline.
+
+```bash
+cvg workspace create --plan 698 --wave 1   # daemon creates isolated worktree
+# ... agents work via Read/Edit/Write tools ...
+cvg workspace release ws-1234              # quality gate → commit → PR → merge
+```
+
+| Component | What |
+|---|---|
+| Workspace API | `/api/workspace/create`, `/delete`, `/list`, `/status`, `/events`, `/quality-gate`, `/release` |
+| GitConnector | Trait abstraction — GitHub impl via reqwest. Supports GitHub/GitLab/Gitea. |
+| Release Agent | Rust module: quality gate pass → auto-commit → auto-push → auto-PR → auto-merge |
+| Event Log | `workspace_events` table — CRDT-enabled audit trail independent of git history |
+| Quality Gate | Mechanical checks in Rust: clean tree, file sizes, cargo check/test |
 
 ---
 

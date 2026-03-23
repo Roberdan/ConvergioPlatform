@@ -359,6 +359,39 @@ chmod 755 data/deliverables
 cvg deliverable create --plan <plan_id> --type report --path ./output.md
 ```
 
+## Problem: Workspace creation fails
+**Symptom**: `cvg workspace create` returns error
+**Cause**: Daemon not running, or parent directory not writable
+**Fix**: Start daemon (`./daemon/start.sh`), check permissions on parent directory
+
+## Problem: Release pipeline stuck
+**Symptom**: POST /api/workspace/release hangs or fails
+**Cause**: GitHub token not set, or quality gates failing
+**Fix**: Set GITHUB_TOKEN env var, run quality gate manually first
+
+## Problem: Quality gate fails on file sizes
+**Symptom**: file_sizes gate reports violations
+**Cause**: .rs files exceeding 250-line limit
+**Fix**: Split oversized files into submodules
+
+## Problem: OpenClaw plugin cannot reach Convergio daemon
+
+**Symptom**: convergio-invoke tool returns connection error
+**Cause**: Daemon not running or wrong URL
+**Fix**: Start daemon (./daemon/start.sh), verify curl http://localhost:8420/api/health
+
+## Problem: No agents listed via OpenClaw
+
+**Symptom**: convergio-agents tool returns empty list
+**Cause**: Agent catalog empty in DB
+**Fix**: Run cvg agent sync to populate catalog from .agent.md files
+
+## Problem: Skill generator produces no output
+
+**Symptom**: convergio-openclaw-skills.sh exits without generating files
+**Cause**: No .agent.md files found in source directory
+**Fix**: Verify claude-config/agents/ contains .agent.md files with YAML frontmatter
+
 ## Problem: Copilot agent not visible in /api/ipc/agents
 
 **Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty

@@ -1,8 +1,11 @@
 #!/bin/bash
+# DEPRECATED — use 'cvg workspace create-feature <branch>' instead
 set -euo pipefail
 # Worktree Create - Creates worktree with automatic .env symlinks
 # Usage: worktree-create.sh <branch> [path]
 # Example: worktree-create.sh feature/new-api ../project-feature
+
+echo "[DEPRECATED] worktree-create.sh is deprecated. Use 'cvg workspace create-feature' instead." >&2
 
 # Version: 1.0.0
 set -euo pipefail

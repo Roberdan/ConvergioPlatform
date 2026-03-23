@@ -1,5 +1,36 @@
 # Changelog
 
+## [16.0.0] — 23 Marzo 2026
+
+### Added
+- Workspace API: /api/workspace/create, /delete, /list, /status, /events, /quality-gate, /release
+- Release Agent Rust module — event-driven git export pipeline
+- GitConnector trait with GitHub implementation (reqwest)
+- Workspace event log (workspace_events table, CRDT-enabled)
+- cvg workspace CLI subcommands (create, delete, list, status, events)
+- Quality gate module in Rust (replaces pre-merge-gate.sh)
+- Wave validation module in Rust (replaces validate-task.sh, validate-wave.sh)
+- Non-code deliverables workspace integration
+- Hook interception for file ops (workspace-event-hook.sh)
+
+### Changed
+- cvg wave create/merge/validate now use workspace layer internally
+
+### Deprecated
+- worktree-create.sh — use cvg workspace create-feature
+- wave-worktree.sh — use cvg workspace commands
+- pr-ops.sh — use cvg workspace release
+- pre-merge-gate.sh — use workspace quality gate API
+- validate-task.sh, validate-wave.sh — migrated to Rust daemon
+
+## [v15.0.0] - 2026-03-23
+
+### Added
+- OpenClaw bridge: Convergio agents accessible via 30+ messaging platforms
+- Daemon API: GET /api/openclaw/agents, POST /api/openclaw/invoke
+- Skill generator: convergio-openclaw-skills.sh (auto-generates SKILL.md)
+- OpenClaw TS plugin: @convergio/openclaw-bridge
+
 ## [v14.0.0] - 22 Marzo 2026
 
 ### Added

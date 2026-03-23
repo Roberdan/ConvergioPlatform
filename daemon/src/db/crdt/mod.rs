@@ -13,7 +13,7 @@ pub use sync::io_as_sql_error;
 
 // ALL operational tables CRR-enabled for automatic row-level replication.
 // Excluded: plan_versions_backup (no PK — it's a raw dump backup table)
-const REQUIRED_CRDT_TABLES: [&str; 57] = [
+const REQUIRED_CRDT_TABLES: [&str; 59] = [
     "agent_activity",
     "agent_runs",
     "chat_messages",
@@ -71,6 +71,8 @@ const REQUIRED_CRDT_TABLES: [&str; 57] = [
     "tasks",
     "token_usage",
     "waves",
+    "workspace_events",
+    "workspaces",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

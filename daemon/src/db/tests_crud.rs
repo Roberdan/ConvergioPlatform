@@ -134,7 +134,9 @@ fn db_crdt_required_tables_are_declared() {
             "snapshots",
             "tasks",
             "token_usage",
-            "waves"
+            "waves",
+            "workspace_events",
+            "workspaces"
         ]
     );
 }

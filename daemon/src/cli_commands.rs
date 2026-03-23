@@ -5,16 +5,18 @@
 use crate::cli_agent;
 use crate::cli_bus;
 use crate::cli_checkpoint;
+use crate::cli_domain;
 use crate::cli_kb;
 use crate::cli_lock;
 use crate::cli_ops;
-use crate::cli_project;
 use crate::cli_plan;
+use crate::cli_project;
 use crate::cli_review;
 use crate::cli_run;
 use crate::cli_skill;
 use crate::cli_task;
 use crate::cli_wave;
+use crate::cli_workspace;
 use crate::ipc_handler::{DaemonCommands, IpcCommands};
 use clap::Subcommand;
 use std::path::PathBuf;
@@ -161,5 +163,15 @@ pub enum Commands {
     Alert {
         #[command(subcommand)]
         command: cli_ops::AlertCommands,
+    },
+    /// Domain→skill mapping commands (cvg domain list/map)
+    Domain {
+        #[command(subcommand)]
+        command: cli_domain::DomainCommands,
+    },
+    /// Workspace management commands (cvg workspace create/delete/list/status/events)
+    Workspace {
+        #[command(subcommand)]
+        command: cli_workspace::WorkspaceCommands,
     },
 }

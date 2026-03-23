@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# DEPRECATED — use 'cvg workspace release' and 'POST /api/workspace/quality-gate' instead
 set -euo pipefail
+echo "[DEPRECATED] pr-ops.sh is deprecated. Use 'cvg workspace release' instead." >&2
 # pr-ops.sh - PR write/action operations (reply, resolve, merge, status)
 # Complements pr-digest.sh (read-only) with correct API calls.
 # Usage: pr-ops.sh <command> [args...]

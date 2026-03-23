@@ -30,6 +30,7 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | `cvg project show <id>` | Show project details |
 | `cvg audit --project <id>` | Run project-scoped audit |
 | `scripts/mesh/mesh-heartbeat.sh` | Check mesh nodes |
+| `bash scripts/platform/convergio-openclaw-skills.sh` | Generate OpenClaw SKILL.md files |
 
 ## Architecture
 
@@ -40,6 +41,8 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | Evolution | `evolution/` | TypeScript | core/types, adapters (claude, maranello, dashboard) |
 | Scripts | `scripts/` | Bash | mesh(12), platform(5) |
 | Data | `data/dashboard.db` | SQLite WAL | plans, tasks, waves, KB, heartbeats |
+| Integrations | `integrations/` | TS | OpenClaw bridge plugin |
+| Workspace | `daemon/src/workspace/` | Rust | core, events, git_connector, wave_ops, merge_ops, quality_gate, validation, release_agent, deliverables |
 
 ## Key Paths
 
@@ -51,6 +54,8 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | `~/.claude/scripts/lib/*.sh` | Symlinks to `claude-config/scripts/lib/*.sh` |
 | `~/.claude/config/peers.conf` | Mesh config (per-machine) |
 | `daemon/Cargo.toml` | Rust deps (axum, rusqlite, tokio, ssh2, ratatui) |
+| `config/openclaw.yaml` | OpenClaw bridge configuration |
+| `integrations/openclaw-bridge/` | OpenClaw TS plugin source |
 
 ## Conventions
 

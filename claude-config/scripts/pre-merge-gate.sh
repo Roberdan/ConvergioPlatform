@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
+# DEPRECATED — use 'POST /api/workspace/quality-gate' instead
 # pre-merge-gate.sh v1.0.0 — Quality gate before push/merge
 # Runs automatically via PreToolUse hook on git push, or manually.
 # Works with any repo (Claude Code, Copilot, any model).
 set -euo pipefail
+echo "[DEPRECATED] pre-merge-gate.sh is deprecated. Use workspace quality gate API instead." >&2
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

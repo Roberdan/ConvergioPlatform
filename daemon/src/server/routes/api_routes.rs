@@ -83,6 +83,10 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/domain/list",
     "/api/crdt/status",
     "/api/crdt/peers",
+    "/api/workspace/list",
+    "/api/workspace/status/:workspace_id",
+    "/api/workspace/events",
+    "/api/workspace/deliverables",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -146,6 +150,11 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/tracking/agent-activity",
     "/api/tracking/session-state",
     "/api/tracking/compaction",
+    "/api/workspace/create",
+    "/api/workspace/delete",
+    "/api/workspace/events/record",
+    "/api/workspace/quality-gate",
+    "/api/workspace/release",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",
