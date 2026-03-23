@@ -1,0 +1,12 @@
+# OpenClaw Bridge Configuration
+# Connects ConvergioPlatform daemon to OpenClaw legal document processing.
+# Auth, privacy, and session settings will be added in future waves.
+
+# Whether the OpenClaw bridge is active
+enabled: true
+
+# Convergio daemon HTTP endpoint that OpenClaw connects to
+daemon_url: "http://localhost:8420"
+
+# Default agent handling OpenClaw requests
+default_agent: "ali-orchestrator"

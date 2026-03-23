@@ -1,0 +1,523 @@
+# Plan: Convergio × OpenClaw Bridge
+# Enable Convergio agents via OpenClaw messaging channels (WhatsApp, Telegram, Slack, 30+)
+# Project: convergio
+#
+# ARCHITECTURE:
+# OpenClaw Plugin (TypeScript) → HTTP bridge → Convergio Daemon (:8420)
+# - OpenClaw SKILL.md auto-generated from Convergio agent catalog
+# - Ali orchestrator exposed as primary OpenClaw agent
+# - Convergio IPC ↔ OpenClaw sessions bidirectional mapping
+# - RBAC preserved via auth bridge
+#
+# PARALLELISM:
+# W1 = research + architecture (must go first)
+# W2a, W2b = PARALLEL (plugin core + agent skill generator)
+# W3 = orchestration layer (depends on W2a + W2b)
+# W4 = closure (depends on all)
+
+name: "Convergio × OpenClaw Bridge"
+description: >
+  Integration layer enabling Convergio's 40+ specialized AI agents
+  to be accessed through OpenClaw's 30+ messaging channels.
+  OpenClaw plugin bridges to Convergio daemon API (:8420).
+  Preserves Ali orchestration, RBAC, audit trail, IPC protocol.
+
+waves:
+  # ════════════════════════════════════════════════════════════════
+  # W1: Research & Architecture
+  # ════════════════════════════════════════════════════════════════
+  - id: W1
+    name: "Research & Architecture Design"
+    parallel_mode: standard
+    tasks:
+      - id: T1-01
+        do: >
+          Write Architecture Decision Record for Convergio × OpenClaw integration.
+          Analyze and document:
+          (1) Mapping: OpenClaw SKILL.md format → Convergio agent definition format
+          (fields: name, description, version, requires, metadata.openclaw vs
+          name, description, tools, model, maturity in Convergio frontmatter)
+          (2) Session mapping: OpenClaw session keys (agent:<id>:<provider>:<chat>)
+          → Convergio IPC channels + shared context store
+          (3) Auth bridge: OpenClaw channel security (DM pairing, allowlists)
+          → Convergio RBAC + privacy-aware dispatch (sensitive → local only)
+          (4) Tool mapping: OpenClaw tool profiles (minimal/coding/messaging/full)
+          → Convergio agent tool restrictions (tools/disallowedTools)
+          (5) Orchestration: How Ali multi-agent dispatch works within OpenClaw's
+          single-session model (sub-sessions via ACP protocol)
+          (6) Risk analysis: tight coupling, API stability, data privacy
+          Output: docs/adr/adr-openclaw-bridge.md (max 250 lines)
+        type: analysis
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: baccio-tech-architect
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "test -f docs/adr/adr-openclaw-bridge.md"
+          - "wc -l docs/adr/adr-openclaw-bridge.md | awk '{if($1 < 50 || $1 > 250) exit 1}'"
+
+      - id: T1-02
+        do: >
+          Design the OpenClaw plugin contract and Convergio daemon API extensions.
+          Document in docs/design/openclaw-plugin-spec.md:
+          (1) Plugin structure: openclaw-convergio-bridge/ with
+          openclaw.plugin.json, package.json, src/index.ts
+          (2) New daemon API endpoints needed:
+          - GET /api/openclaw/agents — list agents in SKILL.md-compatible format
+          - POST /api/openclaw/invoke — invoke agent with OpenClaw session context
+          - GET /api/openclaw/session/:key — map OpenClaw session to IPC channel
+          - POST /api/openclaw/webhook — receive OpenClaw gateway events
+          (3) Data flow diagrams: message in (WhatsApp) → OpenClaw gateway →
+          plugin → daemon API → Ali dispatch → agent → IPC response →
+          plugin → gateway → WhatsApp reply
+          (4) Error handling: agent timeout, model failure, RBAC denial
+          (5) Configuration schema for openclaw.json convergio section
+          Output: docs/design/openclaw-plugin-spec.md (max 250 lines)
+        type: design
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: baccio-tech-architect
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "test -f docs/design/openclaw-plugin-spec.md"
+          - "wc -l docs/design/openclaw-plugin-spec.md | awk '{if($1 < 50 || $1 > 250) exit 1}'"
+
+  # ════════════════════════════════════════════════════════════════
+  # W2a: Plugin Core (parallel with W2b)
+  # ════════════════════════════════════════════════════════════════
+  - id: W2a
+    name: "OpenClaw Plugin Core"
+    parallel_mode: standard
+    tasks:
+      - id: T2a-01
+        do: >
+          Create the OpenClaw plugin package scaffold at integrations/openclaw-bridge/.
+          Files (max 5):
+          (1) package.json — name: @convergio/openclaw-bridge, no runtime deps
+          (use native fetch), devDeps: typescript, @types/node. Scripts: build (tsc), test.
+          type: module, main: dist/index.js
+          (2) tsconfig.json — strict, ESM, target ES2022, outDir dist/, rootDir src/
+          (3) openclaw.plugin.json — id: convergio-bridge, name, version, main: dist/index.js
+          (4) src/types.ts — shared interfaces: ConvergioAgent, InvokeRequest,
+          InvokeResponse, ConvergioError, OpenClawConfig. All typed, no any.
+          Each file max 250 lines. No stubs.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -f integrations/openclaw-bridge/package.json"
+          - "test -f integrations/openclaw-bridge/src/types.ts"
+          - "cd integrations/openclaw-bridge && npx tsc --noEmit"
+
+      - id: T2a-02
+        do: >
+          Create the OpenClaw plugin entry point and daemon HTTP client.
+          In integrations/openclaw-bridge/src/:
+          (1) src/client.ts — ConvergioDaemonClient class:
+            - constructor(config: OpenClawConfig)
+            - listAgents(): GET /api/openclaw/agents, cache 60s in-memory
+            - invokeAgent(req: InvokeRequest): POST /api/openclaw/invoke,
+              AbortSignal.timeout, structured error handling (403/504/503)
+            - getSessionMapping(key): GET /api/openclaw/session/:key
+            - sendWebhook(event, data): POST /api/openclaw/webhook
+            - health(): GET /api/health
+            All methods: native fetch(), Bearer auth if configured.
+          (2) src/index.ts — register(api) function that:
+            - Creates ConvergioDaemonClient
+            - Registers convergio-invoke tool (agent + message params)
+            - Registers convergio-agents tool (list available agents)
+            - Loads config from api.getConfig('convergio') with env fallback
+            Wire: imports from client.ts and types.ts. No dead code.
+          Each file max 250 lines. Real HTTP calls, no stubs.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "test -f integrations/openclaw-bridge/src/client.ts"
+          - "test -f integrations/openclaw-bridge/src/index.ts"
+          - "cd integrations/openclaw-bridge && npx tsc --noEmit"
+
+      - id: T2a-03
+        do: >
+          Add OpenClaw bridge API endpoints to the Convergio daemon.
+          In daemon/src/server/, create api_openclaw.rs (max 250 lines):
+          (1) GET /api/openclaw/agents — reads agent catalog from
+          claude-config/agents/**/*.md, parses YAML frontmatter,
+          returns JSON array [{name, description, model, tools, maturity}].
+          Cache results with tokio::sync::RwLock + 60s TTL.
+          (2) POST /api/openclaw/invoke — accepts {agent_id, message,
+          session_key, channel_context}. Creates IPC skill request via
+          create_skill_request(), assigns to best agent, returns request_id.
+          Timeout: 120s. Error format: {error: {code, message}}.
+          (3) GET /api/openclaw/session/:key — maps OpenClaw session key
+          to Convergio IPC channel name. Creates channel if not exists.
+          (4) POST /api/openclaw/webhook — receives OpenClaw gateway events
+          (message_received, session_started, session_ended).
+          Routes to IPC message bus.
+          Auth middleware: read OPENCLAW_AUTH_TOKEN from env. If set,
+          require Bearer token on all endpoints (401 if missing).
+          If env not set, endpoints are open (dev mode).
+          Create pub fn router() -> axum::Router<ServerState>.
+          CRITICAL WIRING (in same task):
+          - Add 'pub mod api_openclaw;' to daemon/src/server/mod.rs
+          - Add 'use super::api_openclaw;' to daemon/src/server/routes/mod.rs
+          - Add '.merge(api_openclaw::router())' in build_router_with_db()
+          Follow existing .merge() pattern from api_ipc.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "grep -r 'api_openclaw' daemon/src/server/"
+          - "grep 'api_openclaw' daemon/src/server/routes/mod.rs"
+          - "grep 'pub mod api_openclaw' daemon/src/server/mod.rs"
+          - "cd daemon && cargo check"
+
+  # ════════════════════════════════════════════════════════════════
+  # W2b: Agent Skill Generator (parallel with W2a)
+  # ════════════════════════════════════════════════════════════════
+  - id: W2b
+    name: "Agent Skill Generator"
+    parallel_mode: standard
+    tasks:
+      - id: T2b-01
+        do: >
+          Create scripts/platform/convergio-openclaw-skills.sh that auto-generates
+          OpenClaw SKILL.md files from Convergio agent definitions.
+          Input: claude-config/agents/**/*.md (YAML frontmatter + markdown)
+          Output: integrations/openclaw-bridge/skills/<agent-name>/SKILL.md
+          Mapping logic:
+          (1) name → metadata.openclaw.skillKey (lowercase, hyphens)
+          (2) description → description field
+          (3) model → noted in markdown body as "Powered by {model}"
+          (4) tools → metadata.openclaw.requires.bins (map Read/Grep/Bash → curl)
+          (5) maturity → version (stable=1.0.0, preview=0.9.0)
+          (6) Agent markdown body → SKILL.md body with:
+            "When user asks for {description}, invoke Convergio agent via:
+            curl -X POST http://localhost:8420/api/openclaw/invoke
+            -H 'Content-Type: application/json'
+            -d '{\"agent_id\":\"{name}\",\"message\":\"$USER_MESSAGE\"}'
+            "
+          (7) Generate index.json listing all skills for ClawHub compatibility
+          set -euo pipefail. Idempotent (overwrites existing).
+          Max 250 lines. Split helpers if needed.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -x scripts/platform/convergio-openclaw-skills.sh"
+          - "bash scripts/platform/convergio-openclaw-skills.sh --help 2>&1 | grep -qi usage"
+          - "wc -l scripts/platform/convergio-openclaw-skills.sh | awk '{if($1 > 250) exit 1}'"
+
+      - id: T2b-02
+        do: >
+          Create tests for the skill generator and validate generated output.
+          In tests/openclaw/:
+          (1) test-skill-generator.sh — runs convergio-openclaw-skills.sh against
+          a test agent fixture (tests/fixtures/openclaw/test-agent.md with
+          known frontmatter), verifies output SKILL.md has correct:
+          - YAML frontmatter (name, description, version, metadata.openclaw)
+          - Markdown body with curl invocation
+          - File structure (skills/<name>/SKILL.md)
+          (2) test-skill-format.sh — validates generated SKILL.md files against
+          OpenClaw format requirements:
+          - name is lowercase with hyphens only
+          - version is valid semver
+          - metadata.openclaw section exists
+          - description is non-empty
+          (3) Create test fixture: tests/fixtures/openclaw/test-agent.md
+          with realistic agent definition (use rex-code-reviewer as template)
+          All tests use real file I/O, no mocks. set -euo pipefail.
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -f tests/openclaw/test-skill-generator.sh"
+          - "test -f tests/openclaw/test-skill-format.sh"
+          - "test -f tests/fixtures/openclaw/test-agent.md"
+          - "bash tests/openclaw/test-skill-generator.sh"
+
+  # ════════════════════════════════════════════════════════════════
+  # W3: Orchestration & Integration
+  # ════════════════════════════════════════════════════════════════
+  - id: W3
+    name: "Ali Orchestration via OpenClaw"
+    parallel_mode: standard
+    tasks:
+      - id: T3-01
+        do: >
+          Implement Ali orchestrator routing in the OpenClaw plugin.
+          In integrations/openclaw-bridge/src/:
+          (1) src/orchestrator.ts — ConvergioOrchestrator class:
+            - routeMessage(message, sessionContext): determines if message
+              should go to Ali (complex/multi-domain) or direct agent
+            - Heuristic: if message mentions multiple domains OR is ambiguous
+              → Ali. If message clearly maps to single agent → direct.
+            - mapSessionToIPC(openclawKey): creates/retrieves IPC channel
+              for the OpenClaw session, preserving conversation history
+            - handleAliResponse(response): parses Ali's dispatch decisions,
+              tracks sub-agent invocations, aggregates final response
+          (2) src/session-bridge.ts — SessionBridge class:
+            - syncFromOpenClaw(sessionKey, transcript): pushes OpenClaw
+              session history to Convergio IPC shared context
+            - syncToOpenClaw(ipcChannel): pulls Convergio agent responses
+              and formats for OpenClaw delivery
+            - handleMultiAgent(responses[]): merges responses from multiple
+              Convergio agents into coherent OpenClaw reply
+          (3) Update src/index.ts to wire orchestrator + session-bridge
+          into the plugin registration flow
+          Each file max 250 lines. Real logic, no stubs.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "test -f integrations/openclaw-bridge/src/orchestrator.ts"
+          - "test -f integrations/openclaw-bridge/src/session-bridge.ts"
+          - "cd integrations/openclaw-bridge && npx tsc --noEmit"
+
+      - id: T3-02
+        do: >
+          Create Lobster workflow templates for common Convergio patterns.
+          In integrations/openclaw-bridge/workflows/:
+          (1) code-review.yaml — Lobster workflow:
+            step 1: receive code/PR URL from user message
+            step 2: invoke rex-code-reviewer via convergio-invoke tool
+            step 3: format review as messaging-friendly output
+            step 4: deliver to originating channel
+          (2) project-plan.yaml — Lobster workflow:
+            step 1: receive project description
+            step 2: invoke ali-orchestrator for team assembly
+            step 3: invoke planner skill via daemon
+            step 4: return plan summary with approval gate
+          (3) security-audit.yaml — Lobster workflow:
+            step 1: receive repo/code reference
+            step 2: invoke luca-security-expert
+            step 3: format findings with severity levels
+            step 4: deliver structured report
+          Each workflow max 80 lines. Real Lobster syntax with
+          openclaw.invoke tool calls. Include step dependencies.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -f integrations/openclaw-bridge/workflows/code-review.yaml"
+          - "test -f integrations/openclaw-bridge/workflows/project-plan.yaml"
+          - "test -f integrations/openclaw-bridge/workflows/security-audit.yaml"
+
+      - id: T3-03
+        do: >
+          Add OpenClaw configuration to Convergio daemon config.
+          (1) In config/, create openclaw.yaml with:
+            enabled: true/false
+            gateway_url: "http://localhost:18789"
+            auth_token: "${OPENCLAW_AUTH_TOKEN}"  # env var reference
+            skill_output_dir: "integrations/openclaw-bridge/skills"
+            agent_allowlist: []  # empty = all agents exposed
+            agent_denylist: []   # agents never exposed to OpenClaw
+            privacy:
+              sensitive_agents: ["elena-legal", "dr-enzo-healthcare"]
+              require_auth: true
+              audit_log: true
+            session:
+              idle_timeout_minutes: 30
+              max_history_turns: 50
+            orchestration:
+              default_agent: "ali-orchestrator"
+              direct_routing_threshold: 0.8  # confidence to skip Ali
+          (2) In daemon/src/server/api_openclaw.rs, load this config
+          at startup. Guard all endpoints with enabled check.
+          (3) Add OPENCLAW_AUTH_TOKEN to .env.example (not .env)
+          Max 250 lines total across files.
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "test -f config/openclaw.yaml"
+          - "grep OPENCLAW_AUTH_TOKEN .env.example || grep OPENCLAW_AUTH_TOKEN config/openclaw.yaml"
+
+  # ════════════════════════════════════════════════════════════════
+  # W4: Closure
+  # ════════════════════════════════════════════════════════════════
+  - id: W4
+    name: "Testing, Documentation & Closure"
+    parallel_mode: standard
+    tasks:
+      - id: TF-rust-tests
+        do: >
+          Rust unit tests for api_openclaw.rs.
+          Create daemon/src/server/api_openclaw_tests.rs following existing
+          companion test file pattern (see api_ideas tests as reference).
+          Tests:
+          (1) test_agents_endpoint — mock agent catalog dir with 2 test .md files,
+          call GET /api/openclaw/agents, verify JSON array with 2 entries,
+          verify fields (name, description, model) are correctly parsed
+          (2) test_agents_cache — call twice within 60s, verify second call
+          uses cache (no filesystem read)
+          (3) test_invoke_endpoint — POST /api/openclaw/invoke with valid
+          {agent_id, message}, verify 200 + request_id returned
+          (4) test_invoke_missing_agent — POST with empty agent_id,
+          verify defaults to ali-orchestrator
+          (5) test_session_mapping — GET /api/openclaw/session/test-key,
+          verify channel name returned, call again verify same channel
+          (6) test_auth_required — set OPENCLAW_AUTH_TOKEN env, call without
+          Bearer header, verify 401. Call with correct token, verify 200.
+          (7) test_auth_open — unset OPENCLAW_AUTH_TOKEN, verify endpoints
+          accessible without token (dev mode)
+          Add #[cfg(test)] mod tests in api_openclaw.rs or companion file.
+          Use axum::test helpers. Real DB (test fixture), no mocks on internals.
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "grep '#\\[cfg(test)\\]' daemon/src/server/api_openclaw.rs || test -f daemon/src/server/api_openclaw_tests.rs"
+          - "cd daemon && cargo test api_openclaw"
+
+      - id: TF-integration-tests
+        do: >
+          Integration tests for the OpenClaw bridge.
+          In tests/openclaw/:
+          (1) test-daemon-api.sh — test all /api/openclaw/* endpoints:
+            - Start daemon, verify /api/openclaw/agents returns agent list
+            - POST /api/openclaw/invoke with test agent, verify request created
+            - GET /api/openclaw/session/test-key, verify channel mapped
+            - POST /api/openclaw/webhook with test event, verify IPC message
+            Auth: test with and without Bearer token
+          (2) test-plugin-build.sh — verify OpenClaw plugin builds:
+            - cd integrations/openclaw-bridge && npm install && npm run build
+            - Verify dist/ output exists
+            - Verify openclaw.plugin.json is valid JSON
+          (3) test-e2e-flow.sh — end-to-end message flow:
+            - Start daemon
+            - Simulate OpenClaw webhook (message_received)
+            - Verify IPC channel created
+            - Verify agent invoked via skill request
+            - Verify response returned
+          All tests: real daemon, real HTTP, no mocks. set -euo pipefail.
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "test -f tests/openclaw/test-daemon-api.sh"
+          - "test -f tests/openclaw/test-plugin-build.sh"
+          - "test -f tests/openclaw/test-e2e-flow.sh"
+          - "bash tests/openclaw/test-plugin-build.sh"
+
+      - id: TF-doc
+        do: >
+          Complete documentation for the OpenClaw bridge. ALL files updated.
+          (1) Update CHANGELOG.md with OpenClaw bridge entry under new version:
+            ### Added
+            - OpenClaw bridge plugin: Convergio agents via 30+ messaging platforms
+            - Daemon API: /api/openclaw/* endpoints (agents, invoke, session, webhook)
+            - Skill generator: auto-generates OpenClaw SKILL.md from agent catalog
+            - Lobster workflows: code-review, project-plan, security-audit
+          (2) Update TROUBLESHOOTING.md with OpenClaw-specific problems:
+            - Plugin won't connect to daemon (Symptom/Cause/Fix)
+            - Skills not generated
+            - Session mapping failures
+            - Auth token issues
+          (3) Create integrations/openclaw-bridge/README.md:
+            - Quick start (3 steps: install, configure, start daemon)
+            - Architecture diagram (text: user → OpenClaw → plugin → daemon → agent)
+            - Configuration reference (openclaw.yaml fields)
+            - Available agents table (all 40+ with descriptions)
+            - Lobster workflow examples
+            - Troubleshooting section
+          (4) Update VERSION.md (minor bump for new feature)
+          (5) Update README.md (repo root) — add OpenClaw section:
+            - What it is (bridge to 30+ messaging platforms)
+            - Link to integrations/openclaw-bridge/README.md
+            - Quick setup commands
+          (6) Update CLAUDE.md — add to Commands table:
+            - convergio-openclaw-skills.sh (generate SKILL.md files)
+            Add to Architecture table:
+            - Integrations | integrations/ | TS | OpenClaw bridge plugin
+            Add to Key Paths:
+            - config/openclaw.yaml | OpenClaw bridge config
+          (7) Update .github/agents/Convergio.agent.md:
+            - Add api_openclaw to API modules list (now 26 modules)
+            - Add /api/openclaw/* endpoints to New Endpoint table:
+              /api/openclaw/agents GET, /api/openclaw/invoke POST,
+              /api/openclaw/session/:key GET, /api/openclaw/webhook POST
+            - Add OpenClaw troubleshooting entries
+          All docs max 250 lines each. English only.
+        type: documentation
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "grep -i openclaw CHANGELOG.md"
+          - "grep -i openclaw TROUBLESHOOTING.md"
+          - "test -f integrations/openclaw-bridge/README.md"
+          - "grep -i openclaw README.md"
+          - "grep -i openclaw CLAUDE.md"
+          - "grep -i api_openclaw .github/agents/Convergio.agent.md"
+
+      - id: TF-pr
+        do: >
+          Create PR for the OpenClaw bridge feature.
+          Ensure all files are committed with conventional commits.
+          PR title: "feat: OpenClaw bridge — Convergio agents via messaging"
+          PR body: summary of all waves, test plan, architecture overview.
+          Verify CI passes (cargo check, tsc, tests).
+        type: release
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo check"
+          - "cd integrations/openclaw-bridge && npx tsc --noEmit"
+
+      - id: TF-deploy-verify
+        do: >
+          Verify OpenClaw bridge is operational:
+          (1) Start daemon with OpenClaw config enabled
+          (2) curl http://localhost:8420/api/openclaw/agents — verify 200 + non-empty
+          (3) Verify generated SKILL.md files exist and are valid
+          (4) Verify plugin builds successfully
+          (5) Run full test suite
+          Document results in deployment verification log.
+        type: verification
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "curl -sf http://localhost:8420/api/openclaw/agents | head -c 1 | grep -q '[{'"
+          - "ls integrations/openclaw-bridge/skills/*/SKILL.md | wc -l | awk '{if($1 < 1) exit 1}'"

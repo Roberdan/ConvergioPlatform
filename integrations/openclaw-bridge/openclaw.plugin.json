@@ -1,0 +1,7 @@
+{
+  "id": "convergio-bridge",
+  "name": "Convergio Bridge",
+  "version": "0.1.0",
+  "description": "Access Convergio AI agents via OpenClaw",
+  "main": "dist/index.js"
+}
