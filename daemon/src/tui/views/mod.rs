@@ -11,6 +11,7 @@ use crate::tui::widgets;
 
 pub mod brain;
 pub mod cost;
+pub mod events;
 
 /// Renders header, KPI strip, active view with selection, and footer.
 pub fn render_view(
@@ -64,10 +65,7 @@ pub fn render_view(
             frame.render_widget(cost::cost_center(data, selected), chunks[2]);
         }
         MainView::EventStream => {
-            let p = Paragraph::new("Event Stream — coming soon")
-                .block(Block::default().borders(Borders::ALL).title("Event Stream"))
-                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
-            frame.render_widget(p, chunks[2]);
+            frame.render_widget(events::event_stream(data, selected), chunks[2]);
         }
         MainView::WorkspaceView => {
             let p = Paragraph::new("Workspace View — coming soon")

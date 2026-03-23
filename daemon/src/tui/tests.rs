@@ -104,6 +104,25 @@ fn renders_event_stream_placeholder() {
 }
 
 #[test]
+fn renders_event_stream_with_events() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::EventStream);
+    // sample_data() has one event with agent "task-executor" and action "write"
+    assert!(rendered.contains("EVENTS"), "Missing EVENTS header");
+}
+
+#[test]
+fn renders_event_stream_empty_state() {
+    let mut data = sample_data();
+    data.events = vec![];
+    let rendered = render_to_text(&data, MainView::EventStream);
+    assert!(
+        rendered.contains("No events"),
+        "Missing empty state message"
+    );
+}
+
+#[test]
 fn renders_workspace_view_placeholder() {
     let data = sample_data();
     let rendered = render_to_text(&data, MainView::WorkspaceView);
