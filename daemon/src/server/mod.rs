@@ -99,9 +99,35 @@ mod api_workspace_integration_tests;
 #[cfg(test)]
 mod api_workspace_tests;
 #[cfg(test)]
+mod api_chat_tests;
+#[cfg(test)]
+mod api_chat_tests_msg;
+#[cfg(test)]
+mod api_coordinator_tests;
+#[cfg(test)]
+mod api_domain_tests;
+#[cfg(test)]
+mod api_evolution_tests;
+#[cfg(test)]
+mod api_github_tests;
+#[cfg(test)]
 mod state_init_tests;
 #[cfg(test)]
 mod ws_pty_tests;
+#[cfg(test)]
+mod api_heartbeat_tests;
+#[cfg(test)]
+mod api_ingest_tests;
+#[cfg(test)]
+mod api_metrics_tests;
+#[cfg(test)]
+mod api_peers_tests;
+#[cfg(test)]
+mod api_plans_tests;
+#[cfg(test)]
+mod api_plan_db_checkpoint_tests;
+#[cfg(test)]
+mod api_plan_db_query_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};
