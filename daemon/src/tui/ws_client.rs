@@ -140,6 +140,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_heartbeat_event() {
+        // kind=brain_event + event_type=heartbeat → Heartbeat variant
+        let json = r#"{"kind":"brain_event","event_type":"heartbeat"}"#;
+        let event = WsClient::parse_message(json).unwrap();
+        assert_eq!(event, BrainEvent::Heartbeat);
+    }
+
+    #[test]
     fn test_parse_heartbeat_none() {
         // kind != brain_event → None
         let json = r#"{"kind":"heartbeat","event_type":"ping"}"#;

@@ -158,3 +158,52 @@ fn build_paragraph(lines: Vec<Line<'static>>) -> Paragraph<'static> {
         )
         .style(Style::default().fg(widgets::TEXT_PRIMARY))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tui::{BrainNode, TuiData};
+
+    #[test]
+    fn brain_canvas_shows_empty_state_when_no_nodes() {
+        let data = TuiData::default();
+        let p = brain_canvas(&data, 0);
+        let debug = format!("{p:?}");
+        assert!(debug.contains("No brain data"), "Missing empty-state text");
+    }
+
+    #[test]
+    fn brain_canvas_contains_header_with_nodes() {
+        let data = TuiData {
+            brain_nodes: vec![BrainNode {
+                id: "s1".to_string(),
+                label: "session-alpha".to_string(),
+                kind: "session".to_string(),
+                parent_id: None,
+                status: "running".to_string(),
+            }],
+            ..TuiData::default()
+        };
+        let p = brain_canvas(&data, 0);
+        let debug = format!("{p:?}");
+        assert!(debug.contains("BRAIN CANVAS"), "Missing BRAIN CANVAS header");
+        assert!(debug.contains("session-alpha"), "Missing node label");
+    }
+
+    #[test]
+    fn brain_canvas_counts_nodes_by_kind() {
+        let data = TuiData {
+            brain_nodes: vec![
+                BrainNode { id: "s1".to_string(), label: "sess".to_string(), kind: "session".to_string(), parent_id: None, status: "running".to_string() },
+                BrainNode { id: "a1".to_string(), label: "agent-thor".to_string(), kind: "agent".to_string(), parent_id: Some("s1".to_string()), status: "idle".to_string() },
+                BrainNode { id: "t1".to_string(), label: "task-9120".to_string(), kind: "task".to_string(), parent_id: Some("a1".to_string()), status: "submitted".to_string() },
+            ],
+            ..TuiData::default()
+        };
+        let p = brain_canvas(&data, 0);
+        let debug = format!("{p:?}");
+        assert!(debug.contains("Sessions: 1"), "Wrong session count");
+        assert!(debug.contains("Agents: 1"), "Wrong agent count");
+        assert!(debug.contains("Tasks: 1"), "Wrong task count");
+    }
+}

@@ -138,6 +138,43 @@ pub struct TuiData {
     pub deliverables: Vec<DeliverableInfo>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tui_data_default_compiles_and_is_empty() {
+        let data = TuiData::default();
+        assert!(data.plans.is_empty());
+        assert!(data.pipeline.is_empty());
+        assert!(data.mesh_nodes.is_empty());
+        assert!(data.agents.is_empty());
+        assert!(data.brain_nodes.is_empty());
+        assert!(data.events.is_empty());
+        assert!(data.workspaces.is_empty());
+        assert!(data.deliverables.is_empty());
+    }
+
+    #[test]
+    fn kpi_data_default_zeroes() {
+        let kpi = KpiData::default();
+        assert_eq!(kpi.plans_active, 0);
+        assert_eq!(kpi.agents_running, 0);
+        assert_eq!(kpi.daily_tokens, 0);
+        assert_eq!(kpi.daily_cost, 0.0);
+        assert_eq!(kpi.mesh_online, 0);
+    }
+
+    #[test]
+    fn cost_data_default_compiles_and_is_empty() {
+        let cost = CostData::default();
+        assert!(cost.by_model.is_empty());
+        assert!(cost.by_project.is_empty());
+        assert!(cost.by_date.is_empty());
+        assert_eq!(cost.summary.run_count, 0);
+    }
+}
+
 // --- View selector ---
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
