@@ -2,7 +2,7 @@
 # convergio-sync.sh — Cross-repo agent coordination
 # Enables agents working in different repos to communicate and synchronize
 # Usage: convergio-sync.sh <command> [args]
-set -uo pipefail
+set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"

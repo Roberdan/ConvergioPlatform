@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use super::types::SubCommands;
+use super::types::{IpcHandlerError, SubCommands};
 use super::utils::default_db_path;
 
-pub fn handle_models(db_path: Option<PathBuf>) {
-    let conn = open_db(db_path);
+pub fn handle_models(db_path: Option<PathBuf>) -> Result<(), IpcHandlerError> {
+    let conn = open_db(db_path)?;
     match claude_core::ipc::models::get_all_models(&conn) {
         Ok(models) => {
             println!(
@@ -20,19 +20,21 @@ pub fn handle_models(db_path: Option<PathBuf>) {
             println!("\n{} model(s)", models.len());
         }
         Err(e) => {
-            eprintln!("list models: {e}");
-            std::process::exit(2);
+            return Err(IpcHandlerError::OperationFailed(
+                format!("list models: {e}"),
+            ));
         }
     }
+    Ok(())
 }
 
-pub fn handle_sub(command: SubCommands) {
+pub fn handle_sub(command: SubCommands) -> Result<(), IpcHandlerError> {
     let db_path = match &command {
         SubCommands::Add { db_path, .. }
         | SubCommands::List { db_path }
         | SubCommands::Remove { db_path, .. } => db_path.clone().unwrap_or_else(default_db_path),
     };
-    let conn = open_db(Some(db_path));
+    let conn = open_db(Some(db_path))?;
     match command {
         SubCommands::Add {
             name,
@@ -54,8 +56,9 @@ pub fn handle_sub(command: SubCommands) {
             match claude_core::ipc::models::add_subscription(&conn, &sub) {
                 Ok(()) => println!("added subscription {}", sub.name),
                 Err(e) => {
-                    eprintln!("add sub: {e}");
-                    std::process::exit(2);
+                    return Err(IpcHandlerError::OperationFailed(
+                        format!("add sub: {e}"),
+                    ));
                 }
             }
         }
@@ -79,24 +82,27 @@ pub fn handle_sub(command: SubCommands) {
                 println!("\n{} subscription(s)", subs.len());
             }
             Err(e) => {
-                eprintln!("list subs: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(
+                    format!("list subs: {e}"),
+                ));
             }
         },
         SubCommands::Remove { name, .. } => {
             match claude_core::ipc::models::remove_subscription(&conn, &name) {
                 Ok(n) => println!("removed {n} subscription(s)"),
                 Err(e) => {
-                    eprintln!("remove sub: {e}");
-                    std::process::exit(2);
+                    return Err(IpcHandlerError::OperationFailed(
+                        format!("remove sub: {e}"),
+                    ));
                 }
             }
         }
     }
+    Ok(())
 }
 
-pub fn handle_budget(db_path: Option<PathBuf>) {
-    let conn = open_db(db_path);
+pub fn handle_budget(db_path: Option<PathBuf>) -> Result<(), IpcHandlerError> {
+    let conn = open_db(db_path)?;
     match claude_core::ipc::models::list_subscriptions(&conn) {
         Ok(subs) => {
             println!(
@@ -129,19 +135,14 @@ pub fn handle_budget(db_path: Option<PathBuf>) {
             }
         }
         Err(e) => {
-            eprintln!("budget: {e}");
-            std::process::exit(2);
+            return Err(IpcHandlerError::OperationFailed(format!("budget: {e}")));
         }
     }
+    Ok(())
 }
 
-fn open_db(db_path: Option<PathBuf>) -> rusqlite::Connection {
+fn open_db(db_path: Option<PathBuf>) -> Result<rusqlite::Connection, IpcHandlerError> {
     let path = db_path.unwrap_or_else(default_db_path);
-    match rusqlite::Connection::open(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("db open: {e}");
-            std::process::exit(2);
-        }
-    }
+    rusqlite::Connection::open(&path)
+        .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))
 }

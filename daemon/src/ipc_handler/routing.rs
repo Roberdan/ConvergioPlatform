@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use super::types::IpcHandlerError;
 use super::utils::default_db_path;
 
 pub fn handle_route(
@@ -7,15 +8,10 @@ pub fn handle_route(
     dry_run: bool,
     parallel: bool,
     db_path: Option<PathBuf>,
-) {
+) -> Result<(), IpcHandlerError> {
     let path = db_path.unwrap_or_else(default_db_path);
-    let conn = match rusqlite::Connection::open(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("db open: {e}");
-            std::process::exit(2);
-        }
-    };
+    let conn = rusqlite::Connection::open(&path)
+        .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
     if parallel {
         match claude_core::ipc::router::plan_parallel_execution(&conn, &task_description, 3) {
             Ok(plan) => println!(
@@ -23,8 +19,9 @@ pub fn handle_route(
                 serde_json::to_string_pretty(&plan).unwrap_or_default()
             ),
             Err(e) => {
-                eprintln!("parallel route: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(
+                    format!("parallel route: {e}"),
+                ));
             }
         }
     } else if dry_run {
@@ -54,22 +51,20 @@ pub fn handle_route(
             }
             Ok(None) => println!("No suitable model found"),
             Err(e) => {
-                eprintln!("route: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(format!("route: {e}")));
             }
         }
     }
+    Ok(())
 }
 
-pub fn handle_skills(agent: Option<String>, db_path: Option<PathBuf>) {
+pub fn handle_skills(
+    agent: Option<String>,
+    db_path: Option<PathBuf>,
+) -> Result<(), IpcHandlerError> {
     let path = db_path.unwrap_or_else(default_db_path);
-    let conn = match rusqlite::Connection::open(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("db open: {e}");
-            std::process::exit(2);
-        }
-    };
+    let conn = rusqlite::Connection::open(&path)
+        .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
     if let Some(agent_name) = agent {
         match claude_core::ipc::skills::get_skills_for_agent(&conn, &agent_name) {
             Ok(skills) => {
@@ -85,8 +80,7 @@ pub fn handle_skills(agent: Option<String>, db_path: Option<PathBuf>) {
                 }
             }
             Err(e) => {
-                eprintln!("skills: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(format!("skills: {e}")));
             }
         }
     } else {
@@ -106,22 +100,21 @@ pub fn handle_skills(agent: Option<String>, db_path: Option<PathBuf>) {
                 }
             }
             Err(e) => {
-                eprintln!("skills: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(format!("skills: {e}")));
             }
         }
     }
+    Ok(())
 }
 
-pub fn handle_request_skill(skill: String, payload: String, db_path: Option<PathBuf>) {
+pub fn handle_request_skill(
+    skill: String,
+    payload: String,
+    db_path: Option<PathBuf>,
+) -> Result<(), IpcHandlerError> {
     let path = db_path.unwrap_or_else(default_db_path);
-    let conn = match rusqlite::Connection::open(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("db open: {e}");
-            std::process::exit(2);
-        }
-    };
+    let conn = rusqlite::Connection::open(&path)
+        .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
     match claude_core::ipc::skills::create_skill_request(&conn, &skill, &payload) {
         Ok(id) => {
             println!("Request created: {id}");
@@ -133,44 +126,48 @@ pub fn handle_request_skill(skill: String, payload: String, db_path: Option<Path
             }
         }
         Err(e) => {
-            eprintln!("request-skill: {e}");
-            std::process::exit(2);
+            return Err(IpcHandlerError::OperationFailed(
+                format!("request-skill: {e}"),
+            ));
         }
     }
+    Ok(())
 }
 
-pub fn handle_respond_skill(request_id: String, result: String, db_path: Option<PathBuf>) {
+pub fn handle_respond_skill(
+    request_id: String,
+    result: String,
+    db_path: Option<PathBuf>,
+) -> Result<(), IpcHandlerError> {
     let path = db_path.unwrap_or_else(default_db_path);
-    let conn = match rusqlite::Connection::open(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("db open: {e}");
-            std::process::exit(2);
-        }
-    };
+    let conn = rusqlite::Connection::open(&path)
+        .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
     match claude_core::ipc::skills::complete_skill_request(&conn, &request_id, &result) {
         Ok(()) => println!("Request {request_id} completed"),
         Err(e) => {
-            eprintln!("respond-skill: {e}");
-            std::process::exit(2);
+            return Err(IpcHandlerError::OperationFailed(
+                format!("respond-skill: {e}"),
+            ));
         }
     }
+    Ok(())
 }
 
-pub fn handle_rate_skill(request_id: String, rating: f64, db_path: Option<PathBuf>) {
+pub fn handle_rate_skill(
+    request_id: String,
+    rating: f64,
+    db_path: Option<PathBuf>,
+) -> Result<(), IpcHandlerError> {
     let path = db_path.unwrap_or_else(default_db_path);
-    let conn = match rusqlite::Connection::open(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("db open: {e}");
-            std::process::exit(2);
-        }
-    };
+    let conn = rusqlite::Connection::open(&path)
+        .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
     match claude_core::ipc::skills::rate_skill_response(&conn, &request_id, rating) {
         Ok(()) => println!("Rated request {request_id}: {rating}"),
         Err(e) => {
-            eprintln!("rate-skill: {e}");
-            std::process::exit(2);
+            return Err(IpcHandlerError::OperationFailed(
+                format!("rate-skill: {e}"),
+            ));
         }
     }
+    Ok(())
 }

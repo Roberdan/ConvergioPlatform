@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+use super::types::IpcHandlerError;
 use super::utils::{default_db_path, default_peers_conf};
 
 pub async fn run_serve(
@@ -8,7 +9,7 @@ pub async fn run_serve(
     static_dir: Option<PathBuf>,
     crsqlite_path: Option<String>,
     dev_mode: bool,
-) {
+) -> Result<(), IpcHandlerError> {
     // Init structured logging to file + stderr
     let log_dir = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
         .join(".claude/logs");
@@ -41,9 +42,11 @@ pub async fn run_serve(
     eprintln!("claude-core serve → {effective_bind} (static: {dir:?})");
     if let Err(err) = claude_core::server::run(&effective_bind, dir, crsqlite_path).await {
         warn!("server failed: {err}");
-        eprintln!("server failed: {err}");
-        std::process::exit(2);
+        return Err(IpcHandlerError::ServerFailed(
+            format!("server failed: {err}"),
+        ));
     }
+    Ok(())
 }
 
 pub async fn run_daemon(
@@ -53,7 +56,7 @@ pub async fn run_daemon(
     db_path: Option<PathBuf>,
     crsqlite_path: Option<String>,
     local_only: bool,
-) {
+) -> Result<(), IpcHandlerError> {
     let resolved_ip = if local_only {
         bind_ip.unwrap_or_else(|| "127.0.0.1".to_string())
     } else {
@@ -71,7 +74,9 @@ pub async fn run_daemon(
         local_only,
     };
     if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
-        eprintln!("daemon start failed: {err}");
-        std::process::exit(2);
+        return Err(IpcHandlerError::ServerFailed(
+            format!("daemon start failed: {err}"),
+        ));
     }
+    Ok(())
 }

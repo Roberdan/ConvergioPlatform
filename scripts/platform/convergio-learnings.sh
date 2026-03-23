@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # convergio-learnings.sh — Learning loop: detect patterns, promote to knowledge/skills
 # Analyzes plan_learnings for recurring patterns and auto-promotes
-set -uo pipefail
+set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"

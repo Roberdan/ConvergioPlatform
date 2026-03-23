@@ -2,7 +2,7 @@
 # convergio-import-agents.sh — Import agent catalog into ConvergioPlatform
 # Reads agent .md files, copies to claude-config/agents/, populates capability registry
 # Usage: convergio-import-agents.sh <source-dir> [--dry-run]
-set -uo pipefail
+set -euo pipefail
 
 SOURCE="${1:?Usage: convergio-import-agents.sh <source-agents-dir> [--dry-run]}"
 DRY_RUN="${2:-}"
@@ -43,7 +43,7 @@ if [ -f "$DB" ] && [ "$DRY_RUN" != "--dry-run" ]; then
   );" 2>/dev/null
 fi
 
-find "$SOURCE" -name "*.md" -not -path "*archive*" | sort | while read f; do
+find "$SOURCE" -name "*.md" -not -path "*archive*" | sort | while read -r f; do
   filename=$(basename "$f" .md)
 
   # Skip non-agent files

@@ -2,6 +2,7 @@
 // Run subcommands for the cvg CLI — delegates to daemon HTTP API via reqwest.
 // JSON output by default; --human flag for readable text.
 
+use crate::cli_error::CliError;
 use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
@@ -56,7 +57,7 @@ pub enum RunCommands {
     },
 }
 
-pub async fn handle(cmd: RunCommands) {
+pub async fn handle(cmd: RunCommands) -> Result<(), CliError> {
     match cmd {
         RunCommands::Create {
             plan_id,
@@ -68,7 +69,7 @@ pub async fn handle(cmd: RunCommands) {
                 "plan_id": plan_id,
                 "label": label,
             });
-            post_and_print(&format!("{api_url}/api/runs"), &body, human).await;
+            post_and_print(&format!("{api_url}/api/runs"), &body, human).await
         }
         RunCommands::List {
             plan_id,
@@ -79,7 +80,7 @@ pub async fn handle(cmd: RunCommands) {
                 Some(id) => format!("{api_url}/api/runs?plan_id={id}"),
                 None => format!("{api_url}/api/runs"),
             };
-            fetch_and_print(&url, human).await;
+            fetch_and_print(&url, human).await
         }
         RunCommands::Pause {
             run_id,
@@ -87,7 +88,12 @@ pub async fn handle(cmd: RunCommands) {
             api_url,
         } => {
             let body = serde_json::json!({});
-            post_and_print(&format!("{api_url}/api/runs/{run_id}/pause"), &body, human).await;
+            post_and_print(
+                &format!("{api_url}/api/runs/{run_id}/pause"),
+                &body,
+                human,
+            )
+            .await
         }
         RunCommands::Resume {
             run_id,
@@ -95,54 +101,54 @@ pub async fn handle(cmd: RunCommands) {
             api_url,
         } => {
             let body = serde_json::json!({});
-            post_and_print(&format!("{api_url}/api/runs/{run_id}/resume"), &body, human).await;
+            post_and_print(
+                &format!("{api_url}/api/runs/{run_id}/resume"),
+                &body,
+                human,
+            )
+            .await
         }
     }
 }
 
-async fn fetch_and_print(url: &str, human: bool) {
-    match reqwest::get(url).await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
+async fn fetch_and_print(url: &str, human: bool) -> Result<(), CliError> {
+    let resp = reqwest::get(url)
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error connecting to daemon: {e}")))?;
+    let status = resp.status();
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error parsing response: {e}")))?;
+    print_value(&val, human);
+    if !status.is_success() {
+        return Err(CliError::NotFound("API returned non-success status".into()));
     }
+    Ok(())
 }
 
-async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
+async fn post_and_print(
+    url: &str,
+    body: &serde_json::Value,
+    human: bool,
+) -> Result<(), CliError> {
     let client = reqwest::Client::new();
-    match client.post(url).json(body).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => print_value(&val, human),
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
+    let resp = client
+        .post(url)
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error connecting to daemon: {e}")))?;
+    let status = resp.status();
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error parsing response: {e}")))?;
+    print_value(&val, human);
+    if !status.is_success() {
+        return Err(CliError::NotFound("API returned non-success status".into()));
     }
+    Ok(())
 }
 
 fn print_value(val: &serde_json::Value, human: bool) {

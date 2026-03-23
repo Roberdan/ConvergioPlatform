@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # convergio-org.sh — Organizational telemetry: flows, relationships, teams
 # Tracks every agent interaction and visualizes as org structure
-set -uo pipefail
+set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"

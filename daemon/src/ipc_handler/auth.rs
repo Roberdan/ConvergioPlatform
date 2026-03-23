@@ -1,7 +1,7 @@
-use super::types::AuthCommands;
+use super::types::{AuthCommands, IpcHandlerError};
 use super::utils::default_db_path;
 
-pub async fn handle_auth(command: AuthCommands) {
+pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
     let db_path = match &command {
         AuthCommands::Store { db_path, .. }
         | AuthCommands::List { db_path }
@@ -9,13 +9,8 @@ pub async fn handle_auth(command: AuthCommands) {
         | AuthCommands::Revoke { db_path, .. }
         | AuthCommands::Rotate { db_path, .. } => db_path.clone().unwrap_or_else(default_db_path),
     };
-    let conn = match rusqlite::Connection::open(&db_path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("db open failed: {e}");
-            std::process::exit(2);
-        }
-    };
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| IpcHandlerError::DbOpen(format!("db open failed: {e}")))?;
     match command {
         AuthCommands::Store {
             service,
@@ -25,8 +20,9 @@ pub async fn handle_auth(command: AuthCommands) {
         } => match claude_core::ipc::auth_sync::store_token(&conn, &service, &token, &secret) {
             Ok(()) => println!("stored token for {service}"),
             Err(e) => {
-                eprintln!("store failed: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(
+                    format!("store failed: {e}"),
+                ));
             }
         },
         AuthCommands::List { .. } => match claude_core::ipc::auth_sync::list_tokens(&conn) {
@@ -38,8 +34,9 @@ pub async fn handle_auth(command: AuthCommands) {
                 println!("\n{} token(s)", tokens.len());
             }
             Err(e) => {
-                eprintln!("list failed: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(
+                    format!("list failed: {e}"),
+                ));
             }
         },
         AuthCommands::Get {
@@ -47,12 +44,14 @@ pub async fn handle_auth(command: AuthCommands) {
         } => match claude_core::ipc::auth_sync::get_token(&conn, &service, &secret) {
             Ok(Some(val)) => println!("{val}"),
             Ok(None) => {
-                eprintln!("no token found for {service}");
-                std::process::exit(1);
+                return Err(IpcHandlerError::NotFound(
+                    format!("no token found for {service}"),
+                ));
             }
             Err(e) => {
-                eprintln!("get failed: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(
+                    format!("get failed: {e}"),
+                ));
             }
         },
         AuthCommands::Revoke { service, host, .. } => {
@@ -64,8 +63,9 @@ pub async fn handle_auth(command: AuthCommands) {
             match claude_core::ipc::auth_sync::revoke_token(&conn, &service, &h) {
                 Ok(n) => println!("revoked {n} token(s) for {service}@{h}"),
                 Err(e) => {
-                    eprintln!("revoke failed: {e}");
-                    std::process::exit(2);
+                    return Err(IpcHandlerError::OperationFailed(
+                        format!("revoke failed: {e}"),
+                    ));
                 }
             }
         }
@@ -76,9 +76,11 @@ pub async fn handle_auth(command: AuthCommands) {
         } => match claude_core::ipc::auth_sync::rotate_keys(&conn, &old_secret, &new_secret) {
             Ok(n) => println!("rotated {n} token(s)"),
             Err(e) => {
-                eprintln!("rotate failed: {e}");
-                std::process::exit(2);
+                return Err(IpcHandlerError::OperationFailed(
+                    format!("rotate failed: {e}"),
+                ));
             }
         },
     }
+    Ok(())
 }

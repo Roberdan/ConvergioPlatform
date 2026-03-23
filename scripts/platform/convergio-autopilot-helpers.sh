@@ -2,7 +2,7 @@
 # convergio-autopilot-helpers.sh — Helper functions for convergio-autopilot.sh
 # Sourced by convergio-autopilot.sh — do NOT execute directly.
 # Provides: plan discovery, wave state machine, trigger_*, execution_runs wiring
-set -uo pipefail
+set -euo pipefail
 
 _validate_id() { [[ "$1" =~ ^[0-9]+$ ]] || { log "SECURITY: invalid ID '$1' — aborting"; return 1; }; }
 

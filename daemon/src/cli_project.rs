@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Project subcommands for the cvg CLI — local filesystem ops + daemon HTTP API.
 
+use crate::cli_error::CliError;
 use clap::Subcommand;
 use std::path::PathBuf;
 
@@ -37,7 +38,7 @@ pub enum ProjectCommands {
     },
 }
 
-pub async fn handle(cmd: ProjectCommands) {
+pub async fn handle(cmd: ProjectCommands) -> Result<(), CliError> {
     match cmd {
         ProjectCommands::Create {
             name,
@@ -45,32 +46,47 @@ pub async fn handle(cmd: ProjectCommands) {
             yes,
             api_url,
         } => handle_create(&name, &input, yes, &api_url).await,
-        ProjectCommands::List { api_url } => {
-            crate::cli_http::fetch_and_print(&format!("{api_url}/api/dashboard/projects"), false)
-                .await;
-        }
-        ProjectCommands::Show { id, api_url } => {
-            handle_show(&id, &api_url).await;
-        }
+        ProjectCommands::List { api_url } => handle_list(&api_url).await,
+        ProjectCommands::Show { id, api_url } => handle_show(&id, &api_url).await,
     }
 }
 
-async fn handle_create(name: &str, input: &PathBuf, yes: bool, api_url: &str) {
+async fn handle_list(api_url: &str) -> Result<(), CliError> {
+    let url = format!("{api_url}/api/dashboard/projects");
+    let val = crate::cli_http::get_and_return(&url)
+        .await
+        .map_err(|_| CliError::ApiCallFailed("failed to fetch projects".into()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string())
+    );
+    Ok(())
+}
+
+async fn handle_create(
+    name: &str,
+    input: &PathBuf,
+    yes: bool,
+    api_url: &str,
+) -> Result<(), CliError> {
     // Validate input folder exists and is readable (F-18)
     if !input.exists() {
-        eprintln!("error: input folder does not exist: {}", input.display());
-        std::process::exit(2);
+        return Err(CliError::InvalidInput(format!(
+            "input folder does not exist: {}",
+            input.display()
+        )));
     }
     if !input.is_dir() {
-        eprintln!("error: input path is not a directory: {}", input.display());
-        std::process::exit(2);
+        return Err(CliError::InvalidInput(format!(
+            "input path is not a directory: {}",
+            input.display()
+        )));
     }
     // Permission check — attempt to read the directory (F-19)
-    if let Err(e) = std::fs::read_dir(input) {
-        eprintln!("error: cannot read input folder: {e}");
+    std::fs::read_dir(input).map_err(|e| {
         print_permission_help();
-        std::process::exit(2);
-    }
+        CliError::InvalidInput(format!("cannot read input folder: {e}"))
+    })?;
 
     // Resolve output directory via platform_paths (F-21)
     let output_dir = claude_core::platform_paths::project_output_dir(name);
@@ -83,17 +99,15 @@ async fn handle_create(name: &str, input: &PathBuf, yes: bool, api_url: &str) {
         eprint!("Create? [y/N] ");
         let mut answer = String::new();
         if std::io::stdin().read_line(&mut answer).is_err() || !confirmed(&answer) {
-            eprintln!("Aborted.");
-            std::process::exit(1);
+            return Err(CliError::NotFound("Aborted.".into()));
         }
     }
 
     // Create output directory on local filesystem
-    if let Err(e) = std::fs::create_dir_all(&output_dir) {
-        eprintln!("error: cannot create output directory: {e}");
+    std::fs::create_dir_all(&output_dir).map_err(|e| {
         print_permission_help();
-        std::process::exit(2);
-    }
+        CliError::Io(e)
+    })?;
 
     // Canonicalize paths for storage
     let input_abs = std::fs::canonicalize(input).unwrap_or_else(|_| input.clone());
@@ -108,72 +122,53 @@ async fn handle_create(name: &str, input: &PathBuf, yes: bool, api_url: &str) {
     });
 
     let client = reqwest::Client::new();
-    match client
+    let resp = client
         .post(format!("{api_url}/api/dashboard/projects"))
         .json(&body)
         .send()
         .await
-    {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<serde_json::Value>().await {
-                Ok(val) => {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string())
-                    );
-                }
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
+        .map_err(|e| CliError::ApiCallFailed(format!("error connecting to daemon: {e}")))?;
+
+    let status = resp.status();
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error parsing response: {e}")))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string())
+    );
+    if !status.is_success() {
+        return Err(CliError::NotFound("API returned non-success status".into()));
     }
+    Ok(())
 }
 
-async fn handle_show(id: &str, api_url: &str) {
-    // Fetch project details + deliverable count via two calls
+async fn handle_show(id: &str, api_url: &str) -> Result<(), CliError> {
     let project_url = format!("{api_url}/api/dashboard/projects");
-    match reqwest::get(&project_url).await {
-        Ok(resp) => match resp.json::<serde_json::Value>().await {
-            Ok(val) => {
-                let project = val
-                    .as_array()
-                    .and_then(|arr| arr.iter().find(|p| p["id"].as_str() == Some(id)));
-                match project {
-                    Some(p) => {
-                        let mut out = p.clone();
-                        // Fetch deliverable count
-                        let count = fetch_deliverable_count(id, api_url).await;
-                        out["deliverable_count"] = serde_json::json!(count);
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&out).unwrap_or_else(|_| out.to_string())
-                        );
-                    }
-                    None => {
-                        eprintln!("project not found: {id}");
-                        std::process::exit(1);
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("error parsing response: {e}");
-                std::process::exit(2);
-            }
-        },
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
+    let resp = reqwest::get(&project_url)
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error connecting to daemon: {e}")))?;
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error parsing response: {e}")))?;
+
+    let project = val
+        .as_array()
+        .and_then(|arr| arr.iter().find(|p| p["id"].as_str() == Some(id)));
+    match project {
+        Some(p) => {
+            let mut out = p.clone();
+            let count = fetch_deliverable_count(id, api_url).await;
+            out["deliverable_count"] = serde_json::json!(count);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&out).unwrap_or_else(|_| out.to_string())
+            );
+            Ok(())
         }
+        None => Err(CliError::NotFound(format!("project not found: {id}"))),
     }
 }
 

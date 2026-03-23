@@ -7,6 +7,7 @@ mod cli_bus;
 mod cli_checkpoint;
 mod cli_commands;
 mod cli_domain;
+mod cli_error;
 mod cli_http;
 mod cli_kb;
 mod cli_lock;
@@ -142,7 +143,11 @@ async fn dispatch(command: Commands) {
         } => {
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(claude_core::background::run_pause_bridge(db_path));
-            ipc_handler::run_serve(bind, static_dir, crsqlite_path, dev_mode).await;
+            if let Err(e) = ipc_handler::run_serve(bind, static_dir, crsqlite_path, dev_mode).await
+            {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
         }
         Commands::Daemon { command } => match command {
             DaemonCommands::Start {
@@ -168,7 +173,7 @@ async fn dispatch(command: Commands) {
                 let _sync_handle =
                     claude_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
 
-                ipc_handler::run_daemon(
+                if let Err(e) = ipc_handler::run_daemon(
                     bind_ip,
                     port,
                     peers_conf,
@@ -176,7 +181,11 @@ async fn dispatch(command: Commands) {
                     crsqlite_path,
                     local_only,
                 )
-                .await;
+                .await
+                {
+                    eprintln!("{e}");
+                    std::process::exit(2);
+                }
             }
         },
         Commands::Ipc { args } => {
@@ -186,7 +195,10 @@ async fn dispatch(command: Commands) {
             }
         }
         Commands::IpcIntel { command } => {
-            ipc_handler::handle_ipc(command).await;
+            if let Err(e) = ipc_handler::handle_ipc(command).await {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
         }
         Commands::Tui { api_url } => {
             env::set_var("CONVERGIO_API_URL", &api_url);
@@ -208,7 +220,7 @@ async fn dispatch(command: Commands) {
         Commands::Wave { command } => cli_wave::handle(command).await,
         Commands::Agent { command } => cli_agent_format::dispatch(command).await,
         Commands::Kb { command } => cli_kb::handle(command).await,
-        Commands::Run { command } => cli_run::handle(command).await,
+        Commands::Run { command } => exit_on_err(cli_run::handle(command).await),
         Commands::Mesh { command } => cli_ops::handle_mesh(command).await,
         Commands::Session { command } => cli_ops::handle_session(command).await,
         Commands::Checkpoint { command } => cli_checkpoint::handle(command).await,
@@ -222,17 +234,26 @@ async fn dispatch(command: Commands) {
             api_url,
         } => {
             if let Some(project_id) = project {
-                cli_audit_project::handle(&project_id, output, yes, &api_url).await;
+                exit_on_err(
+                    cli_audit_project::handle(&project_id, output, yes, &api_url).await,
+                );
             } else {
                 cli_audit::handle(path);
             }
         }
         Commands::Skill { command } => cli_skill::handle(command).await,
         Commands::Bus { command } => cli_bus::handle(command).await,
-        Commands::Project { command } => cli_project::handle(command).await,
+        Commands::Project { command } => exit_on_err(cli_project::handle(command).await),
         Commands::Metrics { command } => cli_ops::handle_metrics(command).await,
         Commands::Alert { command } => cli_ops::handle_alert(command).await,
         Commands::Domain { command } => cli_domain::dispatch(command).await,
         Commands::Workspace { command } => cli_workspace::handle(command).await,
+    }
+}
+
+fn exit_on_err(result: Result<(), cli_error::CliError>) {
+    if let Err(e) = result {
+        eprintln!("{e}");
+        std::process::exit(e.exit_code());
     }
 }
