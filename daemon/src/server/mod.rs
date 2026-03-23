@@ -1,4 +1,5 @@
 pub mod api_agent_catalog;
+mod api_agent_catalog_parse;
 pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_audit;
@@ -26,6 +27,7 @@ pub mod api_openclaw;
 pub mod api_peers;
 pub mod api_peers_ext;
 pub mod api_plan_db;
+pub mod api_plan_db_agents;
 pub mod api_plan_db_checkpoint;
 pub mod api_plan_db_import;
 pub mod api_plan_db_import_defaults;

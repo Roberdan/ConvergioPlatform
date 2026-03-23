@@ -2,6 +2,7 @@
 mod nightly;
 mod nightly_data;
 mod nightly_handlers;
+mod nightly_helpers;
 mod overview;
 mod plans;
 mod plans_detail;

@@ -1,4 +1,5 @@
 mod cli_agent;
+mod cli_agent_format;
 mod cli_agents;
 mod cli_audit;
 mod cli_audit_project;
@@ -20,6 +21,7 @@ mod cli_skill_disable;
 mod cli_skill_enable;
 mod cli_skill_transpile;
 mod cli_skill_validate;
+mod cli_skill_validators;
 mod cli_task;
 mod cli_task_approve;
 mod cli_wave;
@@ -204,7 +206,7 @@ async fn dispatch(command: Commands) {
         Commands::Plan { command } => cli_plan::handle(command).await,
         Commands::Task { command } => cli_task::handle(command).await,
         Commands::Wave { command } => cli_wave::handle(command).await,
-        Commands::Agent { command } => cli_agent::handle(command).await,
+        Commands::Agent { command } => cli_agent_format::dispatch(command).await,
         Commands::Kb { command } => cli_kb::handle(command).await,
         Commands::Run { command } => cli_run::handle(command).await,
         Commands::Mesh { command } => cli_ops::handle_mesh(command).await,
