@@ -1,65 +1,14 @@
 use std::collections::BTreeMap;
 
 use ratatui::{
-    style::{Color, Style, Stylize},
-    text::{Line, Span, Text},
+    style::{Style, Stylize},
+    text::{Line, Text},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
-use super::TuiData;
+use crate::tui::TuiData;
 
-// --- Maranello color palette ---
-
-pub const ACCENT_U32: u32 = 0x00FFC72C;
-pub const BG_DARK_U32: u32 = 0x001A1A1A;
-pub const OK_U32: u32 = 0x0022C55E;
-pub const FAIL_U32: u32 = 0x00EF4444;
-pub const WARN_U32: u32 = 0x00F59E0B;
-pub const MUTED_U32: u32 = 0x006B7280;
-
-const ACCENT: Color = Color::from_u32(ACCENT_U32);
-const OK: Color = Color::from_u32(OK_U32);
-const FAIL: Color = Color::from_u32(FAIL_U32);
-const WARN: Color = Color::from_u32(WARN_U32);
-const MUTED: Color = Color::from_u32(MUTED_U32);
-
-fn selected_style() -> Style {
-    Style::default().reversed()
-}
-
-// --- KPI strip (5 gauges) ---
-
-pub fn kpi_strip(data: &TuiData) -> Paragraph<'static> {
-    let k = &data.kpis;
-    let cost_str = format!("{:.2}", k.daily_cost);
-    let token_k = k.daily_tokens / 1000;
-
-    let spans = vec![
-        Span::styled(
-            format!(" Plans:{} ", k.plans_active),
-            Style::default().fg(ACCENT).bold(),
-        ),
-        Span::raw("| "),
-        Span::styled(
-            format!("Agents:{} ", k.agents_running),
-            Style::default().fg(OK),
-        ),
-        Span::raw("| "),
-        Span::styled(format!("Tokens:{}k ", token_k), Style::default().fg(WARN)),
-        Span::raw("| "),
-        Span::styled(format!("Cost:${} ", cost_str), Style::default().fg(WARN)),
-        Span::raw("| "),
-        Span::styled(
-            format!("Mesh:{} ", k.mesh_online),
-            Style::default().fg(ACCENT),
-        ),
-    ];
-    Paragraph::new(Line::from(spans)).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(MUTED)),
-    )
-}
+use super::{selected_style, ACCENT, FAIL, MUTED, OK, WARN};
 
 pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
     let mut cols: BTreeMap<&str, Vec<(usize, String)>> = BTreeMap::new();
@@ -221,14 +170,14 @@ pub fn agent_org_chart(data: &TuiData, selected: usize) -> Paragraph<'static> {
         .wrap(Wrap { trim: true })
 }
 
-fn spark(cpu: i64) -> String {
+pub fn spark(cpu: i64) -> String {
     let levels = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
     let clamped = cpu.clamp(0, 100) as usize;
     let idx = clamped * (levels.len() - 1) / 100;
     levels[idx].repeat(6)
 }
 
-fn progress_bar(pct: u16, width: u16) -> String {
+pub fn progress_bar(pct: u16, width: u16) -> String {
     let filled = ((pct as u32 * width as u32) / 100) as usize;
     let empty = width as usize - filled;
     format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))

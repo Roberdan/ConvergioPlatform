@@ -1,6 +1,7 @@
 use super::{
     views, AgentOrgNode, KpiData, MainView, MeshNode, PlanCard, TaskPipelineItem, TuiData,
 };
+use crate::tui::widgets;
 use ratatui::{backend::TestBackend, Terminal};
 
 #[test]
@@ -90,6 +91,14 @@ fn sample_data() -> TuiData {
         }],
         kpis: KpiData::default(),
     }
+}
+
+#[test]
+fn palette_has_new_surface_and_text_constants() {
+    // Verify the 3 new Maranello palette constants added in T1-03
+    assert_eq!(widgets::BG_SURFACE_U32, 0x00262626);
+    assert_eq!(widgets::TEXT_PRIMARY_U32, 0x00F3F4F6);
+    assert_eq!(widgets::TEXT_SECONDARY_U32, 0x009CA3AF);
 }
 
 #[test]
