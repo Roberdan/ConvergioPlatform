@@ -5,14 +5,15 @@ fn agent_cmd_claude_with_params() {
     let mut qs = HashMap::new();
     qs.insert("task_id".into(), "T1-02".into());
     qs.insert("wave_id".into(), "W1".into());
-    let cmd = build_agent_command("claude", "671", &qs);
+    let cmd = build_agent_command("claude", "671", &qs).unwrap();
     assert!(cmd.contains("plan 671") && cmd.contains("task T1-02"));
 }
 
 #[test]
-fn agent_cmd_custom_cli() {
-    let cmd = build_agent_command("my-agent", "42", &HashMap::new());
-    assert!(cmd.contains("my-agent --plan 42"));
+fn agent_cmd_unknown_cli_is_rejected() {
+    // The old catch-all was RCE; unknown CLIs must now return Err
+    let result = build_agent_command("my-agent", "42", &HashMap::new());
+    assert!(result.is_err(), "expected Err for unknown cli, got Ok");
 }
 
 #[test]

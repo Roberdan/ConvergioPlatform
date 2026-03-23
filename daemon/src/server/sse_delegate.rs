@@ -130,7 +130,10 @@ pub async fn delegate(
         "stage",
         &stage("spawning", target, &format!("Launching {cli}")),
     );
-    let agent_cmd = build_agent_command(cli, plan_id, qs);
+    let agent_cmd = match build_agent_command(cli, plan_id, qs) {
+        Ok(cmd) => cmd,
+        Err(e) => return do_fail(ev, state, qs, &del_id, &format!("invalid command: {e}")),
+    };
     push(
         &mut ev,
         "stage",
