@@ -21,11 +21,11 @@ BEFORE fixing errors, agents MUST follow this search order:
 |---|---|---|---|
 | 1 | Repo `TROUBLESHOOTING.md` | `Read TROUBLESHOOTING.md` (root) | File doesn't exist |
 | 2 | Repo ADRs | `Glob("docs/adr/*.md")` + `Grep(pattern="keyword", path="docs/adr/")` | No `/docs/adr/` dir |
-| 3 | Global KB | `plan-db.sh kb-search "error keywords" --limit 5` | Empty results |
+| 3 | Global KB | `cvg plan --help` (KB search via API) | Empty results |
 | 4 | Global troubleshooting | `Read claude-config/` (if relevant docs exist) | Dir doesn't exist |
 | 5 | Web/Explore | `WebSearch` or `Task(subagent_type="Explore")` | Steps 1-4 resolved |
 
-Rules: **NEVER attempt a fix without completing steps 1-2 first** | Cite source when applying fix | Update TROUBLESHOOTING.md after new resolution | KB write: `plan-db.sh kb-write troubleshooting "title" "solution" --tags '["error-type"]'`
+Rules: **NEVER attempt a fix without completing steps 1-2 first** | Cite source when applying fix | Update TROUBLESHOOTING.md after new resolution | KB write: API endpoint /api/plan-db/kb-write
 
 ## Problem Resolution Anti-Patterns
 
@@ -33,5 +33,5 @@ Rules: **NEVER attempt a fix without completing steps 1-2 first** | Cite source 
 |---|---|
 | Immediately try Stack Overflow fix | Check repo TROUBLESHOOTING.md first |
 | Guess based on error message | Search ADRs for prior decisions on this area |
-| Retry same approach 3 times | Check `plan-db.sh get-failures $PROJECT_ID` for prior failures |
+| Retry same approach 3 times | Check `cvg plan show $PROJECT_ID` for prior failures |
 | Fix without documenting | Add to TROUBLESHOOTING.md after resolution |

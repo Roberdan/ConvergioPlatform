@@ -20,7 +20,7 @@ pending → in_progress → submitted (executor) → done (ONLY Thor)
                          in_progress (fix and resubmit)
 ```
 
-Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. Only `cvg plan validate-wave` (called by @validate at wave level) can batch-promote submitted → done.
+Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. Only `cvg plan validate` (called by @validate at wave level) can batch-promote submitted → done.
 
 ## Routing Rules
 - Read `executor_agent` from DB per task.
@@ -38,7 +38,7 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 4. **Per-wave loop** (repeat for each wave):
    a. Dispatch pending tasks via selected executor.
    b. Wait for ALL tasks in wave to reach `submitted`.
-   c. **MANDATORY Thor gate**: `cvg plan validate-wave {wave_db_id}` — promotes submitted→done, closes wave. NEVER skip. NEVER proceed to next wave without this.
+   c. **MANDATORY Thor gate**: `cvg plan validate <plan_id>` — promotes submitted→done, closes wave. NEVER skip. NEVER proceed to next wave without this.
    d. Apply wave merge mode (`sync`/`batch`/`none`).
    e. Output: `--- Wave WX --- Thor: PASS`
 5. After ALL waves done: validate and complete plan in DB.

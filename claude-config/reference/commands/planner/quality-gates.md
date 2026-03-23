@@ -24,7 +24,7 @@ If the repo has no `deploy_verification` config in its CLAUDE.md, the planner MU
 
 **Task order in WF**: `TF-tests` -> `TF-doc` -> `TF-pr` -> `TF-deploy-verify`
 
-Skipping deploy verification = plan is NOT complete. `plan-db.sh complete` must not be called until deploy is confirmed.
+Skipping deploy verification = plan is NOT complete. `cvg plan complete` must not be called until deploy is confirmed.
 
 ## Codification gate
 - Apply knowledge codification workflow from:

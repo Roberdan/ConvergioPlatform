@@ -53,7 +53,7 @@ Await explicit approval before calling `/execute`.
 
 - NEVER bypass task-executor while a plan is active.
 - NEVER present the plan before readiness check passes.
-- NEVER write to DB without `planner-create.sh` — NEVER use `plan-db.sh create/import` directly.
+- NEVER write to DB without `planner-create.sh` — NEVER use `cvg plan create/import` directly (plan-db.sh is DEPRECATED).
 - NEVER INSERT INTO tasks manually.
 - NEVER include silent exclusions of F-xx requirements.
 - NEVER create tasks without `verify[]` arrays.

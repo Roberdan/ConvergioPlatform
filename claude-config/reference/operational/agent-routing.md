@@ -36,7 +36,7 @@ Thor is the quality validation agent. Multiple names are used interchangeably:
 | `thor` | Subagent type: `Task(subagent_type="thor")` |
 | `thor-quality-assurance-guardian` | Agent file name in `agents/` |
 | `@validate` | Copilot CLI skill invocation |
-| `validate-wave` / `validate-task` | `plan-db.sh` subcommands |
+| `cvg plan validate` | `cvg` CLI subcommand (plan-db.sh is DEPRECATED) |
 
 All refer to the same role: **skeptical, independent quality gate**. Use `thor` as the canonical short name.
 

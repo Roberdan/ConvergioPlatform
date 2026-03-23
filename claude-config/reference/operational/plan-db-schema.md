@@ -93,9 +93,9 @@ Thor uses these as gate criteria when validating a wave.
 ## Critical Notes
 
 - **wave_id_fk** is INTEGER FK to waves(id) — do NOT confuse with TEXT wave_id
-- Use `plan-db-safe.sh update-task <id> done` — never `plan-db.sh update-task done` directly
+- Use `cvg task update <id> done` — never update task to done directly via raw SQL
 - Triggers maintain counters automatically — manual updates cause drift
-- Full CLI reference: `plan-db.sh --help` or `plan-db.sh` with no args
+- Full CLI reference: `cvg --help` (plan-db.sh is DEPRECATED — use cvg)
 
 ## Indexes
 

@@ -74,9 +74,9 @@ Run `code-pattern-check.sh` on changed files to catch mechanical issues (null sa
 
 ### Gate 6b: Task Status Integrity (MANDATORY)
 
-- Executor completion must go through `plan-db-safe.sh update-task ... done` (which sets `submitted`)
-- Only Thor validation (`plan-db.sh validate-task`) may transition `submitted` → `done`
-- **REJECT** if task was forced to `done` via direct `plan-db.sh update-task` or raw SQLite write
+- Executor completion must go through `cvg task update ... done` (which sets `submitted`)
+- Only Thor validation (`cvg plan validate`) may transition `submitted` → `done`
+- **REJECT** if task was forced to `done` via direct DB write or raw SQLite write
 
 ## Gate 7: Performance
 

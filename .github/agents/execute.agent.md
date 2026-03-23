@@ -19,7 +19,7 @@ pending → in_progress → submitted (executor) → done (ONLY Thor)
                          in_progress (fix and resubmit)
 ```
 
-Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. Only `plan-db.sh validate-wave` (called by @validate at wave level) can batch-promote submitted → done.
+Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. Only `cvg plan validate` (called by @validate at wave level) can batch-promote submitted → done.
 
 ## Model Selection
 
@@ -41,20 +41,22 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 | 3    | TDD mandatory — tests BEFORE implementation                            |
 | 4    | One task at a time — mark in_progress, execute, submit                 |
 | 5    | **NEVER skip Thor** — @validate handoff MANDATORY per WAVE (not per task) |
-| 6    | **CANNOT mark done** — only wave Thor can. plan-db-safe.sh sets 'submitted' |
+| 6    | **CANNOT mark done** — only wave Thor can. `cvg task update` sets 'submitted' |
 | 7    | Prefer merge-async for overlapping execution, sync merge as fallback   |
 
-## plan-db.sh Quick Reference
+## cvg CLI Quick Reference
 
 ```
-get-context <plan_id>             # Full plan+tasks JSON (PREFERRED for init)
-show <plan_id>                    # Tree view with statuses (alias: execution-tree)
-task-detail <plan_id> <task_id>   # Single task JSON
-update-task <db_id> <status>      # Change task status
-validate-wave <wave_db_id>        # Thor validates wave
+cvg plan tree <plan_id>              # Tree view with statuses
+cvg plan show <plan_id>              # Plan JSON detail
+cvg task update <db_id> <status>     # Change task status (pending/in_progress/submitted)
+cvg plan validate <plan_id>          # Thor validates all submitted tasks → done
+cvg checkpoint save <plan_id>        # Save checkpoint
+cvg plan --help                      # All plan subcommands
 ```
 
-DO NOT use: `list-tasks`, `get-tasks`, `show-tasks`, `task-list`, `task-info`.
+DO NOT use: `plan-db.sh`, `plan-db-safe.sh`, `list-tasks`, `get-tasks`, `show-tasks`.
+plan-db.sh is DEPRECATED — use `cvg` for all operations.
 
 ## Workflow
 
@@ -65,13 +67,13 @@ export PATH="$HOME/.claude/scripts:$PATH"
 INIT=$(planner-init.sh 2>/dev/null) || INIT='{"project_id":1}'
 PROJECT_ID=$(echo "$INIT" | jq -r '.project_id')
 PLAN_ID=$(echo "$INIT" | jq -r '.active_plans[0].id // empty')
-[[ -z "$PLAN_ID" ]] && { echo "No active plan for $PROJECT_ID"; plan-db.sh list "$PROJECT_ID"; exit 1; }
-CTX=$(plan-db.sh get-context $PLAN_ID)
+[[ -z "$PLAN_ID" ]] && { echo "No active plan for $PROJECT_ID"; cvg plan list "$PROJECT_ID"; exit 1; }
+CTX=$(cvg plan show $PLAN_ID)
 echo "$CTX" | jq '{name,status,tasks_done,tasks_total,framework,worktree_path}'
 WORKTREE_PATH=$(echo "$CTX" | jq -r '.worktree_path')
 
 # Auto-heal: register reviews + approval if missing (autonomous plans)
-plan-db.sh auto-approve $PLAN_ID "Auto-approved for autonomous Copilot execution" 2>/dev/null || true
+cvg plan auto-approve $PLAN_ID "Auto-approved for autonomous Copilot execution" 2>/dev/null || true
 
 # Auto-heal: create worktree if missing
 if [[ -z "$WORKTREE_PATH" || "$WORKTREE_PATH" == "null" ]]; then
@@ -79,31 +81,31 @@ if [[ -z "$WORKTREE_PATH" || "$WORKTREE_PATH" == "null" ]]; then
     "SELECT id FROM waves WHERE plan_id=$PLAN_ID ORDER BY position LIMIT 1;")
   if [[ -n "$FIRST_WAVE_ID" ]]; then
     wave-worktree.sh create $PLAN_ID $FIRST_WAVE_ID 2>/dev/null || true
-    CTX=$(plan-db.sh get-context $PLAN_ID)
+    CTX=$(cvg plan show $PLAN_ID)
     WORKTREE_PATH=$(echo "$CTX" | jq -r '.worktree_path')
   fi
   # Fallback: use current directory as worktree
   [[ -z "$WORKTREE_PATH" || "$WORKTREE_PATH" == "null" ]] && {
     WORKTREE_PATH="$(pwd)"
-    plan-db.sh set-worktree $PLAN_ID "$WORKTREE_PATH"
+    cvg plan set-worktree $PLAN_ID "$WORKTREE_PATH"
   }
 fi
 
 cd "$WORKTREE_PATH" && pwd
-[[ "$(echo "$CTX" | jq -r '.status')" != "doing" ]] && plan-db.sh start $PLAN_ID
-plan-db.sh check-readiness $PLAN_ID
+[[ "$(echo "$CTX" | jq -r '.status')" != "doing" ]] && cvg plan start $PLAN_ID
+cvg plan check-readiness $PLAN_ID
 ```
 
 ### Phase 1.5: Drift Check (MANDATORY)
 
 ```bash
-DRIFT_JSON=$(plan-db.sh drift-check $PLAN_ID) || true
+DRIFT_JSON=$(cvg plan drift-check $PLAN_ID) || true
 DRIFT_LEVEL=$(echo "$DRIFT_JSON" | jq -r '.drift')
 if [[ "$DRIFT_LEVEL" == "major" ]]; then
   echo "$DRIFT_JSON" | jq '{drift,days_stale,branch_behind,overlapping_files}'
   # ASK USER: Proceed / Rebase / Replan
 elif [[ "$DRIFT_LEVEL" == "minor" ]]; then
-  plan-db.sh rebase-plan $PLAN_ID
+  cvg plan rebase $PLAN_ID
 fi
 ```
 
@@ -119,7 +121,7 @@ worktree-guard.sh "$WORKTREE_PATH"
 **Step 1: Mark started**
 
 ```bash
-plan-db.sh update-task {db_task_id} in_progress "Started"
+cvg task update {db_task_id} in_progress "Started"
 ```
 
 **Step 2: TDD (RED)** — Write failing tests from `test_criteria`. Confirm RED.
@@ -153,7 +155,7 @@ git-digest.sh --full 2>/dev/null || git --no-pager status
 **Step 6: Submit Task**
 
 ```bash
-plan-db-safe.sh update-task {db_task_id} done "Summary of what was implemented"
+cvg task update {db_task_id} submitted "Summary of what was implemented"
 # Sets status to 'submitted' (NOT done). Proof-of-work checks: git-diff, time, verify commands.
 ```
 
@@ -164,7 +166,7 @@ After submitting, proceed to next task in wave. Thor validates at wave level aft
 ### Phase 3.5: Output Data
 
 ```bash
-plan-db-safe.sh update-task {db_task_id} done "Summary" \
+cvg task update {db_task_id} submitted "Summary" \
   --output-data '{"summary":"what was accomplished","artifacts":["file/path"]}'
 ```
 
@@ -176,7 +178,7 @@ WAVE_DB_ID=$(sqlite3 ~/.claude/data/dashboard.db \
 
 # @validate handoff — Thor validates entire wave, batch-promotes submitted→done
 @validate Validate wave {wave_id} (db:$WAVE_DB_ID) in plan $PLAN_ID.
-  All 10 gates. Build must pass. If PASS: plan-db.sh validate-wave $WAVE_DB_ID
+  All 10 gates. Build must pass. If PASS: cvg plan validate $PLAN_ID
 ```
 
 **NEVER proceed to next wave without wave Thor PASS.**

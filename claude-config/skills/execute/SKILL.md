@@ -6,8 +6,8 @@ Run when invoked as `/execute {{plan_id}}` or `/execute` (uses current plan). Ac
 
 ### Phase 1: Initialize
 
-1. Run `bash claude-config/scripts/plan-db.sh get-context {{plan_id}}` to retrieve full JSON with tasks, worktree, and constraints.
-2. View tree: `bash claude-config/scripts/plan-db.sh show {{plan_id}}`
+1. Run `cvg plan show {{plan_id}}` to retrieve full JSON with tasks, worktree, and constraints.
+2. View tree: `cvg plan tree {{plan_id}}`
 3. Auto-heal plan/worktree metadata if needed.
 4. Run readiness checks — stop on critical warnings.
 5. Run drift check (mandatory before first task).
@@ -20,7 +20,7 @@ pending → in_progress → submitted (executor) → done (Thor only)
                              ↓ Thor rejects
                         in_progress (fix and resubmit)
 ```
-Executors CANNOT set status=done. Only `validate-wave` (called at wave level) can batch-promote submitted → done.
+Executors CANNOT set status=done. Only `cvg plan validate` (called at wave level) can batch-promote submitted → done.
 
 **Steps per wave:**
 
@@ -28,7 +28,7 @@ Executors CANNOT set status=done. Only `validate-wave` (called at wave level) ca
 2. Dispatch pending tasks via assigned executor (default: copilot; use claude only when explicitly assigned).
 3. Pass to each task: worktree path, constraints, readiness bundle, CI knowledge.
 4. Wait for ALL tasks in wave to reach `submitted`.
-5. Run Thor gate: `bash claude-config/scripts/plan-db.sh validate-wave {{wave_db_id}}` — promotes submitted → done, closes wave. NEVER skip. NEVER proceed to next wave without this.
+5. Run Thor gate: `cvg plan validate <plan_id>` — promotes submitted → done, closes wave. NEVER skip. NEVER proceed to next wave without this.
 6. Apply wave merge mode (`sync` / `batch` / `none`).
 7. Output: `--- Wave WX --- Thor: PASS`
 
@@ -62,5 +62,5 @@ Output: `=== COMPLETE ===`
 - NEVER advance to next wave without Thor gate passing.
 - NEVER set task status=done directly — only Thor can do this.
 - NEVER skip readiness checks or drift check.
-- NEVER use bare script names — always use full path `bash claude-config/scripts/<script>.sh`.
+- NEVER use bare script names — use `cvg` CLI for plan/task/wave ops (plan-db.sh is DEPRECATED).
 - NEVER retry the same failing approach more than twice — mark blocked instead.

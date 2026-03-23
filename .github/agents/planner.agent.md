@@ -60,7 +60,7 @@ echo "$CONTEXT" | jq .
 
 ```bash
 ls docs/adr/*.md 2>/dev/null
-plan-db.sh get-failures $PROJECT_ID 2>/dev/null
+cvg plan show $PROJECT_ID 2>/dev/null  # plan-db.sh is DEPRECATED — use cvg
 ```
 
 ### 3. Generate Plan Spec (YAML preferred)
@@ -89,7 +89,7 @@ Compare ALL F-xx requirements vs tasks. If ANY F-xx is NOT covered:
 ### 3.2 Cross-Plan Conflict Check
 
 ```bash
-plan-db.sh conflict-check-spec $PROJECT_ID spec.yaml 2>/dev/null
+cvg plan show $PROJECT_ID 2>/dev/null  # conflict-check via cvg
 ```
 
 ### 4. Post-Spec Workflow (NON-NEGOTIABLE)
@@ -115,7 +115,7 @@ _Why: Plan 616 — reviews skipped, manual DB writes caused data loss._
 ### 4.1 Post-Import Verification (MANDATORY)
 
 ```bash
-PLAN_JSON=$(plan-db.sh json $PLAN_ID 2>/dev/null)
+PLAN_JSON=$(cvg plan tree $PLAN_ID 2>/dev/null)
 TASKS_TOTAL=$(echo "$PLAN_JSON" | jq -r '.tasks_total')
 [[ -z "$TASKS_TOTAL" || "$TASKS_TOTAL" -eq 0 ]] && echo "BLOCK: Plan not in DB or 0 tasks"
 ```
@@ -127,16 +127,16 @@ Present F-xx list. User says "si"/"yes" → proceed.
 ### 6. Start Execution
 
 ```bash
-plan-db.sh start $PLAN_ID
+cvg plan start $PLAN_ID
 ```
 
 Execute with `@execute {plan_id}`.
 
 ## DB Safety (NON-NEGOTIABLE)
 
-- NEVER use `plan-db.sh create/import` directly — always `planner-create.sh`
+- NEVER use `cvg plan create/import` directly — always `planner-create.sh`
 - NEVER INSERT INTO tasks manually — use `planner-create.sh import`
-- If import fails: run `plan-db.sh execution-tree {id}`, debug — do NOT manually INSERT
+- If import fails: run `cvg plan tree {id}`, debug — do NOT manually INSERT
 - _Why: Plan 616 — manual INSERT skipped triggers, broke counters._
 
 ## Changelog

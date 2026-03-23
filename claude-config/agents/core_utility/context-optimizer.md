@@ -40,7 +40,7 @@ find {repo}/.claude/agents -name "*.md" | wc -l          # Project agents
 | Duplicate agents (project=global) | Compare names | Keep one, archive other |
 | Redundant agents (same pattern) | Same script, different flag | Consolidate into routing table |
 | Long descriptions (>100 chars) | Frontmatter check | Compress to 1 line |
-| MEMORY bloat (>50 lines) | `wc -l` | Migrate to `plan-db.sh kb-write`, keep pointers |
+| MEMORY bloat (>50 lines) | `wc -l` | Migrate to API endpoint /api/plan-db/kb-write, keep pointers |
 | Verbose rules | Token budget | Tables over prose |
 | Unused packages | `which task-master` etc. | Uninstall + remove agent |
 
@@ -59,7 +59,7 @@ Keep ONLY agents relevant to what the repo does. Archive the rest to `{repo}/.cl
 ```bash
 # Recount → compare with baseline → report table
 # Verify NON-NEGOTIABLE preserved: grep 'NON.NEGOZI\|NEVER\|ALWAYS'
-# Verify workflow: grep 'validate-task\|planner-create\|plan-db-safe'
+# Verify workflow: grep 'cvg plan validate\|planner-create\|cvg task update'
 ```
 
 ## Hooks to verify
@@ -72,7 +72,7 @@ Keep ONLY agents relevant to what the repo does. Archive the rest to `{repo}/.cl
 ## Learning management
 
 - MEMORY.md: <30 lines/project. Only quick-ref (env, auth, gotchas) + DB pointers.
-- Knowledge base: `plan-db.sh kb-write <domain> "title" "content" --tags '["tag"]'`
+- Knowledge base: API endpoint /api/plan-db/kb-write (plan-db.sh is DEPRECATED — use cvg)
 - Link to plan: `UPDATE knowledge_base SET source_ref='Plan-XXX' WHERE ...`
 - Session learnings: `session-learnings.jsonl` — review with `session-learnings.sh summary`, truncate stale signals
 

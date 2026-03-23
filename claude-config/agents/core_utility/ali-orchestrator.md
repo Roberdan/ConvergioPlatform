@@ -122,7 +122,7 @@ Requirements (prompt) → Design (sara) → Implementation (executor)
 
 Rules:
 - NEVER start a workstream whose dependency is incomplete
-- Check via: `plan-db.sh execution-tree $PLAN_ID`
+- Check via: `cvg plan tree $PLAN_ID`
 
 ## Step 4.6: Validator Selection (C5 — MANDATORY)
 
@@ -156,7 +156,7 @@ For remote agents: `curl -X POST $DAEMON_URL/api/mesh/delegate -d '{"peer":"node
 ```bash
 convergio-bus.sh read ali      # Poll for agent reports
 convergio-bus.sh who           # Check who's active
-plan-db.sh execution-tree $PLAN_ID
+cvg plan tree $PLAN_ID
 curl -s $DAEMON_URL/api/ipc/metrics
 ```
 

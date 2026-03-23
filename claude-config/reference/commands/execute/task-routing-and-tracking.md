@@ -10,35 +10,27 @@ Key columns: `id` (PK), `plan_id`, `wave_id_fk`, `task_id` (human string like T1
 
 _Why: Plan 677 — executor queried `SELECT db_id` which doesn't exist. Column is `id`._
 
-## plan-db.sh Commands (ONLY use these — do NOT invent commands)
+## cvg CLI Commands (ONLY use these — plan-db.sh is DEPRECATED)
 
 ```
 # View plan/tasks:
-execution-tree <plan_id>          # Tree view with statuses
-show <plan_id>                    # Alias for execution-tree
-tasks <plan_id>                   # Alias for execution-tree
-json <plan_id>                    # Full plan as JSON
-status [project_id]               # Quick status
-task-detail <plan_id> <task_id>   # Single task JSON (e.g. task-detail 680 W1-01)
+cvg plan tree <plan_id>           # Tree view with statuses
+cvg plan show <plan_id>           # Plan details as JSON
+cvg plan list                     # List all plans
 
 # Task status updates:
-update-task <task_db_id> <status> [notes]   # pending|in_progress|submitted|done|blocked
-update-wave <wave_db_id> <status>           # pending|in_progress|done|blocked
+cvg task update <task_db_id> <status> [notes]   # pending|in_progress|submitted|done|blocked
 
 # Validation:
-drift-check <plan_id>             # JSON — check branch_behind, NOT exit code
-evaluate-wave <wave_db_id>        # Check wave preconditions
-validate-wave <wave_db_id> [by]   # Thor validates all submitted tasks in wave
-check-readiness <plan_id>         # Full readiness check
+cvg plan validate <plan_id>       # Thor validates all submitted tasks in plan
 
 # Lifecycle:
-start <plan_id>                   # Begin execution
-complete <plan_id>                # Mark done
-cancel <plan_id> [reason]         # Cancel
+cvg plan start <plan_id>          # Begin execution
+cvg plan complete <plan_id>       # Mark done
+cvg plan cancel <plan_id> [reason]  # Cancel
 
 # Context:
-get-context <plan_id>             # Full plan+tasks JSON for executor prompt (PREFERRED)
-get-worktree <plan_id>            # Worktree path
+cvg plan show <plan_id>           # Full plan+tasks JSON for executor prompt (PREFERRED)
 ```
 
 Commands that DO NOT EXIST: `list-tasks`, `get-tasks`, `show-tasks`, `task-list`, `task-info`.
@@ -56,7 +48,7 @@ ORDER BY task_id;
 
 | Column | Use |
 |---|---|
-| `id` | DB primary key (pass to copilot-worker.sh and plan-db-safe.sh) |
+| `id` | DB primary key (pass to copilot-worker.sh and `cvg task update`) |
 | `task_id` | Human ID (T1-01, T2a-01, etc) — for display/logging |
 | `model` | Model to use (claude-sonnet-4.6, gpt-5, etc) |
 | `executor_agent` | `task-executor` (claude) or `task-executor-copilot` (copilot) |
@@ -96,19 +88,19 @@ Copilot scripts: `claude-config/scripts/copilot-worker.sh`, `copilot-task-prompt
 2. Worktree path (from wave `worktree_path`)
 3. Verify commands (from `test_criteria.verify[]`)
 4. Constraint: max 250 lines per file
-5. Script paths: `bash claude-config/scripts/plan-db-safe.sh update-task {id} submitted`
+5. Script paths: `cvg task update {id} submitted`
 
 ## Status Tracking
 
 ```
 pending → in_progress (executor starts)
 in_progress → submitted (executor finishes, mechanical gates pass)
-submitted → done (ONLY Thor/validator via validate-wave)
+submitted → done (ONLY Thor/validator via `cvg plan validate`)
 ```
 
-Mark in_progress: `bash claude-config/scripts/plan-db-safe.sh update-task {task_db_id} in_progress`
-Mark submitted: `bash claude-config/scripts/plan-db-safe.sh update-task {task_db_id} submitted "summary"`
-NEVER mark done directly — Thor does that via `bash claude-config/scripts/plan-db.sh validate-wave {wave_db_id}`.
+Mark in_progress: `cvg task update {task_db_id} in_progress`
+Mark submitted: `cvg task update {task_db_id} submitted "summary"`
+NEVER mark done directly — Thor does that via `cvg plan validate <plan_id>`.
 
 To get task_db_id from task_id string:
 ```bash

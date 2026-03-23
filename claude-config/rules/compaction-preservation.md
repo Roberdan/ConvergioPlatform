@@ -7,7 +7,7 @@ Rewriting ANY file: these MUST survive. Removing = VIOLATION.
 | Category | Examples |
 |---|---|
 | Quality gates | `test:unit`, `ci:summary`, `i18n:check`, `prisma generate` |
-| Thor validation | `validate-wave` (Opus, wave-only), quality gates |
+| Thor validation | `cvg plan validate` (Opus, wave-only), quality gates |
 | Pre-commit hooks | i18n:check, smart-test, env-var-audit |
 | Verify steps | "run tests before commit", "i18n sync after UI", "env var checklist" |
 | Security | CSP, RBAC, parameterized queries, WCAG, encryption |

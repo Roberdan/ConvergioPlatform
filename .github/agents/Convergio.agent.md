@@ -122,7 +122,7 @@ Adapters: `claude-adapter` (.claude config) · `maranello-adapter` (canary+UI) �
 | `knowledge_base` | domain, title, content, confidence |
 | `peer_heartbeats` | peer_id, timestamp, cpu, memory |
 
-CLI: `plan-db.sh list/json/execution-tree/kanban/status`
+CLI: `cvg plan list/tree/show` (plan-db.sh is DEPRECATED — use cvg)
 
 ## Mesh
 
@@ -149,7 +149,7 @@ Rebuild: create peers.conf on coordinator → provision each worker → heartbea
 | Daemon won't compile | `cargo check` · check Cargo.toml · check mesh/mod.rs |
 | Node unreachable | `tailscale ping <dns>` · SSH check · heartbeat.sh |
 | DB locked | `dashboard-db-repair.sh` · `PRAGMA integrity_check` |
-| plan-db.sh no DB | Check `$DASHBOARD_DB` · check symlink |
+| cvg no DB | Check `$DASHBOARD_DB` · check symlink |
 | OpenClaw plugin fails | Check daemon running, curl /api/health, verify config/openclaw.yaml |
 
 ## Conventions

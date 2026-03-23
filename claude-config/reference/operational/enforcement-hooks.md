@@ -5,7 +5,7 @@
 | Hook                   | Event         | Trigger              | Action                     | Claude Code        | Copilot CLI           |
 | ---------------------- | ------------- | -------------------- | -------------------------- | ------------------ | --------------------- |
 | guard-plan-mode        | PreToolUse    | EnterPlanMode        | Block (exit 2 / deny)      | Yes (matcher)      | Yes (internal filter) |
-| enforce-plan-db-safe   | PreToolUse    | plan-db.sh done      | Block                      | Yes (Bash matcher) | Yes (bash filter)     |
+| enforce-plan-db-safe   | PreToolUse    | plan-db.sh done      | Block — use `cvg task update` | Yes (Bash matcher) | Yes (bash filter)     |
 | enforce-plan-edit      | PreToolUse    | Edit plan files      | Block unless task-executor | Yes (Edit matcher) | Yes (edit filter)     |
 | worktree-guard         | PreToolUse    | git on main          | Warn/Block                 | Yes                | Yes                   |
 | session-file-lock      | PreToolUse    | Edit/Write           | Lock file                  | Yes                | Yes                   |

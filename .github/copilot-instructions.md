@@ -41,7 +41,7 @@ EnterPlanMode bypasses DB registration and is a VIOLATION. Always use `@planner`
 
 Workflow sequence: `@prompt` (requirements) -> `@planner` (spec.yaml + review gate + `planner-create.sh` gated DB) -> `@execute {id}` (TDD) -> `@validate` (Thor per-wave) -> merge -> done.
 
-Plan creation is gated: `planner-create.sh reset` -> plan-reviewer -> `planner-create.sh register-review` -> `planner-create.sh create` -> `planner-create.sh import`. NEVER use `plan-db.sh create/import` directly.
+Plan creation is gated: `planner-create.sh reset` -> plan-reviewer -> `planner-create.sh register-review` -> `planner-create.sh create` -> `planner-create.sh import`. NEVER use `cvg plan create/import` directly (plan-db.sh is DEPRECATED — use cvg).
 
 ## IPC Registration
 
@@ -99,7 +99,7 @@ These hooks apply to Copilot CLI sessions. All are portable across Claude Code a
 | Hook | Event | Trigger | Action |
 |---|---|---|---|
 | guard-plan-mode | PreToolUse | EnterPlanMode | Block -- must use @planner |
-| enforce-plan-db-safe | PreToolUse | `plan-db.sh done` | Block -- must use plan-db-safe.sh |
+| enforce-plan-db-safe | PreToolUse | `plan-db.sh done` | Block -- must use `cvg task update` |
 | enforce-plan-edit | PreToolUse | Edit plan files | Block unless task-executor |
 | worktree-guard | PreToolUse | git on main | Warn/Block -- use worktrees |
 | session-file-lock | PreToolUse | Edit/Write | Lock file to prevent conflicts |
@@ -120,8 +120,8 @@ Non-portable hooks (Claude Code only, no Copilot event): secret-scanner, env-vau
 | `cd dashboard && ./start.sh` | Run Control Room (reads DASHBOARD_DB) |
 | `cd evolution && npx tsc --noEmit` | Type check evolution engine |
 | `cd evolution && npx vitest run` | Run evolution tests |
-| `plan-db.sh status convergio` | Check plan status |
-| `plan-db.sh execution-tree {plan_id}` | View plan execution tree |
+| `cvg plan list` | Check plan status |
+| `cvg plan tree {plan_id}` | View plan execution tree |
 | `scripts/mesh/mesh-heartbeat.sh` | Check mesh node health |
 | `scripts/mesh/mesh-provision-node.sh <peer>` | Provision new mesh node |
 | `scripts/mesh/mesh-sync-all.sh` | Sync all mesh nodes |

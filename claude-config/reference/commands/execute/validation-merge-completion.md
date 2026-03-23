@@ -4,7 +4,7 @@
 
 After ALL tasks in a wave are `submitted` (MANDATORY — coordinator MUST call this before proceeding to next wave):
 
-1. Invoke Thor: `bash claude-config/scripts/plan-db.sh validate-wave {wave_db_id}`
+1. Invoke Thor: `cvg plan validate <plan_id>`
    - This batch-promotes `submitted` → `done` and closes the wave
    - _Why: Plan 677 — coordinator skipped Thor validation, leaving all tasks in submitted limbo_
 2. Thor reads `test_criteria.verify[]` for EACH task and runs them
@@ -38,8 +38,8 @@ After merge:
 ## Plan Completion
 
 After ALL waves done:
-1. `bash claude-config/scripts/plan-db.sh complete {plan_id}`
+1. `cvg plan complete {plan_id}`
 2. Verify: `git worktree list` shows only main
 3. Verify: all PRs merged
 4. Post-mortem: `Agent(subagent_type="plan-post-mortem")`
-5. Calibrate: `bash claude-config/scripts/plan-db.sh calibrate-estimates`
+5. Calibrate: `cvg plan calibrate-estimates`

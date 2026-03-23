@@ -35,9 +35,9 @@ export PATH="$HOME/.claude/scripts:$PATH"
 INIT=$(planner-init.sh 2>/dev/null) || INIT='{"project_id":1}'
 PLAN_ID=$(echo "$INIT" | jq -r '.active_plans[0].id // empty')
 
-[[ -z "$PLAN_ID" ]] && { echo "No active plan"; plan-db.sh list "$(echo "$INIT" | jq -r '.project_id')"; exit 1; }
+[[ -z "$PLAN_ID" ]] && { echo "No active plan"; cvg plan list "$(echo "$INIT" | jq -r '.project_id')"; exit 1; }
 
-WORKTREE=$(plan-db.sh get-worktree $PLAN_ID)
+WORKTREE=$(cvg plan show $PLAN_ID | jq -r '.worktree_path')
 cd "$WORKTREE"
 ```
 
@@ -76,7 +76,7 @@ If task updates an ADR, validate ADR quality instead of enforcing old version.
 | ---------------------- | -------- | ---------------------------------------------------- |
 | executor_agent missing | WARNING  | Warn but allow wave completion                       |
 | output_data invalid    | ERROR    | Invalid JSON blocks wave completion                  |
-| Precondition cycle     | ERROR    | `plan-db.sh check-readiness {plan}` blocks execution |
+| Precondition cycle     | ERROR    | `cvg plan show {plan}` blocks execution |
 
 ## Output Format
 
@@ -104,18 +104,18 @@ pending → in_progress → submitted (executor) → done (Thor wave validation)
 ```
 
 **Executors set `submitted`.** Thor validates at **wave level only** (not per-task).
-`validate-wave` batch-promotes all submitted tasks → done with `validated_by='thor-per-wave'`.
+`cvg plan validate` batch-promotes all submitted tasks → done with `validated_by='thor-per-wave'`.
 SQLite trigger `enforce_thor_done` enforces this.
 
 ## After Validation
 
 ```bash
 # Wave validation: APPROVED → batch submitted → done
-plan-db.sh validate-wave {wave_db_id}
+cvg plan validate <plan_id>
 # Atomically: all submitted tasks → done, validated_at=now, validated_by=thor-per-wave
 
 # Wave: REJECTED → identify failing tasks, executor fixes
-plan-db.sh update-task {task_db_id} in_progress "Thor rejection: reason"
+cvg task update {task_db_id} in_progress "Thor rejection: reason"
 # Executor fixes → re-submits → re-validate wave. Max 3 rounds.
 ```
 

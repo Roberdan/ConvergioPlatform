@@ -13,7 +13,7 @@ Analyze completed plan execution data and extract structured learnings. Read-onl
 
 | Dimension | Source | Output |
 |---|---|---|
-| Thor rejections | `plan-db.sh get-failures {plan_id}` | Pattern + preventive rule |
+| Thor rejections | `cvg plan show {plan_id}` | Pattern + preventive rule |
 | Estimation accuracy | tasks.effort vs actual time | Calibration adjustment |
 | Token consumption | Session logs | Cost optimization |
 | Rework patterns | Task status history | Process improvement |
@@ -21,4 +21,4 @@ Analyze completed plan execution data and extract structured learnings. Read-onl
 
 ## Output
 
-Write findings to `plan_learnings` and `plan_actuals` tables via `plan-db.sh`.
+Write findings to `plan_learnings` and `plan_actuals` tables via `cvg` (plan-db.sh is DEPRECATED).

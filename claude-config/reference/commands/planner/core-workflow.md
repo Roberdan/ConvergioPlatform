@@ -6,7 +6,7 @@
 
 ## Mandatory sequence
 1. Init context and worktree metadata (`planner-init.sh`).
-2. Read docs and failed approaches (`plan-db.sh get-failures`).
+2. Read docs and failed approaches (`cvg plan show`).
 3. Extract constraints (C-xx) and confirm with user.
 4. Clarify technical approach/files/constraints before spec.
 5. Generate spec (`spec.yaml` preferred) with explicit `verify` and `consumers` fields.
@@ -18,7 +18,7 @@
 
 ## Gated Plan Creation (NON-NEGOTIABLE)
 
-`plan-db.sh create` and `plan-db.sh import` are **blocked by PreToolUse hook**. The ONLY way to create/import plans is through `planner-create.sh`, which enforces the review exists before allowing creation.
+`cvg plan create` and `cvg plan import` are **blocked by PreToolUse hook**. The ONLY way to create/import plans is through `planner-create.sh`, which enforces the review exists before allowing creation. (plan-db.sh is DEPRECATED — use cvg)
 
 ### Mandatory sequence inside planner skill:
 

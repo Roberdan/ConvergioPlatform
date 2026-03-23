@@ -10,7 +10,7 @@
 2. **Executor start**: `file-lock.sh acquire <file> <task_id>` for each target file
 3. **Executor start**: `stale-check.sh snapshot <task_id> <files...>` to record baseline
 4. **Before commit**: `stale-check.sh check <task_id>` (BLOCKS if files changed externally)
-5. **On task done**: `plan-db-safe.sh` auto-releases locks + checks staleness
+5. **On task done**: `cvg task update` auto-releases locks + checks staleness
 6. **Merge**: `merge-queue.sh enqueue <branch>` then `merge-queue.sh process --validate`
 
 ## Session-Based File Locking (Non-Plan Workflow)

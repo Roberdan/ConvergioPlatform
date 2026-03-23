@@ -62,7 +62,7 @@ Lock BLOCKED → report conflict, mark `blocked`.
 ### Phase 1: Mark Started
 
 ```bash
-plan-db.sh update-task {db_task_id} in_progress "Started"
+cvg task update {db_task_id} in_progress "Started"
 ```
 
 - **Codex delegation**: If `codex: true` in prompt, propose delegation first
@@ -124,7 +124,7 @@ stale-check.sh check "{db_task_id}"
 # Stale=true → STOP, rebase, re-read, re-verify
 
 # 4.9: Thor self-validation
-plan-db.sh validate-task {db_task_id} {plan_id}
+cvg plan validate <plan_id>
 # Thor REJECTS → fix and re-run. Max 3 rounds.
 ```
 
@@ -134,15 +134,15 @@ plan-db.sh validate-task {db_task_id} {plan_id}
 ### Phase 5: Submit
 
 ```bash
-plan-db-safe.sh update-task {db_task_id} done "Summary" --tokens {N}
+cvg task update {db_task_id} done "Summary" --tokens {N}
 ```
 
-**CRITICAL**: ALWAYS use `plan-db-safe.sh` for `done`. Direct `plan-db.sh done` = dashboard shows 0%.
+**CRITICAL**: ALWAYS use `cvg task update` for `done`. Direct `plan-db.sh done` is DEPRECATED.
 
 ## Output Data (Inter-Wave)
 
 ```bash
-plan-db-safe.sh update-task {id} done "Summary" --tokens N --output-data '{"summary":"...","artifacts":["file1.ts"],"metrics":{"lines_added":42,"tests_added":3}}'
+cvg task update {id} done "Summary" --tokens N --output-data '{"summary":"...","artifacts":["file1.ts"],"metrics":{"lines_added":42,"tests_added":3}}'
 ```
 
 ## Tool Preferences
@@ -186,7 +186,7 @@ session-reaper.sh --max-age 0 2>/dev/null || true
 
 ## EXIT CHECKLIST
 
-1. Verify DB: `sqlite3 ~/.claude/data/dashboard.db "SELECT status FROM tasks WHERE id={db_task_id};"` — if not `submitted|done`, run `plan-db-safe.sh`
+1. Verify DB: `sqlite3 ~/.claude/data/dashboard.db "SELECT status FROM tasks WHERE id={db_task_id};"` — if not `submitted|done`, run `cvg task update`
 2. Cleanup: `session-reaper.sh --max-age 0 2>/dev/null || true`
 3. Output: `## TASK COMPLETION` with `DB Status`, `Task ID`, `Summary`
 

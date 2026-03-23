@@ -34,7 +34,7 @@ Invoked after each task-executor completes. Validates ONE task.
 3. Run each verify command from `test_criteria` JSON
 4. Run Gates 1-4 (including 4b: `~/.claude/scripts/code-pattern-check.sh --files {task_files} --json`), 8, 9 scoped to task files
 5. If type=`documentation` + touches `docs/adr/`: **ADR-Smart Mode**
-6. PASS: `plan-db.sh validate-task {task_id} {plan_id}`
+6. PASS: `cvg plan validate <plan_id>` (validates all submitted tasks)
 7. FAIL: structured THOR_REJECT
 
 ## Mode 2: Per-Wave Validation (batch)
@@ -52,8 +52,8 @@ Invoked after all tasks in wave complete. Validates wave as whole.
 5. Unvalidated tasks: run per-task validation first
 6. Run ALL 9 gates at wave scope
 7. Run build/lint/typecheck/test at worktree level
-8. PASS: `plan-db.sh validate-wave {wave_db_id}` then `npm run ci:summary`
-9. Missing metadata: WARN + continue. Missing test_criteria: REJECT. Run `plan-db.sh check-readiness {plan_id}` first.
+8. PASS: `cvg plan validate <plan_id>` then `npm run ci:summary`
+9. Missing metadata: WARN + continue. Missing test_criteria: REJECT. Run `cvg plan show {plan_id}` first.
 
 ## 9 Validation Gates
 

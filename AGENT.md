@@ -13,8 +13,8 @@
 | `cd daemon && cargo check` | Type check (~5s) |
 | `cd dashboard && ./start.sh` | Start Control Room |
 | `cd evolution && npx tsc --noEmit` | Type check Evolution Engine |
-| `plan-db.sh status convergio` | Plan status |
-| `plan-db.sh kanban` | Kanban board |
+| `cvg plan list` | Plan status |
+| `cvg plan tree` | Plan tree view |
 | `scripts/mesh/mesh-heartbeat.sh` | Check all mesh nodes |
 
 ## Structure

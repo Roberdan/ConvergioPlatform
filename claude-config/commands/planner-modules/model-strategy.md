@@ -152,11 +152,11 @@ When `executor_agent: "claude"`, pick model by complexity:
 
 ```bash
 # MANDATORY: --model, --effort, --executor-agent for EVERY task
-plan-db.sh add-task {db_wave_id} T1-01 "Fix typo" P2 chore \
+cvg task create {db_wave_id} T1-01 "Fix typo" P2 chore \
   --model gpt-5-mini --effort 1 --executor-agent copilot
-plan-db.sh add-task {db_wave_id} T1-02 "Add endpoint" P1 feature \
+cvg task create {db_wave_id} T1-02 "Add endpoint" P1 feature \
   --model gpt-5.3-codex --effort 2 --executor-agent copilot
-plan-db.sh add-task {db_wave_id} T1-03 "Redesign auth" P0 feature \
+cvg task create {db_wave_id} T1-03 "Redesign auth" P0 feature \
   --model claude-opus-4.6 --effort 3 --executor-agent claude
 ```
 
@@ -169,7 +169,7 @@ plan-db.sh add-task {db_wave_id} T1-03 "Redesign auth" P0 feature \
 When a plan is executed by Copilot, the executing tool gets **T0-00 Review Plan** as first task in W0:
 
 ```bash
-plan-db.sh add-task {db_w0_id} T0-00 "Review plan and reassign models/effort" P0 chore \
+cvg task create {db_w0_id} T0-00 "Review plan and reassign models/effort" P0 chore \
   --model gpt-5.3-codex --effort 1 --executor-agent copilot \
   --description "Review all tasks. Reassign model per task to optimal Copilot model. Adjust effort. Flag tasks needing replan."
 ```

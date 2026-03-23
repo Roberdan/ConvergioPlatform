@@ -23,4 +23,4 @@ Mock depth <=2 | No self-mock | Coverage with assertions | Format matches prod |
 
 ## Lean Coordinator
 
-See `reference/operational/execution-optimization.md`. Recovery: `plan-checkpoint.sh restore` → `plan-db.sh execution-tree`.
+See `reference/operational/execution-optimization.md`. Recovery: `cvg checkpoint restore` → `cvg plan tree`.
