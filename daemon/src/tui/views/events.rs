@@ -2,7 +2,7 @@
 
 use ratatui::{
     style::{Style, Stylize},
-    text::{Line, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
@@ -70,9 +70,10 @@ pub fn event_stream(data: &TuiData, selected: usize) -> Paragraph<'static> {
     lines.push(
         Line::from(vec![
             "EVENTS".bold().fg(ACCENT),
-            format!("  Showing {} events", events.len())
-                .fg(TEXT_SECONDARY)
-                .into(),
+            Span::styled(
+                format!("  Showing {} events", events.len()),
+                Style::default().fg(TEXT_SECONDARY),
+            ),
         ]),
     );
 

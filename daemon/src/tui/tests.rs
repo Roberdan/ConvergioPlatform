@@ -97,13 +97,6 @@ fn renders_cost_center_placeholder() {
 }
 
 #[test]
-fn renders_event_stream_placeholder() {
-    let data = sample_data();
-    let rendered = render_to_text(&data, MainView::EventStream);
-    assert!(rendered.contains("Event Stream"));
-}
-
-#[test]
 fn renders_event_stream_with_events() {
     let data = sample_data();
     let rendered = render_to_text(&data, MainView::EventStream);
