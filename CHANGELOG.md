@@ -1,5 +1,21 @@
 # Changelog
 
+## [17.0.0] - 2026-03-23
+
+### Added
+- TUI: Brain Canvas view with session/agent/task tree visualization
+- TUI: Cost/Token Center with model/project/date breakdown
+- TUI: Events Stream with action-colored live feed
+- TUI: Workspace view with status indicators
+- TUI: Deliverables browser with approval status
+- TUI: WebSocket client for real-time updates (/ws/brain)
+- TUI: --api-url flag for remote daemon connection
+- TUI: Maranello ANSI 256-color palette (BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY)
+
+### Changed
+- TUI: Module restructure — views/, widgets/, api/ sub-modules (all under 250 lines)
+- TUI: Tab navigation extended to 9 views (keys 1-9)
+
 ## [16.0.0] — 23 Marzo 2026
 
 ### Added
