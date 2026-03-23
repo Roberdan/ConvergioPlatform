@@ -106,14 +106,18 @@ pub async fn handle_mesh(cmd: MeshCommands) {
         MeshCommands::Heartbeat { human, api_url } => {
             // POST with empty body — signals this node is alive
             crate::cli_http::post_and_print(
-                &format!("{api_url}/api/heartbeat"), &serde_json::json!({}), human,
-            ).await;
+                &format!("{api_url}/api/heartbeat"),
+                &serde_json::json!({}),
+                human,
+            )
+            .await;
         }
         MeshCommands::Status { human, api_url } => {
             crate::cli_http::fetch_and_print(&format!("{api_url}/api/mesh"), human).await;
         }
         MeshCommands::ClusterStatus { human, api_url } => {
-            crate::cli_http::fetch_and_print(&format!("{api_url}/api/heartbeat/status"), human).await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/heartbeat/status"), human)
+                .await;
         }
     }
 }
@@ -122,13 +126,19 @@ pub async fn handle_session(cmd: SessionCommands) {
     match cmd {
         SessionCommands::Reap { human, api_url } => {
             crate::cli_http::post_and_print(
-                &format!("{api_url}/api/sessions/reap"), &serde_json::json!({}), human,
-            ).await;
+                &format!("{api_url}/api/sessions/reap"),
+                &serde_json::json!({}),
+                human,
+            )
+            .await;
         }
         SessionCommands::Recovery { human, api_url } => {
             crate::cli_http::post_and_print(
-                &format!("{api_url}/api/sessions/recovery"), &serde_json::json!({}), human,
-            ).await;
+                &format!("{api_url}/api/sessions/recovery"),
+                &serde_json::json!({}),
+                human,
+            )
+            .await;
         }
         SessionCommands::Check { human, api_url } => {
             crate::cli_http::fetch_and_print(&format!("{api_url}/api/dashboard"), human).await;
@@ -139,14 +149,16 @@ pub async fn handle_session(cmd: SessionCommands) {
 pub async fn handle_metrics(cmd: MetricsCommands) {
     match cmd {
         MetricsCommands::Summary { human, api_url } => {
-            crate::cli_http::fetch_and_print(
-                &format!("{api_url}/api/metrics/summary"), human,
-            ).await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/metrics/summary"), human)
+                .await;
         }
         MetricsCommands::Collect { human, api_url } => {
             crate::cli_http::post_and_print(
-                &format!("{api_url}/api/metrics/collect"), &serde_json::json!({}), human,
-            ).await;
+                &format!("{api_url}/api/metrics/collect"),
+                &serde_json::json!({}),
+                human,
+            )
+            .await;
         }
     }
 }
@@ -154,9 +166,7 @@ pub async fn handle_metrics(cmd: MetricsCommands) {
 pub async fn handle_alert(cmd: AlertCommands) {
     match cmd {
         AlertCommands::List { human, api_url } => {
-            crate::cli_http::fetch_and_print(
-                &format!("{api_url}/api/notifications"), human,
-            ).await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/notifications"), human).await;
         }
     }
 }

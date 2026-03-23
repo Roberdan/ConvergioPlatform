@@ -50,7 +50,10 @@ pub fn gate_credential_scan(files: &[&str]) -> GateResult {
     let patterns: Vec<(Regex, &str)> = vec![
         (Regex::new(r"sk-[a-zA-Z0-9]{20,}").unwrap(), "API key"),
         (Regex::new(r"AKIA[A-Z0-9]{16}").unwrap(), "AWS access key"),
-        (Regex::new(r#"password\s*=\s*["'][^"']+"#).unwrap(), "hardcoded password"),
+        (
+            Regex::new(r#"password\s*=\s*["'][^"']+"#).unwrap(),
+            "hardcoded password",
+        ),
         (Regex::new(r"BEGIN.*PRIVATE KEY").unwrap(), "private key"),
         (Regex::new(r"ghp_[a-zA-Z0-9]{36}").unwrap(), "GitHub PAT"),
     ];
@@ -59,7 +62,9 @@ pub fn gate_credential_scan(files: &[&str]) -> GateResult {
         if fp.ends_with("_test.rs") || fp.ends_with(".test.ts") {
             continue;
         }
-        let Ok(content) = fs::read_to_string(fp) else { continue };
+        let Ok(content) = fs::read_to_string(fp) else {
+            continue;
+        };
         for (re, label) in &patterns {
             if re.is_match(&content) {
                 violations.push(format!("{fp}: {label} detected"));
@@ -77,7 +82,9 @@ pub fn gate_credential_scan(files: &[&str]) -> GateResult {
 pub fn gate_line_count(files: &[&str], max_lines: usize) -> GateResult {
     let mut violations = Vec::new();
     for fp in files {
-        let Ok(content) = fs::read_to_string(fp) else { continue };
+        let Ok(content) = fs::read_to_string(fp) else {
+            continue;
+        };
         let count = content.lines().count();
         if count > max_lines {
             violations.push(format!("{fp}: {count} lines (max {max_lines})"));
@@ -100,7 +107,9 @@ pub fn gate_pattern_check(files: &[&str]) -> GateResult {
 
     let mut violations = Vec::new();
     for fp in files {
-        let Ok(content) = fs::read_to_string(fp) else { continue };
+        let Ok(content) = fs::read_to_string(fp) else {
+            continue;
+        };
         let is_rs = fp.ends_with(".rs");
         let is_ts_js = fp.ends_with(".ts") || fp.ends_with(".js");
         if is_rs && todo_macro.is_match(&content) {
@@ -138,7 +147,11 @@ pub fn gate_verify_commands(commands: &[&str]) -> GateResult {
             Ok(o) => {
                 all_ok = false;
                 let stderr = String::from_utf8_lossy(&o.stderr);
-                details.push(format!("FAIL: {cmd} (exit {:?}) {}", o.status.code(), stderr.trim()));
+                details.push(format!(
+                    "FAIL: {cmd} (exit {:?}) {}",
+                    o.status.code(),
+                    stderr.trim()
+                ));
             }
             Err(e) => {
                 all_ok = false;
@@ -146,7 +159,11 @@ pub fn gate_verify_commands(commands: &[&str]) -> GateResult {
             }
         }
     }
-    GateResult { gate: "verify_commands".to_string(), passed: all_ok, details }
+    GateResult {
+        gate: "verify_commands".to_string(),
+        passed: all_ok,
+        details,
+    }
 }
 
 /// Check that task status is "submitted" (required for validation).
@@ -155,17 +172,27 @@ pub fn gate_status_check(status: &str) -> GateResult {
     GateResult {
         gate: "status_check".to_string(),
         passed: ok,
-        details: if ok { vec![] } else { vec![format!("status is '{status}', expected 'submitted'")] },
+        details: if ok {
+            vec![]
+        } else {
+            vec![format!("status is '{status}', expected 'submitted'")]
+        },
     }
 }
 
 /// Check that test criteria are defined and non-empty.
 pub fn gate_test_criteria(criteria: Option<&str>) -> GateResult {
-    let has = criteria.map(|c| !c.is_empty() && c != "null" && c != "[]" && c != "{}").unwrap_or(false);
+    let has = criteria
+        .map(|c| !c.is_empty() && c != "null" && c != "[]" && c != "{}")
+        .unwrap_or(false);
     GateResult {
         gate: "test_criteria".to_string(),
         passed: has,
-        details: if has { vec![] } else { vec!["test criteria missing or empty".to_string()] },
+        details: if has {
+            vec![]
+        } else {
+            vec!["test criteria missing or empty".to_string()]
+        },
     }
 }
 
@@ -181,7 +208,10 @@ pub fn run_all_gates(files: &[&str], commands: &[&str]) -> Vec<GateResult> {
 
 /// Run full validation: status + criteria + file gates.
 pub fn validate_task(
-    status: &str, test_criteria: Option<&str>, files: &[&str], verify_commands: &[&str],
+    status: &str,
+    test_criteria: Option<&str>,
+    files: &[&str],
+    verify_commands: &[&str],
 ) -> MechanicalValidation {
     let mut gates = vec![gate_status_check(status), gate_test_criteria(test_criteria)];
     if !files.is_empty() {
@@ -194,4 +224,3 @@ pub fn validate_task(
     }
     summarize(gates)
 }
-

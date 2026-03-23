@@ -3,11 +3,7 @@ use tracing::{info, warn};
 
 use super::utils::{default_db_path, default_peers_conf};
 
-pub async fn run_serve(
-    bind: String,
-    static_dir: Option<PathBuf>,
-    crsqlite_path: Option<String>,
-) {
+pub async fn run_serve(bind: String, static_dir: Option<PathBuf>, crsqlite_path: Option<String>) {
     // Init structured logging to file + stderr
     let log_dir = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
         .join(".claude/logs");

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Skill enable subcommand — reads skill.yaml, activates required agents and plugins.
 
-use crate::cli_skill_validate::{yaml_get_list, agent_name_valid};
+use crate::cli_skill_validate::{agent_name_valid, yaml_get_list};
 use std::path::{Path, PathBuf};
 
 /// Result of activating plugins into settings.json.
@@ -19,15 +19,17 @@ pub fn activate_plugins(
 ) -> Result<PluginActivationResult, String> {
     let plugins = yaml_get_list(yaml_content, "requires-plugins").unwrap_or_default();
     if plugins.is_empty() {
-        return Ok(PluginActivationResult { added: vec![], skipped: vec![] });
+        return Ok(PluginActivationResult {
+            added: vec![],
+            skipped: vec![],
+        });
     }
 
     let settings_path = claude_dir.join("settings.json");
     let mut settings: serde_json::Value = if settings_path.is_file() {
         let raw = std::fs::read_to_string(&settings_path)
             .map_err(|e| format!("read {}: {e}", settings_path.display()))?;
-        serde_json::from_str(&raw)
-            .map_err(|e| format!("parse {}: {e}", settings_path.display()))?
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", settings_path.display()))?
     } else {
         serde_json::json!({})
     };
@@ -86,7 +88,10 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
     }
     let yaml_content = match std::fs::read_to_string(&yaml_path) {
         Ok(c) => c,
-        Err(e) => { eprintln!("read error: {e}"); std::process::exit(2); }
+        Err(e) => {
+            eprintln!("read error: {e}");
+            std::process::exit(2);
+        }
     };
 
     let agents = yaml_get_list(&yaml_content, "requires-agents").unwrap_or_default();
@@ -102,7 +107,9 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
         match reqwest::Client::new().post(&url).json(&body).send().await {
             Ok(resp) if resp.status().is_success() => {
                 agents_enabled += 1;
-                if human { println!("enabled agent: {agent_name}"); }
+                if human {
+                    println!("enabled agent: {agent_name}");
+                }
             }
             Ok(resp) => {
                 let status = resp.status();
@@ -122,7 +129,10 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("warning: plugin activation failed: {e}");
-            PluginActivationResult { added: vec![], skipped: vec![] }
+            PluginActivationResult {
+                added: vec![],
+                skipped: vec![],
+            }
         }
     };
 
@@ -140,14 +150,17 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
         );
     } else {
         let plugins = yaml_get_list(&yaml_content, "requires-plugins").unwrap_or_default();
-        println!("{}", serde_json::json!({
-            "ok": true,
-            "agents_enabled": agents_enabled,
-            "agents_total": agents.len(),
-            "plugins_activated": plugin_result.added,
-            "plugins_skipped": plugin_result.skipped,
-            "plugins_total": plugins.len(),
-        }));
+        println!(
+            "{}",
+            serde_json::json!({
+                "ok": true,
+                "agents_enabled": agents_enabled,
+                "agents_total": agents.len(),
+                "plugins_activated": plugin_result.added,
+                "plugins_skipped": plugin_result.skipped,
+                "plugins_total": plugins.len(),
+            })
+        );
     }
 }
 

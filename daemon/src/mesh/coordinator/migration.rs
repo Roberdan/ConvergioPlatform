@@ -3,10 +3,10 @@
 use crate::mesh::peers::PeersRegistry;
 use chrono::Utc;
 
-use super::types::{CoordinatorError, MigrationState, PeerSnapshot};
 use super::migration_helpers::{
     copy_crontab, registry_to_ini_string, scp_db, ssh_read_peers_conf, ssh_write_peers_conf,
 };
+use super::types::{CoordinatorError, MigrationState, PeerSnapshot};
 
 // ── Migration ─────────────────────────────────────────────────────────────────
 

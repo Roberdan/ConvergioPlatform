@@ -13,9 +13,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/peers/coordinator — return current coordinator node
-pub async fn handle_coordinator(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn handle_coordinator(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
 
@@ -168,9 +166,7 @@ pub async fn handle_ping(
 }
 
 /// GET /api/mesh/diagnostics — overall mesh health
-pub async fn handle_diagnostics(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn handle_diagnostics(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
 

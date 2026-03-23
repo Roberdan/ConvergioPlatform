@@ -127,18 +127,21 @@ fn crdt_changes_converge_between_two_nodes() {
     let right = PlanDb::open_in_memory().expect("right db");
     seed_change_schema(&left);
     seed_change_schema(&right);
-    left.connection().execute(
-        r#"INSERT INTO crsql_changes ("table",pk,cid,val,col_version,db_version,site_id,cl,seq)
+    left.connection()
+        .execute(
+            r#"INSERT INTO crsql_changes ("table",pk,cid,val,col_version,db_version,site_id,cl,seq)
            VALUES ('tasks','id=1','title','left',1,1,'left',1,1)"#,
-        [],
-    )
-    .expect("left change");
-    right.connection().execute(
-        r#"INSERT INTO crsql_changes ("table",pk,cid,val,col_version,db_version,site_id,cl,seq)
+            [],
+        )
+        .expect("left change");
+    right
+        .connection()
+        .execute(
+            r#"INSERT INTO crsql_changes ("table",pk,cid,val,col_version,db_version,site_id,cl,seq)
            VALUES ('tasks','id=2','title','right',1,1,'right',1,1)"#,
-        [],
-    )
-    .expect("right change");
+            [],
+        )
+        .expect("right change");
     let left_changes = left.export_changes().expect("left export");
     let right_changes = right.export_changes().expect("right export");
     left.apply_changes(&right_changes).expect("left apply");

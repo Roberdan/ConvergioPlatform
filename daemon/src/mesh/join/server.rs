@@ -36,7 +36,7 @@ pub async fn serve_bundles(
         .map_err(|e| JoinError::Network(e.to_string()))?;
     mac.update(b"download");
     let expected_sig = mac.finalize().into_bytes();
-    let expected_bearer = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&expected_sig);
+    let expected_bearer = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(expected_sig);
 
     struct ServerState {
         auth_bytes: Vec<u8>,
@@ -138,7 +138,7 @@ pub(super) async fn download_bundles(
         .map_err(|e| JoinError::BundleDownload(e.to_string()))?;
     mac.update(b"download");
     let sig = mac.finalize().into_bytes();
-    let bearer = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&sig);
+    let bearer = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(sig);
 
     let url = format!("http://{coordinator_ip}:7979/bundle");
     let client = reqwest::Client::new();

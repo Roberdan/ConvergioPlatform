@@ -8,8 +8,8 @@ pub fn handle_models(db_path: Option<PathBuf>) {
     match claude_core::ipc::models::get_all_models(&conn) {
         Ok(models) => {
             println!(
-                "{:<15} {:<10} {:<30} {:>8} {:<10} {}",
-                "HOST", "PROVIDER", "MODEL", "SIZE_GB", "QUANT", "LAST_SEEN"
+                "{:<15} {:<10} {:<30} {:>8} {:<10} LAST_SEEN",
+                "HOST", "PROVIDER", "MODEL", "SIZE_GB", "QUANT"
             );
             for m in &models {
                 println!(
@@ -59,32 +59,30 @@ pub fn handle_sub(command: SubCommands) {
                 }
             }
         }
-        SubCommands::List { .. } => {
-            match claude_core::ipc::models::list_subscriptions(&conn) {
-                Ok(subs) => {
+        SubCommands::List { .. } => match claude_core::ipc::models::list_subscriptions(&conn) {
+            Ok(subs) => {
+                println!(
+                    "{:<20} {:<12} {:<10} {:>10} {:>5} MODELS",
+                    "NAME", "PROVIDER", "PLAN", "BUDGET", "DAY"
+                );
+                for s in &subs {
                     println!(
-                        "{:<20} {:<12} {:<10} {:>10} {:>5} {}",
-                        "NAME", "PROVIDER", "PLAN", "BUDGET", "DAY", "MODELS"
+                        "{:<20} {:<12} {:<10} {:>10.2} {:>5} {}",
+                        s.name,
+                        s.provider,
+                        s.plan,
+                        s.budget_usd,
+                        s.reset_day,
+                        s.models.join(",")
                     );
-                    for s in &subs {
-                        println!(
-                            "{:<20} {:<12} {:<10} {:>10.2} {:>5} {}",
-                            s.name,
-                            s.provider,
-                            s.plan,
-                            s.budget_usd,
-                            s.reset_day,
-                            s.models.join(",")
-                        );
-                    }
-                    println!("\n{} subscription(s)", subs.len());
                 }
-                Err(e) => {
-                    eprintln!("list subs: {e}");
-                    std::process::exit(2);
-                }
+                println!("\n{} subscription(s)", subs.len());
             }
-        }
+            Err(e) => {
+                eprintln!("list subs: {e}");
+                std::process::exit(2);
+            }
+        },
         SubCommands::Remove { name, .. } => {
             match claude_core::ipc::models::remove_subscription(&conn, &name) {
                 Ok(n) => println!("removed {n} subscription(s)"),
@@ -102,15 +100,8 @@ pub fn handle_budget(db_path: Option<PathBuf>) {
     match claude_core::ipc::models::list_subscriptions(&conn) {
         Ok(subs) => {
             println!(
-                "{:<20} {:<10} {:>10} {:>10} {:>10} {:>6} {:>10} {}",
-                "SUBSCRIPTION",
-                "PROVIDER",
-                "BUDGET",
-                "SPENT",
-                "REMAINING",
-                "DAYS",
-                "PROJECTED",
-                "STATUS"
+                "{:<20} {:<10} {:>10} {:>10} {:>10} {:>6} {:>10} STATUS",
+                "SUBSCRIPTION", "PROVIDER", "BUDGET", "SPENT", "REMAINING", "DAYS", "PROJECTED"
             );
             for s in &subs {
                 if let Ok(Some(st)) = claude_core::ipc::budget::get_budget_status(&conn, &s.name) {

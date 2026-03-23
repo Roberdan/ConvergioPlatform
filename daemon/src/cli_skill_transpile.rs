@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Transpile subcommand implementation — converts skill.yaml + SKILL.md to provider formats.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-pub fn handle_transpile(skill_dir: &PathBuf, output_dir: &PathBuf, provider: &str, human: bool) {
+pub fn handle_transpile(skill_dir: &Path, output_dir: &Path, provider: &str, human: bool) {
     let yaml_path = skill_dir.join("skill.yaml");
     let md_path = skill_dir.join("SKILL.md");
 
@@ -16,11 +16,17 @@ pub fn handle_transpile(skill_dir: &PathBuf, output_dir: &PathBuf, provider: &st
 
     let yaml_content = match std::fs::read_to_string(&yaml_path) {
         Ok(c) => c,
-        Err(e) => { eprintln!("read error: {e}"); std::process::exit(2); }
+        Err(e) => {
+            eprintln!("read error: {e}");
+            std::process::exit(2);
+        }
     };
     let md_content = match std::fs::read_to_string(&md_path) {
         Ok(c) => c,
-        Err(e) => { eprintln!("read error: {e}"); std::process::exit(2); }
+        Err(e) => {
+            eprintln!("read error: {e}");
+            std::process::exit(2);
+        }
     };
 
     let output = match provider {
@@ -38,7 +44,10 @@ pub fn handle_transpile(skill_dir: &PathBuf, output_dir: &PathBuf, provider: &st
             if human {
                 println!("Written: {}", path.display());
             } else {
-                println!("{}", serde_json::json!({"ok": true, "path": path.display().to_string()}));
+                println!(
+                    "{}",
+                    serde_json::json!({"ok": true, "path": path.display().to_string()})
+                );
             }
         }
         Err(e) => {
@@ -48,9 +57,10 @@ pub fn handle_transpile(skill_dir: &PathBuf, output_dir: &PathBuf, provider: &st
     }
 }
 
-pub fn transpile_claude(yaml: &str, md: &str, output_dir: &PathBuf) -> Result<PathBuf, String> {
+pub fn transpile_claude(yaml: &str, md: &str, output_dir: &Path) -> Result<PathBuf, String> {
     let name = crate::cli_skill::yaml_get(yaml, "name").ok_or("skill.yaml missing 'name'")?;
-    let version = crate::cli_skill::yaml_get(yaml, "version").ok_or("skill.yaml missing 'version'")?;
+    let version =
+        crate::cli_skill::yaml_get(yaml, "version").ok_or("skill.yaml missing 'version'")?;
     let description = crate::cli_skill::yaml_get(yaml, "description").unwrap_or_default();
     let arguments = crate::cli_skill::yaml_get(yaml, "arguments").unwrap_or_default();
 
@@ -75,7 +85,7 @@ pub fn transpile_claude(yaml: &str, md: &str, output_dir: &PathBuf) -> Result<Pa
     Ok(out_path)
 }
 
-pub fn transpile_copilot(yaml: &str, md: &str, output_dir: &PathBuf) -> Result<PathBuf, String> {
+pub fn transpile_copilot(yaml: &str, md: &str, output_dir: &Path) -> Result<PathBuf, String> {
     let name = crate::cli_skill::yaml_get(yaml, "name").ok_or("skill.yaml missing 'name'")?;
     let description = crate::cli_skill::yaml_get(yaml, "description").unwrap_or_default();
     let model = crate::cli_skill::yaml_get(yaml, "model").unwrap_or_default();
@@ -100,11 +110,12 @@ pub fn transpile_copilot(yaml: &str, md: &str, output_dir: &PathBuf) -> Result<P
     Ok(out_path)
 }
 
-pub fn transpile_generic(yaml: &str, md: &str, output_dir: &PathBuf) -> Result<PathBuf, String> {
+pub fn transpile_generic(yaml: &str, md: &str, output_dir: &Path) -> Result<PathBuf, String> {
     let name = crate::cli_skill::yaml_get(yaml, "name").ok_or("skill.yaml missing 'name'")?;
     let description = crate::cli_skill::yaml_get(yaml, "description").unwrap_or_default();
     let domain = crate::cli_skill::yaml_get(yaml, "domain").unwrap_or_else(|| "general".into());
-    let const_ver = crate::cli_skill::yaml_get(yaml, "constitution-version").unwrap_or_else(|| "2.0.0".into());
+    let const_ver =
+        crate::cli_skill::yaml_get(yaml, "constitution-version").unwrap_or_else(|| "2.0.0".into());
     let license = crate::cli_skill::yaml_get(yaml, "license").unwrap_or_else(|| "MPL-2.0".into());
 
     let mut out = String::new();
@@ -115,12 +126,21 @@ pub fn transpile_generic(yaml: &str, md: &str, output_dir: &PathBuf) -> Result<P
     out.push_str("## Instructions\n\n");
     out.push_str(md);
     out.push_str("\n\n## Constraints\n");
-    out.push_str(&format!("- Follow the Convergio Constitution v{const_ver}\n"));
+    out.push_str(&format!(
+        "- Follow the Convergio Constitution v{const_ver}\n"
+    ));
     out.push_str(&format!("- {license} licensed\n"));
 
-    let safe_name: String = name.to_lowercase()
+    let safe_name: String = name
+        .to_lowercase()
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
     let out_path = output_dir.join(format!("{safe_name}.system-prompt.txt"));
     std::fs::write(&out_path, &out).map_err(|e| format!("write error: {e}"))?;

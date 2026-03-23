@@ -134,10 +134,7 @@ fn agent_activity_upsert_by_agent_id() {
         row.get("status").and_then(|v| v.as_str()),
         Some("completed")
     );
-    assert_eq!(
-        row.get("tokens_total").and_then(|v| v.as_i64()),
-        Some(1500)
-    );
+    assert_eq!(row.get("tokens_total").and_then(|v| v.as_i64()), Some(1500));
 }
 
 #[test]

@@ -20,7 +20,7 @@ pub async fn handle_cost_breakdown(
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
-    let days = params.days.unwrap_or(7).max(1).min(365);
+    let days = params.days.unwrap_or(7).clamp(1, 365);
 
     // Cost by model
     let by_model = if let Some(ref project) = params.project {

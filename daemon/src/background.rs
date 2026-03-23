@@ -87,7 +87,9 @@ pub(crate) fn process_tick(conn: &Connection, seen: &mut HashSet<i64>) -> rusqli
         };
 
         match result {
-            Ok(n) => debug!("pause_bridge: event {id} ({event_type}) plan_id={plan_id} affected={n}"),
+            Ok(n) => {
+                debug!("pause_bridge: event {id} ({event_type}) plan_id={plan_id} affected={n}")
+            }
             Err(e) => warn!("pause_bridge: event {id} ({event_type}) plan_id={plan_id} error: {e}"),
         }
     }

@@ -63,7 +63,7 @@ pub async fn join(
     );
     emit_if_interactive(&config, &p);
     if config.selections.network {
-        network_setup().map_err(|e| JoinError::Network(e))?;
+        network_setup().map_err(JoinError::Network)?;
         p.status = StepStatus::Done;
     }
     emit_if_interactive(&config, &p);
@@ -97,7 +97,7 @@ pub async fn join(
     );
     emit_if_interactive(&config, &p);
     if config.selections.auth {
-        import_auth(&bundle_dir).map_err(|e| JoinError::AuthImport(e))?;
+        import_auth(&bundle_dir).map_err(JoinError::AuthImport)?;
         p.status = StepStatus::Done;
     }
     emit_if_interactive(&config, &p);
@@ -111,7 +111,7 @@ pub async fn join(
         StepStatus::Running,
     );
     emit_if_interactive(&config, &p);
-    import_env(&bundle_dir, &config.selections).map_err(|e| JoinError::Network(e))?;
+    import_env(&bundle_dir, &config.selections).map_err(JoinError::Network)?;
     p.status = StepStatus::Done;
     emit_if_interactive(&config, &p);
     log.push(p);
@@ -141,7 +141,7 @@ pub async fn join(
     emit_if_interactive(&config, &p);
     register_self_in_peers(&coordinator_ip)
         .await
-        .map_err(|e| JoinError::Network(e))?;
+        .map_err(JoinError::Network)?;
     p.status = StepStatus::Done;
     emit_if_interactive(&config, &p);
     log.push(p);
@@ -149,7 +149,7 @@ pub async fn join(
     // ── Step 9: Preflight check ───────────────────────────────────────────────
     let mut p = make_step(9, TOTAL, "Preflight check", StepStatus::Running);
     emit_if_interactive(&config, &p);
-    run_preflight().map_err(|e| JoinError::Preflight(e))?;
+    run_preflight().map_err(JoinError::Preflight)?;
     p.status = StepStatus::Done;
     emit_if_interactive(&config, &p);
     log.push(p);

@@ -17,9 +17,7 @@ pub async fn api_tasks_distribution(
     )?)))
 }
 
-pub async fn api_tasks_blocked(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn api_tasks_blocked(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     Ok(Json(Value::Array(query_rows(
         &conn,
@@ -39,9 +37,7 @@ pub async fn api_plans_assignable(
     )?)))
 }
 
-pub async fn api_notifications(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn api_notifications(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     Ok(Json(Value::Array(query_rows(
         &conn,
@@ -149,5 +145,7 @@ pub async fn api_plan_status(
         rusqlite::params![payload.status, payload.plan_id],
     )
     .map_err(|err| ApiError::internal(format!("status update failed: {err}")))?;
-    Ok(Json(json!({"ok": true, "plan_id": payload.plan_id, "status": payload.status})))
+    Ok(Json(
+        json!({"ok": true, "plan_id": payload.plan_id, "status": payload.status}),
+    ))
 }

@@ -115,7 +115,11 @@ fn process_tick_skips_seen_events() {
     let mut seen = HashSet::new();
     process_tick(&conn, &mut seen).unwrap();
     let status: String = conn
-        .query_row("SELECT status FROM execution_runs WHERE plan_id=5", [], |r| r.get(0))
+        .query_row(
+            "SELECT status FROM execution_runs WHERE plan_id=5",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(status, "paused");
     conn.execute(
@@ -125,7 +129,11 @@ fn process_tick_skips_seen_events() {
     .unwrap();
     process_tick(&conn, &mut seen).unwrap();
     let status2: String = conn
-        .query_row("SELECT status FROM execution_runs WHERE plan_id=5", [], |r| r.get(0))
+        .query_row(
+            "SELECT status FROM execution_runs WHERE plan_id=5",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(status2, "running", "seen events must not be re-processed");
 }

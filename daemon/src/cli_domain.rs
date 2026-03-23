@@ -82,6 +82,7 @@ pub(crate) fn validate_skill_dir(path: &str) -> Result<(), String> {
 }
 
 /// A single row from domain_skill_map.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct DomainSkillRow {
     pub(crate) domain: String,
@@ -90,6 +91,7 @@ pub(crate) struct DomainSkillRow {
 }
 
 /// Query all rows from domain_skill_map ordered by domain, skill_name.
+#[allow(dead_code)]
 pub(crate) fn query_domain_list(
     conn: &rusqlite::Connection,
 ) -> rusqlite::Result<Vec<DomainSkillRow>> {
@@ -109,6 +111,7 @@ pub(crate) fn query_domain_list(
 }
 
 /// Insert a new domain→skill mapping. Returns Err on UNIQUE violation or DB error.
+#[allow(dead_code)]
 pub(crate) fn insert_domain_map(
     conn: &rusqlite::Connection,
     domain: &str,

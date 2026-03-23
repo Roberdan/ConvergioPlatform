@@ -1,5 +1,5 @@
-use super::tracking::{log_usage, BudgetEntry, get_usage_for_period};
 use super::status::{estimate_cost, estimate_task_cost, get_budget_status};
+use super::tracking::{get_usage_for_period, log_usage, BudgetEntry};
 use rusqlite::Connection;
 
 fn setup_db() -> Connection {

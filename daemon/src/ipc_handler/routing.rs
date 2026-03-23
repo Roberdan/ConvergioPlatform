@@ -74,8 +74,8 @@ pub fn handle_skills(agent: Option<String>, db_path: Option<PathBuf>) {
         match claude_core::ipc::skills::get_skills_for_agent(&conn, &agent_name) {
             Ok(skills) => {
                 println!(
-                    "{:<20} {:<15} {:<15} {:>10} {}",
-                    "SKILL", "AGENT", "HOST", "CONFIDENCE", "LAST_USED"
+                    "{:<20} {:<15} {:<15} {:>10} LAST_USED",
+                    "SKILL", "AGENT", "HOST", "CONFIDENCE"
                 );
                 for s in &skills {
                     println!(
@@ -93,10 +93,10 @@ pub fn handle_skills(agent: Option<String>, db_path: Option<PathBuf>) {
         match claude_core::ipc::skills::get_skill_pool(&conn) {
             Ok(pool) => {
                 println!(
-                    "{:<20} {:<15} {:<15} {:>10} {}",
-                    "SKILL", "AGENT", "HOST", "CONFIDENCE", "LAST_USED"
+                    "{:<20} {:<15} {:<15} {:>10} LAST_USED",
+                    "SKILL", "AGENT", "HOST", "CONFIDENCE"
                 );
-                for (_, agents) in &pool {
+                for agents in pool.values() {
                     for s in agents {
                         println!(
                             "{:<20} {:<15} {:<15} {:>10.2} {}",

@@ -69,7 +69,11 @@ fn test_disable_removes_unshared() {
         "mcp-unique should be disabled: {:?}",
         result
     );
-    assert!(result.kept_shared.is_empty(), "nothing shared: {:?}", result);
+    assert!(
+        result.kept_shared.is_empty(),
+        "nothing shared: {:?}",
+        result
+    );
 
     let remaining = read_allowed_plugins(&claude_dir);
     assert!(
@@ -103,7 +107,11 @@ fn test_disable_keeps_shared() {
         "mcp-shared should be kept (shared): {:?}",
         result
     );
-    assert!(result.disabled_plugins.is_empty(), "nothing disabled: {:?}", result);
+    assert!(
+        result.disabled_plugins.is_empty(),
+        "nothing disabled: {:?}",
+        result
+    );
 
     let remaining = read_allowed_plugins(&claude_dir);
     assert!(

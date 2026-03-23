@@ -119,7 +119,11 @@ pub async fn api_nightly_jobs(
             NULL AS log_file_path, NULL AS parent_run_id
         FROM nightly_jobs ORDER BY started_at DESC LIMIT ?1 OFFSET ?2";
     let rows = query_rows(&conn, list_sql, rusqlite::params![per_page, offset]).or_else(|_| {
-        query_rows(&conn, fallback_list_sql, rusqlite::params![per_page, offset])
+        query_rows(
+            &conn,
+            fallback_list_sql,
+            rusqlite::params![per_page, offset],
+        )
     })?;
     let latest = query_one(
         &conn,
@@ -230,7 +234,9 @@ pub async fn api_nightly_job_retry(
         .and_then(|name| name.split('-').next())
         .unwrap_or("mirrorbuddy");
     spawn_nightly_guardian(project_id, "retry", parent_run_id.as_deref());
-    Ok(Json(json!({"ok": true, "triggered": true, "parent_run_id": parent_run_id, "project_id": project_id})))
+    Ok(Json(
+        json!({"ok": true, "triggered": true, "parent_run_id": parent_run_id, "project_id": project_id}),
+    ))
 }
 
 pub async fn api_nightly_job_trigger(
@@ -242,5 +248,7 @@ pub async fn api_nightly_job_trigger(
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "mirrorbuddy".to_string());
     spawn_nightly_guardian(&project_id, "manual", None);
-    Ok(Json(json!({"ok": true, "triggered": true, "project_id": project_id})))
+    Ok(Json(
+        json!({"ok": true, "triggered": true, "project_id": project_id}),
+    ))
 }

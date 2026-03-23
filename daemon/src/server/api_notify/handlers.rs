@@ -1,7 +1,7 @@
 use crate::server::state::{query_rows, ApiError, ServerState};
 use axum::extract::State;
-use axum::{Json, Router};
 use axum::routing::{get, post};
+use axum::{Json, Router};
 use serde_json::{json, Value};
 
 pub fn router() -> Router<ServerState> {
@@ -166,7 +166,7 @@ pub fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn();
-        return result.is_ok();
+        result.is_ok()
     }
 
     #[cfg(target_os = "linux")]
@@ -176,7 +176,7 @@ pub fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn();
-        return result.is_ok();
+        result.is_ok()
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]

@@ -58,25 +58,42 @@ pub enum RunCommands {
 
 pub async fn handle(cmd: RunCommands) {
     match cmd {
-        RunCommands::Create { plan_id, label, human, api_url } => {
+        RunCommands::Create {
+            plan_id,
+            label,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({
                 "plan_id": plan_id,
                 "label": label,
             });
             post_and_print(&format!("{api_url}/api/runs"), &body, human).await;
         }
-        RunCommands::List { plan_id, human, api_url } => {
+        RunCommands::List {
+            plan_id,
+            human,
+            api_url,
+        } => {
             let url = match plan_id {
                 Some(id) => format!("{api_url}/api/runs?plan_id={id}"),
                 None => format!("{api_url}/api/runs"),
             };
             fetch_and_print(&url, human).await;
         }
-        RunCommands::Pause { run_id, human, api_url } => {
+        RunCommands::Pause {
+            run_id,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({});
             post_and_print(&format!("{api_url}/api/runs/{run_id}/pause"), &body, human).await;
         }
-        RunCommands::Resume { run_id, human, api_url } => {
+        RunCommands::Resume {
+            run_id,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({});
             post_and_print(&format!("{api_url}/api/runs/{run_id}/resume"), &body, human).await;
         }
@@ -130,8 +147,10 @@ async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
 
 fn print_value(val: &serde_json::Value, human: bool) {
     if human {
-        println!("{}", serde_json::to_string_pretty(val)
-            .unwrap_or_else(|_| val.to_string()));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(val).unwrap_or_else(|_| val.to_string())
+        );
     } else {
         println!("{val}");
     }

@@ -9,10 +9,8 @@ fn test_router() -> axum::Router {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let tmp = std::env::temp_dir().join(format!(
-        "claude-runs-lc-test-{}-{n}.db",
-        std::process::id()
-    ));
+    let tmp =
+        std::env::temp_dir().join(format!("claude-runs-lc-test-{}-{n}.db", std::process::id()));
     let conn = rusqlite::Connection::open(&tmp).expect("open");
     conn.execute_batch(super::api_runs_tests::CORE_SCHEMA)
         .expect("core schema");

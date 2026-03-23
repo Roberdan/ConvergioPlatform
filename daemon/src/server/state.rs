@@ -39,6 +39,11 @@ impl ServerState {
             .map_err(|err| ApiError::internal(format!("pool exhausted: {err}")))
     }
 
+    /// Expose the connection pool for modules that need a Pool directly (e.g. WorkspaceManager).
+    pub fn pool(&self) -> r2d2::Pool<SqliteConnectionManager> {
+        self.pool.clone()
+    }
+
     pub fn open_db(&self) -> Result<PlanDb, ApiError> {
         // Always use plain SQLite — CRSQLite extension loads per-connection
         // and leaks file descriptors (WAL handles not released on drop).
@@ -58,6 +63,13 @@ impl ApiError {
     pub fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
+            message: message.into(),
+        }
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
             message: message.into(),
         }
     }

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 
-use super::{now_ts, DaemonConfig};
 use super::sync_db::{spawn_sync_db_thread, SyncDbCmd};
+use super::{now_ts, DaemonConfig};
 
 use sync::MeshSyncFrame;
 

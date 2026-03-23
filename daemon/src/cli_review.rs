@@ -49,25 +49,48 @@ pub enum ReviewCommands {
 
 pub async fn handle(cmd: ReviewCommands) {
     match cmd {
-        ReviewCommands::Register { plan_id, reviewer_agent, verdict, suggestions, human, api_url } => {
+        ReviewCommands::Register {
+            plan_id,
+            reviewer_agent,
+            verdict,
+            suggestions,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({
                 "plan_id": plan_id, "reviewer_agent": reviewer_agent,
                 "verdict": verdict, "suggestions": suggestions,
             });
             crate::cli_http::post_and_print(
-                &format!("{api_url}/api/plan-db/review/register"), &body, human,
-            ).await;
+                &format!("{api_url}/api/plan-db/review/register"),
+                &body,
+                human,
+            )
+            .await;
         }
-        ReviewCommands::Check { plan_id, human, api_url } => {
+        ReviewCommands::Check {
+            plan_id,
+            human,
+            api_url,
+        } => {
             crate::cli_http::fetch_and_print(
-                &format!("{api_url}/api/plan-db/review/check?plan_id={plan_id}"), human,
-            ).await;
+                &format!("{api_url}/api/plan-db/review/check?plan_id={plan_id}"),
+                human,
+            )
+            .await;
         }
-        ReviewCommands::Reset { plan_id, human, api_url } => {
+        ReviewCommands::Reset {
+            plan_id,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({ "plan_id": plan_id.unwrap_or(0) });
             crate::cli_http::post_and_print(
-                &format!("{api_url}/api/plan-db/review/reset"), &body, human,
-            ).await;
+                &format!("{api_url}/api/plan-db/review/reset"),
+                &body,
+                human,
+            )
+            .await;
         }
     }
 }
@@ -79,9 +102,12 @@ mod tests {
     #[test]
     fn review_register_variant_exists() {
         let cmd = ReviewCommands::Register {
-            plan_id: 685, reviewer_agent: "plan-reviewer".to_string(),
-            verdict: "approved".to_string(), suggestions: None,
-            human: false, api_url: "http://localhost:8420".to_string(),
+            plan_id: 685,
+            reviewer_agent: "plan-reviewer".to_string(),
+            verdict: "approved".to_string(),
+            suggestions: None,
+            human: false,
+            api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, ReviewCommands::Register { plan_id: 685, .. }));
     }
@@ -89,7 +115,9 @@ mod tests {
     #[test]
     fn review_check_variant_exists() {
         let cmd = ReviewCommands::Check {
-            plan_id: 100, human: false, api_url: "http://localhost:8420".to_string(),
+            plan_id: 100,
+            human: false,
+            api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, ReviewCommands::Check { plan_id: 100, .. }));
     }
@@ -97,15 +125,25 @@ mod tests {
     #[test]
     fn review_reset_variant_exists() {
         let cmd = ReviewCommands::Reset {
-            plan_id: Some(1), human: true, api_url: "http://localhost:8420".to_string(),
+            plan_id: Some(1),
+            human: true,
+            api_url: "http://localhost:8420".to_string(),
         };
-        assert!(matches!(cmd, ReviewCommands::Reset { plan_id: Some(1), .. }));
+        assert!(matches!(
+            cmd,
+            ReviewCommands::Reset {
+                plan_id: Some(1),
+                ..
+            }
+        ));
     }
 
     #[test]
     fn review_reset_without_plan_id() {
         let cmd = ReviewCommands::Reset {
-            plan_id: None, human: false, api_url: "http://localhost:8420".to_string(),
+            plan_id: None,
+            human: false,
+            api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, ReviewCommands::Reset { plan_id: None, .. }));
     }

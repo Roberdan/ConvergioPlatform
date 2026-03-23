@@ -79,8 +79,14 @@ pub async fn api_overview(State(state): State<ServerState>) -> Result<Json<Value
     if let Some(obj) = result.as_object_mut() {
         obj.insert("today_lines_changed".to_string(), json!(today_lines));
         obj.insert("week_lines_changed".to_string(), json!(week_lines));
-        obj.insert("yesterday_lines_changed".to_string(), json!(yesterday_lines));
-        obj.insert("prev_week_lines_changed".to_string(), json!(prev_week_lines));
+        obj.insert(
+            "yesterday_lines_changed".to_string(),
+            json!(yesterday_lines),
+        );
+        obj.insert(
+            "prev_week_lines_changed".to_string(),
+            json!(prev_week_lines),
+        );
         obj.insert("agents_today".to_string(), json!(agents_today));
     }
     Ok(Json(result))
@@ -108,8 +114,8 @@ fn today_lines_changed(conn: &rusqlite::Connection) -> (i64, i64, i64, i64) {
     ) {
         if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
             for path in rows.flatten() {
-                let expanded = if path.starts_with("~/") {
-                    format!("{}/{}", home, &path[2..])
+                let expanded = if let Some(rest) = path.strip_prefix("~/") {
+                    format!("{home}/{rest}")
                 } else {
                     path
                 };

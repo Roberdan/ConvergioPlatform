@@ -27,7 +27,10 @@ pub fn canonicalize_existing_project_paths(conn: &Connection) {
             .prepare("SELECT id, path FROM projects WHERE path IS NOT NULL AND path != ''")
         {
             Ok(s) => s,
-            Err(e) => { eprintln!("[migration] canonicalize projects prepare failed: {e}"); return; }
+            Err(e) => {
+                eprintln!("[migration] canonicalize projects prepare failed: {e}");
+                return;
+            }
         };
         stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
             .and_then(|mapped| mapped.collect())

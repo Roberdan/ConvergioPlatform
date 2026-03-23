@@ -85,9 +85,15 @@ enum WaveCommands {
 
 #[test]
 fn cli_plan_task_update_parses_id_and_status() {
-    let cli = TaskCli::try_parse_from(["cvg-task-test", "update", "8795", "done"])
-        .expect("parse");
-    if let TaskCommands::Update { task_id, status, summary, human, .. } = cli.command {
+    let cli = TaskCli::try_parse_from(["cvg-task-test", "update", "8795", "done"]).expect("parse");
+    if let TaskCommands::Update {
+        task_id,
+        status,
+        summary,
+        human,
+        ..
+    } = cli.command
+    {
         assert_eq!(task_id, 8795);
         assert_eq!(status, "done");
         assert!(summary.is_none());
@@ -100,11 +106,21 @@ fn cli_plan_task_update_parses_id_and_status() {
 #[test]
 fn cli_plan_task_update_parses_optional_summary() {
     let cli = TaskCli::try_parse_from([
-        "cvg-task-test", "update", "10", "in_progress",
-        "--summary", "still running",
+        "cvg-task-test",
+        "update",
+        "10",
+        "in_progress",
+        "--summary",
+        "still running",
     ])
     .expect("parse");
-    if let TaskCommands::Update { task_id, status, summary, .. } = cli.command {
+    if let TaskCommands::Update {
+        task_id,
+        status,
+        summary,
+        ..
+    } = cli.command
+    {
         assert_eq!(task_id, 10);
         assert_eq!(status, "in_progress");
         assert_eq!(summary.as_deref(), Some("still running"));
@@ -121,9 +137,11 @@ fn cli_plan_task_update_missing_args_fails() {
 
 #[test]
 fn cli_plan_task_validate_parses_task_and_plan_id() {
-    let cli = TaskCli::try_parse_from(["cvg-task-test", "validate", "8795", "685"])
-        .expect("parse");
-    if let TaskCommands::Validate { task_id, plan_id, .. } = cli.command {
+    let cli = TaskCli::try_parse_from(["cvg-task-test", "validate", "8795", "685"]).expect("parse");
+    if let TaskCommands::Validate {
+        task_id, plan_id, ..
+    } = cli.command
+    {
         assert_eq!(task_id, 8795);
         assert_eq!(plan_id, 685);
     } else {
@@ -133,8 +151,7 @@ fn cli_plan_task_validate_parses_task_and_plan_id() {
 
 #[test]
 fn cli_plan_task_kb_search_parses_query_default_limit() {
-    let cli = TaskCli::try_parse_from(["cvg-task-test", "kb-search", "rust clap"])
-        .expect("parse");
+    let cli = TaskCli::try_parse_from(["cvg-task-test", "kb-search", "rust clap"]).expect("parse");
     if let TaskCommands::KbSearch { query, limit, .. } = cli.command {
         assert_eq!(query, "rust clap");
         assert_eq!(limit, 5);
@@ -145,10 +162,9 @@ fn cli_plan_task_kb_search_parses_query_default_limit() {
 
 #[test]
 fn cli_plan_task_kb_search_parses_custom_limit() {
-    let cli = TaskCli::try_parse_from([
-        "cvg-task-test", "kb-search", "integration", "--limit", "10",
-    ])
-    .expect("parse");
+    let cli =
+        TaskCli::try_parse_from(["cvg-task-test", "kb-search", "integration", "--limit", "10"])
+            .expect("parse");
     if let TaskCommands::KbSearch { limit, .. } = cli.command {
         assert_eq!(limit, 10);
     } else {
@@ -160,9 +176,11 @@ fn cli_plan_task_kb_search_parses_custom_limit() {
 
 #[test]
 fn cli_plan_wave_update_parses_id_and_status() {
-    let cli = WaveCli::try_parse_from(["cvg-wave-test", "update", "3", "done"])
-        .expect("parse");
-    if let WaveCommands::Update { wave_id, status, .. } = cli.command {
+    let cli = WaveCli::try_parse_from(["cvg-wave-test", "update", "3", "done"]).expect("parse");
+    if let WaveCommands::Update {
+        wave_id, status, ..
+    } = cli.command
+    {
         assert_eq!(wave_id, 3);
         assert_eq!(status, "done");
     } else {
@@ -188,9 +206,11 @@ fn cli_plan_wave_context_parses_plan_id() {
 
 #[test]
 fn cli_plan_wave_validate_parses_wave_and_plan_id() {
-    let cli = WaveCli::try_parse_from(["cvg-wave-test", "validate", "7", "685"])
-        .expect("parse");
-    if let WaveCommands::Validate { wave_id, plan_id, .. } = cli.command {
+    let cli = WaveCli::try_parse_from(["cvg-wave-test", "validate", "7", "685"]).expect("parse");
+    if let WaveCommands::Validate {
+        wave_id, plan_id, ..
+    } = cli.command
+    {
         assert_eq!(wave_id, 7);
         assert_eq!(plan_id, 685);
     } else {
@@ -241,7 +261,9 @@ fn cli_plan_argv0_daemon_binary_not_detected_as_cvg() {
 #[test]
 fn cli_plan_argv0_agent_ipc_symlink_detected() {
     assert!(is_agent_ipc_invocation("agent-ipc"));
-    assert!(is_agent_ipc_invocation("/home/user/.claude/scripts/agent-ipc"));
+    assert!(is_agent_ipc_invocation(
+        "/home/user/.claude/scripts/agent-ipc"
+    ));
 }
 
 #[test]

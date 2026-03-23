@@ -165,7 +165,7 @@ _buongiorno_mesh_sync() {
 }
 
 _buongiorno_master_peer() {
-	echo "${BUONGIORNO_MASTER_PEER:-m3max}"
+	echo "${BUONGIORNO_MASTER_PEER:-m5max}"
 }
 
 _buongiorno_redirect_to_master() {
@@ -222,7 +222,7 @@ claude_buongiorno() {
 	echo -e "   Nodo: ${C}${local_peer:-unknown}${N} | Master: ${C}${master_peer}${N} | Mode: ${B}${execution_mode}${N}"
 	echo ""
 
-	echo -e "${C}[1/5]${N} 🤖 Claude Code..."
+	echo -e "${C}[1/6]${N} 🤖 Claude Code..."
 	if command -v claude >/dev/null 2>&1; then
 		local claude_before claude_after
 		claude_before=$(claude --version 2>/dev/null)
@@ -240,7 +240,7 @@ claude_buongiorno() {
 		echo -e "  ${Y}⚠${N} claude non trovato"
 	fi
 
-	echo -e "${C}[2/5]${N} 🐙 GitHub Copilot CLI..."
+	echo -e "${C}[2/6]${N} 🐙 GitHub Copilot CLI..."
 	if command -v gh >/dev/null 2>&1; then
 		local copilot_before copilot_after
 		copilot_before=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
@@ -258,7 +258,7 @@ claude_buongiorno() {
 		echo -e "  ${Y}⚠${N} gh non trovato"
 	fi
 
-	echo -e "${C}[3/5]${N} 🍺 Homebrew..."
+	echo -e "${C}[3/6]${N} 🍺 Homebrew..."
 	if command -v brew >/dev/null 2>&1; then
 		local outdated
 		brew update --quiet 2>/dev/null
@@ -277,7 +277,7 @@ claude_buongiorno() {
 		echo -e "  ${Y}⚠${N} brew non disponibile su questo host, skip"
 	fi
 
-	echo -e "${C}[4/5]${N} 🔧 GitHub CLI & estensioni..."
+	echo -e "${C}[4/6]${N} 🔧 GitHub CLI & estensioni..."
 	if command -v gh >/dev/null 2>&1; then
 		gh extension upgrade --all 2>&1 | grep -v "already up to date" | tail -5
 		echo -e "  ${G}✓${N} fatto"

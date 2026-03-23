@@ -1,7 +1,9 @@
 pub mod dispatch;
 pub mod handlers;
 
-pub use dispatch::{analyze_task, fallback_chain, route_task, FallbackOption, RouteDecision, TaskAnalysis, TaskType};
+pub use dispatch::{
+    analyze_task, fallback_chain, route_task, FallbackOption, RouteDecision, TaskAnalysis, TaskType,
+};
 pub use handlers::{plan_parallel_execution, ExecutionPlan, SubtaskAssignment};
 
 #[cfg(test)]

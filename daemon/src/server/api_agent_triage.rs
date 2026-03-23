@@ -109,12 +109,7 @@ async fn handle_triage(
         .iter()
         .map(|a| {
             let s = score_agent(a, &words, &body.domain);
-            (
-                a.name.clone(),
-                a.category.clone(),
-                a.description.clone(),
-                s,
-            )
+            (a.name.clone(), a.category.clone(), a.description.clone(), s)
         })
         .collect();
 
@@ -138,14 +133,21 @@ async fn handle_triage(
 
     let best_score = scored_snapshot.first().map(|s| s.3).unwrap_or(0.0);
     let suggest_creation = best_score < SUGGEST_CREATION_THRESHOLD;
-    let mut result = json!({ "ok": true, "suggestions": suggestions, "suggest_creation": suggest_creation });
+    let mut result =
+        json!({ "ok": true, "suggestions": suggestions, "suggest_creation": suggest_creation });
 
     if suggest_creation {
         // Provide a scaffold hint derived from the problem description
-        let suggested_name = body.problem_description
-            .split_whitespace().take(3)
-            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
-            .collect::<Vec<_>>().join("-");
+        let suggested_name = body
+            .problem_description
+            .split_whitespace()
+            .take(3)
+            .map(|w| {
+                w.trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_lowercase()
+            })
+            .collect::<Vec<_>>()
+            .join("-");
         result["scaffold_hint"] = json!({
             "name": if suggested_name.is_empty() { "new-agent".to_string() } else { suggested_name },
             "category": body.domain.clone().unwrap_or_else(|| "general".to_string()),
@@ -158,14 +160,15 @@ async fn handle_triage(
 }
 
 /// POST /api/agents/scaffold — generate an agent .md template from metadata.
-async fn handle_scaffold(
-    Json(body): Json<ScaffoldRequest>,
-) -> Result<Json<Value>, ApiError> {
+async fn handle_scaffold(Json(body): Json<ScaffoldRequest>) -> Result<Json<Value>, ApiError> {
     if body.name.trim().is_empty() {
         return Err(ApiError::bad_request("name is required"));
     }
     let category = body.category.as_deref().unwrap_or("general");
-    let description = body.description.as_deref().unwrap_or("TODO: describe this agent");
+    let description = body
+        .description
+        .as_deref()
+        .unwrap_or("TODO: describe this agent");
     let domain = body.domain.as_deref().unwrap_or("general");
 
     let markdown = format!(
@@ -176,7 +179,9 @@ async fn handle_scaffold(
         category = category,
     );
 
-    Ok(Json(json!({ "ok": true, "name": body.name.trim(), "markdown": markdown })))
+    Ok(Json(
+        json!({ "ok": true, "name": body.name.trim(), "markdown": markdown }),
+    ))
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 // api_deliverables: router + list/get/create handlers
 // approve/version handlers → api_deliverables_handlers.rs
 use super::api_deliverables_handlers::{approve_deliverable, version_deliverable};
-use super::state::{query_one, query_rows, ApiError, ServerState};
+use super::state::{query_one, ApiError, ServerState};
 use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -13,7 +13,10 @@ use std::fs;
 
 pub fn router() -> Router<ServerState> {
     Router::new()
-        .route("/api/deliverables", get(list_deliverables).post(create_deliverable))
+        .route(
+            "/api/deliverables",
+            get(list_deliverables).post(create_deliverable),
+        )
         .route("/api/deliverables/:id", get(get_deliverable))
         .route("/api/deliverables/:id/approve", post(approve_deliverable))
         .route("/api/deliverables/:id/version", post(version_deliverable))
@@ -57,7 +60,7 @@ async fn list_deliverables(
         .and_then(|mut stmt| {
             let idx: Vec<&dyn rusqlite::ToSql> =
                 params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
-            stmt.query_map(idx.as_slice(), |row| row_to_json(row))
+            stmt.query_map(idx.as_slice(), row_to_json)
                 .and_then(|mapped| mapped.collect::<Result<Vec<_>, _>>())
         })
         .map_err(|e| ApiError::internal(format!("list deliverables failed: {e}")))?;
@@ -128,9 +131,8 @@ async fn create_deliverable(
     // Resolve output directory via platform_paths (created by T1-02)
     let output_dir = crate::platform_paths::project_output_dir(&project_id).join(&folder_name);
 
-    fs::create_dir_all(&output_dir).map_err(|e| {
-        ApiError::internal(format!("failed to create output dir: {e}"))
-    })?;
+    fs::create_dir_all(&output_dir)
+        .map_err(|e| ApiError::internal(format!("failed to create output dir: {e}")))?;
 
     let agent = body.agent.unwrap_or_default();
     let metadata = json!({
@@ -141,15 +143,24 @@ async fn create_deliverable(
         "version": 1,
     });
     let meta_path = output_dir.join("metadata.json");
-    fs::write(&meta_path, serde_json::to_string_pretty(&metadata).unwrap_or_default())
-        .map_err(|e| ApiError::internal(format!("failed to write metadata.json: {e}")))?;
+    fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&metadata).unwrap_or_default(),
+    )
+    .map_err(|e| ApiError::internal(format!("failed to write metadata.json: {e}")))?;
 
     let output_path = output_dir.to_string_lossy().to_string();
     let conn = state.get_conn()?;
     conn.execute(
         "INSERT INTO deliverables (task_id, project_id, name, output_type, output_path, \
          status, version) VALUES (?1, ?2, ?3, ?4, ?5, 'pending', 1)",
-        rusqlite::params![body.task_id, project_id, name, body.output_type, output_path],
+        rusqlite::params![
+            body.task_id,
+            project_id,
+            name,
+            body.output_type,
+            output_path
+        ],
     )
     .map_err(|e| ApiError::internal(format!("create deliverable failed: {e}")))?;
 

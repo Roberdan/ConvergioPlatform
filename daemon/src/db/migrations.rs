@@ -16,9 +16,13 @@ CREATE TABLE domain_skill_map (
 )";
 
 const DOMAIN_SKILL_SEED: &[(&str, &str, &str)] = &[
-    ("healthcare", "research", "Medical research and clinical analysis"),
-    ("deploy",     "release",  "Deployment and release management"),
-    ("design",     "prepare",  "Design preparation and setup"),
+    (
+        "healthcare",
+        "research",
+        "Medical research and clinical analysis",
+    ),
+    ("deploy", "release", "Deployment and release management"),
+    ("design", "prepare", "Design preparation and setup"),
 ];
 
 const CREATE_EXECUTION_RUNS: &str = "
@@ -86,10 +90,7 @@ fn ensure_execution_runs(conn: &Connection) -> rusqlite::Result<()> {
     // Apply indexes regardless — each is guarded by its own existence check.
     for sql in INDEXES {
         // Extract index name (second token after CREATE INDEX).
-        let name = sql
-            .split_whitespace()
-            .nth(2)
-            .unwrap_or("");
+        let name = sql.split_whitespace().nth(2).unwrap_or("");
         if !index_exists(conn, name)? {
             conn.execute_batch(sql)?;
             eprintln!("[migrations] created index {name}");
@@ -111,7 +112,10 @@ fn ensure_domain_skill_map(conn: &Connection) -> rusqlite::Result<()> {
                 [domain, skill_name, description],
             )?;
         }
-        eprintln!("[migrations] seeded domain_skill_map ({} rows)", DOMAIN_SKILL_SEED.len());
+        eprintln!(
+            "[migrations] seeded domain_skill_map ({} rows)",
+            DOMAIN_SKILL_SEED.len()
+        );
     }
     Ok(())
 }
@@ -142,9 +146,7 @@ fn ensure_mesh_sync_stats_columns(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     if !columns.iter().any(|c| c == "status") {
-        conn.execute_batch(
-            "ALTER TABLE mesh_sync_stats ADD COLUMN status TEXT DEFAULT 'online'",
-        )?;
+        conn.execute_batch("ALTER TABLE mesh_sync_stats ADD COLUMN status TEXT DEFAULT 'online'")?;
         eprintln!("[migrations] added mesh_sync_stats.status");
     }
 

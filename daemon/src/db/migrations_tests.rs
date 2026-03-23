@@ -44,7 +44,10 @@ fn execution_runs_status_constraint_rejects_invalid() {
         "INSERT INTO execution_runs (goal, status) VALUES (?1, ?2)",
         ["test goal", "invalid_status"],
     );
-    assert!(result.is_err(), "CHECK constraint must reject invalid status");
+    assert!(
+        result.is_err(),
+        "CHECK constraint must reject invalid status"
+    );
 }
 
 #[test]
@@ -57,7 +60,10 @@ fn indexes_exist_after_migration() {
         "idx_execution_runs_plan_id",
         "idx_execution_runs_started_at",
     ] {
-        assert!(index_exists(&conn, name).unwrap(), "index {name} must exist");
+        assert!(
+            index_exists(&conn, name).unwrap(),
+            "index {name} must exist"
+        );
     }
 }
 
@@ -107,7 +113,10 @@ fn test_domain_skill_map_migration() {
         "INSERT INTO domain_skill_map (domain, skill_name) VALUES (?1, ?2)",
         ["healthcare", "research"],
     );
-    assert!(dup.is_err(), "UNIQUE(domain, skill_name) must reject duplicate");
+    assert!(
+        dup.is_err(),
+        "UNIQUE(domain, skill_name) must reject duplicate"
+    );
 
     run(&conn).expect("second run must be idempotent");
 }

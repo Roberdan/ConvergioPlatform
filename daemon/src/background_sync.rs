@@ -30,9 +30,7 @@ pub fn resolve_interval_secs(override_secs: Option<u64>) -> u64 {
 ///
 /// Returns an empty Vec — not an error — when the table has no rows or the
 /// lock is already held. Callers should skip the tick rather than propagate.
-pub fn query_active_peers(
-    db: &Arc<Mutex<Connection>>,
-) -> Result<Vec<String>, rusqlite::Error> {
+pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, rusqlite::Error> {
     let conn = db.lock().map_err(|_| {
         rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
@@ -41,22 +39,22 @@ pub fn query_active_peers(
     })?;
 
     // Table may not exist on a fresh DB — return empty rather than error.
-    let exists: bool = conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mesh_sync_stats'",
-        [],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|n| n > 0)
-    .unwrap_or(false);
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mesh_sync_stats'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .unwrap_or(false);
 
     if !exists {
         debug!("background_sync: mesh_sync_stats not yet present, skipping tick");
         return Ok(vec![]);
     }
 
-    let mut stmt = conn.prepare_cached(
-        "SELECT peer_name FROM mesh_sync_stats WHERE status != 'unreachable'",
-    )?;
+    let mut stmt =
+        conn.prepare_cached("SELECT peer_name FROM mesh_sync_stats WHERE status != 'unreachable'")?;
     let peers: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
         .filter_map(|r| r.ok())

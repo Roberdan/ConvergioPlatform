@@ -9,10 +9,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 pub fn router() -> Router<ServerState> {
-    Router::new().route(
-        "/api/plan-db/readiness/:plan_id",
-        get(handle_readiness),
-    )
+    Router::new().route("/api/plan-db/readiness/:plan_id", get(handle_readiness))
 }
 
 #[derive(Debug, Serialize)]
@@ -31,10 +28,7 @@ pub struct ReadinessResult {
 }
 
 /// Check all readiness gates for a plan. Returns an error if plan not found.
-pub fn check_readiness(
-    conn: &Connection,
-    plan_id: i64,
-) -> Result<ReadinessResult, ApiError> {
+pub fn check_readiness(conn: &Connection, plan_id: i64) -> Result<ReadinessResult, ApiError> {
     // Verify plan exists
     let tasks_total: i64 = conn
         .query_row(
@@ -96,9 +90,7 @@ pub fn check_readiness(
         .unwrap_or(0);
     let model_passed = missing_model == 0 && tasks_total > 0;
     if !model_passed && tasks_total > 0 {
-        errors.push(format!(
-            "{missing_model} task(s) missing model assignment"
-        ));
+        errors.push(format!("{missing_model} task(s) missing model assignment"));
     }
     gates.push(Gate {
         name: "all_tasks_have_model".to_string(),

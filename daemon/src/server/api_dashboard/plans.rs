@@ -36,9 +36,7 @@ pub async fn api_mission(State(state): State<ServerState>) -> Result<Json<Value>
     Ok(Json(json!({"plans": result})))
 }
 
-pub async fn api_tokens_daily(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn api_tokens_daily(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     Ok(Json(Value::Array(query_rows(
         &conn,
@@ -47,9 +45,7 @@ pub async fn api_tokens_daily(
     )?)))
 }
 
-pub async fn api_tokens_models(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn api_tokens_models(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     Ok(Json(Value::Array(query_rows(
         &conn,
@@ -130,7 +126,9 @@ pub async fn api_plan_detail(
         "SELECT COALESCE(SUM(input_tokens+output_tokens),0) AS tokens, COALESCE(SUM(cost_usd),0) AS cost FROM token_usage WHERE plan_id=?1",
         rusqlite::params![plan_id],
     )?.unwrap_or_else(|| json!({"tokens":0,"cost":0}));
-    Ok(Json(json!({"plan": plan, "waves": waves, "tasks": tasks, "cost": cost})))
+    Ok(Json(
+        json!({"plan": plan, "waves": waves, "tasks": tasks, "cost": cost}),
+    ))
 }
 
 pub async fn api_plans_timeline(
@@ -169,4 +167,3 @@ pub async fn api_plans_timeline(
     }
     Ok(Json(json!({ "plans": result })))
 }
-

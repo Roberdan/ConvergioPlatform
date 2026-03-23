@@ -1,10 +1,10 @@
 // Node join protocol and onboarding flow
 
 mod pipeline;
-pub(self) mod server;
-mod types;
+mod server;
 #[cfg(test)]
 mod tests;
+mod types;
 
 pub use pipeline::join;
 pub use server::serve_bundles;

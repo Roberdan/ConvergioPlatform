@@ -31,18 +31,29 @@ pub enum CheckpointCommands {
 
 pub async fn handle(cmd: CheckpointCommands) {
     match cmd {
-        CheckpointCommands::Save { plan_id, human, api_url } => {
+        CheckpointCommands::Save {
+            plan_id,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({ "plan_id": plan_id });
             crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/checkpoint/save"),
-                &body, human,
-            ).await;
+                &body,
+                human,
+            )
+            .await;
         }
-        CheckpointCommands::Restore { plan_id, human, api_url } => {
+        CheckpointCommands::Restore {
+            plan_id,
+            human,
+            api_url,
+        } => {
             crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/checkpoint/restore?plan_id={plan_id}"),
                 human,
-            ).await;
+            )
+            .await;
         }
     }
 }
@@ -54,7 +65,9 @@ mod tests {
     #[test]
     fn checkpoint_save_variant_exists() {
         let cmd = CheckpointCommands::Save {
-            plan_id: 685, human: false, api_url: "http://localhost:8420".to_string(),
+            plan_id: 685,
+            human: false,
+            api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, CheckpointCommands::Save { plan_id: 685, .. }));
     }
@@ -62,9 +75,14 @@ mod tests {
     #[test]
     fn checkpoint_restore_variant_exists() {
         let cmd = CheckpointCommands::Restore {
-            plan_id: 42, human: true, api_url: "http://localhost:8420".to_string(),
+            plan_id: 42,
+            human: true,
+            api_url: "http://localhost:8420".to_string(),
         };
-        assert!(matches!(cmd, CheckpointCommands::Restore { plan_id: 42, .. }));
+        assert!(matches!(
+            cmd,
+            CheckpointCommands::Restore { plan_id: 42, .. }
+        ));
     }
 
     #[test]

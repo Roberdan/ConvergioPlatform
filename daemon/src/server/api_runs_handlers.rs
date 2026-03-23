@@ -60,7 +60,10 @@ pub async fn update_run(
         }
 
         let id_idx = vals.len() + 1;
-        let sql = format!("UPDATE execution_runs SET {} WHERE id=?{id_idx}", sets.join(", "));
+        let sql = format!(
+            "UPDATE execution_runs SET {} WHERE id=?{id_idx}",
+            sets.join(", ")
+        );
         vals.push(Box::new(id));
 
         let idx: Vec<&dyn rusqlite::ToSql> = vals.iter().map(|v| v.as_ref()).collect();

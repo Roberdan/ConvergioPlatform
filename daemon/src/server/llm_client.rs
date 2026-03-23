@@ -131,6 +131,8 @@ async fn stream_litellm(
 }
 
 /// Parse Anthropic native SSE: content_block_delta text and message_start usage.
+// Used in unit tests below; not yet wired into a streaming path.
+#[allow(dead_code)]
 fn parse_claude_sse(block: &str) -> Option<StreamChunk> {
     let data = sse_data(block)?;
     let parsed: Value = serde_json::from_str(data).ok()?;
@@ -145,8 +147,14 @@ fn parse_claude_sse(block: &str) -> Option<StreamChunk> {
     }
     if event_type == "message_start" {
         if let Some(usage) = parsed.get("message").and_then(|m| m.get("usage")) {
-            let inp = usage.get("input_tokens").and_then(Value::as_u64).unwrap_or(0);
-            let out = usage.get("output_tokens").and_then(Value::as_u64).unwrap_or(0);
+            let inp = usage
+                .get("input_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let out = usage
+                .get("output_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
             if inp > 0 || out > 0 {
                 return Some(StreamChunk::Usage(TokenUsage {
                     input_tokens: inp,

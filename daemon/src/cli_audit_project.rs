@@ -77,8 +77,7 @@ async fn write_report(project_id: &str, report: &Value, yes: bool, api_url: &str
 
     // Write report.json
     let report_path = dest.join("report.json");
-    let report_str =
-        serde_json::to_string_pretty(report).unwrap_or_else(|_| report.to_string());
+    let report_str = serde_json::to_string_pretty(report).unwrap_or_else(|_| report.to_string());
     if let Err(e) = fs::write(&report_path, &report_str) {
         eprintln!("error: cannot write report.json: {e}");
         print_permission_help();

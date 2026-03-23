@@ -15,7 +15,9 @@ pub async fn api_nightly_config_get(
         "SELECT id, name, description, schedule, script_path, target_host, enabled, run_fixes, timeout_sec FROM nightly_job_definitions WHERE project_id=?1 ORDER BY name",
         rusqlite::params![&project_id],
     )?;
-    Ok(Json(json!({"ok": true, "project_id": project_id, "definitions": rows})))
+    Ok(Json(
+        json!({"ok": true, "project_id": project_id, "definitions": rows}),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -62,7 +64,9 @@ pub async fn api_nightly_config_update(
             .map_err(|err| ApiError::internal(format!("config update failed: {err}")))?;
     }
 
-    Ok(Json(json!({"ok": true, "updated": project_id, "rows_affected": updated_fields})))
+    Ok(Json(
+        json!({"ok": true, "updated": project_id, "rows_affected": updated_fields}),
+    ))
 }
 
 pub async fn api_nightly_def_toggle(
@@ -151,7 +155,9 @@ pub async fn api_coordinator_status(
         [],
     )?
     .unwrap_or_else(|| json!({"pending_events": 0}));
-    Ok(Json(json!({"running": false, "pid": "", "pending_events": pending["pending_events"]})))
+    Ok(Json(
+        json!({"running": false, "pid": "", "pending_events": pending["pending_events"]}),
+    ))
 }
 
 pub async fn api_coordinator_toggle() -> Json<Value> {

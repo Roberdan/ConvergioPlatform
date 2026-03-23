@@ -59,43 +59,45 @@ pub enum BusCommands {
 pub async fn handle(cmd: BusCommands) {
     match cmd {
         BusCommands::Who { human, api_url } => {
-            crate::cli_http::fetch_and_print(
-                &format!("{api_url}/api/ipc/agents"),
-                human,
-            )
-            .await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/agents"), human).await;
         }
-        BusCommands::Send { from, to, message, human, api_url } => {
+        BusCommands::Send {
+            from,
+            to,
+            message,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({
                 "from": from,
                 "to": to,
                 "message": message,
             });
-            crate::cli_http::post_and_print(
-                &format!("{api_url}/api/ipc/send"),
-                &body,
-                human,
-            )
-            .await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/send"), &body, human).await;
         }
-        BusCommands::Read { name, human, api_url } => {
+        BusCommands::Read {
+            name,
+            human,
+            api_url,
+        } => {
             crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/ipc/messages?agent={name}"),
                 human,
             )
             .await;
         }
-        BusCommands::Broadcast { from, message, human, api_url } => {
+        BusCommands::Broadcast {
+            from,
+            message,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({
                 "from": from,
                 "message": message,
             });
-            crate::cli_http::post_and_print(
-                &format!("{api_url}/api/ipc/broadcast"),
-                &body,
-                human,
-            )
-            .await;
+            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/broadcast"), &body, human)
+                .await;
         }
     }
 }

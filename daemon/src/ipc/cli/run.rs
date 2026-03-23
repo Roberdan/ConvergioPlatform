@@ -1,11 +1,11 @@
-use super::args::{
-    agent_name_from_env, default_db_path, default_socket_path, ChannelSub, CtxSub, DbSub,
-    IpcArgs, IpcSubcommand,
-};
-use super::output::format_response;
 use super::super::client::ipc_request_with_fallback;
 use super::super::engine::core::IpcEngine;
 use super::super::protocol::IpcRequest;
+use super::args::{
+    agent_name_from_env, default_db_path, default_socket_path, ChannelSub, CtxSub, DbSub, IpcArgs,
+    IpcSubcommand,
+};
+use super::output::format_response;
 
 pub async fn run_ipc(args: IpcArgs) -> Result<(), String> {
     let socket = args.socket.unwrap_or_else(default_socket_path);

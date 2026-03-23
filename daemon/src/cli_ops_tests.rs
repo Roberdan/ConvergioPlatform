@@ -5,31 +5,46 @@ use super::*;
 
 #[test]
 fn mesh_heartbeat_variant_exists() {
-    let cmd = MeshCommands::Heartbeat { human: false, api_url: "http://localhost:8420".to_string() };
+    let cmd = MeshCommands::Heartbeat {
+        human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, MeshCommands::Heartbeat { human: false, .. }));
 }
 
 #[test]
 fn mesh_status_variant_exists() {
-    let cmd = MeshCommands::Status { human: true, api_url: "http://localhost:8420".to_string() };
+    let cmd = MeshCommands::Status {
+        human: true,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, MeshCommands::Status { human: true, .. }));
 }
 
 #[test]
 fn mesh_cluster_status_variant_exists() {
-    let cmd = MeshCommands::ClusterStatus { human: false, api_url: "http://localhost:8420".to_string() };
+    let cmd = MeshCommands::ClusterStatus {
+        human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, MeshCommands::ClusterStatus { .. }));
 }
 
 #[test]
 fn session_reap_variant_exists() {
-    let cmd = SessionCommands::Reap { human: false, api_url: "http://localhost:8420".to_string() };
+    let cmd = SessionCommands::Reap {
+        human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, SessionCommands::Reap { human: false, .. }));
 }
 
 #[test]
 fn session_recovery_variant_exists() {
-    let cmd = SessionCommands::Recovery { human: true, api_url: "http://localhost:8420".to_string() };
+    let cmd = SessionCommands::Recovery {
+        human: true,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, SessionCommands::Recovery { human: true, .. }));
 }
 
@@ -82,7 +97,10 @@ fn print_value_json_pretty() {
 
 #[test]
 fn session_check_variant_exists() {
-    let cmd = SessionCommands::Check { human: false, api_url: "http://localhost:8420".to_string() };
+    let cmd = SessionCommands::Check {
+        human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, SessionCommands::Check { human: false, .. }));
 }
 
@@ -96,7 +114,10 @@ fn session_check_url() {
 
 #[test]
 fn metrics_summary_variant_exists() {
-    let cmd = MetricsCommands::Summary { human: false, api_url: "http://localhost:8420".to_string() };
+    let cmd = MetricsCommands::Summary {
+        human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, MetricsCommands::Summary { human: false, .. }));
 }
 
@@ -108,7 +129,10 @@ fn metrics_summary_url() {
 
 #[test]
 fn metrics_collect_variant_exists() {
-    let cmd = MetricsCommands::Collect { human: true, api_url: "http://localhost:8420".to_string() };
+    let cmd = MetricsCommands::Collect {
+        human: true,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, MetricsCommands::Collect { human: true, .. }));
 }
 
@@ -122,7 +146,10 @@ fn metrics_collect_url() {
 
 #[test]
 fn alert_list_variant_exists() {
-    let cmd = AlertCommands::List { human: false, api_url: "http://localhost:8420".to_string() };
+    let cmd = AlertCommands::List {
+        human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
     assert!(matches!(cmd, AlertCommands::List { human: false, .. }));
 }
 

@@ -43,7 +43,9 @@ fn test_map_valid() {
     assert!(result.is_ok(), "insert should succeed: {:?}", result);
     let rows = super::query_domain_list(&conn).expect("query after insert");
     assert_eq!(rows.len(), 4, "expected 4 rows after insert");
-    let found = rows.iter().find(|r| r.domain == "analytics" && r.skill_name == "research");
+    let found = rows
+        .iter()
+        .find(|r| r.domain == "analytics" && r.skill_name == "research");
     assert!(found.is_some(), "new row not found");
 }
 

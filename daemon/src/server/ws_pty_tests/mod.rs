@@ -39,8 +39,7 @@ fn params_with_peer_and_tmux() {
 
 #[test]
 fn params_peer_only() {
-    let p: super::ws_pty::PtyParams =
-        serde_json::from_str(r#"{"peer":"mac-worker-1"}"#).unwrap();
+    let p: super::ws_pty::PtyParams = serde_json::from_str(r#"{"peer":"mac-worker-1"}"#).unwrap();
     assert_eq!(p.peer, "mac-worker-1");
     assert!(p.tmux_session.is_empty());
 }
@@ -89,8 +88,7 @@ fn peer_validation_has_max_length() {
 fn remote_tmux_command_quotes_session_argument() {
     let state = test_state();
     let params: super::ws_pty::PtyParams =
-        serde_json::from_str(r#"{"peer":"linux-worker","tmux_session":"session_1-main"}"#)
-            .unwrap();
+        serde_json::from_str(r#"{"peer":"linux-worker","tmux_session":"session_1-main"}"#).unwrap();
     let (_program, args) = super::ws_pty::build_pty_command(&state, &params, false);
     let remote_cmd: &String = args.get(2).expect("remote command arg");
     assert!(remote_cmd.contains("exec $SHELL -lc"));

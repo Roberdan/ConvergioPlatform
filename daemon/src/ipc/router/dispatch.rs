@@ -59,7 +59,7 @@ pub fn analyze_task(description: &str) -> TaskAnalysis {
         TaskType::CodeGen
     };
     let words = description.split_whitespace().count();
-    let complexity = (words as f64 / 50.0).min(1.0).max(0.1);
+    let complexity = (words as f64 / 50.0).clamp(0.1, 1.0);
     let estimated_tokens = (words as f64 * 1.3 * 4.0) as i64;
     TaskAnalysis {
         task_type,
@@ -136,7 +136,7 @@ pub fn route_task(conn: &Connection, description: &str) -> rusqlite::Result<Opti
         let score = capability_match * budget_headroom * availability;
         let cost = super::super::budget::estimate_task_cost(description, model);
 
-        if best.as_ref().map_or(true, |b| score > b.score) {
+        if best.as_ref().is_none_or(|b| score > b.score) {
             best = Some(RouteDecision {
                 model: model.clone(),
                 provider: provider.clone(),

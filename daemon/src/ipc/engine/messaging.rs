@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use super::core::IpcEngine;
 use super::super::protocol::{IpcResponse, MessageInfo};
+use super::core::IpcEngine;
 
 impl IpcEngine {
     pub fn send_message(

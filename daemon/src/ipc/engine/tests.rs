@@ -1,6 +1,6 @@
 // Tests for agents, messaging, and core operations
-use super::core::IpcEngine;
 use super::super::protocol::{IpcRequest, IpcResponse};
+use super::core::IpcEngine;
 
 pub(super) fn temp_engine() -> (IpcEngine, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();

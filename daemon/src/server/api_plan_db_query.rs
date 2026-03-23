@@ -125,12 +125,7 @@ async fn handle_validate_task(
         .unwrap_or_default();
 
     // Run mechanical gates (no file paths stored in DB — use empty slice)
-    let result = mechanical_gates::validate_task(
-        status,
-        test_criteria,
-        &[],
-        &verify_cmds,
-    );
+    let result = mechanical_gates::validate_task(status, test_criteria, &[], &verify_cmds);
 
     let is_validated = task.get("validated_by").is_some()
         && !task

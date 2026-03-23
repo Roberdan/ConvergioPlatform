@@ -1,8 +1,8 @@
 // Dedicated DB thread for mesh sync — owns a persistent SQLite connection.
 // Separated from daemon_sync_loops.rs to keep each file under 250 lines.
 
-use crate::mesh::sync;
 use super::DaemonConfig;
+use crate::mesh::sync;
 
 // Type alias to simplify complex channel types used below
 type SyncReply = std::sync::mpsc::Sender<Result<(Vec<sync::DeltaChange>, i64, i64), String>>;
@@ -26,9 +26,7 @@ pub(super) enum SyncDbCmd {
 }
 
 /// Spawn a single DB thread that owns one persistent connection.
-pub(super) fn spawn_sync_db_thread(
-    config: &DaemonConfig,
-) -> std::sync::mpsc::Sender<SyncDbCmd> {
+pub(super) fn spawn_sync_db_thread(config: &DaemonConfig) -> std::sync::mpsc::Sender<SyncDbCmd> {
     let (tx, rx) = std::sync::mpsc::channel::<SyncDbCmd>();
     let db_path = config.db_path.clone();
     let crsql_path = config.crsqlite_path.clone();
@@ -55,9 +53,12 @@ pub(super) fn spawn_sync_db_thread(
                             .map(|(changes, checkpoint)| (changes, checkpoint, init_cursor));
                         let _ = reply.send(result);
                     }
-                    SyncDbCmd::RecordSent { peer, count, version } => {
-                        let _ =
-                            sync::record_sent_stats_with_conn(&conn, &peer, count, version);
+                    SyncDbCmd::RecordSent {
+                        peer,
+                        count,
+                        version,
+                    } => {
+                        let _ = sync::record_sent_stats_with_conn(&conn, &peer, count, version);
                     }
                     SyncDbCmd::GetPeerCursor { peer, reply } => {
                         // T1-01: Anti-entropy — resume from peer's last known version

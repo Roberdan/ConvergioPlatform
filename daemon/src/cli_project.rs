@@ -46,11 +46,8 @@ pub async fn handle(cmd: ProjectCommands) {
             api_url,
         } => handle_create(&name, &input, yes, &api_url).await,
         ProjectCommands::List { api_url } => {
-            crate::cli_http::fetch_and_print(
-                &format!("{api_url}/api/dashboard/projects"),
-                false,
-            )
-            .await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/dashboard/projects"), false)
+                .await;
         }
         ProjectCommands::Show { id, api_url } => {
             handle_show(&id, &api_url).await;
@@ -99,10 +96,8 @@ async fn handle_create(name: &str, input: &PathBuf, yes: bool, api_url: &str) {
     }
 
     // Canonicalize paths for storage
-    let input_abs = std::fs::canonicalize(input)
-        .unwrap_or_else(|_| input.clone());
-    let output_abs = std::fs::canonicalize(&output_dir)
-        .unwrap_or_else(|_| output_dir.clone());
+    let input_abs = std::fs::canonicalize(input).unwrap_or_else(|_| input.clone());
+    let output_abs = std::fs::canonicalize(&output_dir).unwrap_or_else(|_| output_dir.clone());
 
     // Register project in daemon DB via HTTP API
     let body = serde_json::json!({
@@ -161,8 +156,7 @@ async fn handle_show(id: &str, api_url: &str) {
                         out["deliverable_count"] = serde_json::json!(count);
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(&out)
-                                .unwrap_or_else(|_| out.to_string())
+                            serde_json::to_string_pretty(&out).unwrap_or_else(|_| out.to_string())
                         );
                     }
                     None => {
@@ -184,9 +178,7 @@ async fn handle_show(id: &str, api_url: &str) {
 }
 
 async fn fetch_deliverable_count(project_id: &str, api_url: &str) -> i64 {
-    let url = format!(
-        "{api_url}/api/deliverables?project_id={project_id}&count_only=true"
-    );
+    let url = format!("{api_url}/api/deliverables?project_id={project_id}&count_only=true");
     match reqwest::get(&url).await {
         Ok(resp) => resp
             .json::<serde_json::Value>()
@@ -219,8 +211,6 @@ fn print_permission_help() {
              chmod -R u+rX <folder>"
         );
     } else {
-        eprintln!(
-            "hint: ensure the current user has read permissions on the input folder"
-        );
+        eprintln!("hint: ensure the current user has read permissions on the input folder");
     }
 }

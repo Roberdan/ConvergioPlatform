@@ -144,8 +144,7 @@ mod tests {
 
     #[test]
     fn test_extract_aliases() {
-        let zshrc =
-            "alias gs='git status'\nalias ll='ls -la'\nexport PATH=$PATH:/usr/local/bin\n";
+        let zshrc = "alias gs='git status'\nalias ll='ls -la'\nexport PATH=$PATH:/usr/local/bin\n";
         let aliases = helpers::extract_aliases(zshrc);
         assert_eq!(aliases.len(), 2);
         assert!(aliases[0].contains("gs="));

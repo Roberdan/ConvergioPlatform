@@ -42,7 +42,13 @@ pub async fn approve_deliverable(
     }
 
     // Update metadata.json on disk
-    update_metadata_status(state.clone(), id, "approved", Some(&approved_by), Some(&now))?;
+    update_metadata_status(
+        state.clone(),
+        id,
+        "approved",
+        Some(&approved_by),
+        Some(&now),
+    )?;
 
     let _ = state.ws_tx.send(json!({
         "type": "deliverable_update",
@@ -94,8 +100,11 @@ pub async fn version_deliverable(
         "version": new_version,
     });
     let meta_path = std::path::Path::new(&new_path).join("metadata.json");
-    fs::write(&meta_path, serde_json::to_string_pretty(&metadata).unwrap_or_default())
-        .map_err(|e| ApiError::internal(format!("failed to write metadata.json: {e}")))?;
+    fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&metadata).unwrap_or_default(),
+    )
+    .map_err(|e| ApiError::internal(format!("failed to write metadata.json: {e}")))?;
 
     // Insert new DB row for the new version
     let name = row["name"].as_str().unwrap_or("");
@@ -106,7 +115,14 @@ pub async fn version_deliverable(
     conn.execute(
         "INSERT INTO deliverables (task_id, project_id, name, output_type, output_path, \
          status, version) VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6)",
-        rusqlite::params![task_id, project_id, name, output_type, new_path, new_version],
+        rusqlite::params![
+            task_id,
+            project_id,
+            name,
+            output_type,
+            new_path,
+            new_version
+        ],
     )
     .map_err(|e| ApiError::internal(format!("create version failed: {e}")))?;
 
@@ -164,8 +180,11 @@ fn update_metadata_status(
         }
     }
 
-    fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
-        .map_err(|e| ApiError::internal(format!("write metadata: {e}")))?;
+    fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&meta).unwrap_or_default(),
+    )
+    .map_err(|e| ApiError::internal(format!("write metadata: {e}")))?;
 
     Ok(())
 }

@@ -1,4 +1,6 @@
 use rusqlite::{params, Connection};
+// PeerToken: (service, encrypted_token, nonce, host, updated_at)
+type PeerToken = (String, Vec<u8>, Vec<u8>, String, String);
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
@@ -112,7 +114,7 @@ pub fn check_token_sync_health(conn: &Connection) -> rusqlite::Result<TokenSyncH
 
 pub fn sync_tokens_from_peer(
     conn: &Connection,
-    peer_tokens: &[(String, Vec<u8>, Vec<u8>, String, String)],
+    peer_tokens: &[PeerToken],
 ) -> rusqlite::Result<usize> {
     let mut count = 0;
     for (service, encrypted, nonce, host, updated_at) in peer_tokens {

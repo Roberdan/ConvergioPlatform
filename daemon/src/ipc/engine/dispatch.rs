@@ -1,5 +1,5 @@
-use super::core::IpcEngine;
 use super::super::protocol::{IpcRequest, IpcResponse};
+use super::core::IpcEngine;
 
 impl IpcEngine {
     pub async fn dispatch(&self, req: IpcRequest) -> rusqlite::Result<IpcResponse> {

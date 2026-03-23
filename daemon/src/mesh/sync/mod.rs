@@ -26,6 +26,6 @@ pub use db_ops::{
 pub use frame_io::{read_frame, read_frame_with_quota, write_frame};
 pub use sync_batch::{current_time_ms, SyncBatchWindow};
 pub use types::{
-    ApplySummary, DeltaChange, FramedMeshSyncFrame, MeshSyncFrame, PeerQuota,
-    MAX_FRAME_BYTES, MAX_PEER_NAME_LEN, MAX_PENDING_PEER_BYTES,
+    ApplySummary, DeltaChange, FramedMeshSyncFrame, MeshSyncFrame, PeerQuota, MAX_FRAME_BYTES,
+    MAX_PEER_NAME_LEN, MAX_PENDING_PEER_BYTES,
 };

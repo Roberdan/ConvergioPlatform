@@ -67,15 +67,31 @@ pub enum TaskCommands {
 
 pub async fn handle(cmd: TaskCommands) {
     match cmd {
-        TaskCommands::Update { task_id, status, summary, human, api_url } => {
+        TaskCommands::Update {
+            task_id,
+            status,
+            summary,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({
                 "task_id": task_id,
                 "status": status,
                 "summary": summary,
             });
-            crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/task/update"), &body, human).await;
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/plan-db/task/update"),
+                &body,
+                human,
+            )
+            .await;
         }
-        TaskCommands::Validate { task_id, plan_id, human, api_url } => {
+        TaskCommands::Validate {
+            task_id,
+            plan_id,
+            human,
+            api_url,
+        } => {
             let url = format!("{api_url}/api/plan-db/validate-task/{task_id}/{plan_id}");
             match reqwest::get(&url).await {
                 Ok(resp) => match resp.json::<serde_json::Value>().await {
@@ -106,14 +122,24 @@ pub async fn handle(cmd: TaskCommands) {
                 }
             }
         }
-        TaskCommands::KbSearch { query, limit, human, api_url } => {
+        TaskCommands::KbSearch {
+            query,
+            limit,
+            human,
+            api_url,
+        } => {
             crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/kb-search?q={query}&limit={limit}"),
                 human,
             )
             .await;
         }
-        TaskCommands::Approve { task_id, comment, human, api_url } => {
+        TaskCommands::Approve {
+            task_id,
+            comment,
+            human,
+            api_url,
+        } => {
             crate::cli_task_approve::handle(task_id, comment, human, &api_url).await;
         }
     }
@@ -144,7 +170,10 @@ fn print_mechanical_human(val: &serde_json::Value) {
     if let Some(gates) = mechanical.get("gates").and_then(|g| g.as_array()) {
         for gate in gates {
             let name = gate.get("gate").and_then(|g| g.as_str()).unwrap_or("?");
-            let passed = gate.get("passed").and_then(|p| p.as_bool()).unwrap_or(false);
+            let passed = gate
+                .get("passed")
+                .and_then(|p| p.as_bool())
+                .unwrap_or(false);
             let icon = if passed { "PASS" } else { "FAIL" };
             println!("  [{icon}] {name}");
             if let Some(details) = gate.get("details").and_then(|d| d.as_array()) {

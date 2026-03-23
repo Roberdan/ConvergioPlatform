@@ -104,7 +104,9 @@ fn plan_db_import_creates_rows() {
     .unwrap();
 
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM tasks WHERE plan_id = 1", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM tasks WHERE plan_id = 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(count, 2);
 }

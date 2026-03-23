@@ -62,8 +62,7 @@ pub(super) async fn handle_start(
     let conn = &conn;
 
     // Guard: plan must have imported tasks and an approved review
-    plan_lifecycle_guards::require_plan_startable(plan_id, conn)
-        .map_err(ApiError::conflict)?;
+    plan_lifecycle_guards::require_plan_startable(plan_id, conn).map_err(ApiError::conflict)?;
 
     let changed = conn
         .execute(

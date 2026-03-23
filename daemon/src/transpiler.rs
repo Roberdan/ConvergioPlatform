@@ -3,12 +3,7 @@
 // Distinct from cli_skill_transpile which operates on skill.yaml + SKILL.md directories.
 
 /// Generate Claude Code .agent.md format with YAML frontmatter.
-pub fn transpile_claude_code(
-    name: &str,
-    description: &str,
-    model: &str,
-    tools: &str,
-) -> String {
+pub fn transpile_claude_code(name: &str, description: &str, model: &str, tools: &str) -> String {
     let mut out = String::new();
     out.push_str("---\n");
     out.push_str(&format!("name: {name}\n"));
@@ -29,12 +24,7 @@ pub fn transpile_claude_code(
 }
 
 /// Generate GitHub Copilot CLI format (no YAML frontmatter).
-pub fn transpile_copilot_cli(
-    name: &str,
-    description: &str,
-    model: &str,
-    tools: &str,
-) -> String {
+pub fn transpile_copilot_cli(name: &str, description: &str, model: &str, tools: &str) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {name}\n\n"));
     out.push_str(&format!("**Model**: {model}\n"));
@@ -45,11 +35,7 @@ pub fn transpile_copilot_cli(
 }
 
 /// Generate plain system prompt for generic LLM providers.
-pub fn transpile_generic_llm(
-    name: &str,
-    description: &str,
-    model: &str,
-) -> String {
+pub fn transpile_generic_llm(name: &str, description: &str, model: &str) -> String {
     let mut out = String::new();
     out.push_str(&format!("You are {name}. {description}\n\n"));
     out.push_str(&format!("Model: {model}\n"));
@@ -68,10 +54,16 @@ mod tests {
             "claude-sonnet-4-6",
             "view,edit,bash",
         );
-        assert!(result.starts_with("---\n"), "must start with YAML frontmatter delimiter");
+        assert!(
+            result.starts_with("---\n"),
+            "must start with YAML frontmatter delimiter"
+        );
         // Frontmatter must close before body
         let second_delimiter = result[4..].find("---\n");
-        assert!(second_delimiter.is_some(), "must have closing frontmatter delimiter");
+        assert!(
+            second_delimiter.is_some(),
+            "must have closing frontmatter delimiter"
+        );
         assert!(result.contains("name: code-reviewer"));
         assert!(result.contains("model: claude-sonnet-4-6"));
         assert!(result.contains("description: \"Reviews pull requests for quality\""));
@@ -93,13 +85,12 @@ mod tests {
 
     #[test]
     fn test_copilot_cli_no_frontmatter() {
-        let result = transpile_copilot_cli(
-            "planner",
-            "Creates execution plans",
-            "gpt-4o",
-            "view,bash",
+        let result =
+            transpile_copilot_cli("planner", "Creates execution plans", "gpt-4o", "view,bash");
+        assert!(
+            !result.starts_with("---"),
+            "copilot CLI format must NOT have YAML frontmatter"
         );
-        assert!(!result.starts_with("---"), "copilot CLI format must NOT have YAML frontmatter");
         assert!(result.starts_with("# planner\n"));
         assert!(result.contains("**Model**: gpt-4o"));
         assert!(result.contains("**Tools**: view,bash"));

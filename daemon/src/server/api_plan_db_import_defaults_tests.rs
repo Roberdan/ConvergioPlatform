@@ -39,7 +39,16 @@ fn defaults_model_opus_types() {
 
 #[test]
 fn defaults_model_codex_types() {
-    for t in &["feature", "fix", "refactor", "config", "documentation", "docs", "doc", "chore"] {
+    for t in &[
+        "feature",
+        "fix",
+        "refactor",
+        "config",
+        "documentation",
+        "docs",
+        "doc",
+        "chore",
+    ] {
         assert_model(t, "gpt-5.3-codex");
     }
 }
@@ -98,7 +107,10 @@ fn defaults_validator_legal_gets_compliance_validator() {
     let mut task = make_task("chore");
     task.output_type = Some("legal_opinion".to_string());
     apply_defaults(&mut task);
-    assert_eq!(task.validator_agent.as_deref(), Some("compliance-validator"));
+    assert_eq!(
+        task.validator_agent.as_deref(),
+        Some("compliance-validator")
+    );
 }
 
 #[test]
@@ -133,7 +145,10 @@ fn defaults_verify_generates_test_f_per_file() {
     let mut task = make_task("feature");
     task.files = vec!["src/main.rs".to_string(), "src/lib.rs".to_string()];
     apply_defaults(&mut task);
-    assert_eq!(task.verify, vec!["test -f src/main.rs", "test -f src/lib.rs"]);
+    assert_eq!(
+        task.verify,
+        vec!["test -f src/main.rs", "test -f src/lib.rs"]
+    );
 }
 
 #[test]

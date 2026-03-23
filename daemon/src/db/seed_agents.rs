@@ -36,12 +36,7 @@ const DEFAULT_AGENTS: &[(&str, &str, &str, &str)] = &[
         "Plan creation and orchestration",
         "claude-opus-4.6-1m",
     ),
-    (
-        "plan-reviewer",
-        "core",
-        "Plan review",
-        "claude-sonnet-4.6",
-    ),
+    ("plan-reviewer", "core", "Plan review", "claude-sonnet-4.6"),
     (
         "adversarial-debugger",
         "technical",
@@ -60,12 +55,7 @@ const DEFAULT_AGENTS: &[(&str, &str, &str, &str)] = &[
         "Code review",
         "claude-haiku-4.5",
     ),
-    (
-        "check",
-        "core",
-        "Quick checks",
-        "gpt-5.1-codex-mini",
-    ),
+    ("check", "core", "Quick checks", "gpt-5.1-codex-mini"),
 ];
 
 /// Insert default agents into agent_catalog using INSERT OR IGNORE.

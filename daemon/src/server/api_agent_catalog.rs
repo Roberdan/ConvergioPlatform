@@ -87,8 +87,8 @@ async fn catalog_sync(
         )));
     }
 
-    let entries = fs::read_dir(path)
-        .map_err(|e| ApiError::internal(format!("read_dir failed: {e}")))?;
+    let entries =
+        fs::read_dir(path).map_err(|e| ApiError::internal(format!("read_dir failed: {e}")))?;
 
     let conn = state.get_conn()?;
     let mut synced = 0u32;
@@ -179,8 +179,7 @@ async fn catalog_enable(
         description,
     );
 
-    fs::write(&file_path, content)
-        .map_err(|e| ApiError::internal(format!("write failed: {e}")))?;
+    fs::write(&file_path, content).map_err(|e| ApiError::internal(format!("write failed: {e}")))?;
 
     Ok(Json(json!({
         "ok": true,

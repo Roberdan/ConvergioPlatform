@@ -147,10 +147,7 @@ pub async fn get_run(
             .unwrap_or(0.0);
 
         if let Some(obj) = run.as_object_mut() {
-            obj.insert(
-                "delegation_cost".to_string(),
-                Value::from(delegation_cost),
-            );
+            obj.insert("delegation_cost".to_string(), Value::from(delegation_cost));
         }
     } else {
         if let Some(obj) = run.as_object_mut() {

@@ -197,7 +197,10 @@ fn noncode_plan_blocked_by_unapproved_deliverables() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(unapproved, 1, "unapproved deliverable should block completion");
+    assert_eq!(
+        unapproved, 1,
+        "unapproved deliverable should block completion"
+    );
 
     // Approve the deliverable
     conn.execute(
@@ -217,5 +220,8 @@ fn noncode_plan_blocked_by_unapproved_deliverables() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(unapproved, 0, "after approval, completion should be unblocked");
+    assert_eq!(
+        unapproved, 0,
+        "after approval, completion should be unblocked"
+    );
 }

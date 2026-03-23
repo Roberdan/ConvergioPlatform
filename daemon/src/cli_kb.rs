@@ -43,14 +43,26 @@ pub enum KbCommands {
 
 pub async fn handle(cmd: KbCommands) {
     match cmd {
-        KbCommands::Search { query, limit, human, api_url } => {
+        KbCommands::Search {
+            query,
+            limit,
+            human,
+            api_url,
+        } => {
             fetch_and_print(
                 &format!("{api_url}/api/plan-db/kb-search?q={query}&limit={limit}"),
                 human,
             )
             .await;
         }
-        KbCommands::Write { title, content, domain, confidence, human, api_url } => {
+        KbCommands::Write {
+            title,
+            content,
+            domain,
+            confidence,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({
                 "title": title,
                 "content": content,
@@ -109,8 +121,10 @@ async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) {
 
 fn print_value(val: &serde_json::Value, human: bool) {
     if human {
-        println!("{}", serde_json::to_string_pretty(val)
-            .unwrap_or_else(|_| val.to_string()));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(val).unwrap_or_else(|_| val.to_string())
+        );
     } else {
         println!("{val}");
     }

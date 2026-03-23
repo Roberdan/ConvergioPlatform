@@ -50,10 +50,7 @@ async fn project_audit(
             "SELECT id, plan_id, task_id, title, status, model, effort, wave_id_fk \
              FROM tasks WHERE plan_id IN ({placeholders}) ORDER BY plan_id, id"
         );
-        let params = plan_ids
-            .iter()
-            .map(|id| *id as i64)
-            .collect::<Vec<i64>>();
+        let params = plan_ids.to_vec();
         query_rows_dynamic(&conn, &sql, &params)?
     };
 
@@ -67,7 +64,7 @@ async fn project_audit(
              model, agents_used, started_at, ended_at \
              FROM execution_runs WHERE plan_id IN ({placeholders}) ORDER BY id DESC"
         );
-        let params = plan_ids.iter().map(|id| *id as i64).collect::<Vec<i64>>();
+        let params = plan_ids.to_vec();
         query_rows_dynamic(&conn, &sql, &params)?
     };
 
@@ -81,7 +78,7 @@ async fn project_audit(
              started_at, completed_at \
              FROM agent_activity WHERE plan_id IN ({placeholders}) ORDER BY agent_id"
         );
-        let params = plan_ids.iter().map(|id| *id as i64).collect::<Vec<i64>>();
+        let params = plan_ids.to_vec();
         query_rows_dynamic(&conn, &sql, &params)?
     };
 
@@ -158,17 +155,15 @@ fn query_rows_dynamic(
     sql: &str,
     params: &[i64],
 ) -> Result<Vec<Value>, ApiError> {
-    let boxed: Vec<Box<dyn rusqlite::types::ToSql>> =
-        params.iter().map(|p| Box::new(*p) as Box<dyn rusqlite::types::ToSql>).collect();
+    let boxed: Vec<Box<dyn rusqlite::types::ToSql>> = params
+        .iter()
+        .map(|p| Box::new(*p) as Box<dyn rusqlite::types::ToSql>)
+        .collect();
     let refs: Vec<&dyn rusqlite::types::ToSql> = boxed.iter().map(|b| b.as_ref()).collect();
     let mut stmt = conn
         .prepare(sql)
         .map_err(|e| ApiError::internal(format!("prepare failed: {e}")))?;
-    let column_names: Vec<String> = stmt
-        .column_names()
-        .iter()
-        .map(|c| c.to_string())
-        .collect();
+    let column_names: Vec<String> = stmt.column_names().iter().map(|c| c.to_string()).collect();
     let rows = stmt
         .query_map(refs.as_slice(), |row| row_to_json(row, &column_names))
         .map_err(|e| ApiError::internal(format!("query failed: {e}")))?;
@@ -189,10 +184,7 @@ fn table_exists(
         > 0
 }
 
-fn row_to_json(
-    row: &rusqlite::Row<'_>,
-    columns: &[String],
-) -> rusqlite::Result<Value> {
+fn row_to_json(row: &rusqlite::Row<'_>, columns: &[String]) -> rusqlite::Result<Value> {
     let mut obj = serde_json::Map::new();
     for (idx, col) in columns.iter().enumerate() {
         let val = match row.get_ref(idx)? {

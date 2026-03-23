@@ -9,10 +9,7 @@ use serde_json::{json, Value};
 
 pub fn router() -> Router<ServerState> {
     Router::new()
-        .route(
-            "/api/plan-db/review/register",
-            post(handle_review_register),
-        )
+        .route("/api/plan-db/review/register", post(handle_review_register))
         .route("/api/plan-db/review/check", get(handle_review_check))
         .route("/api/plan-db/review/reset", post(handle_review_reset))
 }

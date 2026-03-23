@@ -22,7 +22,8 @@ fn constitution_all_present_no_violation() {
     let dir = make_tmp();
     write_constitution(&dir);
     let violations = audit(dir.path());
-    let count = violations.iter()
+    let count = violations
+        .iter()
         .filter(|v| matches!(v.kind, ViolationKind::ConstitutionMissing { .. }))
         .count();
     assert_eq!(count, 0, "all constitution files present");
@@ -49,7 +50,8 @@ fn file_under_250_lines_passes() {
     write_constitution(&dir);
     let content = "// Copyright (c) 2026 Roberto D'Angelo.\nfn x() {}\n".repeat(100);
     fs::write(dir.path().join("ok.rs"), content.as_bytes()).unwrap();
-    let line_viol: Vec<_> = audit(dir.path()).into_iter()
+    let line_viol: Vec<_> = audit(dir.path())
+        .into_iter()
         .filter(|v| matches!(v.kind, ViolationKind::TooManyLines { .. }))
         .collect();
     assert!(line_viol.is_empty());
@@ -60,9 +62,12 @@ fn file_over_250_lines_fails() {
     let dir = make_tmp();
     write_constitution(&dir);
     let mut content = "// Copyright (c) 2026 Roberto D'Angelo.\n".to_string();
-    for i in 0..260 { content.push_str(&format!("let x{i} = {i};\n")); }
+    for i in 0..260 {
+        content.push_str(&format!("let x{i} = {i};\n"));
+    }
     fs::write(dir.path().join("big.rs"), content.as_bytes()).unwrap();
-    let line_viol: Vec<_> = audit(dir.path()).into_iter()
+    let line_viol: Vec<_> = audit(dir.path())
+        .into_iter()
         .filter(|v| matches!(v.kind, ViolationKind::TooManyLines { .. }))
         .collect();
     assert_eq!(line_viol.len(), 1);
@@ -77,8 +82,13 @@ fn file_over_250_lines_fails() {
 fn file_with_copyright_passes() {
     let dir = make_tmp();
     write_constitution(&dir);
-    fs::write(dir.path().join("ok.rs"), b"// Copyright (c) 2026 Roberto D'Angelo.\nfn x() {}").unwrap();
-    let copy_viol: Vec<_> = audit(dir.path()).into_iter()
+    fs::write(
+        dir.path().join("ok.rs"),
+        b"// Copyright (c) 2026 Roberto D'Angelo.\nfn x() {}",
+    )
+    .unwrap();
+    let copy_viol: Vec<_> = audit(dir.path())
+        .into_iter()
         .filter(|v| matches!(v.kind, ViolationKind::MissingCopyright))
         .collect();
     assert!(copy_viol.is_empty());
@@ -89,7 +99,8 @@ fn file_without_copyright_fails() {
     let dir = make_tmp();
     write_constitution(&dir);
     fs::write(dir.path().join("bad.rs"), b"fn main() {}\n").unwrap();
-    let copy_viol: Vec<_> = audit(dir.path()).into_iter()
+    let copy_viol: Vec<_> = audit(dir.path())
+        .into_iter()
         .filter(|v| matches!(v.kind, ViolationKind::MissingCopyright))
         .filter(|v| v.path.file_name().map(|n| n == "bad.rs").unwrap_or(false))
         .collect();
@@ -105,7 +116,8 @@ fn rules_file_within_budget_passes() {
     let rules = dir.path().join("rules");
     fs::create_dir(&rules).unwrap();
     fs::write(rules.join("test.md"), b"# small rule").unwrap();
-    let budget_viol: Vec<_> = audit(dir.path()).into_iter()
+    let budget_viol: Vec<_> = audit(dir.path())
+        .into_iter()
         .filter(|v| matches!(v.kind, ViolationKind::TokenBudgetExceeded { .. }))
         .collect();
     assert!(budget_viol.is_empty());
@@ -119,9 +131,15 @@ fn rules_file_over_budget_fails() {
     fs::create_dir(&rules).unwrap();
     // 8193 bytes > 8192 byte limit for rules/*.md
     fs::write(rules.join("oversize.md"), vec![b'x'; 8_193]).unwrap();
-    let budget_viol: Vec<_> = audit(dir.path()).into_iter()
+    let budget_viol: Vec<_> = audit(dir.path())
+        .into_iter()
         .filter(|v| matches!(v.kind, ViolationKind::TokenBudgetExceeded { .. }))
-        .filter(|v| v.path.file_name().map(|n| n == "oversize.md").unwrap_or(false))
+        .filter(|v| {
+            v.path
+                .file_name()
+                .map(|n| n == "oversize.md")
+                .unwrap_or(false)
+        })
         .collect();
     assert_eq!(budget_viol.len(), 1);
 }
@@ -130,14 +148,20 @@ fn rules_file_over_budget_fails() {
 
 #[test]
 fn format_violation_lines() {
-    let v = Violation { path: PathBuf::from("src/big.rs"), kind: ViolationKind::TooManyLines { lines: 300 } };
+    let v = Violation {
+        path: PathBuf::from("src/big.rs"),
+        kind: ViolationKind::TooManyLines { lines: 300 },
+    };
     let s = format_violation(&v);
     assert!(s.contains("300") && s.contains("LINES"));
 }
 
 #[test]
 fn format_violation_copyright() {
-    let v = Violation { path: PathBuf::from("src/bad.rs"), kind: ViolationKind::MissingCopyright };
+    let v = Violation {
+        path: PathBuf::from("src/bad.rs"),
+        kind: ViolationKind::MissingCopyright,
+    };
     assert!(format_violation(&v).contains("COPYRIGHT"));
 }
 
@@ -145,7 +169,9 @@ fn format_violation_copyright() {
 fn format_violation_constitution() {
     let v = Violation {
         path: PathBuf::from("CONSTITUTION.md"),
-        kind: ViolationKind::ConstitutionMissing { filename: "CONSTITUTION.md".into() },
+        kind: ViolationKind::ConstitutionMissing {
+            filename: "CONSTITUTION.md".into(),
+        },
     };
     assert!(format_violation(&v).contains("CONSTITUTION"));
 }
@@ -154,7 +180,11 @@ fn format_violation_constitution() {
 fn format_violation_token_budget() {
     let v = Violation {
         path: PathBuf::from("rules/big.md"),
-        kind: ViolationKind::TokenBudgetExceeded { bytes: 9000, max_bytes: 8192, label: "rules/*.md".into() },
+        kind: ViolationKind::TokenBudgetExceeded {
+            bytes: 9000,
+            max_bytes: 8192,
+            label: "rules/*.md".into(),
+        },
     };
     let s = format_violation(&v);
     assert!(s.contains("TOKEN-BUDGET") && s.contains("9000"));

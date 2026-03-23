@@ -1,6 +1,6 @@
 // Tests for channels, context, db ops, and dispatch
-use super::tests::temp_engine;
 use super::super::protocol::{IpcRequest, IpcResponse};
+use super::tests::temp_engine;
 
 #[test]
 fn test_channel_create_and_list() {

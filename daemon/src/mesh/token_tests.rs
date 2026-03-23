@@ -74,8 +74,8 @@ fn wrong_secret_is_rejected() {
 #[test]
 fn expired_token_is_rejected() {
     let db = setup_db();
-    let token = generate_token(SECRET, "worker", vec![], "100.64.0.2", -1)
-        .expect("generate expired token");
+    let token =
+        generate_token(SECRET, "worker", vec![], "100.64.0.2", -1).expect("generate expired token");
     let err = validate_token(&token, SECRET, &db).expect_err("expired must fail");
     assert!(matches!(err, TokenError::Expired));
 }

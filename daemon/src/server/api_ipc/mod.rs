@@ -64,8 +64,9 @@ CREATE INDEX IF NOT EXISTS idx_ipc_messages_channel ON ipc_messages(channel, cre
 
 pub fn ensure_ipc_schema(state: &ServerState) -> Result<(), super::state::ApiError> {
     let conn = state.get_conn()?;
-    conn.execute_batch(IPC_SCHEMA)
-        .map_err(|err| super::state::ApiError::internal(format!("ipc schema init failed: {err}")))?;
+    conn.execute_batch(IPC_SCHEMA).map_err(|err| {
+        super::state::ApiError::internal(format!("ipc schema init failed: {err}"))
+    })?;
     // Drop CRDT triggers on IPC tables — IPC is local-only, not replicated
     let _ = conn.execute_batch(
         "DROP TRIGGER IF EXISTS ipc_agents__crsql_itrig;
@@ -140,9 +141,18 @@ pub fn router() -> Router<ServerState> {
         .route("/api/ipc/status", get(handlers::api_ipc_status))
         .route("/api/ipc/send", post(handlers::api_ipc_send))
         // Plan 668: Agent write endpoints
-        .route("/api/ipc/agents/register", post(handlers::api_ipc_agents_register))
-        .route("/api/ipc/agents/unregister", post(handlers::api_ipc_agents_unregister))
-        .route("/api/ipc/agents/heartbeat", post(handlers::api_ipc_agents_heartbeat))
+        .route(
+            "/api/ipc/agents/register",
+            post(handlers::api_ipc_agents_register),
+        )
+        .route(
+            "/api/ipc/agents/unregister",
+            post(handlers::api_ipc_agents_unregister),
+        )
+        .route(
+            "/api/ipc/agents/heartbeat",
+            post(handlers::api_ipc_agents_heartbeat),
+        )
         // Plan 635: Intelligence endpoints
         .route("/api/ipc/budget", get(routes::api_ipc_budget))
         .route("/api/ipc/models", get(routes::api_ipc_models))

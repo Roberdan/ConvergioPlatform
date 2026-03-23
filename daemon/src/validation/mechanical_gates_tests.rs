@@ -79,7 +79,9 @@ fn pattern_check_detects_empty_catch() {
 
 // -- verify commands --
 #[test]
-fn verify_commands_pass() { assert!(gate_verify_commands(&["true", "echo ok"]).passed); }
+fn verify_commands_pass() {
+    assert!(gate_verify_commands(&["true", "echo ok"]).passed);
+}
 #[test]
 fn verify_commands_fail() {
     let r = gate_verify_commands(&["true", "false"]);
@@ -131,7 +133,10 @@ fn validate_task_rejected_for_bad_status() {
 }
 #[test]
 fn validate_task_rejected_for_no_criteria() {
-    assert_eq!(validate_task("submitted", None, &[], &[]).status, "REJECTED");
+    assert_eq!(
+        validate_task("submitted", None, &[], &[]).status,
+        "REJECTED"
+    );
 }
 #[test]
 fn run_all_gates_no_short_circuit() {
@@ -147,8 +152,16 @@ fn run_all_gates_no_short_circuit() {
 #[test]
 fn summarize_all_pass() {
     let gates = vec![
-        GateResult { gate: "a".into(), passed: true, details: vec![] },
-        GateResult { gate: "b".into(), passed: true, details: vec![] },
+        GateResult {
+            gate: "a".into(),
+            passed: true,
+            details: vec![],
+        },
+        GateResult {
+            gate: "b".into(),
+            passed: true,
+            details: vec![],
+        },
     ];
     let s = summarize(gates);
     assert_eq!(s.status, "APPROVED");
@@ -157,8 +170,16 @@ fn summarize_all_pass() {
 #[test]
 fn summarize_one_fail() {
     let gates = vec![
-        GateResult { gate: "a".into(), passed: true, details: vec![] },
-        GateResult { gate: "b".into(), passed: false, details: vec!["bad".into()] },
+        GateResult {
+            gate: "a".into(),
+            passed: true,
+            details: vec![],
+        },
+        GateResult {
+            gate: "b".into(),
+            passed: false,
+            details: vec!["bad".into()],
+        },
     ];
     let s = summarize(gates);
     assert_eq!(s.status, "REJECTED");

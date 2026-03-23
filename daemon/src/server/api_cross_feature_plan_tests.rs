@@ -88,29 +88,15 @@ async fn non_code_plan_document_tasks_complete() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let (status, _) = post_json(
-        &app,
-        &format!("/api/plan-db/approve/{plan_id}"),
-        json!({}),
-    )
-    .await;
+    let (status, _) = post_json(&app, &format!("/api/plan-db/approve/{plan_id}"), json!({})).await;
     assert_eq!(status, StatusCode::OK);
 
-    let (status, resp) = post_json(
-        &app,
-        &format!("/api/plan-db/start/{plan_id}"),
-        json!({}),
-    )
-    .await;
+    let (status, resp) = post_json(&app, &format!("/api/plan-db/start/{plan_id}"), json!({})).await;
     assert_eq!(status, StatusCode::OK, "start: {resp}");
     assert_eq!(resp["status"], "doing");
 
     // 4. Get task IDs from execution tree
-    let (status, resp) = get_json(
-        &app,
-        &format!("/api/plan-db/execution-tree/{plan_id}"),
-    )
-    .await;
+    let (status, resp) = get_json(&app, &format!("/api/plan-db/execution-tree/{plan_id}")).await;
     assert_eq!(status, StatusCode::OK);
     let tasks = resp["tree"].as_array().unwrap()[0]["tasks"]
         .as_array()
@@ -134,12 +120,8 @@ async fn non_code_plan_document_tasks_complete() {
     }
 
     // 6. Complete plan — all tasks done
-    let (status, resp) = post_json(
-        &app,
-        &format!("/api/plan-db/complete/{plan_id}"),
-        json!({}),
-    )
-    .await;
+    let (status, resp) =
+        post_json(&app, &format!("/api/plan-db/complete/{plan_id}"), json!({})).await;
     assert_eq!(status, StatusCode::OK, "complete: {resp}");
     assert_eq!(resp["status"], "completed");
 }
@@ -178,12 +160,8 @@ async fn non_code_plan_blocks_completion_with_pending_docs() {
     post_json(&app, &format!("/api/plan-db/start/{plan_id}"), json!({})).await;
 
     // Try complete with pending task — should fail
-    let (status, resp) = post_json(
-        &app,
-        &format!("/api/plan-db/complete/{plan_id}"),
-        json!({}),
-    )
-    .await;
+    let (status, resp) =
+        post_json(&app, &format!("/api/plan-db/complete/{plan_id}"), json!({})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "should block: {resp}");
     assert_eq!(resp["ok"], false);
 }

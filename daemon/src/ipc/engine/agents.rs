@@ -1,5 +1,5 @@
-use super::core::IpcEngine;
 use super::super::protocol::{AgentInfo, IpcResponse};
+use super::core::IpcEngine;
 
 impl IpcEngine {
     pub fn register(

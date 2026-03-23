@@ -62,7 +62,11 @@ pub(super) fn read_peer_conf(peer: &str) -> Option<std::collections::HashMap<Str
             }
         }
     }
-    if found { Some(map) } else { None }
+    if found {
+        Some(map)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn tailscale_resolve(peer: &str) -> Option<(String, bool, bool)> {

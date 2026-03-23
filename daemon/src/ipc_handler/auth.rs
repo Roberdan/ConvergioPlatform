@@ -22,30 +22,26 @@ pub async fn handle_auth(command: AuthCommands) {
             token,
             secret,
             ..
-        } => {
-            match claude_core::ipc::auth_sync::store_token(&conn, &service, &token, &secret) {
-                Ok(()) => println!("stored token for {service}"),
-                Err(e) => {
-                    eprintln!("store failed: {e}");
-                    std::process::exit(2);
-                }
+        } => match claude_core::ipc::auth_sync::store_token(&conn, &service, &token, &secret) {
+            Ok(()) => println!("stored token for {service}"),
+            Err(e) => {
+                eprintln!("store failed: {e}");
+                std::process::exit(2);
             }
-        }
-        AuthCommands::List { .. } => {
-            match claude_core::ipc::auth_sync::list_tokens(&conn) {
-                Ok(tokens) => {
-                    println!("{:<20} {:<20} {}", "SERVICE", "HOST", "UPDATED");
-                    for t in &tokens {
-                        println!("{:<20} {:<20} {}", t.service, t.host, t.updated_at);
-                    }
-                    println!("\n{} token(s)", tokens.len());
+        },
+        AuthCommands::List { .. } => match claude_core::ipc::auth_sync::list_tokens(&conn) {
+            Ok(tokens) => {
+                println!("{:<20} {:<20} UPDATED", "SERVICE", "HOST");
+                for t in &tokens {
+                    println!("{:<20} {:<20} {}", t.service, t.host, t.updated_at);
                 }
-                Err(e) => {
-                    eprintln!("list failed: {e}");
-                    std::process::exit(2);
-                }
+                println!("\n{} token(s)", tokens.len());
             }
-        }
+            Err(e) => {
+                eprintln!("list failed: {e}");
+                std::process::exit(2);
+            }
+        },
         AuthCommands::Get {
             service, secret, ..
         } => match claude_core::ipc::auth_sync::get_token(&conn, &service, &secret) {
@@ -77,15 +73,12 @@ pub async fn handle_auth(command: AuthCommands) {
             old_secret,
             new_secret,
             ..
-        } => {
-            match claude_core::ipc::auth_sync::rotate_keys(&conn, &old_secret, &new_secret) {
-                Ok(n) => println!("rotated {n} token(s)"),
-                Err(e) => {
-                    eprintln!("rotate failed: {e}");
-                    std::process::exit(2);
-                }
+        } => match claude_core::ipc::auth_sync::rotate_keys(&conn, &old_secret, &new_secret) {
+            Ok(n) => println!("rotated {n} token(s)"),
+            Err(e) => {
+                eprintln!("rotate failed: {e}");
+                std::process::exit(2);
             }
-        }
+        },
     }
 }
-

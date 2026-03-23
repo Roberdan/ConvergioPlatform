@@ -64,19 +64,28 @@ enum PlanCommands {
 #[test]
 fn cli_plan_list_parses_defaults() {
     let cli = PlanCli::try_parse_from(["cvg-plan-test", "list"]).expect("parse");
-    assert!(matches!(cli.command, PlanCommands::List { human: false, .. }));
+    assert!(matches!(
+        cli.command,
+        PlanCommands::List { human: false, .. }
+    ));
 }
 
 #[test]
 fn cli_plan_list_parses_human_flag() {
     let cli = PlanCli::try_parse_from(["cvg-plan-test", "list", "--human"]).expect("parse");
-    assert!(matches!(cli.command, PlanCommands::List { human: true, .. }));
+    assert!(matches!(
+        cli.command,
+        PlanCommands::List { human: true, .. }
+    ));
 }
 
 #[test]
 fn cli_plan_list_parses_custom_api_url() {
     let cli = PlanCli::try_parse_from([
-        "cvg-plan-test", "list", "--api-url", "http://localhost:9000",
+        "cvg-plan-test",
+        "list",
+        "--api-url",
+        "http://localhost:9000",
     ])
     .expect("parse");
     if let PlanCommands::List { api_url, .. } = cli.command {
@@ -99,8 +108,7 @@ fn cli_plan_tree_parses_plan_id() {
 
 #[test]
 fn cli_plan_show_parses_plan_id_with_human() {
-    let cli =
-        PlanCli::try_parse_from(["cvg-plan-test", "show", "42", "--human"]).expect("parse");
+    let cli = PlanCli::try_parse_from(["cvg-plan-test", "show", "42", "--human"]).expect("parse");
     if let PlanCommands::Show { plan_id, human, .. } = cli.command {
         assert_eq!(plan_id, 42);
         assert!(human);

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Skill disable subcommand — removes unshared plugins/agents when a skill is disabled.
 
-use crate::cli_skill_validate::{yaml_get_list, agent_name_valid};
+use crate::cli_skill_validate::{agent_name_valid, yaml_get_list};
 use std::path::{Path, PathBuf};
 
 /// Result of deactivating plugins for a disabled skill.
@@ -79,9 +79,14 @@ pub fn deactivate_plugins(
             let mut settings: serde_json::Value = serde_json::from_str(&raw)
                 .map_err(|e| format!("parse {}: {e}", settings_path.display()))?;
 
-            if let Some(arr) = settings.get_mut("allowedPlugins").and_then(|v| v.as_array_mut()) {
+            if let Some(arr) = settings
+                .get_mut("allowedPlugins")
+                .and_then(|v| v.as_array_mut())
+            {
                 arr.retain(|v| {
-                    v.as_str().map(|s| !to_remove.contains(&s.to_string())).unwrap_or(true)
+                    v.as_str()
+                        .map(|s| !to_remove.contains(&s.to_string()))
+                        .unwrap_or(true)
                 });
             }
 
@@ -108,7 +113,10 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
     }
     let yaml_content = match std::fs::read_to_string(&yaml_path) {
         Ok(c) => c,
-        Err(e) => { eprintln!("read error: {e}"); std::process::exit(2); }
+        Err(e) => {
+            eprintln!("read error: {e}");
+            std::process::exit(2);
+        }
     };
 
     let skill_name = skill_dir
@@ -126,17 +134,18 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
     let claude_dir = home.join(".claude");
 
-    let mut plugin_result = match deactivate_plugins(&yaml_content, &skills_dir, &skill_name, &claude_dir) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("warning: plugin deactivation failed: {e}");
-            DeactivatePluginsResult {
-                disabled_plugins: vec![],
-                disabled_agents: vec![],
-                kept_shared: vec![],
+    let mut plugin_result =
+        match deactivate_plugins(&yaml_content, &skills_dir, &skill_name, &claude_dir) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("warning: plugin deactivation failed: {e}");
+                DeactivatePluginsResult {
+                    disabled_plugins: vec![],
+                    disabled_agents: vec![],
+                    kept_shared: vec![],
+                }
             }
-        }
-    };
+        };
 
     // Disable agents not shared with other active skills
     let agents = yaml_get_list(&yaml_content, "requires-agents").unwrap_or_default();
@@ -145,8 +154,12 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
         let mut v = Vec::new();
         if let Some(entries) = entries {
             for entry in entries.flatten() {
-                if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) { continue; }
-                if entry.file_name().to_string_lossy() == skill_name { continue; }
+                if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                if entry.file_name().to_string_lossy() == skill_name {
+                    continue;
+                }
                 let yp = entry.path().join("skill.yaml");
                 if let Ok(c) = std::fs::read_to_string(&yp) {
                     if let Some(a) = yaml_get_list(&c, "requires-agents") {
@@ -172,7 +185,9 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
         match reqwest::Client::new().post(&url).json(&body).send().await {
             Ok(resp) if resp.status().is_success() => {
                 plugin_result.disabled_agents.push(agent_name.clone());
-                if human { println!("disabled agent: {agent_name}"); }
+                if human {
+                    println!("disabled agent: {agent_name}");
+                }
             }
             Ok(resp) => {
                 let status = resp.status();
@@ -199,12 +214,15 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
             plugin_result.kept_shared.len(),
         );
     } else {
-        println!("{}", serde_json::json!({
-            "ok": true,
-            "disabled_plugins": plugin_result.disabled_plugins,
-            "disabled_agents": plugin_result.disabled_agents,
-            "kept_shared": plugin_result.kept_shared,
-        }));
+        println!(
+            "{}",
+            serde_json::json!({
+                "ok": true,
+                "disabled_plugins": plugin_result.disabled_plugins,
+                "disabled_agents": plugin_result.disabled_agents,
+                "kept_shared": plugin_result.kept_shared,
+            })
+        );
     }
 }
 

@@ -1,5 +1,5 @@
-use super::core::IpcEngine;
 use super::super::protocol::{ChannelInfo, ContextEntry, IpcResponse};
+use super::core::IpcEngine;
 
 impl IpcEngine {
     // ── Channels ─────────────────────────────────────
@@ -130,8 +130,7 @@ impl IpcEngine {
 
     pub fn db_stats(&self) -> rusqlite::Result<IpcResponse> {
         let conn = self.open_conn()?;
-        let agents: u64 =
-            conn.query_row("SELECT count(*) FROM ipc_agents", [], |r| r.get(0))?;
+        let agents: u64 = conn.query_row("SELECT count(*) FROM ipc_agents", [], |r| r.get(0))?;
         let messages: u64 =
             conn.query_row("SELECT count(*) FROM ipc_messages", [], |r| r.get(0))?;
         let channels: u64 =

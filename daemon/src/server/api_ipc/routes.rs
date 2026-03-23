@@ -33,7 +33,9 @@ pub async fn api_ipc_models(State(state): State<ServerState>) -> Result<Json<Val
         .map_err(|e| ApiError::internal(format!("models: {e}")))?;
     let capabilities = crate::ipc::models::get_all_capabilities(conn)
         .map_err(|e| ApiError::internal(format!("caps: {e}")))?;
-    Ok(Json(json!({ "models": models, "capabilities": capabilities })))
+    Ok(Json(
+        json!({ "models": models, "capabilities": capabilities }),
+    ))
 }
 
 pub async fn api_ipc_skills(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {

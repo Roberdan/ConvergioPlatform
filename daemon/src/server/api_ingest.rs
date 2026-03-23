@@ -61,9 +61,7 @@ async fn ingest_source(
     })))
 }
 
-async fn ingest_formats(
-    State(_state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+async fn ingest_formats(State(_state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     // Check which conversion tools are available on the system PATH.
     let pdf = tool_available("pdftotext").await;
     let docx = tool_available("pandoc").await;

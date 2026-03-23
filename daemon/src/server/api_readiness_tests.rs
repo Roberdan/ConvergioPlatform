@@ -84,7 +84,10 @@ fn readiness_fails_when_no_tasks() {
     let result = super::check_readiness(conn, 1).expect("readiness check");
     assert!(!result.ready, "plan with no tasks should not be ready");
     assert!(
-        result.gates.iter().any(|g| g.name == "spec_imported" && !g.passed),
+        result
+            .gates
+            .iter()
+            .any(|g| g.name == "spec_imported" && !g.passed),
         "spec_imported gate must fail"
     );
 }
@@ -110,7 +113,10 @@ fn readiness_fails_when_no_review() {
     let result = super::check_readiness(conn, 1).expect("readiness check");
     assert!(!result.ready, "plan without review should not be ready");
     assert!(
-        result.gates.iter().any(|g| g.name == "review_approved" && !g.passed),
+        result
+            .gates
+            .iter()
+            .any(|g| g.name == "review_approved" && !g.passed),
         "review_approved gate must fail"
     );
 }
@@ -142,7 +148,10 @@ fn readiness_fails_when_task_missing_model() {
     let result = super::check_readiness(conn, 1).expect("readiness check");
     assert!(!result.ready, "task without model should block readiness");
     assert!(
-        result.gates.iter().any(|g| g.name == "all_tasks_have_model" && !g.passed),
+        result
+            .gates
+            .iter()
+            .any(|g| g.name == "all_tasks_have_model" && !g.passed),
         "all_tasks_have_model gate must fail"
     );
 }

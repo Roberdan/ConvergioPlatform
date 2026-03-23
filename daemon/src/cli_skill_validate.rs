@@ -76,7 +76,10 @@ pub(crate) fn name_format_valid(name: &str) -> bool {
 /// Validate semver format: ^[0-9]+\.[0-9]+\.[0-9]+$
 pub(crate) fn version_format_valid(ver: &str) -> bool {
     let parts: Vec<&str> = ver.split('.').collect();
-    parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
 }
 
 /// Validate agent name format: ^[a-z][a-z0-9-]*$

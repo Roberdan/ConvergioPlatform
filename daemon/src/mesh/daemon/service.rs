@@ -2,8 +2,7 @@
 
 use super::events::{now_ts, publish_event};
 use super::net_utils::{
-    collect_system_stats, load_peer_addrs, resolve_local_node_name,
-    websocket_key,
+    collect_system_stats, load_peer_addrs, resolve_local_node_name, websocket_key,
 };
 use super::peer_loop::{connect_peer_loop, validate_config};
 use super::types::{DaemonConfig, DaemonState, InboundConnectionRateLimiter};

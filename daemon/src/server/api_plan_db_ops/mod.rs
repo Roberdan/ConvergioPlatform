@@ -162,16 +162,25 @@ mod tests {
         // /tmp is a symlink on macOS → /private/tmp; canonicalize must resolve it.
         let result = super::handlers::canonicalize_project_path("/tmp");
         let canon = result.expect("must succeed for existing /tmp");
-        assert!(canon.starts_with('/'), "canonical path must be absolute: {canon}");
+        assert!(
+            canon.starts_with('/'),
+            "canonical path must be absolute: {canon}"
+        );
         // On macOS /tmp is a symlink; the canonical form must differ.
-        assert_ne!(canon, "/tmp", "/tmp symlink must be resolved to its real path");
+        assert_ne!(
+            canon, "/tmp",
+            "/tmp symlink must be resolved to its real path"
+        );
     }
 
     #[test]
     fn canonicalize_path_returns_none_for_nonexistent() {
         // Non-existent paths must return None so callers store the raw path gracefully.
         let result = super::handlers::canonicalize_project_path("/this/path/does/not/exist/xyz");
-        assert!(result.is_none(), "non-existent path must return None, got {result:?}");
+        assert!(
+            result.is_none(),
+            "non-existent path must return None, got {result:?}"
+        );
     }
 
     #[test]

@@ -23,11 +23,7 @@ pub fn publish_event(state: &DaemonState, kind: &str, node: &str, payload: Value
     });
 }
 
-pub fn relay_agent_activity_changes(
-    state: &DaemonState,
-    node: &str,
-    changes: &[DeltaChange],
-) {
+pub fn relay_agent_activity_changes(state: &DaemonState, node: &str, changes: &[DeltaChange]) {
     let mut grouped: BTreeMap<Vec<u8>, HashMap<String, String>> = BTreeMap::new();
     for change in changes {
         if change.table_name != "agent_activity" {

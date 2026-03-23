@@ -57,9 +57,7 @@ pub async fn api_ipc_messages(
     Ok(Json(json!({ "ok": true, "messages": rows })))
 }
 
-pub async fn api_ipc_channels(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn api_ipc_channels(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
     let rows = query_rows(
@@ -93,9 +91,7 @@ pub async fn api_ipc_locks(State(state): State<ServerState>) -> Result<Json<Valu
     Ok(Json(json!({ "ok": true, "locks": rows })))
 }
 
-pub async fn api_ipc_worktrees(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn api_ipc_worktrees(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
     let rows = query_rows(
@@ -107,9 +103,7 @@ pub async fn api_ipc_worktrees(
     Ok(Json(json!({ "ok": true, "worktrees": rows })))
 }
 
-pub async fn api_ipc_conflicts(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn api_ipc_conflicts(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
     let rows = query_rows(
@@ -204,4 +198,3 @@ pub async fn api_ipc_send(
 
     Ok(Json(json!({ "ok": true })))
 }
-

@@ -77,7 +77,10 @@ CREATE TABLE IF NOT EXISTS notifications (
 ";
 
 /// Create a ServerState with core tables and a seeded project.
-pub(super) fn setup_state(project_id: &str, project_name: &str) -> (ServerState, tempfile::TempDir) {
+pub(super) fn setup_state(
+    project_id: &str,
+    project_name: &str,
+) -> (ServerState, tempfile::TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let db_path = tmp.path().join("test.db");
     let conn = rusqlite::Connection::open(&db_path).unwrap();
@@ -101,19 +104,20 @@ pub(super) async fn post_json(app: &Router, uri: &str, body: Value) -> (StatusCo
         .unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
-    let bytes = axum::body::to_bytes(resp.into_body(), 1_000_000).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1_000_000)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     (status, json)
 }
 
 pub(super) async fn get_json(app: &Router, uri: &str) -> (StatusCode, Value) {
-    let req = Request::builder()
-        .uri(uri)
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
-    let bytes = axum::body::to_bytes(resp.into_body(), 1_000_000).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1_000_000)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     (status, json)
 }

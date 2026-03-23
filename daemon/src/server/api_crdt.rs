@@ -30,7 +30,11 @@ async fn handle_crdt_status(State(state): State<ServerState>) -> Result<Json<Val
         )
         .unwrap_or(0);
 
-    let mode = if crdt_table_count > 0 { "crdt" } else { "wal-only" };
+    let mode = if crdt_table_count > 0 {
+        "crdt"
+    } else {
+        "wal-only"
+    };
 
     Ok(Json(json!({
         "mode": mode,
@@ -124,18 +128,12 @@ CREATE TABLE IF NOT EXISTS peer_heartbeats (
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let tmp = std::env::temp_dir().join(format!(
-            "claude-crdt-test-{}-{n}.db",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("claude-crdt-test-{}-{n}.db", std::process::id()));
         let conn = rusqlite::Connection::open(&tmp).expect("open tmp db");
         conn.execute_batch(SCHEMA).expect("schema");
         drop(conn);
-        super::super::routes::build_router_with_db(
-            std::path::PathBuf::from("/tmp"),
-            tmp,
-            None,
-        )
+        super::super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
     }
 
     async fn get_json(router: axum::Router, path: &str) -> (StatusCode, Value) {
@@ -182,14 +180,23 @@ CREATE TABLE IF NOT EXISTS peer_heartbeats (
         let router = test_router();
         let (status, body) = get_json(router, "/api/crdt/status").await;
         assert_eq!(status, StatusCode::OK, "expected 200: {body}");
-        assert!(body.get("mode").is_some(), "response must have 'mode' field: {body}");
+        assert!(
+            body.get("mode").is_some(),
+            "response must have 'mode' field: {body}"
+        );
         let mode = body["mode"].as_str().unwrap();
         assert!(
             mode == "crdt" || mode == "wal-only",
             "mode must be 'crdt' or 'wal-only', got: {mode}"
         );
-        assert!(body.get("tables").is_some(), "response must have 'tables' field: {body}");
-        assert!(body.get("version").is_some(), "response must have 'version' field: {body}");
+        assert!(
+            body.get("tables").is_some(),
+            "response must have 'tables' field: {body}"
+        );
+        assert!(
+            body.get("version").is_some(),
+            "response must have 'version' field: {body}"
+        );
     }
 
     #[tokio::test]
@@ -206,10 +213,8 @@ CREATE TABLE IF NOT EXISTS peer_heartbeats (
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(100);
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let tmp = std::env::temp_dir().join(format!(
-            "claude-crdt-test-{}-{n}.db",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("claude-crdt-test-{}-{n}.db", std::process::id()));
         let conn = rusqlite::Connection::open(&tmp).expect("open tmp db");
         conn.execute_batch(SCHEMA).expect("schema");
         conn.execute_batch(
@@ -217,11 +222,8 @@ CREATE TABLE IF NOT EXISTS peer_heartbeats (
         )
         .expect("seed");
         drop(conn);
-        let router = super::super::routes::build_router_with_db(
-            std::path::PathBuf::from("/tmp"),
-            tmp,
-            None,
-        );
+        let router =
+            super::super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None);
 
         let (status, body) = get_json(router, "/api/crdt/peers").await;
         assert_eq!(status, StatusCode::OK, "expected 200: {body}");

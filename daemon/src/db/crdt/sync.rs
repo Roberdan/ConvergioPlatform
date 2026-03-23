@@ -125,6 +125,8 @@ pub fn io_as_sql_error(err: std::io::Error) -> rusqlite::Error {
 ///
 /// When the counter reaches 3, the peer is marked 'unreachable' so the
 /// background sync loop (background_sync.rs) stops attempting to contact it.
+// Used by mesh background sync loop and tests; not yet called by lib code.
+#[allow(dead_code)]
 pub fn record_sync_failure(conn: &rusqlite::Connection, peer: &str) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE mesh_sync_stats
@@ -137,6 +139,8 @@ pub fn record_sync_failure(conn: &rusqlite::Connection, peer: &str) -> rusqlite:
 }
 
 /// Reset consecutive_failures to 0 and mark a peer 'online' after a successful sync.
+// Used by mesh background sync loop and tests; not yet called by lib code.
+#[allow(dead_code)]
 pub fn record_sync_success(conn: &rusqlite::Connection, peer: &str) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE mesh_sync_stats

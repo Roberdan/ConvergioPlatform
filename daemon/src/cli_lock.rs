@@ -47,15 +47,36 @@ pub enum LockCommands {
 
 pub async fn handle(cmd: LockCommands) {
     match cmd {
-        LockCommands::Acquire { file_path, task_id, agent, human, api_url } => {
+        LockCommands::Acquire {
+            file_path,
+            task_id,
+            agent,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({
                 "file_path": file_path, "task_id": task_id, "agent": agent,
             });
-            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/locks/acquire"), &body, human).await;
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/ipc/locks/acquire"),
+                &body,
+                human,
+            )
+            .await;
         }
-        LockCommands::Release { file_path, task_id, human, api_url } => {
+        LockCommands::Release {
+            file_path,
+            task_id,
+            human,
+            api_url,
+        } => {
             let body = serde_json::json!({ "file_path": file_path, "task_id": task_id });
-            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/locks/release"), &body, human).await;
+            crate::cli_http::post_and_print(
+                &format!("{api_url}/api/ipc/locks/release"),
+                &body,
+                human,
+            )
+            .await;
         }
         LockCommands::List { human, api_url } => {
             crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/locks"), human).await;
@@ -70,8 +91,10 @@ mod tests {
     #[test]
     fn lock_acquire_variant_exists() {
         let cmd = LockCommands::Acquire {
-            file_path: "daemon/src/main.rs".to_string(), task_id: 8796,
-            agent: "task-executor".to_string(), human: false,
+            file_path: "daemon/src/main.rs".to_string(),
+            task_id: 8796,
+            agent: "task-executor".to_string(),
+            human: false,
             api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, LockCommands::Acquire { task_id: 8796, .. }));
@@ -80,15 +103,20 @@ mod tests {
     #[test]
     fn lock_release_variant_exists() {
         let cmd = LockCommands::Release {
-            file_path: "daemon/src/main.rs".to_string(), task_id: 8796,
-            human: false, api_url: "http://localhost:8420".to_string(),
+            file_path: "daemon/src/main.rs".to_string(),
+            task_id: 8796,
+            human: false,
+            api_url: "http://localhost:8420".to_string(),
         };
         assert!(matches!(cmd, LockCommands::Release { task_id: 8796, .. }));
     }
 
     #[test]
     fn lock_list_variant_exists() {
-        let cmd = LockCommands::List { human: true, api_url: "http://localhost:8420".to_string() };
+        let cmd = LockCommands::List {
+            human: true,
+            api_url: "http://localhost:8420".to_string(),
+        };
         assert!(matches!(cmd, LockCommands::List { human: true, .. }));
     }
 

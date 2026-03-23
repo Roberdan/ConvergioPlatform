@@ -1,9 +1,9 @@
-#[path = "daemon_sync_db.rs"]
-mod sync_db;
-#[path = "daemon_sync_loops.rs"]
-mod loops;
 #[path = "daemon_sync_frame.rs"]
 mod frame;
+#[path = "daemon_sync_loops.rs"]
+mod loops;
+#[path = "daemon_sync_db.rs"]
+mod sync_db;
 
 use crate::mesh::auth;
 use crate::mesh::sync::{self, MeshSyncFrame};
@@ -12,9 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 
-use super::{
-    handle_ws_client, now_ts, publish_event, DaemonConfig, DaemonState,
-};
+use super::{handle_ws_client, now_ts, publish_event, DaemonConfig, DaemonState};
 
 /// Handle a peer connection. `is_outbound` = true spawns the delta loop (only outbound sends changes).
 /// Inbound connections only receive frames and send heartbeats/acks.

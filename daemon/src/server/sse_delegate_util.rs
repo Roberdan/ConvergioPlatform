@@ -65,7 +65,7 @@ pub(super) fn update_task_status(state: &ServerState, qs: &HashMap<String, Strin
     if let Ok(conn) = state.get_conn() {
         if let Err(e) = conn.execute(
             "UPDATE tasks SET status=?1 WHERE plan_id=?2 AND id=?3",
-            &[status, plan_id.as_str(), task_id.as_str()],
+            [status, plan_id.as_str(), task_id.as_str()],
         ) {
             tracing::warn!("delegate task status update failed: {e}");
         }

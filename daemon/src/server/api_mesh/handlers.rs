@@ -1,6 +1,6 @@
 //! Core mesh API handlers: peers list, actions, and mesh admin operations.
-use super::peer_conf::{detect_local_identity, is_local_peer_conf, parse_peers_conf};
 use super::super::state::{query_rows, ApiError, ServerState};
+use super::peer_conf::{detect_local_identity, is_local_peer_conf, parse_peers_conf};
 use axum::extract::{Query, State};
 use axum::Json;
 use serde_json::{json, Value};
@@ -64,14 +64,40 @@ pub(crate) async fn api_mesh(State(state): State<ServerState>) -> Result<Json<Va
         }
         let mut obj = serde_json::Map::new();
         obj.insert("peer_name".into(), json!(name));
-        obj.insert("os".into(), json!(fields.get("os").cloned().unwrap_or_else(|| "unknown".into())));
-        obj.insert("role".into(), json!(fields.get("role").cloned().unwrap_or_else(|| "worker".into())));
-        obj.insert("capabilities".into(), json!(fields.get("capabilities").cloned().unwrap_or_default()));
-        if let Some(ip) = fields.get("tailscale_ip") { obj.insert("tailscale_ip".into(), json!(ip)); }
-        if let Some(dns) = fields.get("dns_name") { obj.insert("dns_name".into(), json!(dns)); }
-        if let Some(alias) = fields.get("ssh_alias") { obj.insert("ssh_alias".into(), json!(alias)); }
-        if let Some(mac) = fields.get("mac_address") { obj.insert("mac_address".into(), json!(mac)); }
-        obj.insert("is_local".into(), json!(is_local_peer_conf(&local_host, &local_ts_ip, fields)));
+        obj.insert(
+            "os".into(),
+            json!(fields
+                .get("os")
+                .cloned()
+                .unwrap_or_else(|| "unknown".into())),
+        );
+        obj.insert(
+            "role".into(),
+            json!(fields
+                .get("role")
+                .cloned()
+                .unwrap_or_else(|| "worker".into())),
+        );
+        obj.insert(
+            "capabilities".into(),
+            json!(fields.get("capabilities").cloned().unwrap_or_default()),
+        );
+        if let Some(ip) = fields.get("tailscale_ip") {
+            obj.insert("tailscale_ip".into(), json!(ip));
+        }
+        if let Some(dns) = fields.get("dns_name") {
+            obj.insert("dns_name".into(), json!(dns));
+        }
+        if let Some(alias) = fields.get("ssh_alias") {
+            obj.insert("ssh_alias".into(), json!(alias));
+        }
+        if let Some(mac) = fields.get("mac_address") {
+            obj.insert("mac_address".into(), json!(mac));
+        }
+        obj.insert(
+            "is_local".into(),
+            json!(is_local_peer_conf(&local_host, &local_ts_ip, fields)),
+        );
 
         // Merge heartbeat dynamic data
         if let Some(hb) = hb_map.remove(name) {
@@ -81,23 +107,35 @@ pub(crate) async fn api_mesh(State(state): State<ServerState>) -> Result<Json<Va
             if let Some(load_str) = hb.get("load_json").and_then(Value::as_str) {
                 if let Ok(load) = serde_json::from_str::<Value>(load_str) {
                     if let Some(load_obj) = load.as_object() {
-                        for (k, v) in load_obj { obj.insert(k.clone(), v.clone()); }
+                        for (k, v) in load_obj {
+                            obj.insert(k.clone(), v.clone());
+                        }
                     }
                 }
             }
             // DB capabilities override if richer
             if let Some(db_caps) = hb.get("capabilities").and_then(Value::as_str) {
-                if !db_caps.is_empty() { obj.insert("capabilities".into(), json!(db_caps)); }
+                if !db_caps.is_empty() {
+                    obj.insert("capabilities".into(), json!(db_caps));
+                }
             }
         } else {
             obj.insert("is_online".into(), json!(false));
             obj.insert("last_seen".into(), json!(0));
         }
-        if !obj.contains_key("cpu") { obj.insert("cpu".into(), json!(0)); }
-        if !obj.contains_key("active_tasks") { obj.insert("active_tasks".into(), json!(0)); }
+        if !obj.contains_key("cpu") {
+            obj.insert("cpu".into(), json!(0));
+        }
+        if !obj.contains_key("active_tasks") {
+            obj.insert("active_tasks".into(), json!(0));
+        }
         let mut aliases: Vec<String> = Vec::new();
-        if let Some(alias) = fields.get("ssh_alias") { aliases.push(alias.clone()); }
-        if let Some(dns) = fields.get("dns_name") { aliases.push(dns.clone()); }
+        if let Some(alias) = fields.get("ssh_alias") {
+            aliases.push(alias.clone());
+        }
+        if let Some(dns) = fields.get("dns_name") {
+            aliases.push(dns.clone());
+        }
         obj.insert("hostname_aliases".into(), json!(aliases));
         peers.push(Value::Object(obj));
     }
@@ -106,21 +144,41 @@ pub(crate) async fn api_mesh(State(state): State<ServerState>) -> Result<Json<Va
     for (name, mut hb) in hb_map {
         let seen = hb.get("last_seen").and_then(Value::as_f64).unwrap_or(0.0);
         let obj = hb.as_object_mut().unwrap();
-        if !obj.contains_key("is_online") { obj.insert("is_online".into(), json!(now - seen < 3600.0)); }
-        if !obj.contains_key("is_local") {
-            obj.insert("is_local".into(), json!(name.to_lowercase().contains(&local_host)));
+        if !obj.contains_key("is_online") {
+            obj.insert("is_online".into(), json!(now - seen < 3600.0));
         }
-        if !obj.contains_key("os") { obj.insert("os".into(), json!("unknown")); }
-        if !obj.contains_key("cpu") { obj.insert("cpu".into(), json!(0)); }
-        if !obj.contains_key("active_tasks") { obj.insert("active_tasks".into(), json!(0)); }
+        if !obj.contains_key("is_local") {
+            obj.insert(
+                "is_local".into(),
+                json!(name.to_lowercase().contains(&local_host)),
+            );
+        }
+        if !obj.contains_key("os") {
+            obj.insert("os".into(), json!("unknown"));
+        }
+        if !obj.contains_key("cpu") {
+            obj.insert("cpu".into(), json!(0));
+        }
+        if !obj.contains_key("active_tasks") {
+            obj.insert("active_tasks".into(), json!(0));
+        }
         if !obj.contains_key("role") {
-            let role = if name.contains("mac-worker-2") || name.contains("local") { "coordinator" } else { "worker" };
+            let role = if name.contains("mac-worker-2") || name.contains("local") {
+                "coordinator"
+            } else {
+                "worker"
+            };
             obj.insert("role".into(), json!(role));
         }
-        if let Some(load_str) = obj.remove("load_json").and_then(|v| v.as_str().map(str::to_owned)) {
+        if let Some(load_str) = obj
+            .remove("load_json")
+            .and_then(|v| v.as_str().map(str::to_owned))
+        {
             if let Ok(load) = serde_json::from_str::<Value>(&load_str) {
                 if let Some(load_obj) = load.as_object() {
-                    for (k, v) in load_obj { obj.insert(k.clone(), v.clone()); }
+                    for (k, v) in load_obj {
+                        obj.insert(k.clone(), v.clone());
+                    }
                 }
             }
         }
@@ -132,16 +190,16 @@ pub(crate) async fn api_mesh(State(state): State<ServerState>) -> Result<Json<Va
     } else {
         String::new()
     };
-    Ok(Json(json!({ "peers": peers, "daemon_ws": daemon_ws, "local_node": local_host })))
+    Ok(Json(
+        json!({ "peers": peers, "daemon_ws": daemon_ws, "local_node": local_host }),
+    ))
 }
 
 pub(crate) async fn api_mesh_init() -> Json<Value> {
     Json(json!({"status": "ok", "daemons_restarted": [], "hosts_needing_normalization": 0}))
 }
 
-pub(crate) async fn handle_mesh_action(
-    Query(qs): Query<HashMap<String, String>>,
-) -> Json<Value> {
+pub(crate) async fn handle_mesh_action(Query(qs): Query<HashMap<String, String>>) -> Json<Value> {
     let action = qs.get("action").cloned().unwrap_or_default();
     let peer = qs.get("peer").cloned().unwrap_or_default();
     if action.is_empty() || peer.is_empty() {
@@ -188,15 +246,21 @@ fn handle_remove_node(peer: &str) -> Json<Value> {
                 if trimmed.starts_with('[') && trimmed.ends_with(']') {
                     let section = &trimmed[1..trimmed.len() - 1];
                     skip_section = section == peer;
-                    if skip_section { continue; }
+                    if skip_section {
+                        continue;
+                    }
                 }
-                if skip_section && !trimmed.starts_with('[') { continue; }
+                if skip_section && !trimmed.starts_with('[') {
+                    continue;
+                }
                 skip_section = false;
                 result.push_str(line);
                 result.push('\n');
             }
             match std::fs::write(&conf_path, &result) {
-                Ok(_) => Json(json!({"ok": true, "output": format!("Removed {peer} from peers.conf")})),
+                Ok(_) => {
+                    Json(json!({"ok": true, "output": format!("Removed {peer} from peers.conf")}))
+                }
                 Err(e) => Json(json!({"error": format!("Failed to write: {e}")})),
             }
         }
