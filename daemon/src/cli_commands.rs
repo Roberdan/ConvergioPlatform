@@ -5,6 +5,7 @@
 use crate::cli_agent;
 use crate::cli_bus;
 use crate::cli_checkpoint;
+use crate::cli_delegation;
 use crate::cli_domain;
 use crate::cli_kb;
 use crate::cli_lock;
@@ -16,6 +17,7 @@ use crate::cli_run;
 use crate::cli_skill;
 use crate::cli_task;
 use crate::cli_wave;
+use crate::cli_who;
 use crate::cli_workspace;
 use crate::ipc_handler::{DaemonCommands, IpcCommands};
 use clap::Subcommand;
@@ -183,5 +185,15 @@ pub enum Commands {
     Workspace {
         #[command(subcommand)]
         command: cli_workspace::WorkspaceCommands,
+    },
+    /// Who is working on what? Show active agents, delegations, per-plan workers.
+    Who {
+        #[command(subcommand)]
+        command: cli_who::WhoCommands,
+    },
+    /// Delegation management (delegate plans to mesh workers, track status)
+    Delegation {
+        #[command(subcommand)]
+        command: cli_delegation::DelegationCommands,
     },
 }

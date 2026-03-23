@@ -29,6 +29,8 @@ mod cli_task;
 mod cli_task_approve;
 mod cli_wave;
 mod cli_wave_handlers;
+mod cli_who;
+mod cli_delegation;
 mod cli_workspace;
 mod ipc_handler;
 mod transpiler;
@@ -260,6 +262,8 @@ async fn dispatch(command: Commands) {
         Commands::Alert { command } => cli_ops::handle_alert(command).await,
         Commands::Domain { command } => exit_on_err(cli_domain::dispatch(command).await),
         Commands::Workspace { command } => cli_workspace::handle(command).await,
+        Commands::Who { command } => exit_on_err(cli_who::handle(command, "http://localhost:8420").await),
+        Commands::Delegation { command } => exit_on_err(cli_delegation::handle(command, "http://localhost:8420").await),
     }
 }
 
