@@ -10,6 +10,7 @@ use super::{MainView, TuiData};
 use crate::tui::widgets;
 
 pub mod brain;
+pub mod cost;
 
 /// Renders header, KPI strip, active view with selection, and footer.
 pub fn render_view(
@@ -60,10 +61,7 @@ pub fn render_view(
             frame.render_widget(brain::brain_canvas(data, selected), chunks[2]);
         }
         MainView::CostCenter => {
-            let p = Paragraph::new("Cost Center — coming soon")
-                .block(Block::default().borders(Borders::ALL).title("Cost Center"))
-                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
-            frame.render_widget(p, chunks[2]);
+            frame.render_widget(cost::cost_center(data, selected), chunks[2]);
         }
         MainView::EventStream => {
             let p = Paragraph::new("Event Stream — coming soon")

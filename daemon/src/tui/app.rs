@@ -151,14 +151,17 @@ impl TuiApp {
 
     async fn refresh_data(&mut self) {
         let url = self.api_url.as_str();
-        let (kpis, plans, tasks, mesh, agents, (brain_nodes, brain_kpi)) = tokio::join!(
-            api::fetch_overview(&self.client, url),
-            api::fetch_plans(&self.client, url),
-            api::fetch_all_tasks(&self.client, url),
-            api::fetch_mesh(&self.client, url),
-            api::fetch_agents(&self.client, url),
-            api::fetch_brain(&self.client, url),
-        );
+        let (kpis, plans, tasks, mesh, agents, (brain_nodes, brain_kpi), cost, summary) =
+            tokio::join!(
+                api::fetch_overview(&self.client, url),
+                api::fetch_plans(&self.client, url),
+                api::fetch_all_tasks(&self.client, url),
+                api::fetch_mesh(&self.client, url),
+                api::fetch_agents(&self.client, url),
+                api::fetch_brain(&self.client, url),
+                api::fetch_cost(&self.client, url),
+                api::fetch_metrics_summary(&self.client, url),
+            );
         // Merge KPIs: overview wins for all fields except tokens/cost if brain provides them
         self.data.kpis = if brain_kpi.daily_tokens > 0 || brain_kpi.daily_cost > 0.0 {
             KpiData {
@@ -174,6 +177,13 @@ impl TuiApp {
         self.data.mesh_nodes = mesh;
         self.data.agents = agents;
         self.data.brain_nodes = brain_nodes;
+        // Merge cost data: combine fetched cost fields with summary
+        self.data.cost = crate::tui::CostData {
+            by_model: cost.by_model,
+            by_project: cost.by_project,
+            by_date: cost.by_date,
+            summary,
+        };
         self.last_fetch = Instant::now();
     }
 

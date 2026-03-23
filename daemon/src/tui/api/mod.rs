@@ -2,8 +2,10 @@
 // api_url is passed explicitly; falls back to CONVERGIO_API_URL env var in app.rs.
 
 mod brain;
+pub mod cost;
 
 pub use brain::{fetch_brain, parse_brain_response};
+pub use cost::{fetch_cost, fetch_metrics_summary};
 
 use reqwest::Client;
 use serde::Deserialize;
