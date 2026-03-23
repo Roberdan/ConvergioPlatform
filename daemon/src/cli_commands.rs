@@ -50,6 +50,10 @@ pub enum Commands {
         /// Disable auth and bind to 127.0.0.1 only (development use only)
         #[arg(long)]
         dev_mode: bool,
+        /// Enable mesh CRDT sync (Tailscale P2P on :9420). Default: enabled.
+        /// Use --no-mesh to disable.
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        mesh: bool,
     },
     Daemon {
         #[command(subcommand)]

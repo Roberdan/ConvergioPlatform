@@ -3,14 +3,51 @@ use tracing::{info, warn};
 
 use super::utils::{default_db_path, default_peers_conf};
 
-pub async fn run_serve(bind: String, static_dir: Option<PathBuf>, crsqlite_path: Option<String>) {
-    // Logging is initialized in main() via daemon_logging::init()
+pub async fn run_serve(
+    bind: String,
+    static_dir: Option<PathBuf>,
+    crsqlite_path: Option<String>,
+    mesh_enabled: bool,
+) {
     let dir = static_dir.unwrap_or_else(|| {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         claude_core::server::resolve_dashboard_static_dir(PathBuf::from(home).join(".claude"))
     });
     info!("claude-core serve → {bind} (static: {dir:?})");
     eprintln!("claude-core serve → {bind} (static: {dir:?})");
+
+    // Unified daemon: mesh CRDT sync + background sync loop alongside HTTP server
+    if mesh_enabled {
+        // Background CRDT sync loop (was only in `daemon start`)
+        let sync_db = default_db_path();
+        if let Ok(sync_conn) = rusqlite::Connection::open(&sync_db) {
+            let sync_conn = std::sync::Arc::new(std::sync::Mutex::new(sync_conn));
+            let interval = claude_core::background_sync::resolve_interval_secs(None);
+            claude_core::background_sync::spawn_sync_loop(sync_conn, interval);
+        }
+
+        let db_path = default_db_path();
+        let peers_conf = default_peers_conf();
+        let crsqlite_clone = crsqlite_path.clone();
+        tokio::spawn(async move {
+            let config = claude_core::mesh::daemon::DaemonConfig {
+                bind_ip: claude_core::mesh::daemon::detect_tailscale_ip()
+                    .unwrap_or_else(|| "127.0.0.1".to_string()),
+                port: 9420,
+                peers_conf_path: peers_conf,
+                db_path,
+                crsqlite_path: crsqlite_clone,
+                local_only: false,
+            };
+            info!("mesh service starting on {}:{}", config.bind_ip, config.port);
+            eprintln!("mesh service → {}:{}", config.bind_ip, config.port);
+            if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
+                warn!("mesh service failed: {err}");
+                eprintln!("mesh service failed (non-fatal): {err}");
+            }
+        });
+    }
+
     if let Err(err) = claude_core::server::run(&bind, dir, crsqlite_path).await {
         warn!("server failed: {err}");
         eprintln!("server failed: {err}");

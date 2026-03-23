@@ -144,8 +144,8 @@ async fn dispatch(command: Commands) {
             crsqlite_path,
             db_path,
             dev_mode,
+            mesh,
         } => {
-            // BUG-2 fix: --db-path flag overrides default; env var is fallback
             if let Some(ref p) = db_path {
                 std::env::set_var("DASHBOARD_DB", p);
             }
@@ -154,7 +154,8 @@ async fn dispatch(command: Commands) {
             }
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(claude_core::background::run_pause_bridge(db_path));
-            ipc_handler::run_serve(bind, static_dir, crsqlite_path).await;
+            // Unified daemon: HTTP API + mesh CRDT in one process
+            ipc_handler::run_serve(bind, static_dir, crsqlite_path, mesh).await;
         }
         Commands::Daemon { command } => match command {
             DaemonCommands::Start {
