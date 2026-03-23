@@ -128,6 +128,12 @@ mod api_plans_tests;
 mod api_plan_db_checkpoint_tests;
 #[cfg(test)]
 mod api_plan_db_query_tests;
+#[cfg(test)]
+mod api_agents_tests;
+#[cfg(test)]
+mod api_agents_brain_tests;
+#[cfg(test)]
+mod api_audit_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};
