@@ -151,18 +151,31 @@ impl TuiApp {
 
     async fn refresh_data(&mut self) {
         let url = self.api_url.as_str();
-        let (kpis, plans, tasks, mesh, agents, (brain_nodes, brain_kpi), cost, summary, events) =
-            tokio::join!(
-                api::fetch_overview(&self.client, url),
-                api::fetch_plans(&self.client, url),
-                api::fetch_all_tasks(&self.client, url),
-                api::fetch_mesh(&self.client, url),
-                api::fetch_agents(&self.client, url),
-                api::fetch_brain(&self.client, url),
-                api::fetch_cost(&self.client, url),
-                api::fetch_metrics_summary(&self.client, url),
-                api::fetch_events(&self.client, url),
-            );
+        let (
+            kpis,
+            plans,
+            tasks,
+            mesh,
+            agents,
+            (brain_nodes, brain_kpi),
+            cost,
+            summary,
+            events,
+            workspaces,
+            deliverables,
+        ) = tokio::join!(
+            api::fetch_overview(&self.client, url),
+            api::fetch_plans(&self.client, url),
+            api::fetch_all_tasks(&self.client, url),
+            api::fetch_mesh(&self.client, url),
+            api::fetch_agents(&self.client, url),
+            api::fetch_brain(&self.client, url),
+            api::fetch_cost(&self.client, url),
+            api::fetch_metrics_summary(&self.client, url),
+            api::fetch_events(&self.client, url),
+            api::fetch_workspaces(&self.client, url),
+            api::fetch_deliverables(&self.client, url),
+        );
         // Merge KPIs: overview wins for all fields except tokens/cost if brain provides them
         self.data.kpis = if brain_kpi.daily_tokens > 0 || brain_kpi.daily_cost > 0.0 {
             KpiData {
@@ -179,6 +192,8 @@ impl TuiApp {
         self.data.agents = agents;
         self.data.brain_nodes = brain_nodes;
         self.data.events = events;
+        self.data.workspaces = workspaces;
+        self.data.deliverables = deliverables;
         // Merge cost data: combine fetched cost fields with summary
         self.data.cost = crate::tui::CostData {
             by_model: cost.by_model,

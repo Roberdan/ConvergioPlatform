@@ -11,7 +11,9 @@ use crate::tui::widgets;
 
 pub mod brain;
 pub mod cost;
+pub mod deliverables;
 pub mod events;
+pub mod workspace;
 
 /// Renders header, KPI strip, active view with selection, and footer.
 pub fn render_view(
@@ -68,20 +70,10 @@ pub fn render_view(
             frame.render_widget(events::event_stream(data, selected), chunks[2]);
         }
         MainView::WorkspaceView => {
-            let p = Paragraph::new("Workspace View — coming soon")
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title("Workspace View"),
-                )
-                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
-            frame.render_widget(p, chunks[2]);
+            frame.render_widget(workspace::workspace_view(data, selected), chunks[2]);
         }
         MainView::Deliverables => {
-            let p = Paragraph::new("Deliverables — coming soon")
-                .block(Block::default().borders(Borders::ALL).title("Deliverables"))
-                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
-            frame.render_widget(p, chunks[2]);
+            frame.render_widget(deliverables::deliverables_view(data, selected), chunks[2]);
         }
     }
 
