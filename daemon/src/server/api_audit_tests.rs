@@ -40,9 +40,9 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS execution_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, goal TEXT NOT NULL,
   status TEXT DEFAULT 'running', cost_usd REAL DEFAULT 0,
-  duration_s REAL, model TEXT, agents_used INTEGER DEFAULT 0,
+  duration_minutes REAL, agents_used INTEGER DEFAULT 0,
   plan_id INTEGER, started_at TEXT DEFAULT (datetime('now')),
-  ended_at TEXT
+  completed_at TEXT
 );
 CREATE TABLE IF NOT EXISTS knowledge_base (
   id INTEGER PRIMARY KEY, domain TEXT, title TEXT,
