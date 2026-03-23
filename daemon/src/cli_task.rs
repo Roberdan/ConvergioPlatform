@@ -65,7 +65,7 @@ pub enum TaskCommands {
     },
 }
 
-pub async fn handle(cmd: TaskCommands) {
+pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError> {
     match cmd {
         TaskCommands::Update {
             task_id,
@@ -93,33 +93,31 @@ pub async fn handle(cmd: TaskCommands) {
             api_url,
         } => {
             let url = format!("{api_url}/api/plan-db/validate-task/{task_id}/{plan_id}");
-            match reqwest::get(&url).await {
-                Ok(resp) => match resp.json::<serde_json::Value>().await {
-                    Ok(val) => {
-                        if human {
-                            print_mechanical_human(&val);
-                        } else {
-                            println!("{val}");
-                        }
-                        // Exit 1 if mechanical gates rejected
-                        let rejected = val
-                            .get("mechanical")
-                            .and_then(|m| m.get("status"))
-                            .and_then(serde_json::Value::as_str)
-                            == Some("REJECTED");
-                        if rejected {
-                            std::process::exit(1);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("error parsing response: {e}");
-                        std::process::exit(2);
-                    }
-                },
-                Err(e) => {
-                    eprintln!("error connecting to daemon: {e}");
-                    std::process::exit(2);
-                }
+            let resp = reqwest::get(&url).await.map_err(|e| {
+                crate::cli_error::CliError::ApiCallFailed(
+                    format!("error connecting to daemon: {e}"),
+                )
+            })?;
+            let val: serde_json::Value = resp.json().await.map_err(|e| {
+                crate::cli_error::CliError::ApiCallFailed(
+                    format!("error parsing response: {e}"),
+                )
+            })?;
+            if human {
+                print_mechanical_human(&val);
+            } else {
+                println!("{val}");
+            }
+            // Return error if mechanical gates rejected
+            let rejected = val
+                .get("mechanical")
+                .and_then(|m| m.get("status"))
+                .and_then(serde_json::Value::as_str)
+                == Some("REJECTED");
+            if rejected {
+                return Err(crate::cli_error::CliError::ValidationRejected(
+                    "mechanical gates rejected".into(),
+                ));
             }
         }
         TaskCommands::KbSearch {
@@ -140,9 +138,10 @@ pub async fn handle(cmd: TaskCommands) {
             human,
             api_url,
         } => {
-            crate::cli_task_approve::handle(task_id, comment, human, &api_url).await;
+            crate::cli_task_approve::handle(task_id, comment, human, &api_url).await?;
         }
     }
+    Ok(())
 }
 
 /// Human-readable output for mechanical gate validation results.

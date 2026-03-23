@@ -183,6 +183,12 @@ const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_workspace_events_workspace ON workspace_events(workspace_id)",
     "CREATE INDEX IF NOT EXISTS idx_workspace_events_agent ON workspace_events(agent)",
     "CREATE INDEX IF NOT EXISTS idx_workspace_events_created ON workspace_events(created_at DESC)",
+    // Plan 706 — performance indexes on hot query paths
+    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk)",
+    "CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
+    "CREATE INDEX IF NOT EXISTS idx_waves_plan_id ON waves(plan_id)",
 ];
 
 /// Run DB migrations and return a connection pool for `db_path`.

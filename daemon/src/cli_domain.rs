@@ -33,7 +33,7 @@ pub enum DomainCommands {
     },
 }
 
-pub async fn dispatch(cmd: DomainCommands) {
+pub async fn dispatch(cmd: DomainCommands) -> Result<(), crate::cli_error::CliError> {
     match cmd {
         DomainCommands::List { api_url, human } => handle_list(&api_url, human).await,
         DomainCommands::Map {
@@ -42,8 +42,9 @@ pub async fn dispatch(cmd: DomainCommands) {
             description,
             api_url,
             human,
-        } => handle_map(&domain, &skill, description.as_deref(), &api_url, human).await,
+        } => handle_map(&domain, &skill, description.as_deref(), &api_url, human).await?,
     }
+    Ok(())
 }
 
 async fn handle_list(api_url: &str, human: bool) {
@@ -56,19 +57,19 @@ async fn handle_map(
     description: Option<&str>,
     api_url: &str,
     human: bool,
-) {
+) -> Result<(), crate::cli_error::CliError> {
     // Validate skill directory exists before calling daemon (fast-fail at CLI layer)
     let skill_path = format!("claude-config/skills/{skill}");
-    if let Err(e) = validate_skill_dir(&skill_path) {
-        eprintln!("error: {e}");
-        std::process::exit(2);
-    }
+    validate_skill_dir(&skill_path).map_err(|e| {
+        crate::cli_error::CliError::InvalidInput(format!("error: {e}"))
+    })?;
     let body = serde_json::json!({
         "domain": domain,
         "skill_name": skill,
         "description": description,
     });
     crate::cli_http::post_and_print(&format!("{api_url}/api/domain/map"), &body, human).await;
+    Ok(())
 }
 
 /// Validate that the skill directory exists at `path`.

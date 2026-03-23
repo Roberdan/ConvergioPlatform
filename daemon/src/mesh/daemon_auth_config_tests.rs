@@ -18,7 +18,7 @@ fn validate_config_rejects_missing_shared_secret() {
     std::fs::write(&peers_conf, "[peer1]\ntailscale_ip=100.1.2.3\n").expect("write peers conf");
     let err = validate_config(&test_config(peers_conf.clone())).expect_err("must reject config");
     assert!(
-        err.contains("shared_secret"),
+        err.to_string().contains("shared_secret"),
         "error should mention shared_secret: {err}"
     );
     let _ = std::fs::remove_file(peers_conf);
@@ -31,7 +31,7 @@ fn auth_secret_loader_rejects_empty_secret() {
     let err = daemon_sync::load_required_shared_secret(&peers_conf)
         .expect_err("must reject empty secret");
     assert!(
-        err.contains("shared_secret"),
+        err.to_string().contains("shared_secret"),
         "error should mention shared_secret: {err}"
     );
     let _ = std::fs::remove_file(peers_conf);

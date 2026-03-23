@@ -6,6 +6,7 @@ use super::net_utils::{
 };
 use super::peer_loop::{connect_peer_loop, validate_config};
 use super::types::{DaemonConfig, DaemonState, InboundConnectionRateLimiter};
+use crate::mesh::error::MeshError;
 use crate::mesh::net::apply_socket_tuning;
 use crate::mesh::ws::{text_frame, websocket_accept};
 use serde_json::json;
@@ -16,7 +17,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, RwLock};
 
-pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
+pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
     if !config.local_only {
         validate_config(&config)?;
     }
@@ -27,14 +28,14 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
             &config.db_path,
             config.crsqlite_path.as_deref(),
         )?;
-        crate::mesh::sync::ensure_sync_schema_pub(&conn).map_err(|e| e.to_string())?;
+        crate::mesh::sync::ensure_sync_schema_pub(&conn)?;
     }
 
     // Ensure IPC schema exists
     {
         let conn = rusqlite::Connection::open(&config.db_path)
-            .map_err(|e| format!("open db for IPC schema: {e}"))?;
-        crate::ipc::ensure_ipc_schema(&conn).map_err(|e| e.to_string())?;
+            .map_err(|e| MeshError::Db(format!("open db for IPC schema: {e}")))?;
+        crate::ipc::ensure_ipc_schema(&conn)?;
     }
 
     // Spawn IPC socket server
@@ -52,7 +53,6 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
     });
 
     if config.local_only {
-        // Local-only mode: only IPC socket + heartbeat, no mesh
         tracing::info!("daemon running in local-only mode (IPC socket only)");
         let hb_engine = ipc_engine.clone();
         tokio::spawn(async move {
@@ -64,7 +64,6 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
                 }
             }
         });
-        // Wait for shutdown signal
         tokio::signal::ctrl_c().await.ok();
         tracing::info!("daemon shutting down");
         return Ok(());
@@ -73,7 +72,7 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
     let bind_addr = format!("{}:{}", config.bind_ip, config.port);
     let listener = TcpListener::bind(&bind_addr)
         .await
-        .map_err(|e| format!("mesh listen failed on {bind_addr}: {e}"))?;
+        .map_err(|e| MeshError::Network(format!("mesh listen failed on {bind_addr}: {e}")))?;
     let inbound_rate_limiter = Arc::new(InboundConnectionRateLimiter::new(10, 100));
     let (tx, _) = broadcast::channel(256);
     let state = DaemonState {
@@ -86,7 +85,6 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
         tokio::spawn(connect_peer_loop(peer, state.clone(), config.clone()));
     }
 
-    // Prune stale heartbeats every 60s (remove entries older than 5 minutes)
     let hb_state = state.clone();
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
@@ -98,7 +96,6 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
         }
     });
 
-    // T2-00: HTTP API server on port+1 (e.g. 9421)
     let mesh_metrics = Arc::new(crate::mesh::observability::MeshMetrics::new());
     let log_buffer = Arc::new(crate::mesh::observability::LogBuffer::new(1000));
     let http_state = Arc::new(super::super::http_api::HttpState {
@@ -124,7 +121,8 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
         }
     }
 
-    // T2-03: Graceful shutdown handler
+    let shutdown = Arc::new(tokio::sync::Notify::new());
+    let shutdown_trigger = shutdown.clone();
     let shutdown_state = state.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
@@ -134,12 +132,10 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
             &shutdown_state.node_id,
             serde_json::json!({}),
         );
-        // Give broadcast subscribers time to receive shutdown event
         tokio::time::sleep(Duration::from_millis(500)).await;
-        std::process::exit(0);
+        shutdown_trigger.notify_one();
     });
 
-    // Local self-heartbeat: write own node to peer_heartbeats with system stats
     let local_config = config.clone();
     let local_node = resolve_local_node_name(&config.peers_conf_path, &config.bind_ip);
     tokio::spawn(async move {
@@ -161,24 +157,30 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
     });
 
     loop {
-        let (mut stream, remote) = listener
-            .accept()
-            .await
-            .map_err(|e| format!("mesh accept failed: {e}"))?;
-        if let Err(err) = inbound_rate_limiter.check(remote) {
-            tracing::warn!("inbound connection rejected from {remote}: {err}");
-            let _ = stream.shutdown().await;
-            continue;
+        tokio::select! {
+            result = listener.accept() => {
+                let (mut stream, remote) = result
+                    .map_err(|e| MeshError::Network(format!("mesh accept failed: {e}")))?;
+                if let Err(err) = inbound_rate_limiter.check(remote) {
+                    tracing::warn!("inbound connection rejected from {remote}: {err}");
+                    let _ = stream.shutdown().await;
+                    continue;
+                }
+                let _ = apply_socket_tuning(&stream);
+                let cfg = config.clone();
+                let st = state.clone();
+                let limiter = inbound_rate_limiter.clone();
+                tokio::spawn(async move {
+                    let conn_id = format!("inbound-{remote}");
+                    let _ = super::daemon_sync::handle_socket(stream, conn_id, st, cfg, false).await;
+                    limiter.release(remote);
+                });
+            }
+            _ = shutdown.notified() => {
+                tracing::info!("daemon shutting down gracefully");
+                return Ok(());
+            }
         }
-        let _ = apply_socket_tuning(&stream);
-        let cfg = config.clone();
-        let st = state.clone();
-        let limiter = inbound_rate_limiter.clone();
-        tokio::spawn(async move {
-            let conn_id = format!("inbound-{remote}");
-            let _ = super::daemon_sync::handle_socket(stream, conn_id, st, cfg, false).await;
-            limiter.release(remote);
-        });
     }
 }
 
@@ -186,27 +188,22 @@ pub async fn handle_ws_client(
     mut stream: TcpStream,
     request: &str,
     state: DaemonState,
-) -> Result<(), String> {
-    let key = websocket_key(request).ok_or_else(|| "missing websocket key".to_string())?;
+) -> Result<(), MeshError> {
+    let key = websocket_key(request)
+        .ok_or_else(|| MeshError::Network("missing websocket key".into()))?;
     let accept = websocket_accept(&key);
     let response = format!(
         "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
     );
-    stream
-        .write_all(response.as_bytes())
-        .await
-        .map_err(|e| e.to_string())?;
+    stream.write_all(response.as_bytes()).await?;
     let mut sub = state.tx.subscribe();
     let snapshot = {
         let heartbeats = state.heartbeats.read().await;
         json!({"kind":"heartbeat_snapshot","node":state.node_id,"ts":now_ts(),"payload":{"nodes":*heartbeats}})
     };
-    stream
-        .write_all(&text_frame(&snapshot.to_string()))
-        .await
-        .map_err(|e| e.to_string())?;
+    stream.write_all(&text_frame(&snapshot.to_string())).await?;
     while let Ok(event) = sub.recv().await {
-        let payload = serde_json::to_string(&event).map_err(|e| e.to_string())?;
+        let payload = serde_json::to_string(&event)?;
         if stream.write_all(&text_frame(&payload)).await.is_err() {
             break;
         }

@@ -14,6 +14,8 @@ fn test_router() -> axum::Router {
     conn.execute_batch(CORE_SCHEMA).expect("core schema");
     conn.execute_batch(SEED_DATA).expect("seed data");
     drop(conn);
+    // Dev-mode: disable auth so tests pass without a bearer token.
+    super::middleware::set_dev_mode(true);
     super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }
 

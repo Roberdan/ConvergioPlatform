@@ -9,6 +9,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
 
+use crate::mesh::error::MeshError;
+
 #[derive(Debug, Clone)]
 pub struct DaemonConfig {
     pub bind_ip: String,
@@ -49,7 +51,7 @@ impl InboundConnectionRateLimiter {
         }
     }
 
-    pub fn check(&self, remote: SocketAddr) -> Result<(), String> {
+    pub fn check(&self, remote: SocketAddr) -> Result<(), MeshError> {
         let ip = remote.ip();
         {
             let mut windows = self.second_windows.lock().unwrap();
@@ -57,10 +59,10 @@ impl InboundConnectionRateLimiter {
             let cutoff = std::time::Instant::now() - Duration::from_secs(1);
             entry.retain(|ts| *ts > cutoff);
             if entry.len() >= self.max_per_second {
-                return Err(format!(
+                return Err(MeshError::Network(format!(
                     "per-second limit ({}/sec) exceeded for {ip}",
                     self.max_per_second
-                ));
+                )));
             }
             entry.push(std::time::Instant::now());
         }

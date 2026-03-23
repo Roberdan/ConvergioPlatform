@@ -2,11 +2,13 @@
 // Replaces wave-worktree.sh create/cleanup commands.
 // Why: centralize wave-workspace binding in daemon, avoid bash script drift (Plan 698).
 
-use super::core::WorkspaceManager;
+use super::core::{WorkspaceError, WorkspaceManager};
 use crate::server::state_init::ConnPool;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+type Result<T> = std::result::Result<T, WorkspaceError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WaveWorkspaceInfo {
@@ -18,10 +20,6 @@ pub struct WaveWorkspaceInfo {
     pub branch: String,
 }
 
-pub(crate) fn pool_err(e: r2d2::Error) -> String {
-    format!("pool error: {e}")
-}
-
 /// Create a workspace for a wave: git worktree + branch + DB links.
 /// Branch naming: plan/{plan_id}-{wave_id} (e.g. "plan/698-W1").
 pub fn create_wave_workspace(
@@ -29,8 +27,8 @@ pub fn create_wave_workspace(
     plan_id: i64,
     wave_db_id: i64,
     pool: &ConnPool,
-) -> Result<WaveWorkspaceInfo, String> {
-    let conn = pool.get().map_err(pool_err)?;
+) -> Result<WaveWorkspaceInfo> {
+    let conn = pool.get()?;
 
     // Resolve wave_id from DB (e.g. "W1")
     let wave_id: String = conn
@@ -39,24 +37,18 @@ pub fn create_wave_workspace(
             params![wave_db_id],
             |row| row.get(0),
         )
-        .map_err(|e| format!("wave {wave_db_id} not found: {e}"))?;
+        .map_err(|e| WorkspaceError::NotFound(format!("wave {wave_db_id}: {e}")))?;
 
     let branch = format!("plan/{plan_id}-{wave_id}");
 
     // Delegate workspace creation to core (git worktree + DB insert)
-    let info = manager
-        .create_workspace(Some(plan_id), Some(wave_db_id))
-        .map_err(|e| format!("create_workspace failed: {e}"))?;
+    let info = manager.create_workspace(Some(plan_id), Some(wave_db_id))?;
 
     // Update waves row with worktree path + canonical branch name
-    // (core creates a generic workspace branch; wave branch is the plan-scoped name)
-    pool.get()
-        .map_err(pool_err)?
-        .execute(
-            "UPDATE waves SET worktree_path = ?1, branch_name = ?2 WHERE id = ?3",
-            params![info.path, branch, wave_db_id],
-        )
-        .map_err(|e| format!("update waves failed: {e}"))?;
+    pool.get()?.execute(
+        "UPDATE waves SET worktree_path = ?1, branch_name = ?2 WHERE id = ?3",
+        params![info.path, branch, wave_db_id],
+    )?;
 
     Ok(WaveWorkspaceInfo {
         workspace_id: info.workspace_id,
@@ -73,29 +65,23 @@ pub fn cleanup_wave_workspace(
     manager: &WorkspaceManager,
     wave_db_id: i64,
     pool: &ConnPool,
-) -> Result<(), String> {
-    let conn = pool.get().map_err(pool_err)?;
+) -> Result<()> {
+    let conn = pool.get()?;
 
-    // Find workspace_id from workspaces table linked to this wave
     let workspace_id: String = conn
         .query_row(
             "SELECT workspace_id FROM workspaces WHERE wave_db_id = ?1 AND status = 'active'",
             params![wave_db_id],
             |row| row.get(0),
         )
-        .map_err(|e| format!("no active workspace for wave {wave_db_id}: {e}"))?;
+        .map_err(|e| WorkspaceError::NotFound(format!("wave {wave_db_id}: {e}")))?;
 
-    manager
-        .delete_workspace(&workspace_id)
-        .map_err(|e| format!("delete_workspace failed: {e}"))?;
+    manager.delete_workspace(&workspace_id)?;
 
-    pool.get()
-        .map_err(pool_err)?
-        .execute(
-            "UPDATE waves SET worktree_path = NULL, branch_name = NULL WHERE id = ?1",
-            params![wave_db_id],
-        )
-        .map_err(|e| format!("clear wave worktree fields failed: {e}"))?;
+    pool.get()?.execute(
+        "UPDATE waves SET worktree_path = NULL, branch_name = NULL WHERE id = ?1",
+        params![wave_db_id],
+    )?;
 
     Ok(())
 }
@@ -105,10 +91,9 @@ pub fn cleanup_wave_workspace(
 pub fn wave_workspace_status(
     wave_db_id: i64,
     pool: &ConnPool,
-) -> Result<Option<WaveWorkspaceInfo>, String> {
-    let conn = pool.get().map_err(pool_err)?;
+) -> Result<Option<WaveWorkspaceInfo>> {
+    let conn = pool.get()?;
 
-    // Join workspaces + waves to get full info
     let result: rusqlite::Result<(String, String, i64, String, String)> = conn.query_row(
         "SELECT ws.workspace_id, w.wave_id, w.plan_id, ws.path, ws.branch
          FROM waves w
@@ -128,9 +113,8 @@ pub fn wave_workspace_status(
 
     match result {
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(format!("status query failed: {e}")),
+        Err(e) => Err(WorkspaceError::Db(e)),
         Ok((workspace_id, wave_id, plan_id, path, branch)) => {
-            // If path no longer exists on disk, treat as absent
             if !Path::new(&path).exists() {
                 return Ok(None);
             }

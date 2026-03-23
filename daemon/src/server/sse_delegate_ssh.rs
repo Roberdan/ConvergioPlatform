@@ -1,6 +1,7 @@
 // SSH helpers for SSE delegate streaming.
 // Extracted from sse_delegate.rs for the 250-line limit.
 
+use super::super::state::ApiError;
 use ssh2::Session;
 use std::io::Read;
 use std::net::TcpStream;
@@ -34,22 +35,26 @@ pub fn ssh_connect(dest: &str) -> Option<Session> {
     Some(session)
 }
 
-pub fn ssh_exec(session: &Session, cmd: &str) -> Result<(i32, String, String), String> {
-    let mut ch = session.channel_session().map_err(|e| e.to_string())?;
-    ch.exec(cmd).map_err(|e| e.to_string())?;
+pub fn ssh_exec(session: &Session, cmd: &str) -> Result<(i32, String, String), ApiError> {
+    let mut ch = session
+        .channel_session()
+        .map_err(|e| ApiError::internal(format!("ssh channel: {e}")))?;
+    ch.exec(cmd)
+        .map_err(|e| ApiError::internal(format!("ssh exec: {e}")))?;
     let mut stdout = String::new();
     let mut stderr = String::new();
-    ch.read_to_string(&mut stdout).map_err(|e| e.to_string())?;
+    ch.read_to_string(&mut stdout)
+        .map_err(|e| ApiError::internal(format!("ssh stdout read: {e}")))?;
     ch.stderr()
         .read_to_string(&mut stderr)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ApiError::internal(format!("ssh stderr read: {e}")))?;
     let _ = ch.wait_close();
     let code = ch.exit_status().unwrap_or(-1);
     drop(ch);
     Ok((code, stdout, stderr))
 }
 
-pub fn ssh_git_sync(session: &Session, plan_id: &str) -> Result<(), String> {
+pub fn ssh_git_sync(session: &Session, plan_id: &str) -> Result<(), ApiError> {
     let branch = format!("plan-{plan_id}");
     let cmd = format!(
         "cd ~/GitHub/ConvergioPlatform && git fetch origin && \
@@ -59,7 +64,9 @@ pub fn ssh_git_sync(session: &Session, plan_id: &str) -> Result<(), String> {
     );
     let (code, _, stderr) = ssh_exec(session, &cmd)?;
     if code != 0 && !stderr.contains("Already on") && !stderr.contains("Already up to date") {
-        return Err(format!("git sync exit {code}: {stderr}"));
+        return Err(ApiError::internal(format!(
+            "git sync exit {code}: {stderr}"
+        )));
     }
     Ok(())
 }

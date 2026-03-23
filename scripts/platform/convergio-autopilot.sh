@@ -2,7 +2,7 @@
 # convergio-autopilot.sh — Autonomous plan execution loop
 # Watches plan state in DB and auto-triggers: execution → Thor → merge
 # Usage: convergio-autopilot.sh [plan_id] [--interval 30]
-set -uo pipefail
+set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"

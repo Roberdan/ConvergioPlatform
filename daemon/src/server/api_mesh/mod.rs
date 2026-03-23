@@ -1,4 +1,5 @@
 pub mod handlers;
+pub mod handlers_admin;
 pub mod peer_conf;
 pub mod sync_ops;
 
@@ -15,7 +16,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/mesh/sync-status", get(sync_ops::api_mesh_sync_status))
         .route("/api/mesh/traffic", get(sync_ops::api_mesh_traffic))
         .route("/api/mesh/init", post(handlers::api_mesh_init))
-        .route("/api/mesh/action", get(handlers::handle_mesh_action))
+        .route("/api/mesh/action", get(handlers_admin::handle_mesh_action))
         .route(
             "/api/mesh/delegate/:id/cancel",
             post(handlers::handle_delegate_cancel),

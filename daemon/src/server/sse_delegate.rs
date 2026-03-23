@@ -114,7 +114,7 @@ pub async fn delegate(
         &stage("cloning", target, "git fetch + checkout"),
     );
     if let Err(e) = ssh_git_sync(&session, plan_id) {
-        return do_fail(ev, state, qs, &del_id, &e);
+        return do_fail(ev, state, qs, &del_id, &e.to_string());
     }
     push(
         &mut ev,
@@ -163,7 +163,7 @@ pub async fn delegate(
                 &format!("agent exited {code}: {stderr}"),
             );
         }
-        Err(e) => return do_fail(ev, state, qs, &del_id, &e),
+        Err(e) => return do_fail(ev, state, qs, &del_id, &e.to_string()),
     }
     remove_delegation(&del_id);
     ev

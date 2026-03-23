@@ -152,3 +152,58 @@ fn test_workspaces_idempotent_migration() {
     assert!(table_exists(&conn, "workspaces"));
     assert!(table_exists(&conn, "workspace_events"));
 }
+
+fn run_core_table_migrations(conn: &Connection) {
+    // Minimal schema for plans/waves/tasks so index migrations can reference them.
+    let ddl = [
+        "CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'todo')",
+        "CREATE TABLE IF NOT EXISTS waves (id INTEGER PRIMARY KEY, plan_id INTEGER, status TEXT DEFAULT 'pending')",
+        "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, plan_id INTEGER, wave_id_fk INTEGER, status TEXT DEFAULT 'pending')",
+        // The five new performance indexes from Plan 706 T2-02.
+        "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk)",
+        "CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
+        "CREATE INDEX IF NOT EXISTS idx_waves_plan_id ON waves(plan_id)",
+    ];
+    for sql in ddl {
+        conn.execute_batch(sql)
+            .expect("core table migration failed");
+    }
+}
+
+#[test]
+fn test_core_performance_indexes_exist_after_migration() {
+    let conn = Connection::open_in_memory().expect("open_in_memory");
+    run_core_table_migrations(&conn);
+    assert!(
+        index_exists(&conn, "idx_tasks_status"),
+        "idx_tasks_status missing"
+    );
+    assert!(
+        index_exists(&conn, "idx_tasks_wave_id"),
+        "idx_tasks_wave_id missing"
+    );
+    assert!(
+        index_exists(&conn, "idx_plans_status"),
+        "idx_plans_status missing"
+    );
+    assert!(
+        index_exists(&conn, "idx_tasks_plan_id"),
+        "idx_tasks_plan_id missing"
+    );
+    assert!(
+        index_exists(&conn, "idx_waves_plan_id"),
+        "idx_waves_plan_id missing"
+    );
+}
+
+#[test]
+fn test_core_performance_indexes_idempotent() {
+    let conn = Connection::open_in_memory().expect("open_in_memory");
+    // IF NOT EXISTS: running twice must not error.
+    run_core_table_migrations(&conn);
+    run_core_table_migrations(&conn);
+    assert!(index_exists(&conn, "idx_tasks_status"));
+    assert!(index_exists(&conn, "idx_plans_status"));
+}

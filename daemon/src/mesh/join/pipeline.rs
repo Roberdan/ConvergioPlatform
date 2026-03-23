@@ -1,6 +1,7 @@
 // Main join pipeline and private step helpers
 
 use super::types::{JoinConfig, JoinError, JoinProgress, JoinSelections, StepStatus};
+use crate::mesh::error::MeshError;
 use crate::mesh::token;
 
 pub(super) fn make_step(step: u8, total: u8, label: &str, status: StepStatus) -> JoinProgress {
@@ -13,13 +14,6 @@ pub(super) fn make_step(step: u8, total: u8, label: &str, status: StepStatus) ->
 }
 
 /// Execute the join pipeline based on `config`.
-///
-/// Returns the full progress log (one entry per step).
-/// When `config.interactive` is true each step is also emitted as a JSON line
-/// to stdout so a GUI can render live progress.
-///
-/// The pipeline validates the token *first* so an invalid/expired token causes
-/// an early Err before any system state is modified.
 pub async fn join(
     config: JoinConfig,
     secret: &[u8],
@@ -28,7 +22,7 @@ pub async fn join(
     const TOTAL: u8 = 9;
     let mut log: Vec<JoinProgress> = Vec::new();
 
-    // ── Step 1: Validate token ────────────────────────────────────────────────
+    // Step 1: Validate token
     let mut p = make_step(1, TOTAL, "Validate invite token", StepStatus::Running);
     emit_if_interactive(&config, &p);
     let _payload = token::validate_token(&config.token, secret, db)?;
@@ -36,7 +30,7 @@ pub async fn join(
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 2: Admin gate ────────────────────────────────────────────────────
+    // Step 2: Admin gate
     let mut p = make_step(
         2,
         TOTAL,
@@ -49,7 +43,7 @@ pub async fn join(
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 3: Network setup ─────────────────────────────────────────────────
+    // Step 3: Network setup
     let step_status = if config.selections.network {
         StepStatus::Running
     } else {
@@ -63,13 +57,13 @@ pub async fn join(
     );
     emit_if_interactive(&config, &p);
     if config.selections.network {
-        network_setup().map_err(JoinError::Network)?;
+        network_setup().map_err(|e| JoinError::Network(e.to_string()))?;
         p.status = StepStatus::Done;
     }
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 4: Download bundles ──────────────────────────────────────────────
+    // Step 4: Download bundles
     let mut p = make_step(
         4,
         TOTAL,
@@ -83,7 +77,7 @@ pub async fn join(
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 5: Import auth ───────────────────────────────────────────────────
+    // Step 5: Import auth
     let step_status = if config.selections.auth {
         StepStatus::Running
     } else {
@@ -97,13 +91,13 @@ pub async fn join(
     );
     emit_if_interactive(&config, &p);
     if config.selections.auth {
-        import_auth(&bundle_dir).map_err(JoinError::AuthImport)?;
+        import_auth(&bundle_dir).map_err(|e| JoinError::AuthImport(e.to_string()))?;
         p.status = StepStatus::Done;
     }
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 6: Import env ────────────────────────────────────────────────────
+    // Step 6: Import env
     let mut p = make_step(
         6,
         TOTAL,
@@ -111,12 +105,12 @@ pub async fn join(
         StepStatus::Running,
     );
     emit_if_interactive(&config, &p);
-    import_env(&bundle_dir, &config.selections).map_err(JoinError::Network)?;
+    import_env(&bundle_dir, &config.selections).map_err(|e| JoinError::Network(e.to_string()))?;
     p.status = StepStatus::Done;
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 7: Coordinator migration ─────────────────────────────────────────
+    // Step 7: Coordinator migration
     let step_status = if config.selections.coordinator_migration {
         StepStatus::Running
     } else {
@@ -125,13 +119,12 @@ pub async fn join(
     let mut p = make_step(7, TOTAL, "Coordinator migration", step_status.clone());
     emit_if_interactive(&config, &p);
     if config.selections.coordinator_migration {
-        // Caller is responsible for providing registry; we signal readiness here.
         p.status = StepStatus::Done;
     }
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 8: Register self in peers.conf ───────────────────────────────────
+    // Step 8: Register self in peers.conf
     let mut p = make_step(
         8,
         TOTAL,
@@ -141,15 +134,15 @@ pub async fn join(
     emit_if_interactive(&config, &p);
     register_self_in_peers(&coordinator_ip)
         .await
-        .map_err(JoinError::Network)?;
+        .map_err(|e| JoinError::Network(e.to_string()))?;
     p.status = StepStatus::Done;
     emit_if_interactive(&config, &p);
     log.push(p);
 
-    // ── Step 9: Preflight check ───────────────────────────────────────────────
+    // Step 9: Preflight check
     let mut p = make_step(9, TOTAL, "Preflight check", StepStatus::Running);
     emit_if_interactive(&config, &p);
-    run_preflight().map_err(JoinError::Preflight)?;
+    run_preflight().map_err(|e| JoinError::Preflight(e.to_string()))?;
     p.status = StepStatus::Done;
     emit_if_interactive(&config, &p);
     log.push(p);
@@ -157,7 +150,7 @@ pub async fn join(
     Ok(log)
 }
 
-// ── Private step helpers ───────────────────────────────────────────────────────
+// Private step helpers
 
 pub(super) fn emit_if_interactive(config: &JoinConfig, progress: &JoinProgress) {
     if config.interactive {
@@ -179,31 +172,24 @@ fn run_sudo_keepalive() -> std::io::Result<()> {
     }
 }
 
-fn network_setup() -> Result<(), String> {
-    // Verify Tailscale is running; SSH keys and Screen Sharing validation
-    // are handled by the CLI layer. Here we just probe the daemon.
+fn network_setup() -> Result<(), MeshError> {
     let out = std::process::Command::new("tailscale")
         .args(["status", "--json"])
-        .output()
-        .map_err(|e| e.to_string())?;
+        .output()?;
     if !out.status.success() {
-        return Err(format!(
+        return Err(MeshError::Network(format!(
             "tailscale not reachable: {}",
             String::from_utf8_lossy(&out.stderr)
-        ));
+        )));
     }
     Ok(())
 }
 
-fn import_auth(_bundle_dir: &std::path::Path) -> Result<(), String> {
-    // Decrypt auth.enc and write credentials to keychain.
-    // Implementation is in the auth module; called here as a step gate.
+fn import_auth(_bundle_dir: &std::path::Path) -> Result<(), MeshError> {
     Ok(())
 }
 
-fn import_env(_bundle_dir: &std::path::Path, selections: &JoinSelections) -> Result<(), String> {
-    // Drive brew, repos, shell, macos-tweaks based on selections.
-    // Each sub-step is a shell script invocation; stubbed for testability.
+fn import_env(_bundle_dir: &std::path::Path, selections: &JoinSelections) -> Result<(), MeshError> {
     let _ = (
         selections.brew,
         selections.repos,
@@ -213,23 +199,19 @@ fn import_env(_bundle_dir: &std::path::Path, selections: &JoinSelections) -> Res
     Ok(())
 }
 
-async fn register_self_in_peers(_coordinator_ip: &str) -> Result<(), String> {
-    // Push updated peers.conf to all nodes via SSH.
-    // Actual SSH execution is handled by the CLI layer or a dedicated helper.
+async fn register_self_in_peers(_coordinator_ip: &str) -> Result<(), MeshError> {
     Ok(())
 }
 
-fn run_preflight() -> Result<(), String> {
-    // Run mesh-preflight.sh and verify exit 0.
+fn run_preflight() -> Result<(), MeshError> {
     let result = std::process::Command::new("mesh-preflight.sh").output();
     match result {
         Ok(out) if out.status.success() => Ok(()),
-        Ok(out) => Err(format!(
+        Ok(out) => Err(MeshError::Internal(format!(
             "preflight issues: {}",
             String::from_utf8_lossy(&out.stderr)
-        )),
-        // Preflight script may not be installed in test environments — treat as skipped
+        ))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(MeshError::from(e)),
     }
 }

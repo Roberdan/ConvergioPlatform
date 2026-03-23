@@ -8,6 +8,8 @@ fn test_router() -> axum::Router {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     let tmp = std::env::temp_dir().join(format!("claude-ipc-test-{}-{n}.db", std::process::id()));
+    // Dev-mode: disable auth so tests pass without a bearer token.
+    super::middleware::set_dev_mode(true);
     super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }
 

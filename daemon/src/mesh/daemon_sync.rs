@@ -6,6 +6,7 @@ mod loops;
 mod sync_db;
 
 use crate::mesh::auth;
+use crate::mesh::error::MeshError;
 use crate::mesh::sync::{self, MeshSyncFrame};
 use serde_json::json;
 use std::sync::Arc;
@@ -14,8 +15,7 @@ use tokio::sync::{mpsc, RwLock};
 
 use super::{handle_ws_client, now_ts, publish_event, DaemonConfig, DaemonState};
 
-/// Handle a peer connection. `is_outbound` = true spawns the delta loop (only outbound sends changes).
-/// Inbound connections only receive frames and send heartbeats/acks.
+/// Handle a peer connection. `is_outbound` = true spawns the delta loop.
 /// T1-09: Challenge-response auth required before any data exchange.
 pub(super) async fn handle_socket(
     mut stream: tokio::net::TcpStream,
@@ -23,22 +23,21 @@ pub(super) async fn handle_socket(
     state: DaemonState,
     config: DaemonConfig,
     is_outbound: bool,
-) -> Result<(), String> {
+) -> Result<(), MeshError> {
     if let Some(head) = frame::maybe_ws_request_head(&mut stream).await {
         return handle_ws_client(stream, &head, state).await;
     }
     let (mut read_half, mut write_half) = stream.into_split();
     let mut peer_quota = sync::PeerQuota::new();
 
-    // T1-09: Peer authentication — shared secret from [mesh] section of peers.conf
+    // T1-09: Peer authentication
     let secret = load_required_shared_secret(&config.peers_conf_path)?;
     if is_outbound {
-        // Outbound: wait for challenge, respond with HMAC
         match sync::read_frame_with_quota(&mut read_half, &mut peer_quota).await? {
             Some(framed) => {
                 let MeshSyncFrame::AuthChallenge { nonce, .. } = framed.frame else {
                     peer_quota.release(framed.payload_len as usize);
-                    return Err("expected AuthChallenge".into());
+                    return Err(MeshError::Auth("expected AuthChallenge".into()));
                 };
                 let hmac = auth::compute_hmac(&secret, &nonce)?;
                 sync::write_frame(
@@ -56,19 +55,18 @@ pub(super) async fn handle_socket(
                             MeshSyncFrame::AuthResult { ok: true, .. } => Ok(()),
                             MeshSyncFrame::AuthResult {
                                 ok: false, reason, ..
-                            } => Err(format!("auth rejected: {reason}")),
-                            _ => Err("unexpected frame during auth".into()),
+                            } => Err(MeshError::Auth(format!("auth rejected: {reason}"))),
+                            _ => Err(MeshError::Auth("unexpected frame during auth".into())),
                         };
                         peer_quota.release(reply.payload_len as usize);
                         result?;
                     }
-                    None => return Err("unexpected EOF during auth".into()),
+                    None => return Err(MeshError::Auth("unexpected EOF during auth".into())),
                 }
             }
-            _ => return Err("expected AuthChallenge".into()),
+            _ => return Err(MeshError::Auth("expected AuthChallenge".into())),
         }
     } else {
-        // Inbound: send challenge, verify response
         let nonce = auth::generate_nonce();
         sync::write_frame(
             &mut write_half,
@@ -102,15 +100,15 @@ pub(super) async fn handle_socket(
                                 },
                             )
                             .await?;
-                            Err(format!("auth failed for {node}: HMAC mismatch"))
+                            Err(MeshError::Auth(format!("auth failed for {node}: HMAC mismatch")))
                         }
                     }
-                    _ => Err("expected AuthResponse".into()),
+                    _ => Err(MeshError::Auth("expected AuthResponse".into())),
                 };
                 peer_quota.release(framed.payload_len as usize);
                 result?;
             }
-            _ => return Err("expected AuthResponse".into()),
+            _ => return Err(MeshError::Auth("expected AuthResponse".into())),
         }
     }
     // Auth passed
@@ -131,7 +129,6 @@ pub(super) async fn handle_socket(
         .await;
     let sync_peer = Arc::new(RwLock::new(conn_id.clone()));
     loops::spawn_heartbeat_loop(out_tx.clone(), state.node_id.clone());
-    // Only outbound connections send deltas — prevents duplicate delta loops
     if is_outbound {
         loops::spawn_delta_loop(
             out_tx.clone(),
@@ -152,13 +149,14 @@ pub(super) async fn handle_socket(
             peer_quota.release(payload_len as usize);
             consecutive_errors = consecutive_errors.saturating_add(1);
             let peer = sync_peer.read().await.clone();
+            let err_str = err.to_string();
             let _ = sync::record_sync_error(
                 &config.db_path,
                 config.crsqlite_path.as_deref(),
                 &peer,
-                &err,
+                &err_str,
             );
-            publish_event(&state, "sync_error", &peer, json!({ "error": err }));
+            publish_event(&state, "sync_error", &peer, json!({ "error": err_str }));
             if consecutive_errors > 3 {
                 let delay = std::cmp::min(consecutive_errors as u64 * 2, 30);
                 tokio::time::sleep(Duration::from_secs(delay)).await;
@@ -173,11 +171,11 @@ pub(super) async fn handle_socket(
     Ok(())
 }
 
-pub(super) fn load_required_shared_secret(peers_conf: &std::path::Path) -> Result<Vec<u8>, String> {
+pub(super) fn load_required_shared_secret(peers_conf: &std::path::Path) -> Result<Vec<u8>, MeshError> {
     auth::load_shared_secret(peers_conf).ok_or_else(|| {
-        format!(
+        MeshError::Config(format!(
             "mesh auth requires non-empty [mesh].shared_secret in peers.conf: {:?}",
             peers_conf
-        )
+        ))
     })
 }

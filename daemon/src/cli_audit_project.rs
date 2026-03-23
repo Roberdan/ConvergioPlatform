@@ -1,36 +1,33 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Project-level audit — fetches aggregated data from daemon API and writes report.
 
+use crate::cli_error::CliError;
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::fs;
 
 /// Fetch project audit report from daemon API, optionally write to disk.
-pub async fn handle(project_id: &str, output: bool, yes: bool, api_url: &str) {
+pub async fn handle(
+    project_id: &str,
+    output: bool,
+    yes: bool,
+    api_url: &str,
+) -> Result<(), CliError> {
     let url = format!("{api_url}/api/audit/project/{project_id}");
-    let report = match reqwest::get(&url).await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<Value>().await {
-                Ok(val) => {
-                    if !status.is_success() {
-                        let msg = val["error"].as_str().unwrap_or("unknown error");
-                        eprintln!("error: {msg}");
-                        std::process::exit(1);
-                    }
-                    val
-                }
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
-    };
+    let resp = reqwest::get(&url)
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error connecting to daemon: {e}")))?;
+
+    let status = resp.status();
+    let report: Value = resp
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error parsing response: {e}")))?;
+
+    if !status.is_success() {
+        let msg = report["error"].as_str().unwrap_or("unknown error");
+        return Err(CliError::NotFound(msg.to_string()));
+    }
 
     // Pretty-print to stdout
     println!(
@@ -39,12 +36,18 @@ pub async fn handle(project_id: &str, output: bool, yes: bool, api_url: &str) {
     );
 
     if output {
-        write_report(project_id, &report, yes, api_url).await;
+        write_report(project_id, &report, yes, api_url).await?;
     }
+    Ok(())
 }
 
 /// Write audit report + metadata to project output directory, create deliverable record.
-async fn write_report(project_id: &str, report: &Value, yes: bool, api_url: &str) {
+async fn write_report(
+    project_id: &str,
+    report: &Value,
+    yes: bool,
+    api_url: &str,
+) -> Result<(), CliError> {
     let output_dir = claude_core::platform_paths::project_output_dir(project_id);
     let now = Utc::now();
     let date_prefix = now.format("%Y-%m-%d").to_string();
@@ -63,26 +66,23 @@ async fn write_report(project_id: &str, report: &Value, yes: bool, api_url: &str
         if std::io::stdin().read_line(&mut answer).is_err()
             || !matches!(answer.trim().to_lowercase().as_str(), "y" | "yes")
         {
-            eprintln!("Aborted.");
-            std::process::exit(1);
+            return Err(CliError::NotFound("Aborted.".into()));
         }
     }
 
     // Permission preflight
-    if let Err(e) = fs::create_dir_all(&dest) {
-        eprintln!("error: cannot create output directory: {e}");
+    fs::create_dir_all(&dest).map_err(|e| {
         print_permission_help();
-        std::process::exit(2);
-    }
+        CliError::Io(e)
+    })?;
 
     // Write report.json
     let report_path = dest.join("report.json");
     let report_str = serde_json::to_string_pretty(report).unwrap_or_else(|_| report.to_string());
-    if let Err(e) = fs::write(&report_path, &report_str) {
-        eprintln!("error: cannot write report.json: {e}");
+    fs::write(&report_path, &report_str).map_err(|e| {
         print_permission_help();
-        std::process::exit(2);
-    }
+        CliError::Io(e)
+    })?;
 
     // Write metadata.json
     let metadata = json!({
@@ -93,10 +93,10 @@ async fn write_report(project_id: &str, report: &Value, yes: bool, api_url: &str
         "output_path": dest.to_string_lossy(),
     });
     let meta_path = dest.join("metadata.json");
-    if let Err(e) = fs::write(&meta_path, serde_json::to_string_pretty(&metadata).unwrap()) {
-        eprintln!("error: cannot write metadata.json: {e}");
-        std::process::exit(2);
-    }
+    fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&metadata).unwrap(),
+    )?;
 
     eprintln!("Report written to: {}", dest.display());
 
@@ -124,6 +124,7 @@ async fn write_report(project_id: &str, report: &Value, yes: bool, api_url: &str
             eprintln!("warn: could not reach daemon for deliverable: {e}");
         }
     }
+    Ok(())
 }
 
 /// Scan output directory for existing audit folders to find next version number.

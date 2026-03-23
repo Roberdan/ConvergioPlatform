@@ -1,24 +1,31 @@
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+use super::types::IpcHandlerError;
 use super::utils::{default_db_path, default_peers_conf};
 
 pub async fn run_serve(
     bind: String,
     static_dir: Option<PathBuf>,
     crsqlite_path: Option<String>,
+    dev_mode: bool,
     mesh_enabled: bool,
-) {
+) -> Result<(), IpcHandlerError> {
+    // Initialise dev-mode flag before any request is handled.
+    claude_core::server::middleware::set_dev_mode(dev_mode);
+
+    // In dev-mode with no auth token, force localhost-only binding.
+    let effective_bind = claude_core::server::resolve_bind_addr(&bind, dev_mode);
+
     let dir = static_dir.unwrap_or_else(|| {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         claude_core::server::resolve_dashboard_static_dir(PathBuf::from(home).join(".claude"))
     });
-    info!("claude-core serve → {bind} (static: {dir:?})");
-    eprintln!("claude-core serve → {bind} (static: {dir:?})");
+    info!("claude-core serve → {effective_bind} (static: {dir:?})");
+    eprintln!("claude-core serve → {effective_bind} (static: {dir:?})");
 
     // Unified daemon: mesh CRDT sync + background sync loop alongside HTTP server
     if mesh_enabled {
-        // Background CRDT sync loop (was only in `daemon start`)
         let sync_db = default_db_path();
         if let Ok(sync_conn) = rusqlite::Connection::open(&sync_db) {
             let sync_conn = std::sync::Arc::new(std::sync::Mutex::new(sync_conn));
@@ -48,11 +55,13 @@ pub async fn run_serve(
         });
     }
 
-    if let Err(err) = claude_core::server::run(&bind, dir, crsqlite_path).await {
+    if let Err(err) = claude_core::server::run(&effective_bind, dir, crsqlite_path).await {
         warn!("server failed: {err}");
-        eprintln!("server failed: {err}");
-        std::process::exit(2);
+        return Err(IpcHandlerError::ServerFailed(
+            format!("server failed: {err}"),
+        ));
     }
+    Ok(())
 }
 
 pub async fn run_daemon(
@@ -62,7 +71,7 @@ pub async fn run_daemon(
     db_path: Option<PathBuf>,
     crsqlite_path: Option<String>,
     local_only: bool,
-) {
+) -> Result<(), IpcHandlerError> {
     let resolved_ip = if local_only {
         bind_ip.unwrap_or_else(|| "127.0.0.1".to_string())
     } else {
@@ -80,7 +89,9 @@ pub async fn run_daemon(
         local_only,
     };
     if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
-        eprintln!("daemon start failed: {err}");
-        std::process::exit(2);
+        return Err(IpcHandlerError::ServerFailed(
+            format!("daemon start failed: {err}"),
+        ));
     }
+    Ok(())
 }

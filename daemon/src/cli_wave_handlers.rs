@@ -2,6 +2,8 @@
 // Wave CLI handler implementations — called from cli_wave::handle().
 // Split from cli_wave.rs to stay under the 250-line file limit.
 
+use crate::cli_error::CliError;
+
 /// Look up the active workspace_id for a given wave in a plan.
 /// Returns None (and prints an error) if not found.
 async fn find_workspace_id(api_url: &str, plan_id: i64, wave_id: i64) -> Option<String> {
@@ -36,21 +38,18 @@ pub async fn handle_create(
     name: String,
     human: bool,
     api_url: String,
-) {
+) -> Result<(), CliError> {
     let create_body = serde_json::json!({
         "plan_id": plan_id,
         "wave_id": wave_id,
         "name": name,
     });
-    let wave_resp = match crate::cli_http::post_and_return(
+    let wave_resp = crate::cli_http::post_and_return(
         &format!("{api_url}/api/plan-db/wave/create"),
         &create_body,
     )
     .await
-    {
-        Ok(v) => v,
-        Err(code) => std::process::exit(code),
-    };
+    .map_err(|code| CliError::ApiCallFailed(format!("wave create failed (exit {code})")))?;
 
     // Provision workspace using the wave_db_id returned by the create endpoint.
     if let Some(wave_db_id) = wave_resp.get("wave_db_id").and_then(|v| v.as_i64()) {
@@ -77,28 +76,39 @@ pub async fn handle_create(
     } else {
         crate::cli_http::print_value(&wave_resp, human);
     }
+    Ok(())
 }
 
 /// Trigger the workspace release pipeline instead of the legacy wave/merge endpoint.
-pub async fn handle_merge(plan_id: i64, wave_id: i64, human: bool, api_url: String) {
-    let workspace_id = match find_workspace_id(&api_url, plan_id, wave_id).await {
-        Some(id) => id,
-        None => {
-            eprintln!("error: no active workspace found for wave {wave_id} in plan {plan_id}");
-            std::process::exit(1);
-        }
-    };
+pub async fn handle_merge(
+    plan_id: i64,
+    wave_id: i64,
+    human: bool,
+    api_url: String,
+) -> Result<(), CliError> {
+    let workspace_id = find_workspace_id(&api_url, plan_id, wave_id)
+        .await
+        .ok_or_else(|| {
+            CliError::NotFound(format!(
+                "no active workspace found for wave {wave_id} in plan {plan_id}"
+            ))
+        })?;
     let release_body = serde_json::json!({"workspace_id": workspace_id});
     crate::cli_http::post_and_print(
         &format!("{api_url}/api/workspace/release"),
         &release_body,
         human,
     )
-    .await;
+    .await
 }
 
 /// Run mechanical quality gates first; only call Thor if all gates pass.
-pub async fn handle_validate(wave_id: i64, plan_id: i64, human: bool, api_url: String) {
+pub async fn handle_validate(
+    wave_id: i64,
+    plan_id: i64,
+    human: bool,
+    api_url: String,
+) -> Result<(), CliError> {
     let workspace_id = find_workspace_id(&api_url, plan_id, wave_id).await;
     if let Some(ws_id) = workspace_id {
         let qg_body = serde_json::json!({"workspace_id": ws_id});
@@ -114,9 +124,10 @@ pub async fn handle_validate(wave_id: i64, plan_id: i64, human: bool, api_url: S
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 if !all_passed {
-                    eprintln!("quality gates failed — Thor validation blocked");
                     crate::cli_http::print_value(&qg_resp, human);
-                    std::process::exit(1);
+                    return Err(CliError::NotFound(
+                        "quality gates failed — Thor validation blocked".into(),
+                    ));
                 }
             }
             Err(code) => {
@@ -132,7 +143,7 @@ pub async fn handle_validate(wave_id: i64, plan_id: i64, human: bool, api_url: S
         &thor_body,
         human,
     )
-    .await;
+    .await
 }
 
 /// Release alias — convenience wrapper around the workspace release pipeline.
@@ -142,21 +153,21 @@ pub async fn handle_release(
     repo: String,
     human: bool,
     api_url: String,
-) {
-    let workspace_id = match find_workspace_id(&api_url, plan_id, wave_id).await {
-        Some(id) => id,
-        None => {
-            eprintln!("error: no active workspace found for wave {wave_id} in plan {plan_id}");
-            std::process::exit(1);
-        }
-    };
+) -> Result<(), CliError> {
+    let workspace_id = find_workspace_id(&api_url, plan_id, wave_id)
+        .await
+        .ok_or_else(|| {
+            CliError::NotFound(format!(
+                "no active workspace found for wave {wave_id} in plan {plan_id}"
+            ))
+        })?;
     let release_body = serde_json::json!({"workspace_id": workspace_id, "repo": repo});
     crate::cli_http::post_and_print(
         &format!("{api_url}/api/workspace/release"),
         &release_body,
         human,
     )
-    .await;
+    .await
 }
 
 #[cfg(test)]

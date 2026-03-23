@@ -28,7 +28,7 @@ async fn handle_import(
     let conn = &conn;
 
     // Guard: plan must exist and be in importable state (draft/todo/approved)
-    plan_lifecycle_guards::require_plan_importable(plan_id, conn).map_err(ApiError::conflict)?;
+    plan_lifecycle_guards::require_plan_importable(plan_id, conn)?;
 
     // Verify plan exists and get project_id
     let project_id: String = conn

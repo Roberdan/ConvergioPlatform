@@ -38,7 +38,7 @@ fn require_review_rejects_when_no_review() {
         [],
     )
     .unwrap();
-    let err = require_review(1, &conn).unwrap_err();
+    let err = require_review(1, &conn).unwrap_err().to_string();
     assert!(err.contains("REVIEW_REQUIRED"), "got: {err}");
 }
 
@@ -90,7 +90,7 @@ fn require_review_rejects_revise_verdict() {
         [],
     )
     .unwrap();
-    let err = require_review(1, &conn).unwrap_err();
+    let err = require_review(1, &conn).unwrap_err().to_string();
     assert!(err.contains("REVIEW_REQUIRED"), "got: {err}");
 }
 
@@ -111,7 +111,7 @@ fn require_plan_exists_returns_status() {
 #[test]
 fn require_plan_exists_rejects_missing() {
     let conn = setup_db();
-    let err = require_plan_exists(999, &conn).unwrap_err();
+    let err = require_plan_exists(999, &conn).unwrap_err().to_string();
     assert!(err.contains("PLAN_NOT_FOUND"), "got: {err}");
 }
 
@@ -147,14 +147,14 @@ fn require_plan_importable_rejects_doing() {
         [],
     )
     .unwrap();
-    let err = require_plan_importable(1, &conn).unwrap_err();
+    let err = require_plan_importable(1, &conn).unwrap_err().to_string();
     assert!(err.contains("PLAN_NOT_IMPORTABLE"), "got: {err}");
 }
 
 #[test]
 fn require_plan_importable_rejects_missing() {
     let conn = setup_db();
-    let err = require_plan_importable(999, &conn).unwrap_err();
+    let err = require_plan_importable(999, &conn).unwrap_err().to_string();
     assert!(err.contains("PLAN_NOT_FOUND"), "got: {err}");
 }
 
@@ -175,7 +175,7 @@ fn require_plan_startable_rejects_no_tasks() {
         [],
     )
     .unwrap();
-    let err = require_plan_startable(1, &conn).unwrap_err();
+    let err = require_plan_startable(1, &conn).unwrap_err().to_string();
     assert!(err.contains("NO_SPEC_IMPORTED"), "got: {err}");
 }
 
@@ -188,7 +188,7 @@ fn require_plan_startable_rejects_no_review() {
         [],
     )
     .unwrap();
-    let err = require_plan_startable(1, &conn).unwrap_err();
+    let err = require_plan_startable(1, &conn).unwrap_err().to_string();
     assert!(err.contains("REVIEW_REQUIRED"), "got: {err}");
 }
 

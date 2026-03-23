@@ -38,10 +38,10 @@ pub(crate) async fn api_mesh_sync_stats(
     if let Ok(result) = proxy_daemon_get("sync-stats").await {
         return Ok(result);
     }
-    // Fallback: read from DB directly
-    let db = state.open_db()?;
+    // Fallback: read from DB directly via the connection pool
+    let conn = state.get_conn()?;
     let rows = query_rows(
-        db.connection(),
+        &conn,
         "SELECT peer_name, total_sent, total_received, total_applied, \
          last_latency_ms, last_sent_at, last_sync_at FROM mesh_sync_stats",
         [],

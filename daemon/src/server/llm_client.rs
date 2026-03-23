@@ -1,3 +1,4 @@
+use super::state::ApiError;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -44,7 +45,7 @@ pub fn stream_chat(provider: Provider, model: &str, messages: Vec<ChatMessage>) 
             Provider::LiteLLM => stream_litellm(&tx, &model, &messages).await,
         };
         if let Err(e) = result {
-            let _ = tx.send(StreamChunk::Error(e)).await;
+            let _ = tx.send(StreamChunk::Error(e.to_string())).await;
         }
     });
     Box::pin(ReceiverStream::new(rx))
@@ -55,14 +56,15 @@ async fn consume_sse<F>(
     tx: &mpsc::Sender<StreamChunk>,
     resp: reqwest::Response,
     parse_fn: F,
-) -> Result<(), String>
+) -> Result<(), ApiError>
 where
     F: Fn(&str) -> Option<StreamChunk>,
 {
     let mut stream = resp.bytes_stream();
     let mut buf = String::new();
     while let Some(chunk) = stream.next().await {
-        let bytes = chunk.map_err(|e| format!("stream read error: {e}"))?;
+        let bytes = chunk
+            .map_err(|e| ApiError::internal(format!("stream read error: {e}")))?;
         buf.push_str(&String::from_utf8_lossy(&bytes));
         while let Some(pos) = buf.find("\n\n") {
             let block = buf[..pos].to_string();
@@ -92,11 +94,11 @@ async fn stream_claude(
     _tx: &mpsc::Sender<StreamChunk>,
     model: &str,
     _messages: &[ChatMessage],
-) -> Result<(), String> {
+) -> Result<(), ApiError> {
     warn!("BLOCKED: Direct Anthropic API call attempted for model '{}'. Use LiteLLM proxy instead. Start with: convergio-llm.sh start", model);
-    Err(format!(
+    Err(ApiError::forbidden(format!(
         "BLOCKED: Direct API calls disabled. Route through LiteLLM proxy (localhost:4000) or use Claude Code/Copilot subscription. Model: {model}"
-    ))
+    )))
 }
 
 // -- LiteLLM proxy (POST http://localhost:4000/v1/chat/completions) --
@@ -105,7 +107,7 @@ async fn stream_litellm(
     tx: &mpsc::Sender<StreamChunk>,
     model: &str,
     messages: &[ChatMessage],
-) -> Result<(), String> {
+) -> Result<(), ApiError> {
     let api_key = std::env::var("LITELLM_API_KEY").unwrap_or_default();
     let body = json!({"model": model, "stream": true, "messages": messages});
     let mut req = Client::new()
@@ -119,13 +121,13 @@ async fn stream_litellm(
     let resp = req
         .send()
         .await
-        .map_err(|e| format!("LiteLLM request failed: {e}"))?;
+        .map_err(|e| ApiError::internal(format!("LiteLLM request failed: {e}")))?;
     if !resp.status().is_success() {
         let s = resp.status();
-        return Err(format!(
+        return Err(ApiError::internal(format!(
             "LiteLLM {s}: {}",
             resp.text().await.unwrap_or_default()
-        ));
+        )));
     }
     consume_sse(tx, resp, parse_openai_sse).await
 }

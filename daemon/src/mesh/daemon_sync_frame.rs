@@ -1,3 +1,4 @@
+use crate::mesh::error::MeshError;
 use crate::mesh::sync::{self, MeshSyncFrame};
 use serde_json::json;
 use std::sync::Arc;
@@ -17,12 +18,11 @@ pub(super) async fn process_frame(
     config: &DaemonConfig,
     out_tx: &mpsc::Sender<MeshSyncFrame>,
     sync_peer: &Arc<RwLock<String>>,
-) -> Result<(), String> {
+) -> Result<(), MeshError> {
     match frame {
         MeshSyncFrame::Heartbeat { node, ts } => {
             *sync_peer.write().await = node.clone();
             state.heartbeats.write().await.insert(node.clone(), *ts);
-            // T1-06: Persist heartbeat to DB with crsqlite loaded (CRR triggers need it)
             if let Ok(conn) =
                 sync::open_persistent_sync_conn(&config.db_path, config.crsqlite_path.as_deref())
             {
@@ -83,7 +83,6 @@ pub(super) async fn process_frame(
                        "last_db_version": last_db_version}),
             );
         }
-        // Auth frames are handled in handshake, not in main loop
         MeshSyncFrame::AuthChallenge { .. }
         | MeshSyncFrame::AuthResponse { .. }
         | MeshSyncFrame::AuthResult { .. } => {}

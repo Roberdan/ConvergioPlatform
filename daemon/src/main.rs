@@ -1,6 +1,7 @@
 mod daemon_logging;
 
 mod cli_agent;
+mod cli_agent_format;
 mod cli_agents;
 mod cli_audit;
 mod cli_audit_project;
@@ -8,6 +9,7 @@ mod cli_bus;
 mod cli_checkpoint;
 mod cli_commands;
 mod cli_domain;
+mod cli_error;
 mod cli_http;
 mod cli_kb;
 mod cli_lock;
@@ -22,6 +24,7 @@ mod cli_skill_disable;
 mod cli_skill_enable;
 mod cli_skill_transpile;
 mod cli_skill_validate;
+mod cli_skill_validators;
 mod cli_task;
 mod cli_task_approve;
 mod cli_wave;
@@ -149,13 +152,14 @@ async fn dispatch(command: Commands) {
             if let Some(ref p) = db_path {
                 std::env::set_var("DASHBOARD_DB", p);
             }
-            if dev_mode {
-                tracing::warn!("Auth disabled — dev mode");
-            }
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(claude_core::background::run_pause_bridge(db_path));
-            // Unified daemon: HTTP API + mesh CRDT in one process
-            ipc_handler::run_serve(bind, static_dir, crsqlite_path, mesh).await;
+            if let Err(e) =
+                ipc_handler::run_serve(bind, static_dir, crsqlite_path, dev_mode, mesh).await
+            {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
         }
         Commands::Daemon { command } => match command {
             DaemonCommands::Start {
@@ -181,7 +185,7 @@ async fn dispatch(command: Commands) {
                 let _sync_handle =
                     claude_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
 
-                ipc_handler::run_daemon(
+                if let Err(e) = ipc_handler::run_daemon(
                     bind_ip,
                     port,
                     peers_conf,
@@ -189,7 +193,11 @@ async fn dispatch(command: Commands) {
                     crsqlite_path,
                     local_only,
                 )
-                .await;
+                .await
+                {
+                    eprintln!("{e}");
+                    std::process::exit(2);
+                }
             }
         },
         Commands::Ipc { args } => {
@@ -199,7 +207,10 @@ async fn dispatch(command: Commands) {
             }
         }
         Commands::IpcIntel { command } => {
-            ipc_handler::handle_ipc(command).await;
+            if let Err(e) = ipc_handler::handle_ipc(command).await {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
         }
         Commands::Tui { api_url } => {
             env::set_var("CONVERGIO_API_URL", &api_url);
@@ -216,12 +227,12 @@ async fn dispatch(command: Commands) {
                 }
             }
         }
-        Commands::Plan { command } => cli_plan::handle(command).await,
-        Commands::Task { command } => cli_task::handle(command).await,
-        Commands::Wave { command } => cli_wave::handle(command).await,
-        Commands::Agent { command } => cli_agent::handle(command).await,
-        Commands::Kb { command } => cli_kb::handle(command).await,
-        Commands::Run { command } => cli_run::handle(command).await,
+        Commands::Plan { command } => exit_on_err(cli_plan::handle(command).await),
+        Commands::Task { command } => exit_on_err(cli_task::handle(command).await),
+        Commands::Wave { command } => exit_on_err(cli_wave::handle(command).await),
+        Commands::Agent { command } => exit_on_err(cli_agent_format::dispatch(command).await),
+        Commands::Kb { command } => exit_on_err(cli_kb::handle(command).await),
+        Commands::Run { command } => exit_on_err(cli_run::handle(command).await),
         Commands::Mesh { command } => cli_ops::handle_mesh(command).await,
         Commands::Session { command } => cli_ops::handle_session(command).await,
         Commands::Checkpoint { command } => cli_checkpoint::handle(command).await,
@@ -235,17 +246,26 @@ async fn dispatch(command: Commands) {
             api_url,
         } => {
             if let Some(project_id) = project {
-                cli_audit_project::handle(&project_id, output, yes, &api_url).await;
+                exit_on_err(
+                    cli_audit_project::handle(&project_id, output, yes, &api_url).await,
+                );
             } else {
-                cli_audit::handle(path);
+                exit_on_err(cli_audit::handle(path));
             }
         }
-        Commands::Skill { command } => cli_skill::handle(command).await,
+        Commands::Skill { command } => exit_on_err(cli_skill::handle(command).await),
         Commands::Bus { command } => cli_bus::handle(command).await,
-        Commands::Project { command } => cli_project::handle(command).await,
+        Commands::Project { command } => exit_on_err(cli_project::handle(command).await),
         Commands::Metrics { command } => cli_ops::handle_metrics(command).await,
         Commands::Alert { command } => cli_ops::handle_alert(command).await,
-        Commands::Domain { command } => cli_domain::dispatch(command).await,
+        Commands::Domain { command } => exit_on_err(cli_domain::dispatch(command).await),
         Commands::Workspace { command } => cli_workspace::handle(command).await,
+    }
+}
+
+fn exit_on_err(result: Result<(), cli_error::CliError>) {
+    if let Err(e) = result {
+        eprintln!("{e}");
+        std::process::exit(e.exit_code());
     }
 }

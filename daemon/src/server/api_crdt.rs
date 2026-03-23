@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS peer_heartbeats (
         let conn = rusqlite::Connection::open(&tmp).expect("open tmp db");
         conn.execute_batch(SCHEMA).expect("schema");
         drop(conn);
+        // Dev-mode: disable auth so tests pass without a bearer token.
+        super::super::middleware::set_dev_mode(true);
         super::super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
     }
 
@@ -222,6 +224,8 @@ CREATE TABLE IF NOT EXISTS peer_heartbeats (
         )
         .expect("seed");
         drop(conn);
+        // Dev-mode: disable auth so tests pass without a bearer token.
+        super::super::middleware::set_dev_mode(true);
         let router =
             super::super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None);
 

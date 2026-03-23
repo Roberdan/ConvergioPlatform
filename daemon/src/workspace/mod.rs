@@ -7,4 +7,5 @@ pub mod merge_ops;
 pub mod quality_gate;
 pub mod release_agent;
 pub mod validation;
+pub mod validation_rules;
 pub mod wave_ops;

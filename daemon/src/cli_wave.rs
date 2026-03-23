@@ -3,6 +3,7 @@
 // JSON output by default; --human flag for readable text.
 // Handler implementations live in cli_wave_handlers.rs (250-line split).
 
+use crate::cli_error::CliError;
 use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
@@ -88,7 +89,7 @@ pub enum WaveCommands {
     },
 }
 
-pub async fn handle(cmd: WaveCommands) {
+pub async fn handle(cmd: WaveCommands) -> Result<(), CliError> {
     match cmd {
         WaveCommands::Update {
             wave_id,
@@ -105,7 +106,7 @@ pub async fn handle(cmd: WaveCommands) {
                 &body,
                 human,
             )
-            .await;
+            .await?;
         }
         WaveCommands::Context {
             plan_id,
@@ -116,7 +117,7 @@ pub async fn handle(cmd: WaveCommands) {
                 &format!("{api_url}/api/plan-db/context/{plan_id}"),
                 human,
             )
-            .await;
+            .await?;
         }
         WaveCommands::Create {
             plan_id,
@@ -125,7 +126,8 @@ pub async fn handle(cmd: WaveCommands) {
             human,
             api_url,
         } => {
-            crate::cli_wave_handlers::handle_create(plan_id, wave_id, name, human, api_url).await;
+            crate::cli_wave_handlers::handle_create(plan_id, wave_id, name, human, api_url)
+                .await?;
         }
         WaveCommands::Merge {
             plan_id,
@@ -133,7 +135,7 @@ pub async fn handle(cmd: WaveCommands) {
             human,
             api_url,
         } => {
-            crate::cli_wave_handlers::handle_merge(plan_id, wave_id, human, api_url).await;
+            crate::cli_wave_handlers::handle_merge(plan_id, wave_id, human, api_url).await?;
         }
         WaveCommands::Validate {
             wave_id,
@@ -141,7 +143,7 @@ pub async fn handle(cmd: WaveCommands) {
             human,
             api_url,
         } => {
-            crate::cli_wave_handlers::handle_validate(wave_id, plan_id, human, api_url).await;
+            crate::cli_wave_handlers::handle_validate(wave_id, plan_id, human, api_url).await?;
         }
         WaveCommands::Release {
             wave_id,
@@ -150,9 +152,11 @@ pub async fn handle(cmd: WaveCommands) {
             human,
             api_url,
         } => {
-            crate::cli_wave_handlers::handle_release(wave_id, plan_id, repo, human, api_url).await;
+            crate::cli_wave_handlers::handle_release(wave_id, plan_id, repo, human, api_url)
+                .await?;
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]

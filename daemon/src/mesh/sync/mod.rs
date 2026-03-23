@@ -16,6 +16,15 @@ mod sync_frame_tests;
 #[cfg(test)]
 #[path = "../sync_tests.rs"]
 mod sync_tests;
+#[cfg(test)]
+#[path = "../sync_quota_tests.rs"]
+mod sync_quota_tests;
+#[cfg(test)]
+#[path = "../sync_batch_tests.rs"]
+mod sync_batch_tests;
+#[cfg(test)]
+#[path = "../sync_db_ops_tests.rs"]
+mod sync_db_ops_tests;
 
 pub use db_ops::{
     apply_delta_frame, collect_changes_since, collect_changes_with_conn, current_db_version,

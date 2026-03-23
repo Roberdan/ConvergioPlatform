@@ -39,7 +39,7 @@ async fn read_frame_with_quota_rejects_oversized_frame() {
     let err = read_frame_with_quota(&mut reader, &mut quota)
         .await
         .expect_err("oversized frame must be rejected");
-    assert!(err.contains("mesh frame exceeds limit"));
+    assert!(err.to_string().contains("mesh frame exceeds limit"));
     assert_eq!(
         quota.pending_bytes(),
         0,
@@ -83,7 +83,7 @@ async fn peer_quota_blocks_multi_frame_flood_until_release() {
     let err = read_frame_with_quota(&mut reader, &mut quota)
         .await
         .expect_err("second frame must be blocked while first is pending");
-    assert!(err.contains("mesh peer pending bytes exceeded"));
+    assert!(err.to_string().contains("mesh peer pending bytes exceeded"));
 
     quota.release(first.payload_len as usize);
     assert_eq!(

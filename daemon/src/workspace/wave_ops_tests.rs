@@ -70,7 +70,7 @@ fn create_wave_workspace_wave_not_found() {
     let mgr = WorkspaceManager::new(pool.clone(), tmp.path().to_path_buf());
     let result = create_wave_workspace(&mgr, 698, 9999, &pool);
     assert!(result.is_err(), "should error for unknown wave_db_id");
-    assert!(result.unwrap_err().contains("not found"));
+    assert!(result.unwrap_err().to_string().contains("not found"));
 }
 
 #[test]

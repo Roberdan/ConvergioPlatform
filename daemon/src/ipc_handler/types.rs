@@ -139,3 +139,15 @@ pub enum DaemonCommands {
         local_only: bool,
     },
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum IpcHandlerError {
+    #[error("database error: {0}")]
+    DbOpen(String),
+    #[error("{0}")]
+    OperationFailed(String),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("server error: {0}")]
+    ServerFailed(String),
+}

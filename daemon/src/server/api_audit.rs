@@ -60,8 +60,8 @@ async fn project_audit(
     } else {
         let placeholders = plan_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let sql = format!(
-            "SELECT id, goal, status, plan_id, cost_usd, duration_s, \
-             model, agents_used, started_at, ended_at \
+            "SELECT id, goal, status, plan_id, cost_usd, duration_minutes, \
+             agents_used, started_at, completed_at \
              FROM execution_runs WHERE plan_id IN ({placeholders}) ORDER BY id DESC"
         );
         let params = plan_ids.to_vec();

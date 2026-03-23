@@ -5,22 +5,22 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::types::MAX_PEER_NAME_LEN;
+use crate::mesh::error::MeshError;
 
 /// Open a new sync connection (WAL mode, cr-sqlite extension if available).
-pub fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Connection, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+pub fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Connection, MeshError> {
+    let conn = Connection::open(db_path)?;
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
          PRAGMA synchronous=NORMAL;
          PRAGMA busy_timeout=5000;
          PRAGMA cache_size=-2000;",
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     if let Some(ext) = crsqlite_ext {
-        match (|| -> Result<(), String> {
-            unsafe { conn.load_extension_enable() }.map_err(|e| e.to_string())?;
-            unsafe { conn.load_extension(ext, None::<&str>) }.map_err(|e| e.to_string())?;
-            crate::db::crdt::mark_required_tables(&conn).map_err(|e| e.to_string())?;
+        match (|| -> Result<(), MeshError> {
+            unsafe { conn.load_extension_enable() }?;
+            unsafe { conn.load_extension(ext, None::<&str>) }?;
+            crate::db::crdt::mark_required_tables(&conn)?;
             Ok(())
         })() {
             Ok(()) => {}
@@ -39,7 +39,7 @@ pub fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Conn
 pub fn open_persistent_sync_conn(
     db_path: &Path,
     crsqlite_ext: Option<&str>,
-) -> Result<Connection, String> {
+) -> Result<Connection, MeshError> {
     open_sync_conn(db_path, crsqlite_ext)
 }
 
@@ -63,9 +63,12 @@ pub fn ensure_sync_schema_pub(conn: &Connection) -> rusqlite::Result<()> {
     ensure_sync_schema(conn)
 }
 
-pub fn validate_peer_name(peer_name: &str) -> Result<(), String> {
+pub fn validate_peer_name(peer_name: &str) -> Result<(), MeshError> {
     if peer_name.is_empty() || peer_name.len() > MAX_PEER_NAME_LEN {
-        return Err(format!("invalid peer name length: {}", peer_name.len()));
+        return Err(MeshError::Config(format!(
+            "invalid peer name length: {}",
+            peer_name.len()
+        )));
     }
     Ok(())
 }

@@ -1,6 +1,6 @@
 // Tests for merge_ops module — MockGitConnector verifies pipeline call order.
 use super::*;
-use crate::workspace::git_connector::{MergeMethod, PrInfo, PrReadiness};
+use crate::workspace::git_connector::{AsyncResult, GitError, MergeMethod, PrInfo, PrReadiness};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::cell::RefCell;
@@ -35,53 +35,58 @@ impl MockGitConnector {
 }
 
 impl GitConnector for MockGitConnector {
-    fn commit(&self, _path: &Path, _message: &str) -> Result<String, String> {
+    fn commit(&self, _path: &Path, _message: &str) -> std::result::Result<String, GitError> {
         self.push_call("commit");
         Ok("abc1234567890123456789012345678901234567890".to_string())
     }
 
-    fn push(&self, _path: &Path, _branch: &str, _force_with_lease: bool) -> Result<(), String> {
+    fn push(&self, _path: &Path, _branch: &str, _force_with_lease: bool) -> std::result::Result<(), GitError> {
         self.push_call("push");
         Ok(())
     }
 
-    fn rebase(&self, _path: &Path, _onto: &str) -> Result<(), String> {
+    fn rebase(&self, _path: &Path, _onto: &str) -> std::result::Result<(), GitError> {
         self.push_call("rebase");
         Ok(())
     }
 
-    fn create_pr(
-        &self,
-        _repo: &str,
-        _branch: &str,
-        _base: &str,
-        _title: &str,
-        _body: &str,
-    ) -> Result<PrInfo, String> {
+    fn create_pr<'a>(
+        &'a self,
+        _repo: &'a str,
+        _branch: &'a str,
+        _base: &'a str,
+        _title: &'a str,
+        _body: &'a str,
+    ) -> AsyncResult<'a, PrInfo> {
         self.push_call("create_pr");
-        Ok(PrInfo {
-            number: 42,
-            url: "https://github.com/example/repo/pull/42".to_string(),
+        Box::pin(async {
+            Ok(PrInfo {
+                number: 42,
+                url: "https://github.com/example/repo/pull/42".to_string(),
+            })
         })
     }
 
-    fn merge_pr(&self, _repo: &str, _pr_number: i64, _method: MergeMethod) -> Result<(), String> {
+    fn merge_pr<'a>(&'a self, _repo: &'a str, _pr_number: i64, _method: MergeMethod) -> AsyncResult<'a, ()> {
         self.push_call("merge_pr");
-        Ok(())
+        Box::pin(async { Ok(()) })
     }
 
-    fn pr_readiness(&self, _repo: &str, _pr_number: i64) -> Result<PrReadiness, String> {
+    fn pr_readiness<'a>(&'a self, _repo: &'a str, _pr_number: i64) -> AsyncResult<'a, PrReadiness> {
         self.push_call("pr_readiness");
-        Ok(PrReadiness {
-            mergeable: self.pr_ready,
-            ci_passed: self.pr_ready,
-            pending_checks: 0,
-            unresolved_threads: 0,
-            review_status: if self.pr_ready {
-                "clean".into()
-            } else {
-                "blocked".into()
-            },
+        let ready = self.pr_ready;
+        Box::pin(async move {
+            Ok(PrReadiness {
+                mergeable: ready,
+                ci_passed: ready,
+                pending_checks: 0,
+                unresolved_threads: 0,
+                review_status: if ready {
+                    "clean".into()
+                } else {
+                    "blocked".into()
+                },
+            })
         })
     }
 }
@@ -141,17 +146,16 @@ fn seed_wave_and_workspace(pool: &ConnPool, wave_db_id: i64, plan_id: i64) {
     .unwrap();
 }
 
-#[test]
-fn merge_pipeline_calls_in_correct_order() {
+#[tokio::test]
+async fn merge_pipeline_calls_in_correct_order() {
     let pool = make_pool_with_schema();
     seed_wave_and_workspace(&pool, 1, 698);
     let connector = MockGitConnector::new(true);
     let event_logger = EventLogger::new(pool.clone());
 
-    let result = merge_wave(1, "example/repo", &connector, &event_logger, &pool).unwrap();
+    let result = merge_wave(1, "example/repo", &connector, &event_logger, &pool).await.unwrap();
 
     let calls = connector.recorded_calls();
-    // Verify order: commit, rebase, push, create_pr, pr_readiness (at least 1), merge_pr
     assert_eq!(calls[0], "commit", "commit must be first");
     assert_eq!(calls[1], "rebase", "rebase must follow commit");
     assert_eq!(calls[2], "push", "push must follow rebase");
@@ -164,14 +168,14 @@ fn merge_pipeline_calls_in_correct_order() {
     assert!(!result.pr_url.is_empty());
 }
 
-#[test]
-fn merge_pipeline_updates_waves_table() {
+#[tokio::test]
+async fn merge_pipeline_updates_waves_table() {
     let pool = make_pool_with_schema();
     seed_wave_and_workspace(&pool, 2, 698);
     let connector = MockGitConnector::new(true);
     let event_logger = EventLogger::new(pool.clone());
 
-    merge_wave(2, "example/repo", &connector, &event_logger, &pool).unwrap();
+    merge_wave(2, "example/repo", &connector, &event_logger, &pool).await.unwrap();
 
     let conn = pool.get().unwrap();
     let (status, pr_number, pr_url): (String, Option<i64>, Option<String>) = conn
@@ -186,24 +190,26 @@ fn merge_pipeline_updates_waves_table() {
     assert!(pr_url.is_some());
 }
 
-#[test]
-fn merge_pipeline_fails_when_no_workspace() {
+#[tokio::test]
+async fn merge_pipeline_fails_when_no_workspace() {
     let pool = make_pool_with_schema();
-    // No workspace seeded for wave_db_id=99
     let connector = MockGitConnector::new(true);
     let event_logger = EventLogger::new(pool.clone());
 
-    let err = merge_wave(99, "example/repo", &connector, &event_logger, &pool).unwrap_err();
+    let err = merge_wave(99, "example/repo", &connector, &event_logger, &pool)
+        .await
+        .unwrap_err()
+        .to_string();
     assert!(
-        err.contains("no active workspace"),
+        err.contains("wave 99"),
         "expected workspace error, got: {err}"
     );
 }
 
-#[test]
-fn pr_readiness_check_delegates_to_connector() {
+#[tokio::test]
+async fn pr_readiness_check_delegates_to_connector() {
     let connector = MockGitConnector::new(true);
-    let readiness = pr_readiness_check(&connector, "example/repo", 42).unwrap();
+    let readiness = pr_readiness_check(&connector, "example/repo", 42).await.unwrap();
     assert!(readiness.mergeable);
     assert!(readiness.ci_passed);
     assert_eq!(readiness.review_status, "clean");

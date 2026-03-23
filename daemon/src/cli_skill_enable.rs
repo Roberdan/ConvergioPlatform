@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Skill enable subcommand — reads skill.yaml, activates required agents and plugins.
 
+use crate::cli_error::CliError;
 use crate::cli_skill_validate::{agent_name_valid, yaml_get_list};
 use std::path::{Path, PathBuf};
 
@@ -80,19 +81,16 @@ pub fn activate_plugins(
 }
 
 /// Enable a skill: parse requires-agents + requires-plugins, activate agents and plugins.
-pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
+pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) -> Result<(), CliError> {
     let yaml_path = skill_dir.join("skill.yaml");
     if !yaml_path.is_file() {
-        eprintln!("skill.yaml not found in {}", skill_dir.display());
-        std::process::exit(2);
+        return Err(CliError::InvalidInput(format!(
+            "skill.yaml not found in {}",
+            skill_dir.display()
+        )));
     }
-    let yaml_content = match std::fs::read_to_string(&yaml_path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("read error: {e}");
-            std::process::exit(2);
-        }
-    };
+    let yaml_content = std::fs::read_to_string(&yaml_path)
+        .map_err(|e| CliError::InvalidInput(format!("read error: {e}")))?;
 
     let agents = yaml_get_list(&yaml_content, "requires-agents").unwrap_or_default();
 
@@ -162,6 +160,7 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
             })
         );
     }
+    Ok(())
 }
 
 #[cfg(test)]

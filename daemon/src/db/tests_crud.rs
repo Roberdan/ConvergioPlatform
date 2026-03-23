@@ -81,14 +81,13 @@ fn db_crdt_required_tables_are_declared() {
     for required in &["plans", "tasks", "waves", "projects", "agent_activity",
                        "delegation_log", "knowledge_base", "peer_heartbeats",
                        "earned_skills", "solve_sessions"] {
-        assert!(tables.contains(&required.to_string()),
+        assert!(tables.contains(required),
             "missing required CRDT table: {required}");
     }
-    // Verify dead tables were removed
     for dead in &["conversation_logs", "file_snapshots", "collector_runs",
                    "debt_items", "env_vault_log", "merge_queue", "metrics_history",
                    "notification_triggers", "schema_metadata", "session_state", "snapshots"] {
-        assert!(!tables.contains(&dead.to_string()),
+        assert!(!tables.contains(dead),
             "dead table still in CRDT list: {dead}");
     }
 }

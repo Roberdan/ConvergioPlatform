@@ -96,17 +96,15 @@ impl IpcEngine {
         })
     }
 
-    pub fn heartbeat_local_agents(&self) -> Result<usize, String> {
-        let conn = self.open_conn().map_err(|e| e.to_string())?;
+    pub fn heartbeat_local_agents(&self) -> Result<usize, super::super::error::IpcError> {
+        let conn = self.open_conn()?;
         let local_host = Self::hostname();
-        let mut stmt = conn
-            .prepare("SELECT name, pid FROM ipc_agents WHERE host = ?1 AND pid IS NOT NULL")
-            .map_err(|e| e.to_string())?;
+        let mut stmt =
+            conn.prepare("SELECT name, pid FROM ipc_agents WHERE host = ?1 AND pid IS NOT NULL")?;
         let agents: Vec<(String, u32)> = stmt
             .query_map(rusqlite::params![local_host], |row| {
                 Ok((row.get(0)?, row.get(1)?))
-            })
-            .map_err(|e| e.to_string())?
+            })?
             .filter_map(|r| r.ok())
             .collect();
 

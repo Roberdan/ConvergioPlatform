@@ -2,7 +2,7 @@
 # convergio-bus.sh — Agent message bus (daemon API client)
 # All operations go through the daemon HTTP API on :8420
 # No file-based messaging — daemon is the single source of truth
-set -uo pipefail
+set -euo pipefail
 
 DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 

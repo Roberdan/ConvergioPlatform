@@ -5,6 +5,8 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::path::Path;
 
+use super::error::MeshError;
+
 type HmacSha256 = Hmac<Sha256>;
 const NONCE_LEN: usize = 32;
 
@@ -16,17 +18,17 @@ pub fn generate_nonce() -> Vec<u8> {
 }
 
 /// Compute HMAC-SHA256(secret, nonce) for challenge-response
-pub fn compute_hmac(secret: &[u8], nonce: &[u8]) -> Result<Vec<u8>, String> {
-    let mut mac =
-        HmacSha256::new_from_slice(secret).map_err(|_| "invalid HMAC key length".to_string())?;
+pub fn compute_hmac(secret: &[u8], nonce: &[u8]) -> Result<Vec<u8>, MeshError> {
+    let mut mac = HmacSha256::new_from_slice(secret)
+        .map_err(|_| MeshError::Auth("invalid HMAC key length".into()))?;
     mac.update(nonce);
     Ok(mac.finalize().into_bytes().to_vec())
 }
 
 /// Verify a peer's HMAC response against expected
-pub fn verify_hmac(secret: &[u8], nonce: &[u8], response: &[u8]) -> Result<bool, String> {
-    let mut mac =
-        HmacSha256::new_from_slice(secret).map_err(|_| "invalid HMAC key length".to_string())?;
+pub fn verify_hmac(secret: &[u8], nonce: &[u8], response: &[u8]) -> Result<bool, MeshError> {
+    let mut mac = HmacSha256::new_from_slice(secret)
+        .map_err(|_| MeshError::Auth("invalid HMAC key length".into()))?;
     mac.update(nonce);
     Ok(mac.verify_slice(response).is_ok())
 }
