@@ -7,10 +7,30 @@ use super::sse_stream::{required, resolve_peer_ip};
 use super::state::{ApiError, ServerState};
 use axum::extract::{Query, State};
 use axum::response::sse::{Event, Sse};
+use regex::Regex;
 use serde_json::json;
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::sync::OnceLock;
 use tokio_stream::iter;
+
+/// Tailscale hostnames: alphanumeric, dots, hyphens, underscores only.
+/// Rejects shell metacharacters that could be injected into command arguments.
+pub fn validate_peer(peer: &str) -> Result<(), String> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"^[a-zA-Z0-9._-]+$").expect("valid regex"));
+    if peer.is_empty() {
+        return Err("peer name must not be empty".into());
+    }
+    if !re.is_match(peer) {
+        return Err(format!("invalid peer name: {peer:?}"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "sse_tests.rs"]
+mod tests;
 
 pub async fn mesh_action_sse(
     Query(qs): Query<HashMap<String, String>>,
@@ -90,38 +110,38 @@ pub async fn mesh_action_sse(
             }
         }
         "sync" => {
-            lines.push(format!("▶ Triggering sync for {peer}..."));
-            // Cross-platform: invoke mesh-coordinator if available
-            let script = format!("{home}/.claude/scripts/mesh-coordinator.sh");
-            let (cmd, args) = if cfg!(windows) {
-                (
-                    "cmd".to_string(),
-                    vec!["/C".to_string(), format!("bash {script} sync {peer}")],
-                )
+            // Validate peer before any command execution to prevent injection
+            if let Err(e) = validate_peer(&peer) {
+                lines.push(format!("ERROR {e}"));
+                ok = false;
             } else {
-                (
-                    "sh".to_string(),
-                    vec!["-c".to_string(), format!("{script} sync {peer}")],
-                )
-            };
-            match tokio::process::Command::new(&cmd)
-                .args(&args)
-                .output()
-                .await
-            {
-                Ok(o) => {
-                    for l in String::from_utf8_lossy(&o.stdout).lines() {
-                        lines.push(l.to_string());
+                lines.push(format!("▶ Triggering sync for {peer}..."));
+                // Pass script path and peer as separate args — no shell interpolation
+                let script = format!("{home}/.claude/scripts/mesh-coordinator.sh");
+                let mut cmd = if cfg!(windows) {
+                    let mut c = tokio::process::Command::new("cmd");
+                    c.args(["/C", "bash", &script, "sync", &peer]);
+                    c
+                } else {
+                    let mut c = tokio::process::Command::new(&script);
+                    c.args(["sync", &peer]);
+                    c
+                };
+                match cmd.output().await {
+                    Ok(o) => {
+                        for l in String::from_utf8_lossy(&o.stdout).lines() {
+                            lines.push(l.to_string());
+                        }
+                        for l in String::from_utf8_lossy(&o.stderr).lines() {
+                            lines.push(format!("WARN {l}"));
+                        }
+                        ok = o.status.success();
                     }
-                    for l in String::from_utf8_lossy(&o.stderr).lines() {
-                        lines.push(format!("WARN {l}"));
+                    Err(e) => {
+                        lines.push(format!("WARN sync script failed: {e}"));
                     }
-                    ok = o.status.success();
                 }
-                Err(e) => {
-                    lines.push(format!("WARN sync script failed: {e}"));
-                }
-            }
+            } // close else block
         }
         _ => {
             lines.push(format!("▶ Action: {action} on {peer}"));
