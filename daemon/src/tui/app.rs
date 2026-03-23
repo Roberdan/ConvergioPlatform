@@ -10,6 +10,7 @@ use reqwest::Client;
 use tokio::time::interval;
 
 use super::data::{MainView, TuiData};
+use super::ws_client::WsClient;
 use super::{api, views};
 
 pub struct TuiApp {
@@ -18,6 +19,7 @@ pub struct TuiApp {
     pub selected_index: usize,
     pub last_fetch: Instant,
     pub api_url: String,
+    pub ws_client: WsClient,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     client: Client,
 }
@@ -41,12 +43,15 @@ impl TuiApp {
         )?;
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
+        let api_url = Self::parse_api_url();
+        let ws_client = WsClient::new(&api_url);
         Ok(Self {
             data: TuiData::default(),
             active_view: MainView::default(),
             selected_index: 0,
             last_fetch: Instant::now() - Duration::from_secs(10),
-            api_url: Self::parse_api_url(),
+            api_url,
+            ws_client,
             terminal,
             client: Client::new(),
         })
@@ -64,7 +69,11 @@ impl TuiApp {
         loop {
             tokio::select! {
                 _ = poll_tick.tick() => {
-                    self.refresh_data().await;
+                    // HTTP polling is the fallback path when WS has exceeded max retries.
+                    // When WS stream is wired in W3/W4, this branch will only run on fallback.
+                    if self.ws_client.should_fallback() {
+                        self.refresh_data().await;
+                    }
                 }
                 _ = render_tick.tick() => {
                     self.render()?;

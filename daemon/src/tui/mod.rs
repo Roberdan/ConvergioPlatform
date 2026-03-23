@@ -3,6 +3,7 @@ pub mod app;
 pub mod data;
 pub mod views;
 pub mod widgets;
+pub mod ws_client;
 
 pub use app::TuiApp;
 pub use data::*;
