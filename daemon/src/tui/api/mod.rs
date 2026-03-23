@@ -1,14 +1,15 @@
-use std::env;
+// TUI HTTP API — fetch functions for all dashboard views.
+// api_url is passed explicitly; falls back to CONVERGIO_API_URL env var in app.rs.
+
+mod brain;
+
+pub use brain::{fetch_brain, parse_brain_response};
 
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{AgentOrgNode, KpiData, MeshNode, PlanCard, TaskPipelineItem};
-
-fn base_url() -> String {
-    env::var("CONVERGIO_API_URL").unwrap_or_else(|_| "http://localhost:8420".to_string())
-}
+use crate::tui::{AgentOrgNode, KpiData, MeshNode, PlanCard, TaskPipelineItem};
 
 // --- API response shapes (match daemon endpoints) ---
 
@@ -77,9 +78,9 @@ struct OverviewResponse {
 
 // --- Fetch functions ---
 
-/// GET /api/overview -> KpiData
-pub async fn fetch_overview(client: &Client) -> KpiData {
-    let url = format!("{}/api/overview", base_url());
+/// GET {api_url}/api/overview -> KpiData
+pub async fn fetch_overview(client: &Client, api_url: &str) -> KpiData {
+    let url = format!("{api_url}/api/overview");
     match client.get(&url).send().await {
         Ok(resp) => match resp.json::<OverviewResponse>().await {
             Ok(o) => KpiData {
@@ -95,9 +96,9 @@ pub async fn fetch_overview(client: &Client) -> KpiData {
     }
 }
 
-/// GET /api/plan-db/list -> Vec<PlanCard>
-pub async fn fetch_plans(client: &Client) -> Vec<PlanCard> {
-    let url = format!("{}/api/plan-db/list", base_url());
+/// GET {api_url}/api/plan-db/list -> Vec<PlanCard>
+pub async fn fetch_plans(client: &Client, api_url: &str) -> Vec<PlanCard> {
+    let url = format!("{api_url}/api/plan-db/list");
     match client.get(&url).send().await {
         Ok(resp) => match resp.json::<PlanListResponse>().await {
             Ok(r) => r
@@ -118,9 +119,10 @@ pub async fn fetch_plans(client: &Client) -> Vec<PlanCard> {
     }
 }
 
-/// GET /api/plan/:plan_id -> tasks for a specific plan
-pub async fn fetch_tasks(client: &Client, plan_id: i64) -> Vec<TaskPipelineItem> {
-    let url = format!("{}/api/plan/{plan_id}", base_url());
+/// GET {api_url}/api/plan/{plan_id} -> tasks for a specific plan
+#[allow(dead_code)]
+pub async fn fetch_tasks(client: &Client, plan_id: i64, api_url: &str) -> Vec<TaskPipelineItem> {
+    let url = format!("{api_url}/api/plan/{plan_id}");
     match client.get(&url).send().await {
         Ok(resp) => match resp.json::<Value>().await {
             Ok(v) => v
@@ -144,9 +146,9 @@ pub async fn fetch_tasks(client: &Client, plan_id: i64) -> Vec<TaskPipelineItem>
     }
 }
 
-/// GET /api/mission -> all active tasks across plans (pipeline view)
-pub async fn fetch_all_tasks(client: &Client) -> Vec<TaskPipelineItem> {
-    let url = format!("{}/api/mission", base_url());
+/// GET {api_url}/api/mission -> all active tasks across plans (pipeline view)
+pub async fn fetch_all_tasks(client: &Client, api_url: &str) -> Vec<TaskPipelineItem> {
+    let url = format!("{api_url}/api/mission");
     match client.get(&url).send().await {
         Ok(resp) => match resp.json::<MissionResponse>().await {
             Ok(r) => r
@@ -167,9 +169,9 @@ pub async fn fetch_all_tasks(client: &Client) -> Vec<TaskPipelineItem> {
     }
 }
 
-/// GET /api/mesh -> Vec<MeshNode>
-pub async fn fetch_mesh(client: &Client) -> Vec<MeshNode> {
-    let url = format!("{}/api/mesh", base_url());
+/// GET {api_url}/api/mesh -> Vec<MeshNode>
+pub async fn fetch_mesh(client: &Client, api_url: &str) -> Vec<MeshNode> {
+    let url = format!("{api_url}/api/mesh");
     let rows: Vec<MeshPeer> = fetch_json(client, &url).await;
     rows.into_iter()
         .map(|r| MeshNode {
@@ -181,9 +183,9 @@ pub async fn fetch_mesh(client: &Client) -> Vec<MeshNode> {
         .collect()
 }
 
-/// GET /api/agents -> Vec<AgentOrgNode>
-pub async fn fetch_agents(client: &Client) -> Vec<AgentOrgNode> {
-    let url = format!("{}/api/agents", base_url());
+/// GET {api_url}/api/agents -> Vec<AgentOrgNode>
+pub async fn fetch_agents(client: &Client, api_url: &str) -> Vec<AgentOrgNode> {
+    let url = format!("{api_url}/api/agents");
     match client.get(&url).send().await {
         Ok(resp) => match resp.json::<AgentsResponse>().await {
             Ok(r) => r

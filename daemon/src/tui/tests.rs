@@ -45,6 +45,51 @@ fn renders_brain_canvas_placeholder() {
 }
 
 #[test]
+fn renders_brain_canvas_with_nodes() {
+    let mut data = sample_data();
+    data.brain_nodes = vec![
+        BrainNode {
+            id: "s1".to_string(),
+            label: "session-alpha".to_string(),
+            kind: "session".to_string(),
+            parent_id: None,
+            status: "running".to_string(),
+        },
+        BrainNode {
+            id: "a1".to_string(),
+            label: "agent-thor".to_string(),
+            kind: "agent".to_string(),
+            parent_id: Some("s1".to_string()),
+            status: "running".to_string(),
+        },
+        BrainNode {
+            id: "t1".to_string(),
+            label: "task-T2-02".to_string(),
+            kind: "task".to_string(),
+            parent_id: Some("a1".to_string()),
+            status: "submitted".to_string(),
+        },
+    ];
+    let rendered = render_to_text(&data, MainView::BrainCanvas);
+    assert!(rendered.contains("BRAIN CANVAS"), "missing BRAIN CANVAS header");
+    assert!(rendered.contains("session-alpha"), "missing session node label");
+    assert!(rendered.contains("agent-thor"), "missing agent node label");
+    assert!(rendered.contains("task-T2-02"), "missing task node label");
+}
+
+#[test]
+fn renders_brain_canvas_empty_state() {
+    let mut data = sample_data();
+    data.brain_nodes = vec![];
+    let rendered = render_to_text(&data, MainView::BrainCanvas);
+    assert!(rendered.contains("BRAIN CANVAS"), "missing BRAIN CANVAS header");
+    assert!(
+        rendered.contains("No brain data"),
+        "missing empty-state message"
+    );
+}
+
+#[test]
 fn renders_cost_center_placeholder() {
     let data = sample_data();
     let rendered = render_to_text(&data, MainView::CostCenter);
@@ -215,4 +260,60 @@ fn cycles_views_forward_and_backward() {
 fn api_url_defaults_to_localhost() {
     let url = super::app::TuiApp::parse_api_url();
     assert_eq!(url, "http://localhost:8420");
+}
+
+#[test]
+fn test_fetch_brain_parse() {
+    // Verify parse_brain_response correctly maps /api/brain JSON to BrainNode + KpiData
+    use super::api::parse_brain_response;
+    let json = serde_json::json!({
+        "sessions": [
+            {
+                "agent_id": "task-executor",
+                "type": "executor",
+                "description": "Running T2-03",
+                "status": "active"
+            }
+        ],
+        "agents": [
+            {
+                "agent_id": "thor",
+                "type": "validator",
+                "description": "Wave validator",
+                "status": "idle"
+            }
+        ],
+        "today_tokens_summary": {
+            "total_tokens": 42000,
+            "total_cost": 1.25
+        }
+    });
+    let (nodes, kpi) = parse_brain_response(&json);
+
+    // Sessions map to kind="session"
+    let session = nodes.iter().find(|n| n.kind == "session").expect("session node");
+    assert_eq!(session.id, "task-executor");
+    assert_eq!(session.label, "Running T2-03");
+    assert_eq!(session.status, "active");
+
+    // Agents map to kind="agent"
+    let agent = nodes.iter().find(|n| n.kind == "agent").expect("agent node");
+    assert_eq!(agent.id, "thor");
+    assert_eq!(agent.label, "Wave validator");
+    assert_eq!(agent.status, "idle");
+
+    // Token summary extracted for KpiData
+    assert_eq!(kpi.daily_tokens, 42000);
+    assert!((kpi.daily_cost - 1.25).abs() < f64::EPSILON);
+}
+
+#[test]
+fn test_fetch_brain_parse_empty_response() {
+    // Verify parse_brain_response handles missing/null fields gracefully
+    use super::api::parse_brain_response;
+    let json = serde_json::json!({});
+    let (nodes, kpi) = parse_brain_response(&json);
+    assert!(nodes.is_empty());
+    assert_eq!(kpi.daily_tokens, 0);
+    assert_eq!(kpi.daily_cost, 0.0);
 }

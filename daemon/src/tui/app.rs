@@ -9,7 +9,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use reqwest::Client;
 use tokio::time::interval;
 
-use super::data::{MainView, TuiData};
+use super::data::{KpiData, MainView, TuiData};
 use super::ws_client::WsClient;
 use super::{api, views};
 
@@ -150,18 +150,30 @@ impl TuiApp {
     }
 
     async fn refresh_data(&mut self) {
-        let (kpis, plans, tasks, mesh, agents) = tokio::join!(
-            api::fetch_overview(&self.client),
-            api::fetch_plans(&self.client),
-            api::fetch_all_tasks(&self.client),
-            api::fetch_mesh(&self.client),
-            api::fetch_agents(&self.client),
+        let url = self.api_url.as_str();
+        let (kpis, plans, tasks, mesh, agents, (brain_nodes, brain_kpi)) = tokio::join!(
+            api::fetch_overview(&self.client, url),
+            api::fetch_plans(&self.client, url),
+            api::fetch_all_tasks(&self.client, url),
+            api::fetch_mesh(&self.client, url),
+            api::fetch_agents(&self.client, url),
+            api::fetch_brain(&self.client, url),
         );
-        self.data.kpis = kpis;
+        // Merge KPIs: overview wins for all fields except tokens/cost if brain provides them
+        self.data.kpis = if brain_kpi.daily_tokens > 0 || brain_kpi.daily_cost > 0.0 {
+            KpiData {
+                daily_tokens: brain_kpi.daily_tokens,
+                daily_cost: brain_kpi.daily_cost,
+                ..kpis
+            }
+        } else {
+            kpis
+        };
         self.data.plans = plans;
         self.data.pipeline = tasks;
         self.data.mesh_nodes = mesh;
         self.data.agents = agents;
+        self.data.brain_nodes = brain_nodes;
         self.last_fetch = Instant::now();
     }
 

@@ -9,6 +9,8 @@ use ratatui::{
 use super::{MainView, TuiData};
 use crate::tui::widgets;
 
+pub mod brain;
+
 /// Renders header, KPI strip, active view with selection, and footer.
 pub fn render_view(
     frame: &mut Frame<'_>,
@@ -55,10 +57,7 @@ pub fn render_view(
             frame.render_widget(widgets::agent_org_chart(data, selected), chunks[2]);
         }
         MainView::BrainCanvas => {
-            let p = Paragraph::new("Brain Canvas — coming soon")
-                .block(Block::default().borders(Borders::ALL).title("Brain Canvas"))
-                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
-            frame.render_widget(p, chunks[2]);
+            frame.render_widget(brain::brain_canvas(data, selected), chunks[2]);
         }
         MainView::CostCenter => {
             let p = Paragraph::new("Cost Center — coming soon")
@@ -91,7 +90,7 @@ pub fn render_view(
     }
 
     let footer = Paragraph::new(
-        " [1-9] Views  [Tab] Next  [q] Quit ",
+        " [1]Kanban [2]Pipeline [3]Mesh [4]Agents [5]Brain [6]Cost [7]Events [8]Workspace [9]Deliverables  [Tab]Next  [q]Quit ",
     )
     .block(Block::default().borders(Borders::ALL))
     .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
