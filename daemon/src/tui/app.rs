@@ -24,7 +24,7 @@ pub struct TuiApp {
 
 impl TuiApp {
     /// Parse --api-url from argv; default http://localhost:8420.
-    fn parse_api_url() -> String {
+    pub(crate) fn parse_api_url() -> String {
         let args: Vec<String> = std::env::args().collect();
         let pos = args.iter().position(|a| a == "--api-url");
         pos.and_then(|i| args.get(i + 1))

@@ -210,3 +210,9 @@ fn cycles_views_forward_and_backward() {
     view = MainView::PlanKanban;
     assert_eq!(view, MainView::PlanKanban);
 }
+
+#[test]
+fn api_url_defaults_to_localhost() {
+    let url = super::app::TuiApp::parse_api_url();
+    assert_eq!(url, "http://localhost:8420");
+}
