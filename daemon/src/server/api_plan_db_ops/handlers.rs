@@ -21,9 +21,32 @@ pub fn canonicalize_project_path(raw: &str) -> Option<String> {
 
 pub fn router() -> Router<ServerState> {
     Router::new()
+        .route("/api/plan-db/wave/create", post(handle_wave_create))
         .route("/api/plan-db/wave/update", post(handle_wave_update))
         .route("/api/plan-db/kb-search", get(handle_kb_search))
         .route("/api/plan-db/kb-write", post(handle_kb_write))
+}
+
+/// POST /api/plan-db/wave/create — Body: {plan_id, wave_id, name}
+pub async fn handle_wave_create(
+    State(state): State<ServerState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let plan_id = body.get("plan_id").and_then(Value::as_i64)
+        .ok_or_else(|| ApiError::bad_request("missing plan_id"))?;
+    let wid_raw = &body["wave_id"];
+    let wave_id_str = wid_raw.as_str().map(String::from)
+        .or_else(|| wid_raw.as_i64().map(|n| format!("W{n}")))
+        .ok_or_else(|| ApiError::bad_request("missing wave_id"))?;
+    let name = body.get("name").and_then(Value::as_str).unwrap_or(&wave_id_str);
+    let conn = state.get_conn()?;
+    let wave_db_id: i64 = conn.query_row(
+        "INSERT INTO waves (plan_id, wave_id, name, status) VALUES (?1, ?2, ?3, 'pending') RETURNING id",
+        rusqlite::params![plan_id, wave_id_str, name], |row| row.get(0),
+    ).map_err(|e| ApiError::internal(format!("wave insert failed: {e}")))?;
+
+    Ok(Json(json!({"ok": true, "wave_db_id": wave_db_id, "plan_id": plan_id,
+        "wave_id": wave_id_str, "name": name, "status": "pending"})))
 }
 
 /// POST /api/plan-db/wave/update — update wave status

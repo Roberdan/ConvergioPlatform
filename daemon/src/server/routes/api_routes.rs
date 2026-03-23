@@ -128,6 +128,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/plan-db/review/reset",
     "/api/plan-db/checkpoint/save",
     "/api/plan-db/kb-write",
+    "/api/plan-db/wave/create",
     "/api/plan-db/wave/update",
     "/api/notify",
     "/api/notify/deliver",

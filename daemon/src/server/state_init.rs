@@ -147,6 +147,8 @@ const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_deliverables_task ON deliverables(task_id)",
     // Plan 689 — solve_sessions table
     "CREATE TABLE IF NOT EXISTS solve_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL DEFAULT (datetime('now')), user_input TEXT NOT NULL, constitution_check TEXT, triage_level TEXT CHECK(triage_level IN ('light','standard','full')), clarification_rounds TEXT, research_findings TEXT, problem_statement TEXT, requirements_json TEXT, acceptance_invariants TEXT, routed_to TEXT, decision_audit TEXT, plan_id INTEGER REFERENCES plans(id), project_id TEXT DEFAULT NULL)",
+    // Column added after initial table creation — ALTER is idempotent via error handling
+    "ALTER TABLE solve_sessions ADD COLUMN project_id TEXT DEFAULT NULL",
     "CREATE INDEX IF NOT EXISTS idx_solve_sessions_project ON solve_sessions(project_id)",
     // Plan 698 — workspace layer tables
     "CREATE TABLE IF NOT EXISTS workspaces (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, wave_db_id INTEGER, workspace_id TEXT UNIQUE NOT NULL, path TEXT NOT NULL, branch TEXT, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','merged','deleted')), created_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)",
@@ -166,7 +168,7 @@ pub fn init_db_and_pool(
     crsqlite_path: &Option<String>,
 ) -> Pool<SqliteConnectionManager> {
     if let Ok(conn) = Connection::open(db_path) {
-        let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
+        let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
         if let Some(ref ext) = crsqlite_path {
             if let Err(e) = crate::db::crdt::load_crsqlite(&conn, ext) {
                 eprintln!("[migration] crsqlite load failed: {e}");
@@ -213,7 +215,7 @@ pub fn init_db_and_pool(
     let manager = SqliteConnectionManager::file(db_path).with_init(|conn| {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
-             PRAGMA synchronous=NORMAL;
+             PRAGMA synchronous=FULL;
              PRAGMA cache_size=-8000;
              PRAGMA mmap_size=67108864;
              PRAGMA temp_store=MEMORY;",

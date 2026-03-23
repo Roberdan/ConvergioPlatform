@@ -17,7 +17,7 @@ fn non_get_route_count_matches_python_port_contract() {
             + DELETE_ROUTES.len()
             + SSE_ROUTES.len()
             + WS_ROUTES.len(),
-        84 // +1 for POST /api/workspace/release (Plan 698 T4-01)
+        85 // +1 for POST /api/plan-db/wave/create (daemon reliability fix)
     );
 }
 

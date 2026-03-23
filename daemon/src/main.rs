@@ -1,3 +1,5 @@
+mod daemon_logging;
+
 mod cli_agent;
 mod cli_agents;
 mod cli_audit;
@@ -51,6 +53,10 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+    // Initialize logging + panic hook before anything else
+    let _log_guard = daemon_logging::init();
+    daemon_logging::spawn_shutdown_watcher();
+
     // argv[0] detection: agent-ipc symlink routes to `ipc`, cvg symlink routes to CLI
     let args: Vec<String> = env::args().collect();
     let cli = if args
