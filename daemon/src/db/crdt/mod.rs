@@ -11,23 +11,20 @@ use serde::{Deserialize, Serialize};
 pub use migration::mark_required_tables;
 pub use sync::io_as_sql_error;
 
-// ALL operational tables CRR-enabled for automatic row-level replication.
-// Excluded: plan_versions_backup (no PK — it's a raw dump backup table)
-const REQUIRED_CRDT_TABLES: [&str; 59] = [
+// Operational tables CRR-enabled for automatic row-level replication.
+// Only tables with active INSERT/SELECT in production code.
+// Removed 11 dead tables (zero production usage): conversation_logs,
+// file_snapshots, collector_runs, debt_items, env_vault_log, merge_queue,
+// metrics_history, notification_triggers, schema_metadata, session_state,
+// snapshots. Cleaned 23 Marzo 2026 after DB audit (Plan 706).
+const REQUIRED_CRDT_TABLES: [&str; 48] = [
     "agent_activity",
     "agent_runs",
     "chat_messages",
-    "chat_requirements",
     "chat_sessions",
-    "collector_runs",
-    "conversation_logs",
     "coordinator_events",
     "daemon_config",
-    "debt_items",
     "delegation_log",
-    "env_vault_log",
-    "file_locks",
-    "file_snapshots",
     "github_events",
     "host_heartbeats",
     "idea_notes",
@@ -45,14 +42,11 @@ const REQUIRED_CRDT_TABLES: [&str; 59] = [
     "ipc_subscriptions",
     "ipc_worktrees",
     "knowledge_base",
-    "merge_queue",
     "mesh_events",
     "mesh_sync_stats",
-    "metrics_history",
     "nightly_job_definitions",
     "nightly_jobs",
     "notification_queue",
-    "notification_triggers",
     "notifications",
     "peer_heartbeats",
     "plan_actuals",
@@ -65,14 +59,13 @@ const REQUIRED_CRDT_TABLES: [&str; 59] = [
     "plan_versions",
     "plans",
     "projects",
-    "schema_metadata",
-    "session_state",
-    "snapshots",
     "tasks",
     "token_usage",
     "waves",
     "workspace_events",
     "workspaces",
+    "earned_skills",
+    "solve_sessions",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

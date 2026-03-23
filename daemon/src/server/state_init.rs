@@ -94,6 +94,19 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS token_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, plan_id INTEGER, model TEXT, input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS mesh_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, source_peer TEXT NOT NULL DEFAULT '', payload TEXT, status TEXT DEFAULT 'pending', created_at INTEGER DEFAULT (unixepoch()))",
     "CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+    // Missing tables found in DB audit (23 Marzo 2026)
+    "CREATE TABLE IF NOT EXISTS delegation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, task_id INTEGER, peer_name TEXT, delegated_at TEXT DEFAULT (datetime('now')), completed_at TEXT, status TEXT DEFAULT 'pending', cost_usd REAL DEFAULT 0, tokens_total INTEGER DEFAULT 0)",
+    "CREATE TABLE IF NOT EXISTS host_heartbeats (hostname TEXT PRIMARY KEY, last_seen INTEGER, status TEXT DEFAULT 'active', metadata TEXT)",
+    "CREATE TABLE IF NOT EXISTS chat_sessions (id TEXT PRIMARY KEY, project_id INTEGER, plan_id INTEGER, task_db_id INTEGER, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_message_at TEXT)",
+    "CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, requirement_id INTEGER, model TEXT, tokens_in INTEGER DEFAULT 0, tokens_out INTEGER DEFAULT 0, metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+    // Core table indexes (high-traffic WHERE columns)
+    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_status ON tasks(plan_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status)",
+    "CREATE INDEX IF NOT EXISTS idx_plans_project_id ON plans(project_id)",
+    "CREATE INDEX IF NOT EXISTS idx_waves_plan_id ON waves(plan_id)",
     // ── End core tables ──
     "CREATE TABLE IF NOT EXISTS daemon_config (key TEXT PRIMARY KEY NOT NULL, value TEXT, updated_at TEXT DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS coordinator_events (id INTEGER PRIMARY KEY, event_type TEXT NOT NULL DEFAULT '', payload TEXT, source_node TEXT, handled_at TEXT DEFAULT (datetime('now')))",

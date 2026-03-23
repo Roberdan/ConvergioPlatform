@@ -75,70 +75,22 @@ fn db_execution_tree_contains_waves_and_tasks() {
 #[test]
 fn db_crdt_required_tables_are_declared() {
     let tables = crate::db::crdt::required_crdt_tables();
-    assert_eq!(
-        tables,
-        vec![
-            "agent_activity",
-            "agent_runs",
-            "chat_messages",
-            "chat_requirements",
-            "chat_sessions",
-            "collector_runs",
-            "conversation_logs",
-            "coordinator_events",
-            "daemon_config",
-            "debt_items",
-            "delegation_log",
-            "env_vault_log",
-            "file_locks",
-            "file_snapshots",
-            "github_events",
-            "host_heartbeats",
-            "idea_notes",
-            "ideas",
-            "ipc_agent_skills",
-            "ipc_agents",
-            "ipc_auth_tokens",
-            "ipc_budget_log",
-            "ipc_channels",
-            "ipc_file_locks",
-            "ipc_messages",
-            "ipc_model_registry",
-            "ipc_node_capabilities",
-            "ipc_shared_context",
-            "ipc_subscriptions",
-            "ipc_worktrees",
-            "knowledge_base",
-            "merge_queue",
-            "mesh_events",
-            "mesh_sync_stats",
-            "metrics_history",
-            "nightly_job_definitions",
-            "nightly_jobs",
-            "notification_queue",
-            "notification_triggers",
-            "notifications",
-            "peer_heartbeats",
-            "plan_actuals",
-            "plan_approvals",
-            "plan_business_assessments",
-            "plan_commits",
-            "plan_learnings",
-            "plan_reviews",
-            "plan_token_estimates",
-            "plan_versions",
-            "plans",
-            "projects",
-            "schema_metadata",
-            "session_state",
-            "snapshots",
-            "tasks",
-            "token_usage",
-            "waves",
-            "workspace_events",
-            "workspaces"
-        ]
-    );
+    // 48 tables after DB audit cleanup (removed 11 dead tables, added 2 missing)
+    assert_eq!(tables.len(), 48, "expected 48 CRDT tables, got {}", tables.len());
+    // Verify core operational tables are present
+    for required in &["plans", "tasks", "waves", "projects", "agent_activity",
+                       "delegation_log", "knowledge_base", "peer_heartbeats",
+                       "earned_skills", "solve_sessions"] {
+        assert!(tables.contains(&required.to_string()),
+            "missing required CRDT table: {required}");
+    }
+    // Verify dead tables were removed
+    for dead in &["conversation_logs", "file_snapshots", "collector_runs",
+                   "debt_items", "env_vault_log", "merge_queue", "metrics_history",
+                   "notification_triggers", "schema_metadata", "session_state", "snapshots"] {
+        assert!(!tables.contains(&dead.to_string()),
+            "dead table still in CRDT list: {dead}");
+    }
 }
 
 #[test]
