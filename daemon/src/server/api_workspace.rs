@@ -203,6 +203,7 @@ async fn run_release(
     let agent = ReleaseAgent::new(connector, logger, state.pool());
     let result = agent
         .release(&body.workspace_id, &body.repo)
+        .await
         .map_err(|e| ApiError::internal(format!("release failed: {e}")))?;
     Ok(Json(
         serde_json::to_value(&result).unwrap_or(json!({"ok": true})),

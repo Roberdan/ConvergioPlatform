@@ -44,6 +44,9 @@ pub enum Commands {
         static_dir: Option<PathBuf>,
         #[arg(long)]
         crsqlite_path: Option<String>,
+        /// Disable auth and bind to 127.0.0.1 only (development use only).
+        #[arg(long, default_value_t = false)]
+        dev_mode: bool,
     },
     Daemon {
         #[command(subcommand)]

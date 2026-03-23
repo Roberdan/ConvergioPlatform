@@ -19,6 +19,8 @@ impl TestApp {
             "claude-ws-events-test-{}-{n}.db",
             std::process::id()
         ));
+        // Dev-mode: disable auth so tests pass without a bearer token.
+        super::middleware::set_dev_mode(true);
         let router = super::routes::build_router_with_db(
             std::path::PathBuf::from("/tmp"),
             db_path.clone(),

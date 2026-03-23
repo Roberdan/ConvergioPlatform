@@ -1,5 +1,6 @@
 // Tests for channels, context, db ops, and dispatch
 use super::super::protocol::{IpcRequest, IpcResponse};
+use super::super::schema::IPC_TABLES;
 use super::tests::temp_engine;
 
 #[test]
@@ -108,6 +109,95 @@ fn test_context_set_get_delete() {
         IpcResponse::Error { code, .. } => assert_eq!(code, 404),
         _ => panic!("expected Error after delete"),
     }
+}
+
+/// db_cleanup must use a parameterized query — not format!() — so the day count
+/// is bound as a parameter, not interpolated into the SQL string.
+#[test]
+fn test_db_cleanup_parameterized_valid_days() {
+    let (engine, _dir) = temp_engine();
+    // Insert a message and verify cleanup succeeds with valid day values
+    engine
+        .send_message("alice", "bob", "old message", "text", 0)
+        .unwrap();
+    // Cleanup with 0 days should delete all messages (created_at < now)
+    match engine.db_cleanup(0).unwrap() {
+        IpcResponse::Ok { message } => {
+            assert!(
+                message.contains("cleaned up"),
+                "expected cleanup message, got: {message}"
+            );
+        }
+        other => panic!("expected Ok, got {other:?}"),
+    }
+}
+
+/// db_cleanup with a large day value must not delete recent messages.
+#[test]
+fn test_db_cleanup_preserves_recent_messages() {
+    let (engine, _dir) = temp_engine();
+    engine
+        .send_message("alice", "bob", "recent message", "text", 0)
+        .unwrap();
+    // 365 days — nothing is older than a year in a fresh DB
+    match engine.db_cleanup(365).unwrap() {
+        IpcResponse::Ok { message } => {
+            assert!(
+                message.contains("cleaned up 0"),
+                "expected 0 cleaned up, got: {message}"
+            );
+        }
+        other => panic!("expected Ok, got {other:?}"),
+    }
+    // Message must still be present
+    match engine.receive("bob", None, None, 10, false).unwrap() {
+        IpcResponse::MessageList { messages } => {
+            assert_eq!(messages.len(), 1, "recent message must survive cleanup");
+        }
+        other => panic!("expected MessageList, got {other:?}"),
+    }
+}
+
+/// db_reset must clear every table in IPC_TABLES via an explicit match,
+/// not a dynamic format!("DELETE FROM {table}") string.
+#[test]
+fn test_db_reset_clears_all_tables() {
+    let (engine, _dir) = temp_engine();
+    // Populate multiple tables
+    engine.register("a", "claude", None, "host", None).unwrap();
+    engine.send_message("a", "b", "hello", "text", 0).unwrap();
+    engine.channel_create("general", None, "a").unwrap();
+    engine.context_set("k", "v", "a").unwrap();
+
+    engine.db_reset().unwrap();
+
+    match engine.db_stats().unwrap() {
+        IpcResponse::Stats {
+            agents,
+            messages,
+            channels,
+            context_keys,
+            ..
+        } => {
+            assert_eq!(agents, 0, "agents must be cleared after reset");
+            assert_eq!(messages, 0, "messages must be cleared after reset");
+            assert_eq!(channels, 0, "channels must be cleared after reset");
+            assert_eq!(context_keys, 0, "context must be cleared after reset");
+        }
+        other => panic!("expected Stats, got {other:?}"),
+    }
+}
+
+/// db_reset must handle each table in IPC_TABLES — verify the count of tables matches.
+#[test]
+fn test_ipc_tables_constant_coverage() {
+    // IPC_TABLES must list exactly the 6 known tables; if a new table is added
+    // the explicit match in db_reset must be updated too.
+    assert_eq!(
+        IPC_TABLES.len(),
+        6,
+        "IPC_TABLES has changed — update db_reset explicit match accordingly"
+    );
 }
 
 #[tokio::test]

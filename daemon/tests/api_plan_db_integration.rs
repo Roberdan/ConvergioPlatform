@@ -7,6 +7,8 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 fn setup_app() -> (axum::Router, TempDir) {
+    // Auth is ON by default (Plan 706 F-04). Enable dev-mode for tests.
+    claude_core::server::middleware::set_dev_mode(true);
     let tmp = TempDir::new().expect("tempdir");
     let db_path = tmp.path().join("test.db");
     let static_dir = tmp.path().join("static");

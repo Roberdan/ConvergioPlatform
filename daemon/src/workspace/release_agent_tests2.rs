@@ -3,7 +3,7 @@
 
 use crate::server::state_init::ConnPool;
 use crate::workspace::events::{EventLogger, WorkspaceAction};
-use crate::workspace::git_connector::{GitConnector, MergeMethod, PrInfo, PrReadiness};
+use crate::workspace::git_connector::{AsyncResult, GitConnector, MergeMethod, PrInfo, PrReadiness};
 use crate::workspace::release_agent::ReleaseAgent;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -18,29 +18,39 @@ impl GitConnector for MockOk {
     fn push(&self, _path: &Path, _branch: &str, _fwl: bool) -> Result<(), String> {
         Ok(())
     }
-    fn create_pr(
-        &self,
-        repo: &str,
-        _branch: &str,
-        _base: &str,
-        _title: &str,
-        _body: &str,
-    ) -> Result<PrInfo, String> {
-        Ok(PrInfo {
-            number: 42,
-            url: format!("https://github.com/{repo}/pull/42"),
+    fn create_pr<'a>(
+        &'a self,
+        repo: &'a str,
+        _branch: &'a str,
+        _base: &'a str,
+        _title: &'a str,
+        _body: &'a str,
+    ) -> AsyncResult<'a, PrInfo> {
+        let repo = repo.to_string();
+        Box::pin(async move {
+            Ok(PrInfo {
+                number: 42,
+                url: format!("https://github.com/{repo}/pull/42"),
+            })
         })
     }
-    fn merge_pr(&self, _repo: &str, _pr_number: i64, _method: MergeMethod) -> Result<(), String> {
-        Ok(())
+    fn merge_pr<'a>(
+        &'a self,
+        _repo: &'a str,
+        _pr_number: i64,
+        _method: MergeMethod,
+    ) -> AsyncResult<'a, ()> {
+        Box::pin(async { Ok(()) })
     }
-    fn pr_readiness(&self, _repo: &str, _pr_number: i64) -> Result<PrReadiness, String> {
-        Ok(PrReadiness {
-            mergeable: true,
-            ci_passed: true,
-            pending_checks: 0,
-            unresolved_threads: 0,
-            review_status: "clean".into(),
+    fn pr_readiness<'a>(&'a self, _repo: &'a str, _pr_number: i64) -> AsyncResult<'a, PrReadiness> {
+        Box::pin(async {
+            Ok(PrReadiness {
+                mergeable: true,
+                ci_passed: true,
+                pending_checks: 0,
+                unresolved_threads: 0,
+                review_status: "clean".into(),
+            })
         })
     }
     fn rebase(&self, _path: &Path, _onto: &str) -> Result<(), String> {
@@ -110,11 +120,11 @@ fn test_generate_pr_description_contains_workspace_id() {
     );
 }
 
-#[test]
-fn test_release_agent_new_and_struct() {
+#[tokio::test]
+async fn test_release_agent_new_and_struct() {
     let pool = make_pool();
     let logger = EventLogger::new(pool.clone());
     let agent = ReleaseAgent::new(Box::new(MockOk), logger, pool);
     // ReleaseAgent exists and release method is callable — missing workspace returns Err
-    assert!(agent.release("missing-ws", "org/repo").is_err());
+    assert!(agent.release("missing-ws", "org/repo").await.is_err());
 }

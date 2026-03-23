@@ -190,13 +190,12 @@ async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Value>
     }
 
     let uptime_secs = state.started_at.elapsed().as_secs();
-    let db = state.open_db();
-    let db_ok = db.is_ok();
-    let (table_count, agent_activity_ok, peer_count) = match db {
-        Ok(db) => {
-            let conn = db.connection();
+    let conn_result = state.get_conn();
+    let db_ok = conn_result.is_ok();
+    let (table_count, agent_activity_ok, peer_count) = match conn_result {
+        Ok(conn) => {
             let tables = super::state::query_one(
-                conn,
+                &conn,
                 "SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table'",
                 [],
             )
@@ -206,7 +205,7 @@ async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Value>
             .unwrap_or(0);
             let aa_ok = conn.prepare("SELECT 1 FROM agent_activity LIMIT 0").is_ok();
             let peers =
-                super::state::query_one(conn, "SELECT COUNT(*) AS c FROM peer_heartbeats", [])
+                super::state::query_one(&conn, "SELECT COUNT(*) AS c FROM peer_heartbeats", [])
                     .ok()
                     .flatten()
                     .and_then(|v| v.get("c").and_then(serde_json::Value::as_i64))

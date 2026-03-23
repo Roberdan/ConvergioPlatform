@@ -32,6 +32,8 @@ fn legacy_db_path() -> PathBuf {
 }
 
 fn legacy_router(db_path: &Path) -> axum::Router {
+    // Dev-mode: disable auth so tests pass without a bearer token.
+    super::middleware::set_dev_mode(true);
     super::routes::build_router_with_db(PathBuf::from("/tmp"), db_path.to_path_buf(), None)
 }
 

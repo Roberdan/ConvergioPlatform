@@ -153,11 +153,11 @@ impl IpcEngine {
 
     pub fn db_cleanup(&self, older_than_days: u32) -> rusqlite::Result<IpcResponse> {
         let conn = self.open_conn()?;
+        // Use concatenation inside SQLite so older_than_days is a bound parameter,
+        // not interpolated into the SQL string (prevents SQL injection).
         let deleted = conn.execute(
-            &format!(
-                "DELETE FROM ipc_messages WHERE created_at < datetime('now', '-{older_than_days} days')"
-            ),
-            [],
+            "DELETE FROM ipc_messages WHERE created_at < datetime('now', '-' || ?1 || ' days')",
+            rusqlite::params![older_than_days],
         )?;
         Ok(IpcResponse::Ok {
             message: format!("cleaned up {deleted} message(s)"),
@@ -174,8 +174,23 @@ impl IpcEngine {
 
     pub fn db_reset(&self) -> rusqlite::Result<IpcResponse> {
         let conn = self.open_conn()?;
-        for table in &super::super::schema::IPC_TABLES {
-            conn.execute(&format!("DELETE FROM {table}"), [])?;
+        // Explicit match on the IPC_TABLES constant values for defense-in-depth:
+        // table names are compile-time constants, but using format!() would open
+        // the door to injection if the constant source ever changes.
+        for &table in &super::super::schema::IPC_TABLES {
+            let sql = match table {
+                "ipc_agents" => "DELETE FROM ipc_agents",
+                "ipc_messages" => "DELETE FROM ipc_messages",
+                "ipc_channels" => "DELETE FROM ipc_channels",
+                "ipc_shared_context" => "DELETE FROM ipc_shared_context",
+                "ipc_file_locks" => "DELETE FROM ipc_file_locks",
+                "ipc_worktrees" => "DELETE FROM ipc_worktrees",
+                other => {
+                    tracing::warn!("db_reset: unknown table '{other}' skipped");
+                    continue;
+                }
+            };
+            conn.execute(sql, [])?;
         }
         Ok(IpcResponse::Ok {
             message: "all IPC tables cleared".into(),

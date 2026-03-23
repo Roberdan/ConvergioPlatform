@@ -46,7 +46,7 @@ impl ReleaseAgent {
     ///   7. Check PR readiness — return Ok(merged=false) if not ready.
     ///   8. Squash-merge.
     ///   9. Update workspace status to 'merged'.
-    pub fn release(&self, workspace_id: &str, repo_slug: &str) -> Result<ReleaseResult, String> {
+    pub async fn release(&self, workspace_id: &str, repo_slug: &str) -> Result<ReleaseResult, String> {
         // 1. Get workspace from DB
         let conn = self.pool.get().map_err(|e| format!("pool error: {e}"))?;
         let (path, branch): (String, String) = conn
@@ -131,7 +131,7 @@ impl ReleaseAgent {
             "main",
             &format!("feat: workspace {workspace_id}"),
             &pr_body,
-        )?;
+        ).await.map_err(|e| e.to_string())?;
         self.event_logger
             .record_event(
                 workspace_id,
@@ -144,7 +144,7 @@ impl ReleaseAgent {
             .ok();
 
         // 7. Check readiness — return unmerged if CI not ready
-        let readiness = self.connector.pr_readiness(repo_slug, pr.number)?;
+        let readiness = self.connector.pr_readiness(repo_slug, pr.number).await.map_err(|e| e.to_string())?;
         if !readiness.mergeable || !readiness.ci_passed {
             return Ok(ReleaseResult {
                 workspace_id: workspace_id.to_string(),
@@ -157,7 +157,7 @@ impl ReleaseAgent {
 
         // 8. Squash-merge
         self.connector
-            .merge_pr(repo_slug, pr.number, MergeMethod::Squash)?;
+            .merge_pr(repo_slug, pr.number, MergeMethod::Squash).await.map_err(|e| e.to_string())?;
         self.event_logger
             .record_event(
                 workspace_id,

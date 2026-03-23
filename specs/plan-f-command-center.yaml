@@ -1,0 +1,1317 @@
+name: "Plan F — Convergio Command Center"
+version: "17.0.0"
+project: convergio
+description: >
+  Three-phase plan: (1) Fix all security findings + performance issues from ADR-0109,
+  (2) Code quality debt elimination + comprehensive testing + dashboard-legacy deletion,
+  (3) Native SwiftUI macOS Tahoe 26 Command Center with Ghostty embedded terminal,
+  Metal brain visualization, and full daemon API integration.
+  Replaces Plan E dashboard concept with native app. Zero backward compatibility.
+  Why: ADR-0109 audit scored 6.2/10 — 5 critical security, testing gaps, code debt.
+
+requirements:
+  - id: F-01
+    title: Fix command injection SSE sync
+    description: "Replace sh -c shell interpolation with Command::new(script).arg('sync').arg(&peer). Validate peer against Tailscale hostname pattern."
+  - id: F-02
+    title: Fix command injection SSE delegate
+    description: "Allowlist for cli param (claude, copilot only). Shell-escape plan_id/task_id. Remove catch-all format!() RCE in sse_delegate_util.rs."
+  - id: F-03
+    title: Parameterize SQL queries
+    description: "Replace format!() with rusqlite params![] in channels_context.rs db_cleanup() and db_reset()."
+  - id: F-04
+    title: Default auth to ON
+    description: "Reverse None=>true in check_bearer(). Require --dev-mode CLI flag to disable. Bind 127.0.0.1 when auth disabled. Update main.rs arg parsing."
+  - id: F-05
+    title: Default-deny GET routes
+    description: "Reverse middleware logic: all routes require auth by default. Only /api/health exempt. Remove PROTECTED_GET list."
+  - id: F-06
+    title: Constant-time token comparison
+    description: "Add constant_time_eq crate. Replace == with constant_time_eq in Bearer token check."
+  - id: F-07
+    title: Async git_connector
+    description: "Convert 3 methods (create_pr, merge_pr, pr_readiness) from reqwest::blocking to async reqwest::Client. Update GitConnector trait to async. Update release_agent.rs callers."
+  - id: F-08
+    title: Fix spawn_blocking+block_on
+    description: "In ipc/socket.rs, replace spawn_blocking(block_on(dispatch)) with direct .await on dispatch()."
+  - id: F-09
+    title: Remove open_db pool bypass
+    description: "Remove open_db() from state.rs. Migrate all callers (sync_ops.rs, overview.rs) to state.get_conn()."
+  - id: F-10
+    title: Fix thread::spawn in async handler
+    description: "Replace std::thread::spawn with tokio::task::spawn_blocking + semaphore (max 4 concurrent) in overview.rs."
+  - id: F-11
+    title: Add DB indexes
+    description: "Migration adding CREATE INDEX on tasks.status, tasks.wave_id_fk, plans.status in state_init.rs."
+  - id: F-12
+    title: Split 9 oversized files
+    description: "Split cli_skill.rs(388), cli_agent.rs(310), api_agent_catalog.rs(297), cli_workspace.rs(270), api_mesh/handlers.rs(269), workspace/validation.rs(257), api_agent_triage.rs(255), api_dashboard/nightly.rs(254), api_plan_db.rs(251). Extract validators/formatters/helpers."
+  - id: F-13
+    title: Delete orphan cli_support
+    description: "Delete cli_support.rs and cli_support_tests.rs. Confirmed not wired to main or any module."
+  - id: F-14
+    title: Replace all process::exit with Result
+    description: "Replace 103 process::exit() across 23 files with Result returns. Single exit point in main(). Exit codes preserved via ExitCode."
+  - id: F-15
+    title: Standardize error handling repo-wide
+    description: "Expand thiserror from 21 to all 145+ Result<T,String> files. Define CliError, IpcError, MeshError enums. Keep ApiError for HTTP. Remove anyhow from Cargo.toml."
+  - id: F-16
+    title: Add strict mode to platform scripts
+    description: "Add set -euo pipefail to 8 scripts: convergio-{aliases,autopilot-helpers,autopilot,bus,import-agents,learnings,org,sync}.sh."
+  - id: F-17
+    title: Test mesh sync pipeline
+    description: "Integration tests for 1356 LOC mesh sync (13 files). Cover: sync handshake, frame I/O, CRDT apply, batch ops, auth, DB ops."
+  - id: F-18
+    title: Test IPC handler
+    description: "Tests for 664 LOC IPC handler (7 files). Cover: routing dispatch, auth validation, model operations, server lifecycle."
+  - id: F-19
+    title: Test 15 untested API handlers
+    description: "Tests for: api_chat, api_coordinator, api_crdt, api_domain, api_evolution, api_github, api_heartbeat, api_ingest, api_metrics, api_peers, api_plans, api_plan_db_checkpoint, api_plan_db_query, api_audit, api_agents."
+  - id: F-20
+    title: Delete dashboard-legacy
+    description: "Remove entire dashboard-legacy/ directory. Update any references in daemon, CLAUDE.md, agent docs."
+  - id: F-21
+    title: SwiftUI macOS app scaffold
+    description: "Xcode 26.3 project, Swift 6.2.3, macOS Tahoe 26 deployment target. Liquid Glass (glassEffect), @Observable, @concurrent. App structure with sidebar navigation, Notarization config."
+  - id: F-22
+    title: Daemon API client layer
+    description: "Swift async/await client for all 165 REST endpoints, 3 WS channels (brain, dashboard, pty), 7 SSE streams. Codable models. URLSession-based. Token auth via Keychain."
+  - id: F-23
+    title: Plan Dashboard view
+    description: "Merge-based progress (waves merged/total), task kanban board, wave timeline, real-time updates via /ws/dashboard WebSocket."
+  - id: F-24
+    title: Agent Catalog view
+    description: "List/enable/disable/create agents. Triage UI. Session monitor. Consumes /api/agents/* endpoints."
+  - id: F-25
+    title: Mesh Topology view
+    description: "Live node map, heartbeat status, sync stats. Provision/delegate actions. Consumes /api/mesh/* + SSE streams."
+  - id: F-26
+    title: Evolution Metrics view
+    description: "Proposals list, experiments, ROI charts (Chart3D), audit trail. Consumes /api/evolution/*."
+  - id: F-27
+    title: Cost Dashboard view
+    description: "Token usage charts, model cost breakdown, run history table. Consumes /api/metrics/* + /api/runs/*."
+  - id: F-28
+    title: Ghostty embedded terminal
+    description: "Native Ghostty integration via cmux pattern. Connected to daemon WS-PTY (/ws/pty). Local + remote mesh nodes. Tmux session management."
+  - id: F-29
+    title: Brain/Neural visualization Metal
+    description: "Reimplement dashboard-legacy/brain-physics-wasm/ (362 LOC Rust: lib.rs, spatial.rs, step.rs) as SwiftUI + Metal. Force-directed graph, real-time agent/task nodes via /ws/brain."
+  - id: F-30
+    title: Native notifications
+    description: "Thor results, task completion, mesh events, plan state changes. macOS Notification Center via UserNotifications framework."
+  - id: F-31
+    title: First-launch auth flow
+    description: "Generate random token on first launch. Store in Keychain. Prompt user to set CONVERGIO_AUTH_TOKEN on daemon. Verify connection. Onboarding SwiftUI view."
+
+acceptance_invariants:
+  - "! grep -rn 'sh -c' daemon/src/server/sse.rs"
+  - "! grep -rn 'format!.*{cli}' daemon/src/server/sse_delegate_util.rs"
+  - "! grep -rn 'format!.*DELETE.*FROM' daemon/src/ipc/engine/channels_context.rs"
+  - "grep -q 'constant_time_eq' daemon/src/server/middleware.rs"
+  - "! grep -rn 'reqwest::blocking' daemon/src/workspace/git_connector.rs"
+  - "! grep -rn 'spawn_blocking.*block_on' daemon/src/ipc/socket.rs"
+  - "! grep -rn 'fn open_db' daemon/src/server/state.rs"
+  - "! grep -rn 'std::thread::spawn' daemon/src/server/api_dashboard/overview.rs"
+  - "grep -q 'CREATE INDEX' daemon/src/server/state_init.rs"
+  - "! test -f daemon/src/cli_support.rs"
+  - "! grep -rn 'process::exit' daemon/src/ --include='*.rs' | grep -v test | grep -v 'fn main'"
+  - "! test -d dashboard-legacy"
+  - "test -f CommandCenter/CommandCenter.xcodeproj/project.pbxproj"
+  - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+  - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+
+waves:
+  # ══════════════════════════════════════════════
+  # PHASE 1: SECURITY HARDENING + PERFORMANCE
+  # ══════════════════════════════════════════════
+
+  - id: W1
+    name: "Security Critical — Command/SQL Injection"
+    tasks:
+      - id: T1-01
+        do: >
+          Fix command injection in daemon/src/server/sse.rs:96-106.
+          Replace `format!("{script} sync {peer}")` passed to sh -c with
+          `Command::new(script).arg("sync").arg(&peer)`.
+          Add peer validation: must match `^[a-zA-Z0-9._-]+$` (Tailscale hostname pattern).
+          Reject invalid peers with SSE error event.
+          Write tests: valid peer, malicious peer (;rm -rf), empty peer.
+        type: fix
+        output_type: pr
+        f_xx: [F-01]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/server/sse.rs]
+        verify:
+          - "! grep -n 'sh.*-c' daemon/src/server/sse.rs"
+          - "grep -q 'Command::new' daemon/src/server/sse.rs"
+          - "cd daemon && cargo test sse -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Tests cover valid peer, injection attempt (semicolon, pipe, backtick), empty peer"
+
+      - id: T1-02
+        do: >
+          Fix command injection in daemon/src/server/sse_delegate_util.rs:28-43.
+          Define ALLOWED_CLI allowlist: ["claude", "copilot"].
+          Validate `cli` param against allowlist — reject unknown with error.
+          Replace all format!() shell string construction with Command::new + .arg() chain.
+          Remove the catch-all `_ => format!("cd {dir} && {cli} --plan {plan_id}")` — this is full RCE.
+          Shell-escape plan_id, task_id, wave_id: reject if not matching `^[a-zA-Z0-9_-]+$`.
+          Write tests: valid cli, invalid cli, injection in plan_id.
+        type: fix
+        output_type: pr
+        f_xx: [F-02]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/server/sse_delegate_util.rs]
+        verify:
+          - "! grep -n 'format!.*{cli}' daemon/src/server/sse_delegate_util.rs"
+          - "grep -q 'ALLOWED_CLI' daemon/src/server/sse_delegate_util.rs"
+          - "cd daemon && cargo test sse_delegate -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Tests cover allowed CLI, rejected CLI, injection in plan_id/task_id"
+
+      - id: T1-03
+        do: >
+          Fix SQL injection in daemon/src/ipc/engine/channels_context.rs.
+          In db_cleanup() (line 158): replace format!("DELETE...'-{older_than_days} days'")
+          with parameterized query using rusqlite params![older_than_days].
+          SQLite datetime param: "DELETE FROM ipc_messages WHERE created_at < datetime('now', '-' || ?1 || ' days')".
+          In db_reset() (line 178): table name from IPC_TABLES constant is safe but
+          use explicit match for defense-in-depth instead of format!("DELETE FROM {table}").
+          Write tests: cleanup with valid days, reset each table.
+        type: fix
+        output_type: pr
+        f_xx: [F-03]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/ipc/engine/channels_context.rs]
+        verify:
+          - "! grep -n 'format!.*DELETE' daemon/src/ipc/engine/channels_context.rs"
+          - "grep -q 'params!' daemon/src/ipc/engine/channels_context.rs"
+          - "cd daemon && cargo test channels_context -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Tests cover cleanup with 30 days, reset each IPC table, verify row deletion"
+
+      - id: T1-04
+        do: >
+          Add constant-time token comparison in daemon/src/server/middleware.rs:61.
+          Add `constant_time_eq` crate to Cargo.toml.
+          Replace `t == expected.as_str()` with `constant_time_eq(t.as_bytes(), expected.as_bytes())`.
+          Write tests: correct token passes, wrong token fails, timing-safe (no early return).
+        type: fix
+        output_type: pr
+        f_xx: [F-06]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/server/middleware.rs, daemon/Cargo.toml]
+        verify:
+          - "grep -q 'constant_time_eq' daemon/src/server/middleware.rs"
+          - "grep -q 'constant_time_eq' daemon/Cargo.toml"
+          - "cd daemon && cargo test middleware -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Tests verify correct token accepted, wrong token rejected, empty token rejected"
+
+  - id: W2
+    name: "Auth Hardening + DB Indexes"
+    tasks:
+      - id: T2-01
+        do: >
+          Complete auth hardening in daemon/src/server/middleware.rs (F-04 + F-05 combined — same file).
+          Part A (F-04): Reverse check_bearer logic: when CONVERGIO_AUTH_TOKEN is None, return false (deny all).
+          Add --dev-mode flag to daemon CLI (main.rs clap args) that sets AUTH_DISABLED OnceLock.
+          When dev-mode AND no token: bind to 127.0.0.1 only (update server::run bind_addr logic).
+          When dev-mode: log WARNING "Auth disabled — dev mode, binding to localhost only".
+          Part B (F-05): Remove PROTECTED_GET list. Reverse needs_auth() logic: define EXEMPT_ROUTES.
+          EXEMPT_ROUTES = ["/api/health"]. All other routes (GET included) require Bearer token.
+          In needs_auth(): return true for everything except EXEMPT_ROUTES (when not in dev-mode).
+          Update ALL existing tests that depend on no-auth behavior to use dev-mode flag.
+          Tests: no token + no dev-mode = 401 on all routes; dev-mode = allows unauthenticated;
+          token set = normal auth; /api/health accessible without auth; /api/plans returns 401 without token.
+        type: fix
+        output_type: pr
+        f_xx: [F-04, F-05]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/server/middleware.rs, daemon/src/main.rs, daemon/src/server/mod.rs]
+        verify:
+          - "grep -q 'dev.mode\\|dev_mode' daemon/src/main.rs"
+          - "! grep -q 'PROTECTED_GET' daemon/src/server/middleware.rs"
+          - "grep -q 'EXEMPT_ROUTES\\|exempt' daemon/src/server/middleware.rs"
+          - "cd daemon && cargo test middleware -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+        test_criteria: "No-token+no-dev-mode=401. Dev-mode=unauthenticated. /api/health exempt. All other GET routes require auth."
+
+      - id: T2-02
+        do: >
+          Add DB indexes migration in daemon/src/server/state_init.rs.
+          New migration block after existing migrations:
+          CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+          CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk);
+          CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status);
+          Also add: idx_tasks_plan_id ON tasks(plan_id), idx_waves_plan_id ON waves(plan_id).
+          Write test verifying indexes exist after migration.
+        type: fix
+        output_type: pr
+        f_xx: [F-11]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/server/state_init.rs]
+        verify:
+          - "grep -q 'idx_tasks_status' daemon/src/server/state_init.rs"
+          - "grep -q 'idx_plans_status' daemon/src/server/state_init.rs"
+          - "cd daemon && cargo test state_init -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Test creates in-memory DB, runs migrations, verifies all 5 indexes exist via PRAGMA index_list"
+
+  - id: W3
+    name: "Async Performance Fixes"
+    tasks:
+      - id: T3-01
+        do: >
+          Convert git_connector.rs from blocking to async in daemon/src/workspace/git_connector.rs.
+          Replace reqwest::blocking::Client with reqwest::Client in create_pr(), merge_pr(), pr_readiness().
+          Make all 3 methods async fn. Update GitConnector trait to use async_trait or native async fn in trait (Rust 2024).
+          Add 30s timeout on all requests.
+          Update callers in release_agent.rs (line 127-160) to .await.
+          Update test mocks for async trait.
+          Also replace Result<T, String> with a GitError thiserror enum (aligns with F-15).
+        type: fix
+        output_type: pr
+        f_xx: [F-07]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/workspace/git_connector.rs, daemon/src/workspace/release_agent.rs]
+        verify:
+          - "! grep -n 'reqwest::blocking' daemon/src/workspace/git_connector.rs"
+          - "grep -q 'async fn create_pr' daemon/src/workspace/git_connector.rs"
+          - "cd daemon && cargo test workspace -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Tests mock HTTP responses for create_pr, merge_pr, pr_readiness. Verify timeout handling. Verify async trait works."
+
+      - id: T3-02
+        do: >
+          Fix spawn_blocking+block_on in daemon/src/ipc/socket.rs:83-84.
+          Replace `tokio::task::spawn_blocking(move || { Handle::current().block_on(eng.dispatch(request)) })`
+          with direct `eng.dispatch(request).await`.
+          Remove the needs_async branching if both paths end up using await.
+          Verify all callers handle the Result properly.
+          Write test for IPC dispatch path.
+        type: fix
+        output_type: pr
+        f_xx: [F-08]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/ipc/socket.rs]
+        verify:
+          - "! grep -n 'spawn_blocking' daemon/src/ipc/socket.rs"
+          - "! grep -n 'block_on' daemon/src/ipc/socket.rs"
+          - "cd daemon && cargo test ipc::socket -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Test IPC socket dispatch path with mock engine, verify async execution without blocking"
+
+      - id: T3-03
+        do: >
+          Remove open_db() bypass in daemon/src/server/state.rs:47-53.
+          Delete the open_db() method entirely.
+          Find ALL callers (grep for open_db): sync_ops.rs, overview.rs, and any others.
+          Replace each call with state.get_conn() — convert PlanDb usage to direct rusqlite connection.
+          If callers need PlanDb specifically, add a from_pooled_conn() constructor to PlanDb.
+          Write test verifying pool is used for all DB access.
+        type: fix
+        output_type: pr
+        f_xx: [F-09]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/server/state.rs, daemon/src/server/api_mesh/sync_ops.rs, daemon/src/server/api_dashboard/overview.rs]
+        verify:
+          - "! grep -n 'fn open_db' daemon/src/server/state.rs"
+          - "! grep -rn 'open_db()' daemon/src/server/"
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+        test_criteria: "All DB access goes through pool. No direct Connection::open in handlers."
+
+      - id: T3-04
+        do: >
+          Fix std::thread::spawn in daemon/src/server/api_dashboard/overview.rs:66,72.
+          Replace std::thread::spawn(move || refresh_lines_cache(&db_path))
+          with tokio::task::spawn_blocking wrapped in a semaphore (max 4 concurrent).
+          Add static REFRESH_SEMAPHORE: Semaphore = Semaphore::const_new(4).
+          Use try_acquire — if no permit available, skip refresh (cache is still valid from last run).
+          Write test verifying concurrent refresh is bounded.
+        type: fix
+        output_type: pr
+        f_xx: [F-10]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/server/api_dashboard/overview.rs]
+        verify:
+          - "! grep -n 'std::thread::spawn' daemon/src/server/api_dashboard/overview.rs"
+          - "grep -q 'Semaphore\\|semaphore' daemon/src/server/api_dashboard/overview.rs"
+          - "cd daemon && cargo test overview -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Test semaphore bounds concurrent refreshes. Verify spawn_blocking used instead of thread::spawn."
+
+  # ══════════════════════════════════════════════
+  # PHASE 2: CODE QUALITY + TESTING
+  # ══════════════════════════════════════════════
+
+  - id: W4
+    name: "File Splits A — Largest 4 Files"
+    tasks:
+      - id: T4-01
+        do: >
+          Split cli_skill.rs (388 lines) into two modules.
+          Extract validation/lint functions (lint_one, plugin_linter, agent_linter, version_linter ~lines 201-350)
+          into cli_skill_validators.rs. Keep enum + handle() dispatch in cli_skill.rs.
+          Update mod declarations in main.rs. Both files must be <250 lines.
+          Existing tests stay with validators (they test lint logic).
+        type: refactor
+        output_type: pr
+        f_xx: [F-12]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/cli_skill.rs, daemon/src/cli_skill_validators.rs, daemon/src/main.rs]
+        verify:
+          - "wc -l < daemon/src/cli_skill.rs | awk '{exit ($1 > 250)}'"
+          - "wc -l < daemon/src/cli_skill_validators.rs | awk '{exit ($1 > 250)}'"
+          - "cd daemon && cargo test cli_skill -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Both files under 250 lines. All existing tests pass. No public API changes."
+
+      - id: T4-02
+        do: >
+          Split cli_agent.rs (310 lines) into two modules.
+          Extract human-readable formatting functions (~lines 181-310)
+          into cli_agent_format.rs. Keep enum + API call wrappers in cli_agent.rs.
+          Update mod declarations. Both files <250 lines.
+        type: refactor
+        output_type: pr
+        f_xx: [F-12]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/cli_agent.rs, daemon/src/cli_agent_format.rs, daemon/src/main.rs]
+        verify:
+          - "wc -l < daemon/src/cli_agent.rs | awk '{exit ($1 > 250)}'"
+          - "wc -l < daemon/src/cli_agent_format.rs | awk '{exit ($1 > 250)}'"
+          - "cd daemon && cargo test cli_agent -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Both files under 250 lines. Formatting output unchanged."
+
+      - id: T4-03
+        do: >
+          Split api_agent_catalog.rs (297 lines) into two modules.
+          Extract DB helper functions (~lines 150-297) into api_agent_catalog_helpers.rs.
+          Keep router + 4 handlers in api_agent_catalog.rs.
+          Update mod.rs or parent module declarations. Both files <250 lines.
+        type: refactor
+        output_type: pr
+        f_xx: [F-12]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/server/api_agent_catalog.rs, daemon/src/server/api_agent_catalog_helpers.rs]
+        verify:
+          - "wc -l < daemon/src/server/api_agent_catalog.rs | awk '{exit ($1 > 250)}'"
+          - "cd daemon && cargo test api_agent_catalog -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Both files under 250 lines. API responses unchanged."
+
+      - id: T4-04
+        do: >
+          Split cli_workspace.rs (270 lines) into two modules.
+          Identify logical split (likely: enum+dispatch vs format/output helpers).
+          Extract to cli_workspace_format.rs or cli_workspace_handlers.rs.
+          Both files <250 lines.
+        type: refactor
+        output_type: pr
+        f_xx: [F-12]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/cli_workspace.rs, daemon/src/main.rs]
+        verify:
+          - "wc -l < daemon/src/cli_workspace.rs | awk '{exit ($1 > 250)}'"
+          - "cd daemon && cargo test cli_workspace -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Both files under 250 lines. CLI behavior unchanged."
+
+  - id: W5
+    name: "File Splits B + Orphan Cleanup"
+    tasks:
+      - id: T5-01
+        do: >
+          Split api_mesh/handlers.rs (269 lines) and workspace/validation.rs (257 lines).
+          handlers.rs: extract sync-related handlers into handlers_sync.rs.
+          validation.rs: extract rule implementations into validation_rules.rs.
+          Both originals and new files <250 lines.
+        type: refactor
+        output_type: pr
+        f_xx: [F-12]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/server/api_mesh/handlers.rs, daemon/src/workspace/validation.rs]
+        verify:
+          - "wc -l < daemon/src/server/api_mesh/handlers.rs | awk '{exit ($1 > 250)}'"
+          - "wc -l < daemon/src/workspace/validation.rs | awk '{exit ($1 > 250)}'"
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+        test_criteria: "All 4 files under 250 lines. Existing tests pass."
+
+      - id: T5-02
+        do: >
+          Split api_agent_triage.rs (255 lines) and api_dashboard/nightly.rs (254 lines).
+          Identify logical split points in each. Extract helpers/formatters.
+          Both originals <250 lines.
+        type: refactor
+        output_type: pr
+        f_xx: [F-12]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/server/api_agent_triage.rs, daemon/src/server/api_dashboard/nightly.rs]
+        verify:
+          - "wc -l < daemon/src/server/api_agent_triage.rs | awk '{exit ($1 > 250)}'"
+          - "wc -l < daemon/src/server/api_dashboard/nightly.rs | awk '{exit ($1 > 250)}'"
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+        test_criteria: "All files under 250 lines."
+
+      - id: T5-03
+        do: >
+          Split api_plan_db.rs (251 lines) — just over limit.
+          Extract query helper functions into api_plan_db_helpers.rs.
+          Keep route handlers in api_plan_db.rs.
+          Also: delete orphan cli_support.rs and cli_support_tests.rs.
+          Verify cli_support is not referenced anywhere (confirmed in research).
+          Remove any mod declaration if present.
+        type: refactor
+        output_type: pr
+        f_xx: [F-12, F-13]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files: [daemon/src/server/api_plan_db.rs, daemon/src/cli_support.rs, daemon/src/cli_support_tests.rs]
+        verify:
+          - "wc -l < daemon/src/server/api_plan_db.rs | awk '{exit ($1 > 250)}'"
+          - "! test -f daemon/src/cli_support.rs"
+          - "! test -f daemon/src/cli_support_tests.rs"
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+        test_criteria: "api_plan_db.rs under 250. Orphan files deleted. Cargo build succeeds."
+
+  - id: W6
+    name: "process::exit Elimination A"
+    tasks:
+      - id: T6-01
+        do: >
+          Replace process::exit in ipc_handler/ (27 exits across 4 files: routing.rs 12, auth.rs 7,
+          models_handler.rs 6, server.rs 2).
+          Pattern: replace `eprintln!("error: {msg}"); process::exit(N)` with `return Err(IpcHandlerError::...)`.
+          Define IpcHandlerError thiserror enum in ipc_handler/types.rs.
+          Update handle_client and dispatch functions to return Result.
+          Callers in ipc_handler/server.rs propagate errors to main loop.
+        type: refactor
+        output_type: pr
+        f_xx: [F-14, F-15]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/ipc_handler/routing.rs, daemon/src/ipc_handler/auth.rs, daemon/src/ipc_handler/models_handler.rs, daemon/src/ipc_handler/server.rs, daemon/src/ipc_handler/types.rs]
+        verify:
+          - "! grep -rn 'process::exit' daemon/src/ipc_handler/"
+          - "grep -q 'IpcHandlerError' daemon/src/ipc_handler/types.rs"
+          - "cd daemon && cargo test ipc_handler -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Zero process::exit in ipc_handler/. Error enum covers all exit codes. Functions return Result."
+
+      - id: T6-02
+        do: >
+          Replace process::exit in cli_project.rs (11), cli_audit_project.rs (7), cli_run.rs (6) = 24 exits.
+          Define CliError thiserror enum in a new cli_error.rs.
+          Variants: InvalidInput(String), ApiCallFailed(String), NotFound(String), Io(#[from] io::Error).
+          Convert all 3 files: eprintln+exit → return Err(CliError::...).
+          Update callers to handle Result — main.rs match arm prints error and calls process::exit(code) ONCE.
+        type: refactor
+        output_type: pr
+        f_xx: [F-14, F-15]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/cli_project.rs, daemon/src/cli_audit_project.rs, daemon/src/cli_run.rs, daemon/src/cli_error.rs, daemon/src/main.rs]
+        verify:
+          - "! grep -n 'process::exit' daemon/src/cli_project.rs"
+          - "! grep -n 'process::exit' daemon/src/cli_audit_project.rs"
+          - "! grep -n 'process::exit' daemon/src/cli_run.rs"
+          - "grep -q 'CliError' daemon/src/cli_error.rs"
+          - "cd daemon && cargo check 2>&1 | grep -v warning | tail -1"
+        test_criteria: "Zero process::exit in 3 files. CliError enum defined. main.rs is single exit point."
+
+      - id: T6-03
+        do: >
+          Add set -euo pipefail to 8 platform scripts missing strict mode:
+          scripts/platform/convergio-aliases.sh, convergio-autopilot-helpers.sh,
+          convergio-autopilot.sh, convergio-bus.sh, convergio-import-agents.sh,
+          convergio-learnings.sh, convergio-org.sh, convergio-sync.sh.
+          Add as second line (after shebang). Add `trap cleanup EXIT` where functions define cleanup.
+          Quote all unquoted variable expansions. Use `local` for function-scoped vars.
+          Verify each script still passes basic shellcheck.
+        type: fix
+        output_type: pr
+        f_xx: [F-16]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        files:
+          - scripts/platform/convergio-aliases.sh
+          - scripts/platform/convergio-autopilot-helpers.sh
+          - scripts/platform/convergio-autopilot.sh
+          - scripts/platform/convergio-bus.sh
+          - scripts/platform/convergio-import-agents.sh
+          - scripts/platform/convergio-learnings.sh
+          - scripts/platform/convergio-org.sh
+          - scripts/platform/convergio-sync.sh
+        verify:
+          - "grep -q 'set -euo pipefail' scripts/platform/convergio-bus.sh"
+          - "grep -q 'set -euo pipefail' scripts/platform/convergio-sync.sh"
+          - "grep -q 'set -euo pipefail' scripts/platform/convergio-aliases.sh"
+        test_criteria: "All 8 scripts have strict mode. No unquoted variables. Shellcheck clean (no errors)."
+
+  - id: W7
+    name: "process::exit Elimination B"
+    tasks:
+      - id: T7-01
+        do: >
+          Replace process::exit in cli_kb.rs (6), cli_http.rs (6), cli_skill_transpile.rs (5),
+          cli_wave_handlers.rs (4) = 21 exits.
+          Use CliError from cli_error.rs (defined in W6).
+          Convert all eprintln+exit to return Err(CliError::...).
+          Ensure main.rs match arms handle these modules' Results.
+        type: refactor
+        output_type: pr
+        f_xx: [F-14]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/cli_kb.rs, daemon/src/cli_http.rs, daemon/src/cli_skill_transpile.rs, daemon/src/cli_wave_handlers.rs, daemon/src/main.rs]
+        verify:
+          - "! grep -n 'process::exit' daemon/src/cli_kb.rs"
+          - "! grep -n 'process::exit' daemon/src/cli_http.rs"
+          - "! grep -n 'process::exit' daemon/src/cli_skill_transpile.rs"
+          - "! grep -n 'process::exit' daemon/src/cli_wave_handlers.rs"
+          - "cd daemon && cargo check 2>&1 | grep -v warning | tail -1"
+        test_criteria: "Zero process::exit in 4 files. CliError variants added if needed."
+
+      - id: T7-02
+        do: >
+          Replace process::exit in CLI modules batch A (~16 exits across 5 files):
+          cli_task_approve.rs (4), cli_skill.rs (4), cli_agent.rs (4),
+          cli_skill_enable.rs (2), cli_skill_disable.rs (2).
+          Use CliError from cli_error.rs. Convert eprintln+exit to return Err(CliError::...).
+          Update main.rs match arms for these modules.
+        type: refactor
+        output_type: pr
+        f_xx: [F-14]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/cli_task_approve.rs, daemon/src/cli_skill.rs, daemon/src/cli_agent.rs, daemon/src/cli_skill_enable.rs, daemon/src/cli_skill_disable.rs]
+        verify:
+          - "! grep -n 'process::exit' daemon/src/cli_task_approve.rs"
+          - "! grep -n 'process::exit' daemon/src/cli_skill.rs"
+          - "! grep -n 'process::exit' daemon/src/cli_agent.rs"
+          - "cd daemon && cargo check 2>&1 | grep -v warning | tail -1"
+        test_criteria: "Zero process::exit in 5 files. CliError used consistently."
+
+      - id: T7-03
+        do: >
+          Replace ALL remaining process::exit calls (~15 exits across 4 files):
+          cli_task.rs (3), mesh/daemon/service.rs (1), cli/helpers.rs (1),
+          main.rs (7 — convert fn main() -> ExitCode).
+          main.rs: match on subcommand Result, print error to stderr, return ExitCode.
+          This is the LAST process::exit task — verify ZERO remain in non-test code after.
+          Run full cargo test to confirm nothing is broken.
+        type: refactor
+        output_type: pr
+        f_xx: [F-14]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/cli_task.rs, daemon/src/mesh/daemon/service.rs, daemon/src/cli/helpers.rs, daemon/src/main.rs]
+        verify:
+          - "! grep -rn 'process::exit' daemon/src/ --include='*.rs' | grep -v test | grep -v '_tests'"
+          - "grep -q 'ExitCode' daemon/src/main.rs"
+          - "cd daemon && cargo build --release 2>&1 | grep -v warning | tail -1"
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+        test_criteria: "ZERO process::exit in production code. main() returns ExitCode. Full cargo test passes."
+
+  - id: W8
+    name: "Error Handling Standardization A — Types + Mesh"
+    tasks:
+      - id: T8-01
+        do: >
+          Define unified error types and migrate mesh/ module.
+          Create daemon/src/errors.rs with re-exports of all domain error types.
+          Verify existing thiserror types in mesh/ (21 files) are complete.
+          Migrate remaining mesh/ files using Result<T, String> to use existing mesh thiserror types
+          (CoordinatorError, JoinError, ShellError, etc.).
+          Add From impls where needed for error conversion chains.
+          Remove any String-based errors in mesh/ module.
+        type: refactor
+        output_type: pr
+        f_xx: [F-15]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/errors.rs, daemon/src/mesh/]
+        verify:
+          - "test -f daemon/src/errors.rs"
+          - "! grep -rn 'Result<.*String>' daemon/src/mesh/ --include='*.rs' | grep -v test | grep -v '//'"
+          - "cd daemon && cargo check 2>&1 | grep -v warning | tail -1"
+        test_criteria: "Zero Result<T, String> in mesh/. All errors use thiserror enums. errors.rs re-exports all types."
+
+      - id: T8-02
+        do: >
+          Migrate ipc/ module from Result<T, String> to typed errors.
+          Define IpcError thiserror enum in ipc/types.rs or ipc/error.rs:
+          variants for channel ops, engine dispatch, socket, lock, worktree, skill, conflict errors.
+          Add From<rusqlite::Error>, From<serde_json::Error>, From<io::Error>.
+          Update all ipc/ files to use IpcError instead of String.
+          Update errors.rs re-exports.
+        type: refactor
+        output_type: pr
+        f_xx: [F-15]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/ipc/]
+        verify:
+          - "! grep -rn 'Result<.*String>' daemon/src/ipc/ --include='*.rs' | grep -v test | grep -v '//'"
+          - "cd daemon && cargo check 2>&1 | grep -v warning | tail -1"
+        test_criteria: "Zero Result<T, String> in ipc/. IpcError defined with From impls."
+
+  - id: W9
+    name: "Error Handling Standardization B — Server + CLI + Cleanup"
+    tasks:
+      - id: T9-01
+        do: >
+          Migrate server/ handlers to consistent ApiError usage.
+          Find server/ files still using Result<T, String> and convert to ApiError.
+          Ensure all handler functions return Result<impl IntoResponse, ApiError>.
+          Add any missing ApiError variants (e.g., rate_limited for 429, forbidden for 403).
+          Align error response format with project standard: {error:{code,message,details,requestId,timestamp}}.
+        type: refactor
+        output_type: pr
+        f_xx: [F-15]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/server/state.rs, daemon/src/server/]
+        verify:
+          - "! grep -rn 'Result<.*String>' daemon/src/server/ --include='*.rs' | grep -v test | grep -v '//' | grep -v 'thiserror'"
+          - "grep -q 'requestId\\|request_id' daemon/src/server/state.rs"
+          - "cd daemon && cargo check 2>&1 | grep -v warning | tail -1"
+        test_criteria: "Server errors follow standard format. ApiError has rate_limited + forbidden variants."
+
+      - id: T9-02
+        do: >
+          Migrate remaining modules (workspace/, db/, hooks/, tui/, digest/, lock/, background*, validation/)
+          from Result<T, String> to appropriate thiserror types.
+          Workspace already has some typed errors — expand.
+          Remove anyhow from Cargo.toml (confirmed unused).
+          Final verification: grep entire daemon/src for Result<T, String> — should be near zero
+          (only acceptable in test code or CLI output formatting).
+        type: refactor
+        output_type: pr
+        f_xx: [F-15]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/workspace/, daemon/src/db/, daemon/Cargo.toml]
+        verify:
+          - "! grep -q 'anyhow' daemon/Cargo.toml"
+          - "cd daemon && cargo check 2>&1 | grep -v warning | tail -1"
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+        test_criteria: "anyhow removed. Result<T, String> minimized to test/display code only. cargo test passes."
+
+  - id: W10
+    name: "Testing — Mesh Sync + IPC Handler"
+    tasks:
+      - id: T10-01
+        do: >
+          Write comprehensive tests for mesh sync pipeline (1356 LOC, 13 files).
+          Test files: mesh/sync/ (types.rs, db_ops.rs, frame_io.rs, mod.rs, conn.rs, ops.rs, ops_apply.rs),
+          mesh/daemon_sync.rs, daemon_sync_auth.rs, daemon_sync_db.rs, daemon_sync_frame.rs,
+          daemon_sync_loops.rs, sync_batch.rs.
+          Cover: sync handshake flow, frame serialization/deserialization, CRDT apply operations,
+          batch sync, auth validation, DB merge operations, error recovery.
+          Use in-memory SQLite for DB tests. Mock network connections.
+          Target: at least 1 test per public function.
+        type: test
+        output_type: pr
+        f_xx: [F-17]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/mesh/sync/, daemon/src/mesh/daemon_sync*.rs, daemon/src/mesh/sync_batch.rs]
+        verify:
+          - "cd daemon && cargo test mesh::sync -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test mesh::daemon_sync -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Sync handshake, frame I/O, CRDT apply, batch ops, auth, DB merge — all tested. In-memory DB."
+
+      - id: T10-02
+        do: >
+          Write comprehensive tests for IPC handler (664 LOC, 7 files).
+          Test files: ipc_handler/ (routing.rs, auth.rs, models_handler.rs, server.rs, types.rs, utils.rs, mod.rs).
+          Cover: routing dispatch (all command types), auth validation (valid/invalid/missing token),
+          model handler operations, server start/stop lifecycle, type serialization.
+          Mock IPC socket connections. Test error handling paths.
+        type: test
+        output_type: pr
+        f_xx: [F-18]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/ipc_handler/]
+        verify:
+          - "cd daemon && cargo test ipc_handler -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "All routing commands dispatched correctly. Auth passes/fails. Models CRUD. Error paths covered."
+
+  - id: W11
+    name: "Testing — API Handlers Batch A"
+    tasks:
+      - id: T11-01
+        do: >
+          Write tests for api_chat.rs, api_coordinator.rs, api_crdt.rs.
+          Use axum::test helpers with in-memory DB. Test each endpoint:
+          - chat: session create/delete, message send, model list
+          - coordinator: status, toggle, emit event, process
+          - crdt: status, force-sync, peers list
+          Verify JSON response shapes match documented API.
+        type: test
+        output_type: pr
+        f_xx: [F-19]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/server/api_chat.rs, daemon/src/server/api_coordinator.rs, daemon/src/server/api_crdt.rs]
+        verify:
+          - "cd daemon && cargo test api_chat -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_coordinator -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_crdt -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "All endpoints tested. Response shapes verified. Error cases covered."
+
+      - id: T11-02
+        do: >
+          Write tests for api_domain.rs, api_evolution.rs, api_github.rs.
+          - domain: list, map
+          - evolution: proposals list, experiments, ROI, audit, approve/reject
+          - github: commits, events, stats, repo create
+          Mock external GitHub API calls. Test with realistic data shapes.
+        type: test
+        output_type: pr
+        f_xx: [F-19]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/server/api_domain.rs, daemon/src/server/api_evolution.rs, daemon/src/server/api_github.rs]
+        verify:
+          - "cd daemon && cargo test api_domain -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_evolution -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_github -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "All endpoints tested. GitHub mocked. Evolution lifecycle covered."
+
+      - id: T11-03
+        do: >
+          Write tests for api_heartbeat.rs, api_ingest.rs, api_metrics.rs.
+          - heartbeat: POST record, GET status
+          - ingest: POST trigger, GET formats
+          - metrics: run detail, summary, cost
+          Test with in-memory DB. Verify metric calculations.
+        type: test
+        output_type: pr
+        f_xx: [F-19]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/server/api_heartbeat.rs, daemon/src/server/api_ingest.rs, daemon/src/server/api_metrics.rs]
+        verify:
+          - "cd daemon && cargo test api_heartbeat -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_ingest -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_metrics -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Heartbeat records stored. Ingest formats listed. Metrics computed correctly."
+
+      - id: T11-04
+        do: >
+          Write tests for api_peers.rs, api_plans.rs, api_plan_db_checkpoint.rs, api_plan_db_query.rs.
+          - peers: CRUD, discover, coordinator, SSH check
+          - plans: timeline, validate
+          - checkpoint: save, restore
+          - query: execution-tree, drift-check, kb-search, readiness
+          Critical paths: checkpoint save/restore must be idempotent. Drift-check must detect real drift.
+        type: test
+        output_type: pr
+        f_xx: [F-19]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [daemon/src/server/api_peers.rs, daemon/src/server/api_plans.rs, daemon/src/server/api_plan_db_checkpoint.rs, daemon/src/server/api_plan_db_query.rs]
+        verify:
+          - "cd daemon && cargo test api_peers -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_plan -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Peer CRUD tested. Checkpoint save/restore idempotent. Query endpoints return correct structures."
+
+  - id: W12
+    name: "Testing — API Handlers Batch B + Dashboard Cleanup"
+    tasks:
+      - id: T12-01
+        do: >
+          Write tests for api_audit.rs and api_agents.rs (the 2 remaining untested handlers).
+          - audit: project audit generation, response structure
+          - agents: list, catalog, sessions, brain data
+          Verify response shapes match what SwiftUI app will consume.
+        type: test
+        output_type: pr
+        f_xx: [F-19]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [daemon/src/server/api_audit.rs, daemon/src/server/api_agents.rs]
+        verify:
+          - "cd daemon && cargo test api_audit -- 2>&1 | grep 'test result: ok'"
+          - "cd daemon && cargo test api_agents -- 2>&1 | grep 'test result: ok'"
+        test_criteria: "Audit generates valid report structure. Agent list/catalog/sessions return correct JSON."
+
+      - id: T12-02
+        do: >
+          Delete entire dashboard-legacy/ directory.
+          Update references: CLAUDE.md, .github/agents/Convergio.agent.md, README.md, CHANGELOG.md.
+          Remove dashboard-related sections from docs that reference old dashboard.
+          Keep daemon static file serving route (per user decision) — it will serve CommandCenter web export later.
+          Do NOT delete brain-physics-wasm reference code until Phase 3 Metal reimplementation is done
+          (copy src/ to docs/reference/brain-physics-wasm/ first as reference).
+        type: chore
+        output_type: pr
+        f_xx: [F-20]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [dashboard-legacy/, CLAUDE.md, .github/agents/Convergio.agent.md, README.md]
+        verify:
+          - "! test -d dashboard-legacy"
+          - "test -d docs/reference/brain-physics-wasm"
+          - "! grep -rn 'dashboard-legacy' CLAUDE.md"
+          - "cd daemon && cargo build --release 2>&1 | tail -1"
+        test_criteria: "dashboard-legacy deleted. References updated. brain-physics-wasm preserved as reference. Daemon builds."
+
+  # ══════════════════════════════════════════════
+  # PHASE 3: NATIVE SWIFTUI COMMAND CENTER
+  # ══════════════════════════════════════════════
+
+  - id: W13
+    name: "SwiftUI Foundation — Project + API Client + Auth"
+    tasks:
+      - id: T13-01
+        do: >
+          Create Xcode project: CommandCenter/CommandCenter.xcodeproj.
+          Swift 6.2.3, macOS Tahoe 26 deployment target, Xcode 26.3.
+          App structure: @main App with WindowGroup, sidebar NavigationSplitView.
+          Apply Liquid Glass: .glassEffect() on sidebar, toolbar.
+          Sidebar items: Plans, Agents, Mesh, Evolution, Costs, Terminal, Brain.
+          Use @Observable for app state. @concurrent where appropriate.
+          Notarization config: enable Hardened Runtime, add entitlements for network (client), keychain.
+          MUST BUILD with xcodebuild — no stubs, no todo!, working app that launches.
+        type: feature
+        output_type: pr
+        f_xx: [F-21]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [CommandCenter/]
+        verify:
+          - "test -f CommandCenter/CommandCenter.xcodeproj/project.pbxproj"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter -destination 'platform=macOS' build 2>&1 | grep 'BUILD SUCCEEDED'"
+          - "grep -q 'glassEffect' CommandCenter/Sources/App/ContentView.swift"
+        test_criteria: "App builds. Launches with sidebar. Liquid Glass applied. Navigation works between all sections."
+
+      - id: T13-02
+        do: >
+          Build daemon API client layer in CommandCenter/Sources/API/.
+          DaemonClient.swift: base URL, auth token, URLSession config.
+          Codable models for all major API responses (plans, tasks, waves, agents, peers, metrics, runs).
+          REST methods: generic get<T>, post<T>, put<T>, delete<T> with Codable.
+          WebSocket manager: connect to /ws/brain, /ws/dashboard, /ws/pty with auto-reconnect.
+          SSE parser: AsyncSequence-based SSE stream consumer for 7 SSE endpoints.
+          Token stored/retrieved from Keychain via Security framework.
+          Integration test: connect to localhost:8420/api/health (skip if daemon not running).
+        type: feature
+        output_type: pr
+        f_xx: [F-22]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [CommandCenter/Sources/API/]
+        verify:
+          - "test -f CommandCenter/Sources/API/DaemonClient.swift"
+          - "test -f CommandCenter/Sources/API/WebSocketManager.swift"
+          - "test -f CommandCenter/Sources/API/SSEParser.swift"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Client compiles. Codable models decode sample JSON. WebSocket connects. SSE parses events. Keychain read/write works."
+
+      - id: T13-03
+        do: >
+          Build first-launch auth flow in CommandCenter/Sources/Onboarding/.
+          OnboardingView.swift: step-by-step wizard.
+          Step 1: Generate 32-byte random token (SecRandomCopyBytes).
+          Step 2: Display token + instructions to set CONVERGIO_AUTH_TOKEN on daemon.
+          Step 3: User enters daemon URL (default localhost:8420), app verifies /api/health with token.
+          Step 4: On success, store token in Keychain, dismiss onboarding.
+          DaemonClient auto-loads token from Keychain on init.
+          Show onboarding only when no token in Keychain.
+          Liquid Glass on onboarding card.
+        type: feature
+        output_type: pr
+        f_xx: [F-31]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [CommandCenter/Sources/Onboarding/, CommandCenter/Sources/API/DaemonClient.swift]
+        verify:
+          - "test -f CommandCenter/Sources/Onboarding/OnboardingView.swift"
+          - "grep -q 'SecRandomCopyBytes\\|randomBytes' CommandCenter/Sources/Onboarding/"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Token generated. Keychain store/retrieve. Health check validates connection. Onboarding dismisses on success."
+
+  - id: W14
+    name: "Core Views A — Plans + Agents"
+    tasks:
+      - id: T14-01
+        do: >
+          Build Plan Dashboard view in CommandCenter/Sources/Views/Plans/.
+          PlanDashboard.swift: list of plans with merge-based progress bars (waves_merged/waves_total).
+          PlanDetailView.swift: wave timeline, task kanban (columns: pending, in_progress, submitted, done).
+          TaskDetailView.swift: task info, test_criteria, verify commands, model, effort.
+          Real-time updates via WebSocket /ws/dashboard subscription.
+          Use Chart3D for wave completion over time.
+          Drag & drop for task reordering (advanced drag APIs).
+          Liquid Glass on plan cards.
+        type: feature
+        output_type: pr
+        f_xx: [F-23]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [CommandCenter/Sources/Views/Plans/]
+        verify:
+          - "test -f CommandCenter/Sources/Views/Plans/PlanDashboard.swift"
+          - "test -f CommandCenter/Sources/Views/Plans/PlanDetailView.swift"
+          - "grep -q 'Chart3D\\|Chart' CommandCenter/Sources/Views/Plans/"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Plan list renders. Progress bars show merge-based %. Kanban board displays tasks. WebSocket updates reflected."
+
+      - id: T14-02
+        do: >
+          Build Agent Catalog view in CommandCenter/Sources/Views/Agents/.
+          AgentCatalogView.swift: searchable grid of agents with domain badges.
+          AgentDetailView.swift: name, description, model, tools, enable/disable toggle.
+          AgentTriageView.swift: input problem description, show recommended agents.
+          SessionMonitor.swift: live agent sessions with token usage, duration.
+          Enable/disable calls /api/agents/enable and /api/agents/disable.
+          Triage calls /api/agents/triage.
+          Liquid Glass on agent cards.
+        type: feature
+        output_type: pr
+        f_xx: [F-24]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [CommandCenter/Sources/Views/Agents/]
+        verify:
+          - "test -f CommandCenter/Sources/Views/Agents/AgentCatalogView.swift"
+          - "test -f CommandCenter/Sources/Views/Agents/AgentTriageView.swift"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Agent grid renders. Search filters. Enable/disable toggles call API. Triage returns recommendations."
+
+  - id: W15
+    name: "Core Views B — Mesh + Evolution"
+    tasks:
+      - id: T15-01
+        do: >
+          Build Mesh Topology view in CommandCenter/Sources/Views/Mesh/.
+          MeshTopologyView.swift: node graph visualization (force-directed layout using Canvas).
+          Nodes show: hostname, role (coordinator/worker), status, CPU/memory from heartbeat.
+          Edges: sync connections with bandwidth/latency.
+          MeshNodeDetail.swift: full node info, logs, sync stats.
+          Actions: provision (POST /api/mesh/init), delegate (POST /api/mesh/delegate).
+          Live updates via SSE /api/mesh/action/stream.
+          Liquid Glass on node cards.
+        type: feature
+        output_type: pr
+        f_xx: [F-25]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [CommandCenter/Sources/Views/Mesh/]
+        verify:
+          - "test -f CommandCenter/Sources/Views/Mesh/MeshTopologyView.swift"
+          - "test -f CommandCenter/Sources/Views/Mesh/MeshNodeDetail.swift"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Topology renders nodes. Heartbeat status shown. Provision action works. SSE updates reflected."
+
+      - id: T15-02
+        do: >
+          Build Evolution Metrics view in CommandCenter/Sources/Views/Evolution/.
+          EvolutionDashboardView.swift: proposals list with status badges.
+          ProposalDetailView.swift: hypothesis, target metric, expected delta, blast radius.
+          ExperimentView.swift: before/after metrics comparison, result.
+          ROIChartView.swift: Chart3D showing ROI over time across proposals.
+          AuditTrailView.swift: evolution audit log per proposal.
+          Data from /api/evolution/* endpoints.
+        type: feature
+        output_type: pr
+        f_xx: [F-26]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [CommandCenter/Sources/Views/Evolution/]
+        verify:
+          - "test -f CommandCenter/Sources/Views/Evolution/EvolutionDashboardView.swift"
+          - "grep -q 'Chart3D\\|Chart' CommandCenter/Sources/Views/Evolution/"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Proposal list renders. Detail shows metrics. ROI chart displays. Approve/reject buttons work."
+
+  - id: W16
+    name: "Cost Dashboard + Ghostty Terminal"
+    tasks:
+      - id: T16-01
+        do: >
+          Build Cost Dashboard view in CommandCenter/Sources/Views/Costs/.
+          CostDashboardView.swift: token usage summary (daily/weekly/monthly).
+          ModelCostBreakdown.swift: Chart showing cost per model (Opus, Sonnet, Haiku, Codex).
+          RunHistoryView.swift: table of execution runs with duration, tokens, cost, status.
+          RunDetailView.swift: single run detail with pause/resume actions.
+          Data from /api/metrics/* and /api/runs/*.
+          Charts: use Swift Charts with Liquid Glass overlays.
+        type: feature
+        output_type: pr
+        f_xx: [F-27]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [CommandCenter/Sources/Views/Costs/]
+        verify:
+          - "test -f CommandCenter/Sources/Views/Costs/CostDashboardView.swift"
+          - "test -f CommandCenter/Sources/Views/Costs/RunHistoryView.swift"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Token usage charts render. Model breakdown shows all models. Run history loads. Pause/resume call API."
+
+      - id: T16-02
+        do: >
+          Build Ghostty embedded terminal in CommandCenter/Sources/Terminal/.
+          GhosttyTerminal.swift: embedded Ghostty terminal view using cmux pattern.
+          Reference cmux project for Ghostty embedding approach.
+          Connect to daemon WS-PTY (/ws/pty) via WebSocket.
+          Support local terminal and remote mesh nodes (peer query param).
+          TmuxSessionPicker.swift: list/create tmux sessions.
+          Terminal tab bar: multiple terminals, named by node.
+          Keyboard passthrough: all input goes to PTY.
+          Max 10 concurrent sessions (matches daemon limit).
+        type: feature
+        output_type: pr
+        f_xx: [F-28]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [CommandCenter/Sources/Terminal/]
+        verify:
+          - "test -f CommandCenter/Sources/Terminal/GhosttyTerminal.swift"
+          - "test -f CommandCenter/Sources/Terminal/TmuxSessionPicker.swift"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Terminal view renders. WebSocket connects to /ws/pty. Multiple tabs. Tmux picker lists sessions."
+
+  - id: W17
+    name: "Brain Visualization + Notifications"
+    tasks:
+      - id: T17-01
+        do: >
+          Build Brain/Neural visualization in CommandCenter/Sources/Views/Brain/.
+          Reimplement dashboard-legacy/brain-physics-wasm/ (362 LOC Rust) as SwiftUI + Metal.
+          Reference: docs/reference/brain-physics-wasm/lib.rs (force-directed graph),
+          spatial.rs (spatial indexing), step.rs (physics simulation step).
+          BrainVisualizationView.swift: Metal-accelerated force-directed graph.
+          Metal shader: compute shader for physics simulation (spring forces, repulsion, damping).
+          Node types: agents (circles), tasks (squares), plans (hexagons).
+          Edge types: delegation, data flow, IPC messages.
+          Real-time data from /ws/brain WebSocket.
+          Smooth 60fps animation with Metal.
+          Click node to inspect (agent session, task status, plan detail).
+        type: feature
+        output_type: pr
+        f_xx: [F-29]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        files: [CommandCenter/Sources/Views/Brain/]
+        verify:
+          - "test -f CommandCenter/Sources/Views/Brain/BrainVisualizationView.swift"
+          - "find CommandCenter/Sources/Views/Brain -name '*.metal' | grep -q '.'"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Metal shader compiles. Force-directed layout renders. WebSocket feeds real-time data. Nodes clickable."
+
+      - id: T17-02
+        do: >
+          Build native notifications in CommandCenter/Sources/Notifications/.
+          NotificationManager.swift: request permission, schedule/deliver notifications.
+          Categories: thor-result (approve/reject inline), task-complete, mesh-event, plan-state.
+          Subscribe to /ws/dashboard WebSocket for events.
+          Filter: user-configurable notification preferences (per category toggle).
+          NotificationPreferencesView.swift: settings panel with toggles.
+          Use UNUserNotificationCenter with rich notifications (title, subtitle, body, category actions).
+          Thor reject notifications show task ID + rejection reason.
+        type: feature
+        output_type: pr
+        f_xx: [F-30]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        files: [CommandCenter/Sources/Notifications/]
+        verify:
+          - "test -f CommandCenter/Sources/Notifications/NotificationManager.swift"
+          - "test -f CommandCenter/Sources/Notifications/NotificationPreferencesView.swift"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+        test_criteria: "Permission requested. Notifications delivered for each category. Preferences toggle works. Thor reject shows details."
+
+  # ══════════════════════════════════════════════
+  # FINAL WAVE: CLOSURE
+  # ══════════════════════════════════════════════
+
+  - id: W18
+    name: "Final — Tests, Docs, PR, Deploy Verify"
+    tasks:
+      - id: TF-tests
+        do: >
+          Run full test suite across all components.
+          cd daemon && cargo test — all tests must pass (including all new tests from W10-W12).
+          cd CommandCenter && xcodebuild test -scheme CommandCenter — all Swift tests pass.
+          Verify zero process::exit in production code.
+          Verify zero Result<T, String> outside tests/display.
+          Verify all files under 250 lines.
+          Run acceptance_invariants from spec — all must pass.
+        type: test
+        output_type: pr
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12, F-13, F-14, F-15, F-16, F-17, F-18, F-19, F-20, F-21, F-22, F-23, F-24, F-25, F-26, F-27, F-28, F-29, F-30, F-31]
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo test 2>&1 | grep 'test result: ok'"
+          - "cd CommandCenter && xcodebuild -scheme CommandCenter build 2>&1 | grep 'BUILD SUCCEEDED'"
+          - "! grep -rn 'process::exit' daemon/src/ --include='*.rs' | grep -v test | grep -v 'fn main'"
+        test_criteria: "All daemon tests pass. SwiftUI builds. Zero process::exit. All acceptance invariants green."
+
+      - id: TF-doc
+        do: >
+          Write ADR-0110: Plan F Command Center decisions.
+          Sections: security fixes rationale, error handling strategy, SwiftUI architecture,
+          Ghostty integration approach, Metal brain visualization, auth flow design.
+          Update CHANGELOG.md: version 17.0.0 with all changes.
+          Update CLAUDE.md: add CommandCenter to architecture table, update dashboard references.
+          Update .github/agents/Convergio.agent.md: add CommandCenter sections.
+          Update TROUBLESHOOTING.md with new issues discovered.
+          Update README.md.
+        type: documentation
+        output_type: pr
+        f_xx: [F-01, F-14, F-15, F-21, F-28, F-29]
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 2
+        files: [docs/adr/0110-plan-f-command-center.md, CHANGELOG.md, CLAUDE.md, README.md, TROUBLESHOOTING.md]
+        verify:
+          - "test -f docs/adr/0110-plan-f-command-center.md"
+          - "grep -q '17.0.0' CHANGELOG.md"
+          - "grep -q 'CommandCenter' CLAUDE.md"
+        test_criteria: "ADR written. CHANGELOG has 17.0.0. CLAUDE.md updated. README current."
+
+      - id: TF-pr
+        do: >
+          Final PR: clean git status, no orphan worktrees, all waves merged to main.
+          Run git-digest.sh --full — verify clean:true.
+          Run project-audit.sh --project-root $(pwd) — verify no errors.
+          Squash merge final wave to main.
+        type: chore
+        output_type: pr
+        f_xx: []
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "git status --short | wc -l | grep -q '^0$'"
+          - "git worktree list | wc -l | grep -q '^1$'"
+        test_criteria: "Clean tree. Single worktree (main). All PRs merged."
+
+      - id: TF-deploy-verify
+        do: >
+          Verify production-ready state.
+          Build daemon release: cd daemon && cargo build --release.
+          Build CommandCenter: xcodebuild -scheme CommandCenter -configuration Release build.
+          Start daemon with auth token set. Launch CommandCenter.
+          Verify: /api/health returns 200. CommandCenter connects and shows plan list.
+          Verify version in VERSION.md matches 17.0.0.
+          Tag git: v17.0.0.
+        type: chore
+        output_type: pr
+        f_xx: []
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo build --release 2>&1 | tail -3"
+          - "grep -q '17.0.0' VERSION.md"
+        test_criteria: "Daemon builds release. CommandCenter builds release. Version 17.0.0 tagged."

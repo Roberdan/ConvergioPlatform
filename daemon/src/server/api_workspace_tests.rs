@@ -19,6 +19,8 @@ impl TestApp {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
         let db_path =
             std::env::temp_dir().join(format!("claude-ws-test-{}-{n}.db", std::process::id()));
+        // Dev-mode: disable auth so tests pass without a bearer token.
+        super::middleware::set_dev_mode(true);
         let router = super::routes::build_router_with_db(
             std::path::PathBuf::from("/tmp"),
             db_path.clone(),

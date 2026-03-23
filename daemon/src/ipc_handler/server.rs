@@ -3,7 +3,12 @@ use tracing::{info, warn};
 
 use super::utils::{default_db_path, default_peers_conf};
 
-pub async fn run_serve(bind: String, static_dir: Option<PathBuf>, crsqlite_path: Option<String>) {
+pub async fn run_serve(
+    bind: String,
+    static_dir: Option<PathBuf>,
+    crsqlite_path: Option<String>,
+    dev_mode: bool,
+) {
     // Init structured logging to file + stderr
     let log_dir = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
         .join(".claude/logs");
@@ -19,13 +24,22 @@ pub async fn run_serve(bind: String, static_dir: Option<PathBuf>, crsqlite_path:
         .with_ansi(false)
         .compact()
         .init();
+
+    // Initialise dev-mode flag before any request is handled.
+    // set_dev_mode logs the warning if dev_mode is true.
+    claude_core::server::middleware::set_dev_mode(dev_mode);
+
+    // In dev-mode with no auth token, force localhost-only binding to prevent
+    // accidental network exposure.
+    let effective_bind = claude_core::server::resolve_bind_addr(&bind, dev_mode);
+
     let dir = static_dir.unwrap_or_else(|| {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         claude_core::server::resolve_dashboard_static_dir(PathBuf::from(home).join(".claude"))
     });
-    info!("claude-core serve → {bind} (static: {dir:?})");
-    eprintln!("claude-core serve → {bind} (static: {dir:?})");
-    if let Err(err) = claude_core::server::run(&bind, dir, crsqlite_path).await {
+    info!("claude-core serve → {effective_bind} (static: {dir:?})");
+    eprintln!("claude-core serve → {effective_bind} (static: {dir:?})");
+    if let Err(err) = claude_core::server::run(&effective_bind, dir, crsqlite_path).await {
         warn!("server failed: {err}");
         eprintln!("server failed: {err}");
         std::process::exit(2);

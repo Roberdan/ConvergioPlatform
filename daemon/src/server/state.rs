@@ -1,5 +1,4 @@
 use super::state_init::init_db_and_pool;
-use crate::db::PlanDb;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -42,14 +41,6 @@ impl ServerState {
     /// Expose the connection pool for modules that need a Pool directly (e.g. WorkspaceManager).
     pub fn pool(&self) -> r2d2::Pool<SqliteConnectionManager> {
         self.pool.clone()
-    }
-
-    pub fn open_db(&self) -> Result<PlanDb, ApiError> {
-        // Always use plain SQLite — CRSQLite extension loads per-connection
-        // and leaks file descriptors (WAL handles not released on drop).
-        // No API query uses CRDT functions; CRSQLite is only needed for sync.
-        PlanDb::open_sqlite_path(&self.db_path)
-            .map_err(|err| ApiError::internal(format!("db open failed: {err}")))
     }
 }
 

@@ -8,6 +8,7 @@ use std::env;
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::Instant;
+use tokio::sync::Semaphore;
 
 struct LinesCache {
     today: i64,
@@ -18,6 +19,8 @@ struct LinesCache {
 }
 
 static LINES_CACHE: Mutex<Option<LinesCache>> = Mutex::new(None);
+// Limit concurrent background cache refreshes; skip if all slots are busy (stale cache still valid)
+static REFRESH_SEMAPHORE: Semaphore = Semaphore::const_new(4);
 const LINES_CACHE_TTL_SECS: u64 = 120;
 
 pub async fn api_overview(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
@@ -62,14 +65,25 @@ pub async fn api_overview(State(state): State<ServerState>) -> Result<Json<Value
         if let Some(ref c) = *cached {
             let vals = (c.today, c.week, c.yesterday, c.prev_week);
             if c.fetched_at.elapsed().as_secs() >= LINES_CACHE_TTL_SECS {
-                let db_path = state.db_path.clone();
-                std::thread::spawn(move || refresh_lines_cache(&db_path));
+                // Skip refresh if max concurrent refreshes already running — stale cache still valid
+                if let Ok(permit) = REFRESH_SEMAPHORE.try_acquire() {
+                    let db_path = state.db_path.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let _permit = permit; // hold permit for duration of refresh
+                        refresh_lines_cache(&db_path);
+                    });
+                }
             }
             vals
         } else {
             drop(cached);
-            let db_path = state.db_path.clone();
-            std::thread::spawn(move || refresh_lines_cache(&db_path));
+            if let Ok(permit) = REFRESH_SEMAPHORE.try_acquire() {
+                let db_path = state.db_path.clone();
+                tokio::task::spawn_blocking(move || {
+                    let _permit = permit; // hold permit for duration of refresh
+                    refresh_lines_cache(&db_path);
+                });
+            }
             (0, 0, 0, 0)
         }
     };
@@ -193,4 +207,44 @@ pub fn agents_today_count(conn: &rusqlite::Connection) -> i64 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Serialize semaphore tests to avoid cross-test interference on the shared static
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Semaphore must be initialized with exactly 4 permits (max concurrent refreshes)
+    #[test]
+    fn refresh_semaphore_has_four_permits() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        let available = REFRESH_SEMAPHORE.available_permits();
+        assert_eq!(available, 4, "REFRESH_SEMAPHORE must allow exactly 4 concurrent refreshes");
+    }
+
+    /// try_acquire must return a permit when none are held (skip-if-busy logic)
+    #[test]
+    fn refresh_semaphore_try_acquire_succeeds_when_free() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        let permit = REFRESH_SEMAPHORE.try_acquire();
+        assert!(permit.is_ok(), "try_acquire should succeed on a free semaphore");
+    }
+
+    /// try_acquire must fail once all 4 permits are exhausted (skip-refresh-when-busy path)
+    #[test]
+    fn refresh_semaphore_try_acquire_fails_when_full() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        // Drain all permits
+        let _p1 = REFRESH_SEMAPHORE.try_acquire().unwrap();
+        let _p2 = REFRESH_SEMAPHORE.try_acquire().unwrap();
+        let _p3 = REFRESH_SEMAPHORE.try_acquire().unwrap();
+        let _p4 = REFRESH_SEMAPHORE.try_acquire().unwrap();
+        // 5th must fail — this is the skip condition
+        let fifth = REFRESH_SEMAPHORE.try_acquire();
+        assert!(fifth.is_err(), "try_acquire should fail when all 4 permits are held");
+        // permits released automatically via Drop when _p1.._p4 go out of scope
+    }
 }

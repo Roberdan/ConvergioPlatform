@@ -600,6 +600,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75984efb6ed102a0d42db99afb6c1948f0380d1d91808d5529916e6c08b49d8d"
 
 [[package]]
+name = "constant_time_eq"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
+
+[[package]]
 name = "convergio-platform-daemon"
 version = "13.0.0"
 dependencies = [
@@ -610,6 +616,7 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "clap",
+ "constant_time_eq",
  "crossterm 0.28.1",
  "dirs",
  "futures-util",

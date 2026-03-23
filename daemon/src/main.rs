@@ -136,10 +136,11 @@ async fn dispatch(command: Commands) {
             bind,
             static_dir,
             crsqlite_path,
+            dev_mode,
         } => {
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(claude_core::background::run_pause_bridge(db_path));
-            ipc_handler::run_serve(bind, static_dir, crsqlite_path).await;
+            ipc_handler::run_serve(bind, static_dir, crsqlite_path, dev_mode).await;
         }
         Commands::Daemon { command } => match command {
             DaemonCommands::Start {
