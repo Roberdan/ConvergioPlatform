@@ -5,6 +5,14 @@ mod server;
 mod types;
 mod utils;
 
+#[cfg(test)]
+#[path = "ipc_handler_tests.rs"]
+mod tests;
+
+#[cfg(test)]
+#[path = "ipc_handler_integration_tests.rs"]
+mod integration_tests;
+
 // Re-export public API — callers in main.rs use these
 pub use server::{run_daemon, run_serve};
 pub use types::{DaemonCommands, IpcCommands, IpcHandlerError};
