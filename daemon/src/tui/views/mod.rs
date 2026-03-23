@@ -54,12 +54,47 @@ pub fn render_view(
         MainView::AgentOrgChart => {
             frame.render_widget(widgets::agent_org_chart(data, selected), chunks[2]);
         }
+        MainView::BrainCanvas => {
+            let p = Paragraph::new("Brain Canvas — coming soon")
+                .block(Block::default().borders(Borders::ALL).title("Brain Canvas"))
+                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
+            frame.render_widget(p, chunks[2]);
+        }
+        MainView::CostCenter => {
+            let p = Paragraph::new("Cost Center — coming soon")
+                .block(Block::default().borders(Borders::ALL).title("Cost Center"))
+                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
+            frame.render_widget(p, chunks[2]);
+        }
+        MainView::EventStream => {
+            let p = Paragraph::new("Event Stream — coming soon")
+                .block(Block::default().borders(Borders::ALL).title("Event Stream"))
+                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
+            frame.render_widget(p, chunks[2]);
+        }
+        MainView::WorkspaceView => {
+            let p = Paragraph::new("Workspace View — coming soon")
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Workspace View"),
+                )
+                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
+            frame.render_widget(p, chunks[2]);
+        }
+        MainView::Deliverables => {
+            let p = Paragraph::new("Deliverables — coming soon")
+                .block(Block::default().borders(Borders::ALL).title("Deliverables"))
+                .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
+            frame.render_widget(p, chunks[2]);
+        }
     }
 
-    let footer =
-        Paragraph::new(" [1] Kanban  [2] Pipeline  [3] Mesh  [4] Org  [Tab] Next  [q] Quit ")
-            .block(Block::default().borders(Borders::ALL))
-            .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
+    let footer = Paragraph::new(
+        " [1-9] Views  [Tab] Next  [q] Quit ",
+    )
+    .block(Block::default().borders(Borders::ALL))
+    .style(Style::default().fg(Color::from_u32(widgets::MUTED_U32)));
     frame.render_widget(footer, chunks[3]);
 }
 
@@ -69,5 +104,10 @@ fn view_name(view: MainView) -> &'static str {
         MainView::TaskPipeline => "Task Pipeline",
         MainView::MeshStatus => "Mesh Status",
         MainView::AgentOrgChart => "Agent Org Chart",
+        MainView::BrainCanvas => "Brain Canvas",
+        MainView::CostCenter => "Cost Center",
+        MainView::EventStream => "Event Stream",
+        MainView::WorkspaceView => "Workspace View",
+        MainView::Deliverables => "Deliverables",
     }
 }

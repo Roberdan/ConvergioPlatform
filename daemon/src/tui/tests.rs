@@ -1,5 +1,6 @@
 use super::{
-    views, AgentOrgNode, KpiData, MainView, MeshNode, PlanCard, TaskPipelineItem, TuiData,
+    views, AgentOrgNode, BrainNode, CostData, CostSummary, DeliverableInfo, KpiData, MainView,
+    MeshNode, PlanCard, TaskPipelineItem, TuiData, WorkspaceEvent, WorkspaceInfo,
 };
 use crate::tui::widgets;
 use ratatui::{backend::TestBackend, Terminal};
@@ -34,6 +35,66 @@ fn renders_agent_org_chart_view() {
     let rendered = render_to_text(&data, MainView::AgentOrgChart);
     assert!(rendered.contains("AGENT ORG CHART"));
     assert!(rendered.contains("Thor"));
+}
+
+#[test]
+fn renders_brain_canvas_placeholder() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::BrainCanvas);
+    assert!(rendered.contains("Brain Canvas"));
+}
+
+#[test]
+fn renders_cost_center_placeholder() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::CostCenter);
+    assert!(rendered.contains("Cost Center"));
+}
+
+#[test]
+fn renders_event_stream_placeholder() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::EventStream);
+    assert!(rendered.contains("Event Stream"));
+}
+
+#[test]
+fn renders_workspace_view_placeholder() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::WorkspaceView);
+    assert!(rendered.contains("Workspace View"));
+}
+
+#[test]
+fn renders_deliverables_placeholder() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::Deliverables);
+    assert!(rendered.contains("Deliverables"));
+}
+
+#[test]
+fn cycles_all_nine_views() {
+    // Verify all 9 MainView variants exist and are distinct
+    let views = [
+        MainView::PlanKanban,
+        MainView::TaskPipeline,
+        MainView::MeshStatus,
+        MainView::AgentOrgChart,
+        MainView::BrainCanvas,
+        MainView::CostCenter,
+        MainView::EventStream,
+        MainView::WorkspaceView,
+        MainView::Deliverables,
+    ];
+    assert_eq!(views.len(), 9);
+    // Each variant is distinct
+    for i in 0..views.len() {
+        for j in 0..views.len() {
+            if i != j {
+                assert_ne!(views[i], views[j], "views[{i}] == views[{j}]");
+            }
+        }
+    }
 }
 
 fn render_to_text(data: &TuiData, view: MainView) -> String {
@@ -90,6 +151,45 @@ fn sample_data() -> TuiData {
             active_task: Some("T13-01".to_string()),
         }],
         kpis: KpiData::default(),
+        brain_nodes: vec![BrainNode {
+            id: "n1".to_string(),
+            label: "Plan 708".to_string(),
+            kind: "plan".to_string(),
+            parent_id: None,
+            status: "active".to_string(),
+        }],
+        cost: CostData {
+            by_model: vec![],
+            by_project: vec![],
+            by_date: vec![],
+            summary: CostSummary::default(),
+        },
+        events: vec![WorkspaceEvent {
+            id: 1,
+            workspace_id: "ws-1".to_string(),
+            agent: "task-executor".to_string(),
+            action: "write".to_string(),
+            file_path: Some("daemon/src/tui/data.rs".to_string()),
+            detail: None,
+            created_at: "2026-03-23T00:00:00Z".to_string(),
+        }],
+        workspaces: vec![WorkspaceInfo {
+            workspace_id: "ws-1".to_string(),
+            path: "/tmp/ws-1".to_string(),
+            branch: "plan-708-W1".to_string(),
+            plan_id: Some(708),
+            status: "active".to_string(),
+            created_at: "2026-03-23T00:00:00Z".to_string(),
+        }],
+        deliverables: vec![DeliverableInfo {
+            id: 1,
+            name: "TUI Refactor".to_string(),
+            output_type: "code".to_string(),
+            status: "done".to_string(),
+            version: 1,
+            project_id: "convergio".to_string(),
+            created_at: "2026-03-23T00:00:00Z".to_string(),
+        }],
     }
 }
 

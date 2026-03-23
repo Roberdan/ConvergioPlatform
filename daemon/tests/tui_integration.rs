@@ -169,6 +169,7 @@ async fn tui_views_cycle_with_real_data() {
         pipeline: tasks,
         mesh_nodes: mesh,
         agents,
+        ..TuiData::default()
     };
 
     // Every view renders without panic
@@ -177,6 +178,11 @@ async fn tui_views_cycle_with_real_data() {
         MainView::TaskPipeline,
         MainView::MeshStatus,
         MainView::AgentOrgChart,
+        MainView::BrainCanvas,
+        MainView::CostCenter,
+        MainView::EventStream,
+        MainView::WorkspaceView,
+        MainView::Deliverables,
     ] {
         let text = render_to_text(&data, view);
         assert!(!text.trim().is_empty(), "view {:?} rendered empty", view);
