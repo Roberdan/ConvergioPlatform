@@ -5,6 +5,8 @@ use std::net::IpAddr;
 use std::time::Duration;
 use tokio::net::TcpStream;
 
+use super::error::MeshError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MeshSocketTuning {
     pub nodelay: bool,
@@ -20,18 +22,18 @@ pub fn mesh_socket_tuning() -> MeshSocketTuning {
     }
 }
 
-pub fn apply_socket_tuning(stream: &TcpStream) -> Result<(), String> {
+pub fn apply_socket_tuning(stream: &TcpStream) -> Result<(), MeshError> {
     let tuning = mesh_socket_tuning();
     stream
         .set_nodelay(tuning.nodelay)
-        .map_err(|e| format!("set TCP_NODELAY failed: {e}"))?;
+        .map_err(|e| MeshError::Network(format!("set TCP_NODELAY failed: {e}")))?;
     let keepalive = TcpKeepalive::new()
         .with_time(Duration::from_secs(tuning.keepalive_idle_secs))
         .with_interval(Duration::from_secs(tuning.keepalive_interval_secs));
     let socket = SockRef::from(stream);
     socket
         .set_tcp_keepalive(&keepalive)
-        .map_err(|e| format!("set SO_KEEPALIVE failed: {e}"))?;
+        .map_err(|e| MeshError::Network(format!("set SO_KEEPALIVE failed: {e}")))?;
     // Optimize buffer sizes for Tailscale (WireGuard MTU ~1280, aim for good throughput)
     let _ = socket.set_send_buffer_size(256 * 1024);
     let _ = socket.set_recv_buffer_size(256 * 1024);

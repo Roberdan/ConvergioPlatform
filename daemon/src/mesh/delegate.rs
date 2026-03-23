@@ -101,7 +101,7 @@ impl DelegateEngine {
         );
         let (code, out, err) = ssh
             .exec(&cmd)
-            .map_err(|e| DelegateError::WorktreeCreate(format!("ssh exec: {e}")))?;
+            .map_err(|e: crate::mesh::error::MeshError| DelegateError::WorktreeCreate(format!("ssh exec: {e}")))?;
         if code != 0 {
             return Err(DelegateError::WorktreeCreate(format!(
                 "exit {code}: {out} {err}"
@@ -127,7 +127,7 @@ impl DelegateEngine {
         );
         let (code, stdout, stderr) = ssh
             .exec(&cmd)
-            .map_err(|e| DelegateError::AgentSpawn(format!("ssh exec: {e}")))?;
+            .map_err(|e: crate::mesh::error::MeshError| DelegateError::AgentSpawn(format!("ssh exec: {e}")))?;
         let output = if stderr.is_empty() {
             stdout.clone()
         } else {
@@ -183,7 +183,7 @@ impl DelegateEngine {
         tokio::task::spawn_blocking(move || {
             let started = Instant::now();
             let ssh = SshClient::connect(&dest, Duration::from_secs(SSH_CONNECT_TIMEOUT_SECS))
-                .map_err(DelegateError::SshConnect)?;
+                .map_err(|e: crate::mesh::error::MeshError| DelegateError::SshConnect(e.to_string()))?;
             Self::check_remote_health(&ssh, &peer_owned)?;
             let worktree_dir = Self::create_remote_worktree(&ssh, plan_id, &task_owned)?;
             let (output, tokens, status) = match Self::spawn_and_monitor(

@@ -46,7 +46,7 @@ pub async fn migrate_coordinator(
     for (peer_name, ssh_alias) in &active_peers {
         let content = ssh_read_peers_conf(ssh_alias).map_err(|e| CoordinatorError::Ssh {
             peer: peer_name.clone(),
-            reason: e,
+            reason: e.to_string(),
         })?;
         snapshots.push(PeerSnapshot {
             peer_name: peer_name.clone(),
@@ -75,12 +75,12 @@ pub async fn migrate_coordinator(
     // ── Step 4: Copy DB from old coordinator to new ───────────────────────────
     let old_ssh = registry.peers[from].ssh_alias.clone();
     let new_ssh = registry.peers[to].ssh_alias.clone();
-    scp_db(&old_ssh, &new_ssh).map_err(CoordinatorError::Scp)?;
+    scp_db(&old_ssh, &new_ssh).map_err(|e| CoordinatorError::Scp(e.to_string()))?;
 
     // ── Step 5: Copy cron jobs ────────────────────────────────────────────────
     copy_crontab(&old_ssh, &new_ssh).map_err(|e| CoordinatorError::Ssh {
         peer: to.to_owned(),
-        reason: e,
+        reason: e.to_string(),
     })?;
 
     // ── Step 6: Push updated peers.conf to all active nodes ───────────────────
@@ -88,7 +88,7 @@ pub async fn migrate_coordinator(
     for (peer_name, ssh_alias) in &active_peers {
         ssh_write_peers_conf(ssh_alias, &new_conf).map_err(|e| CoordinatorError::Ssh {
             peer: peer_name.clone(),
-            reason: e,
+            reason: e.to_string(),
         })?;
     }
 

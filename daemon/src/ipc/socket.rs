@@ -2,12 +2,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::engine::IpcEngine;
+use super::error::IpcError;
 use super::protocol::{
     decode_request, encode_response, read_ipc_frame, write_ipc_frame, IpcResponse,
 };
 
 #[cfg(unix)]
-pub async fn start_ipc_server(engine: Arc<IpcEngine>, socket_path: PathBuf) -> Result<(), String> {
+pub async fn start_ipc_server(
+    engine: Arc<IpcEngine>,
+    socket_path: PathBuf,
+) -> Result<(), IpcError> {
     use tokio::net::UnixListener;
     // Remove stale socket
     if socket_path.exists() {
@@ -16,18 +20,17 @@ pub async fn start_ipc_server(engine: Arc<IpcEngine>, socket_path: PathBuf) -> R
 
     // Ensure parent directory exists
     if let Some(parent) = socket_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {e}"))?;
+        std::fs::create_dir_all(parent)?;
     }
 
-    let listener = UnixListener::bind(&socket_path)
-        .map_err(|e| format!("bind {}: {e}", socket_path.display()))?;
+    let listener = UnixListener::bind(&socket_path)?;
 
     // Set socket permissions to 0600
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = std::fs::Permissions::from_mode(0o600);
-        std::fs::set_permissions(&socket_path, perms).map_err(|e| format!("chmod: {e}"))?;
+        std::fs::set_permissions(&socket_path, perms)?;
     }
 
     tracing::info!("IPC server listening on {}", socket_path.display());
@@ -53,17 +56,17 @@ pub async fn start_ipc_server(engine: Arc<IpcEngine>, socket_path: PathBuf) -> R
 async fn handle_client(
     stream: tokio::net::UnixStream,
     engine: Arc<IpcEngine>,
-) -> Result<(), String> {
+) -> Result<(), IpcError> {
     let (mut reader, mut writer) = stream.into_split();
 
     loop {
         let frame = match read_ipc_frame(&mut reader).await {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(e) => return Err(format!("read frame: {e}")),
+            Err(e) => return Err(IpcError::Io(e)),
         };
 
-        let request = decode_request(&frame).map_err(|e| format!("decode: {e}"))?;
+        let request = decode_request(&frame)?;
 
         // dispatch is async — await directly for all request types
         let response = engine
@@ -74,10 +77,8 @@ async fn handle_client(
                 message: e.to_string(),
             });
 
-        let resp_bytes = encode_response(&response).map_err(|e| format!("encode: {e}"))?;
-        write_ipc_frame(&mut writer, &resp_bytes)
-            .await
-            .map_err(|e| format!("write frame: {e}"))?;
+        let resp_bytes = encode_response(&response)?;
+        write_ipc_frame(&mut writer, &resp_bytes).await?;
     }
 }
 
@@ -85,8 +86,10 @@ async fn handle_client(
 pub async fn start_ipc_server(
     _engine: Arc<IpcEngine>,
     _socket_path: PathBuf,
-) -> Result<(), String> {
-    Err("IPC Unix socket server not supported on this platform. Use TCP fallback.".into())
+) -> Result<(), IpcError> {
+    Err(IpcError::Other(
+        "IPC Unix socket server not supported on this platform. Use TCP fallback.".into(),
+    ))
 }
 
 #[cfg(test)]

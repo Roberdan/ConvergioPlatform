@@ -1,3 +1,4 @@
+use crate::mesh::error::MeshError;
 use crate::mesh::sync;
 use std::sync::Arc;
 use std::time::Duration;
@@ -85,7 +86,7 @@ pub(super) fn spawn_delta_loop(
                 .await
                 .ok()
                 .and_then(|r| r.ok())
-                .unwrap_or(Err("DB thread unavailable".into()));
+                .unwrap_or(Err(MeshError::Internal("DB thread unavailable".into())));
             match db_result {
                 Ok((changes, checkpoint, effective_cursor)) => {
                     if db_cursor < 0 {
@@ -136,7 +137,7 @@ pub(super) fn spawn_delta_loop(
                     if !staged_changes.is_empty()
                         && batch_window.should_flush(sync::current_time_ms())
                     {
-                        let send_count = staged_changes.len(); // T1-03: capture count BEFORE take
+                        let send_count = staged_changes.len();
                         let last_db_version = batch_window.take_checkpoint();
                         let frame = MeshSyncFrame::Delta {
                             node: node_id.clone(),

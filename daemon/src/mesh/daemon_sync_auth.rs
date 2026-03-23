@@ -1,4 +1,5 @@
 use crate::mesh::auth;
+use crate::mesh::error::MeshError;
 use crate::mesh::sync::{self, MeshSyncFrame};
 use serde_json::json;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -6,19 +7,18 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use super::daemon::{publish_event, DaemonState};
 
 /// T1-09: Run challenge-response auth handshake for an outbound connection.
-/// Outbound: wait for challenge from remote, respond with HMAC.
 pub(super) async fn run_outbound_auth(
     read_half: &mut OwnedReadHalf,
     write_half: &mut OwnedWriteHalf,
     peer_quota: &mut sync::PeerQuota,
     state: &DaemonState,
     secret: &[u8],
-) -> Result<(), String> {
+) -> Result<(), MeshError> {
     match sync::read_frame_with_quota(read_half, peer_quota).await? {
         Some(framed) => {
             let MeshSyncFrame::AuthChallenge { nonce, .. } = framed.frame else {
                 peer_quota.release(framed.payload_len as usize);
-                return Err("expected AuthChallenge".into());
+                return Err(MeshError::Auth("expected AuthChallenge".into()));
             };
             let hmac = auth::compute_hmac(secret, &nonce)?;
             sync::write_frame(
@@ -36,29 +36,28 @@ pub(super) async fn run_outbound_auth(
                         MeshSyncFrame::AuthResult { ok: true, .. } => Ok(()),
                         MeshSyncFrame::AuthResult {
                             ok: false, reason, ..
-                        } => Err(format!("auth rejected: {reason}")),
-                        _ => Err("unexpected frame during auth".into()),
+                        } => Err(MeshError::Auth(format!("auth rejected: {reason}"))),
+                        _ => Err(MeshError::Auth("unexpected frame during auth".into())),
                     };
                     peer_quota.release(reply.payload_len as usize);
                     result?;
                 }
-                None => return Err("unexpected EOF during auth".into()),
+                None => return Err(MeshError::Auth("unexpected EOF during auth".into())),
             }
         }
-        _ => return Err("expected AuthChallenge".into()),
+        _ => return Err(MeshError::Auth("expected AuthChallenge".into())),
     }
     Ok(())
 }
 
 /// T1-09: Run challenge-response auth handshake for an inbound connection.
-/// Inbound: send challenge, verify HMAC response.
 pub(super) async fn run_inbound_auth(
     read_half: &mut OwnedReadHalf,
     write_half: &mut OwnedWriteHalf,
     peer_quota: &mut sync::PeerQuota,
     state: &DaemonState,
     secret: &[u8],
-) -> Result<(), String> {
+) -> Result<(), MeshError> {
     let nonce = auth::generate_nonce();
     sync::write_frame(
         write_half,
@@ -92,15 +91,15 @@ pub(super) async fn run_inbound_auth(
                             },
                         )
                         .await?;
-                        Err(format!("auth failed for {node}: HMAC mismatch"))
+                        Err(MeshError::Auth(format!("auth failed for {node}: HMAC mismatch")))
                     }
                 }
-                _ => Err("expected AuthResponse".into()),
+                _ => Err(MeshError::Auth("expected AuthResponse".into())),
             };
             peer_quota.release(framed.payload_len as usize);
             result?;
         }
-        _ => return Err("expected AuthResponse".into()),
+        _ => return Err(MeshError::Auth("expected AuthResponse".into())),
     }
     Ok(())
 }

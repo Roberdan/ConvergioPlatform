@@ -130,12 +130,12 @@ fn allowlist_with_multiple_valid_tables() {
 fn record_sent_stats_rejects_invalid_peer_name() {
     let conn = Connection::open_in_memory().expect("conn");
     let err = record_sent_stats_with_conn(&conn, "", 1, 1).expect_err("empty peer rejected");
-    assert!(err.contains("invalid peer name length"));
+    assert!(err.to_string().contains("invalid peer name length"));
 
     let too_long = "p".repeat(257);
     let err =
         record_sent_stats_with_conn(&conn, &too_long, 1, 1).expect_err("overlong peer rejected");
-    assert!(err.contains("invalid peer name length: 257"));
+    assert!(err.to_string().contains("invalid peer name length: 257"));
 }
 
 #[test]

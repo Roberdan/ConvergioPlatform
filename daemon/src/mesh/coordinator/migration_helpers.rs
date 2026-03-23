@@ -1,80 +1,73 @@
+use crate::mesh::error::MeshError;
 use crate::mesh::peers::PeersRegistry;
 
-pub fn ssh_read_peers_conf(ssh_alias: &str) -> Result<String, String> {
+pub fn ssh_read_peers_conf(ssh_alias: &str) -> Result<String, MeshError> {
     let out = std::process::Command::new("ssh")
         .args([ssh_alias, "cat ~/.claude/config/peers.conf"])
-        .output()
-        .map_err(|e| e.to_string())?;
+        .output()?;
 
     if !out.status.success() {
-        return Err(format!(
+        return Err(MeshError::Network(format!(
             "ssh cat peers.conf failed ({}): {}",
             out.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&out.stderr),
-        ));
+        )));
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-pub fn ssh_write_peers_conf(ssh_alias: &str, content: &str) -> Result<(), String> {
+pub fn ssh_write_peers_conf(ssh_alias: &str, content: &str) -> Result<(), MeshError> {
     use std::io::Write;
 
     let mut child = std::process::Command::new("ssh")
         .args([ssh_alias, "cat > ~/.claude/config/peers.conf"])
         .stdin(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        .spawn()?;
 
     if let Some(stdin) = child.stdin.as_mut() {
-        stdin
-            .write_all(content.as_bytes())
-            .map_err(|e| e.to_string())?;
+        stdin.write_all(content.as_bytes())?;
     }
-    let status = child.wait().map_err(|e| e.to_string())?;
+    let status = child.wait()?;
     if !status.success() {
-        return Err(format!(
+        return Err(MeshError::Network(format!(
             "ssh write peers.conf failed ({})",
             status.code().unwrap_or(-1),
-        ));
+        )));
     }
     Ok(())
 }
 
-pub fn scp_db(from_alias: &str, to_alias: &str) -> Result<(), String> {
+pub fn scp_db(from_alias: &str, to_alias: &str) -> Result<(), MeshError> {
     let src = format!("{from_alias}:~/.claude/convergio.db");
     let dst = format!("{to_alias}:~/.claude/convergio.db");
     let out = std::process::Command::new("scp")
         .args(["-3", &src, &dst])
-        .output()
-        .map_err(|e| e.to_string())?;
+        .output()?;
 
     if !out.status.success() {
-        return Err(format!(
+        return Err(MeshError::Network(format!(
             "scp db failed ({}): {}",
             out.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&out.stderr),
-        ));
+        )));
     }
     Ok(())
 }
 
-pub fn copy_crontab(from_alias: &str, to_alias: &str) -> Result<(), String> {
-    // Dump crontab from source
+pub fn copy_crontab(from_alias: &str, to_alias: &str) -> Result<(), MeshError> {
     let out = std::process::Command::new("ssh")
         .args([from_alias, "crontab -l"])
-        .output()
-        .map_err(|e| e.to_string())?;
+        .output()?;
 
     if !out.status.success() {
-        // No crontab is exit 1 on most systems — treat as empty
         if out.status.code() == Some(1) {
             return Ok(());
         }
-        return Err(format!(
+        return Err(MeshError::Network(format!(
             "crontab -l failed ({}): {}",
             out.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&out.stderr),
-        ));
+        )));
     }
 
     let cron_content = out.stdout;
@@ -82,23 +75,21 @@ pub fn copy_crontab(from_alias: &str, to_alias: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    // Install on target
     use std::io::Write;
     let mut child = std::process::Command::new("ssh")
         .args([to_alias, "crontab -"])
         .stdin(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        .spawn()?;
 
     if let Some(stdin) = child.stdin.as_mut() {
-        stdin.write_all(&cron_content).map_err(|e| e.to_string())?;
+        stdin.write_all(&cron_content)?;
     }
-    let status = child.wait().map_err(|e| e.to_string())?;
+    let status = child.wait()?;
     if !status.success() {
-        return Err(format!(
+        return Err(MeshError::Network(format!(
             "crontab install failed ({})",
             status.code().unwrap_or(-1),
-        ));
+        )));
     }
     Ok(())
 }

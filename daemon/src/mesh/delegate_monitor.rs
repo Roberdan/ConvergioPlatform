@@ -1,3 +1,4 @@
+use crate::mesh::error::MeshError;
 use crate::server::state::ServerState;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -44,7 +45,10 @@ pub fn spawn_monitor(state: ServerState) {
     });
 }
 
-async fn poll_delegated_tasks(state: &ServerState, client: &reqwest::Client) -> Result<(), String> {
+async fn poll_delegated_tasks(
+    state: &ServerState,
+    client: &reqwest::Client,
+) -> Result<(), MeshError> {
     let delegations = load_active_delegations(state)?;
     if delegations.is_empty() {
         return Ok(());
@@ -73,11 +77,10 @@ async fn poll_delegated_tasks(state: &ServerState, client: &reqwest::Client) -> 
 }
 
 /// Process "delegate_complete" coordinator event (callback from remote node).
-/// Wired into api_coordinator.rs handle_process_events.
-pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<String, String> {
+pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<String, MeshError> {
     let parsed: DelegateCompletePayload = serde_json::from_value(payload.clone())
-        .map_err(|e| format!("invalid delegate_complete payload: {e}"))?;
-    let conn = state.get_conn().map_err(|e| format!("db: {e:?}"))?;
+        .map_err(|e| MeshError::Serialization(format!("invalid delegate_complete payload: {e}")))?;
+    let conn = state.get_conn().map_err(|e| MeshError::Db(format!("{e:?}")))?;
     let new_status = match parsed.result.as_str() {
         "failed" | "error" => "failed",
         _ => "done",
@@ -86,12 +89,12 @@ pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<
         "UPDATE tasks SET status = ?1 WHERE id = ?2",
         rusqlite::params![new_status, parsed.task_id],
     )
-    .map_err(|e| format!("task update: {e}"))?;
+    .map_err(|e| MeshError::Db(format!("task update: {e}")))?;
     conn.execute(
         "UPDATE agent_runs SET status = 'completed' WHERE task_id = ?1 AND status = 'running'",
         rusqlite::params![parsed.task_id],
     )
-    .map_err(|e| format!("agent_runs update: {e}"))?;
+    .map_err(|e| MeshError::Db(format!("agent_runs update: {e}")))?;
     let _ = state.ws_tx.send(json!({
         "type": "delegate_complete",
         "task_id": parsed.task_id,
@@ -108,15 +111,15 @@ pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<
     ))
 }
 
-fn load_active_delegations(state: &ServerState) -> Result<Vec<Delegation>, String> {
-    let conn = state.get_conn().map_err(|e| format!("db: {e:?}"))?;
+fn load_active_delegations(state: &ServerState) -> Result<Vec<Delegation>, MeshError> {
+    let conn = state.get_conn().map_err(|e| MeshError::Db(format!("{e:?}")))?;
     let mut stmt = conn
         .prepare(
             "SELECT ar.task_id, ar.plan_id, ar.peer_name, ar.status \
              FROM agent_runs ar \
              WHERE ar.peer_name IS NOT NULL AND ar.peer_name != '' AND ar.status = 'running'",
         )
-        .map_err(|e| format!("prepare: {e}"))?;
+        .map_err(|e| MeshError::Db(format!("prepare: {e}")))?;
     let rows = stmt
         .query_map([], |row| {
             Ok(Delegation {
@@ -127,7 +130,7 @@ fn load_active_delegations(state: &ServerState) -> Result<Vec<Delegation>, Strin
                 status: row.get::<_, String>(3).unwrap_or_default(),
             })
         })
-        .map_err(|e| format!("query: {e}"))?;
+        .map_err(|e| MeshError::Db(format!("query: {e}")))?;
     let mut delegations: Vec<Delegation> = rows.filter_map(|r| r.ok()).collect();
     for d in &mut delegations {
         d.peer_addr = resolve_peer_addr(&conn, &d.peer_name);
@@ -150,17 +153,17 @@ fn resolve_peer_addr(conn: &rusqlite::Connection, peer_name: &str) -> String {
 async fn query_remote_agents(
     client: &reqwest::Client,
     delegation: &Delegation,
-) -> Result<String, String> {
+) -> Result<String, MeshError> {
     let url = format!("{}/api/ipc/agents", delegation.peer_addr);
     let resp = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("GET {url}: {e}"))?;
+        .map_err(|e| MeshError::Network(format!("GET {url}: {e}")))?;
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}: {url}", resp.status()));
+        return Err(MeshError::Network(format!("HTTP {}: {url}", resp.status())));
     }
-    let body: Value = resp.json().await.map_err(|e| format!("JSON: {e}"))?;
+    let body: Value = resp.json().await.map_err(|e| MeshError::Network(format!("JSON: {e}")))?;
     let agents = body
         .get("agents")
         .and_then(Value::as_array)
@@ -172,7 +175,6 @@ async fn query_remote_agents(
             return Ok("running".to_string());
         }
     }
-    // Agent no longer registered = completed (fallback detection)
     Ok("done".to_string())
 }
 
@@ -184,24 +186,20 @@ fn update_delegation_status(
     state: &ServerState,
     delegation: &Delegation,
     new_status: &str,
-) -> Result<(), String> {
-    let conn = state.get_conn().map_err(|e| format!("db: {e:?}"))?;
-    let task_status = if is_terminal(new_status) {
-        new_status
-    } else {
-        "in_progress"
-    };
+) -> Result<(), MeshError> {
+    let conn = state.get_conn().map_err(|e| MeshError::Db(format!("{e:?}")))?;
+    let task_status = if is_terminal(new_status) { new_status } else { "in_progress" };
     conn.execute(
         "UPDATE tasks SET status = ?1 WHERE id = ?2",
         rusqlite::params![task_status, delegation.task_id],
     )
-    .map_err(|e| format!("task update: {e}"))?;
+    .map_err(|e| MeshError::Db(format!("task update: {e}")))?;
     if is_terminal(new_status) {
         conn.execute(
             "UPDATE agent_runs SET status = ?1 WHERE task_id = ?2 AND status = 'running'",
             rusqlite::params![new_status, delegation.task_id],
         )
-        .map_err(|e| format!("agent_runs update: {e}"))?;
+        .map_err(|e| MeshError::Db(format!("agent_runs update: {e}")))?;
     }
     Ok(())
 }

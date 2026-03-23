@@ -33,17 +33,21 @@ struct OllamaDetails {
     quantization_level: String,
 }
 
-pub async fn probe_ollama() -> Result<Vec<OllamaModel>, String> {
+pub async fn probe_ollama() -> Result<Vec<OllamaModel>, super::super::error::IpcError> {
+    use super::super::error::IpcError;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("http client: {e}"))?;
+        .map_err(|e| IpcError::Http(format!("http client: {e}")))?;
     let resp = client
         .get("http://localhost:11434/api/tags")
         .send()
         .await
-        .map_err(|e| format!("ollama probe: {e}"))?;
-    let tags: OllamaTagsResponse = resp.json().await.map_err(|e| format!("parse: {e}"))?;
+        .map_err(|e| IpcError::Http(format!("ollama probe: {e}")))?;
+    let tags: OllamaTagsResponse = resp
+        .json()
+        .await
+        .map_err(|e| IpcError::Http(format!("parse: {e}")))?;
     Ok(tags
         .models
         .into_iter()
@@ -55,17 +59,21 @@ pub async fn probe_ollama() -> Result<Vec<OllamaModel>, String> {
         .collect())
 }
 
-pub async fn probe_lmstudio() -> Result<Vec<OllamaModel>, String> {
+pub async fn probe_lmstudio() -> Result<Vec<OllamaModel>, super::super::error::IpcError> {
+    use super::super::error::IpcError;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("http client: {e}"))?;
+        .map_err(|e| IpcError::Http(format!("http client: {e}")))?;
     let resp = client
         .get("http://localhost:1234/v1/models")
         .send()
         .await
-        .map_err(|e| format!("lmstudio probe: {e}"))?;
-    let body: serde_json::Value = resp.json().await.map_err(|e| format!("parse: {e}"))?;
+        .map_err(|e| IpcError::Http(format!("lmstudio probe: {e}")))?;
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| IpcError::Http(format!("parse: {e}")))?;
     let models = body["data"]
         .as_array()
         .map(|arr| {

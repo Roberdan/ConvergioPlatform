@@ -6,15 +6,16 @@ use std::path::Path;
 use super::conn::{ensure_sync_schema, now_ms, open_sync_conn, validate_peer_name};
 use super::ops_apply::{apply_changes_to_conn, read_local_changes_since};
 use super::types::{ApplySummary, DeltaChange};
+use crate::mesh::error::MeshError;
 
 pub fn collect_changes_since(
     db_path: &Path,
     crsqlite_ext: Option<&str>,
     last_db_version: i64,
-) -> Result<(Vec<DeltaChange>, i64), String> {
+) -> Result<(Vec<DeltaChange>, i64), MeshError> {
     let conn = open_sync_conn(db_path, crsqlite_ext)?;
-    ensure_sync_schema(&conn).map_err(|e| e.to_string())?;
-    let changes = read_local_changes_since(&conn, last_db_version).map_err(|e| e.to_string())?;
+    ensure_sync_schema(&conn)?;
+    let changes = read_local_changes_since(&conn, last_db_version)?;
     let max_db_version = changes
         .iter()
         .map(|c| c.db_version)
@@ -24,14 +25,14 @@ pub fn collect_changes_since(
 }
 
 /// Get the current max db_version — used to initialize cursor on startup
-pub fn current_db_version(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<i64, String> {
+pub fn current_db_version(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<i64, MeshError> {
     let conn = open_sync_conn(db_path, crsqlite_ext)?;
     conn.query_row(
         "SELECT COALESCE(MAX(db_version), 0) FROM crsql_changes",
         [],
         |r| r.get(0),
     )
-    .map_err(|e| e.to_string())
+    .map_err(MeshError::from)
 }
 
 pub fn apply_delta_frame(
@@ -40,11 +41,11 @@ pub fn apply_delta_frame(
     peer_name: &str,
     sent_at_ms: u64,
     changes: &[DeltaChange],
-) -> Result<ApplySummary, String> {
+) -> Result<ApplySummary, MeshError> {
     validate_peer_name(peer_name)?;
     let conn = open_sync_conn(db_path, crsqlite_ext)?;
-    ensure_sync_schema(&conn).map_err(|e| e.to_string())?;
-    let applied = apply_changes_to_conn(&conn, changes).map_err(|e| e.to_string())?;
+    ensure_sync_schema(&conn)?;
+    let applied = apply_changes_to_conn(&conn, changes)?;
     let latency = now_ms().saturating_sub(sent_at_ms);
     let last_db_version = changes.iter().map(|c| c.db_version).max().unwrap_or(0);
     conn.execute(
@@ -58,8 +59,7 @@ pub fn apply_delta_frame(
            last_db_version = MAX(mesh_sync_stats.last_db_version, excluded.last_db_version),
            last_error = NULL",
         params![peer_name, changes.len() as i64, applied as i64, latency as i64, last_db_version],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(ApplySummary {
         applied,
         latency_ms: latency,
@@ -73,10 +73,10 @@ pub fn record_sent_stats(
     peer_name: &str,
     sent_count: usize,
     last_db_version: i64,
-) -> Result<(), String> {
+) -> Result<(), MeshError> {
     validate_peer_name(peer_name)?;
     let conn = open_sync_conn(db_path, crsqlite_ext)?;
-    ensure_sync_schema(&conn).map_err(|e| e.to_string())?;
+    ensure_sync_schema(&conn)?;
     conn.execute(
         "INSERT INTO mesh_sync_stats(peer_name,total_sent,last_sent_at,last_db_version,last_error)
          VALUES(?1, ?2, strftime('%s','now'), ?3, NULL)
@@ -86,8 +86,7 @@ pub fn record_sent_stats(
            last_db_version = MAX(mesh_sync_stats.last_db_version, excluded.last_db_version),
            last_error = NULL",
         params![peer_name, sent_count as i64, last_db_version],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
@@ -96,10 +95,10 @@ pub fn record_sync_error(
     crsqlite_ext: Option<&str>,
     peer_name: &str,
     error: &str,
-) -> Result<(), String> {
+) -> Result<(), MeshError> {
     validate_peer_name(peer_name)?;
     let conn = open_sync_conn(db_path, crsqlite_ext)?;
-    ensure_sync_schema(&conn).map_err(|e| e.to_string())?;
+    ensure_sync_schema(&conn)?;
     conn.execute(
         "INSERT INTO mesh_sync_stats(peer_name,last_error,last_sync_at)
          VALUES(?1, ?2, strftime('%s','now'))
@@ -107,17 +106,16 @@ pub fn record_sync_error(
            last_error = excluded.last_error,
            last_sync_at = excluded.last_sync_at",
         params![peer_name, error],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
-/// Collect local changes using an existing connection (avoids opening new one per tick)
+/// Collect local changes using an existing connection
 pub fn collect_changes_with_conn(
     conn: &Connection,
     last_db_version: i64,
-) -> Result<(Vec<DeltaChange>, i64), String> {
-    let changes = read_local_changes_since(conn, last_db_version).map_err(|e| e.to_string())?;
+) -> Result<(Vec<DeltaChange>, i64), MeshError> {
+    let changes = read_local_changes_since(conn, last_db_version)?;
     let max_db_version = changes
         .iter()
         .map(|c| c.db_version)
@@ -132,9 +130,9 @@ pub fn record_sent_stats_with_conn(
     peer_name: &str,
     sent_count: usize,
     last_db_version: i64,
-) -> Result<(), String> {
+) -> Result<(), MeshError> {
     validate_peer_name(peer_name)?;
-    ensure_sync_schema(conn).map_err(|e| e.to_string())?;
+    ensure_sync_schema(conn)?;
     conn.execute(
         "INSERT INTO mesh_sync_stats(peer_name,total_sent,last_sent_at,last_db_version,last_error)
          VALUES(?1, ?2, strftime('%s','now'), ?3, NULL)
@@ -144,18 +142,17 @@ pub fn record_sent_stats_with_conn(
            last_db_version = MAX(mesh_sync_stats.last_db_version, excluded.last_db_version),
            last_error = NULL",
         params![peer_name, sent_count as i64, last_db_version],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
-pub fn current_db_version_with_conn(conn: &Connection) -> Result<i64, String> {
+pub fn current_db_version_with_conn(conn: &Connection) -> Result<i64, MeshError> {
     conn.query_row(
         "SELECT COALESCE(MAX(db_version), 0) FROM crsql_changes",
         [],
         |r| r.get(0),
     )
-    .map_err(|e| e.to_string())
+    .map_err(MeshError::from)
 }
 
 pub use super::ops_apply::read_changes_since_from_conn;

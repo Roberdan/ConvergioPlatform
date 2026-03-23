@@ -2,10 +2,11 @@
 // Separated from daemon_sync_loops.rs to keep each file under 250 lines.
 
 use super::DaemonConfig;
+use crate::mesh::error::MeshError;
 use crate::mesh::sync;
 
 // Type alias to simplify complex channel types used below
-type SyncReply = std::sync::mpsc::Sender<Result<(Vec<sync::DeltaChange>, i64, i64), String>>;
+type SyncReply = std::sync::mpsc::Sender<Result<(Vec<sync::DeltaChange>, i64, i64), MeshError>>;
 
 /// Messages for the dedicated DB sync thread
 pub(super) enum SyncDbCmd {
@@ -61,7 +62,6 @@ pub(super) fn spawn_sync_db_thread(config: &DaemonConfig) -> std::sync::mpsc::Se
                         let _ = sync::record_sent_stats_with_conn(&conn, &peer, count, version);
                     }
                     SyncDbCmd::GetPeerCursor { peer, reply } => {
-                        // T1-01: Anti-entropy — resume from peer's last known version
                         let cursor = conn
                             .query_row(
                                 "SELECT COALESCE(last_db_version, 0) FROM mesh_sync_stats \

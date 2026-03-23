@@ -39,14 +39,15 @@ pub fn decrypt_token(
     key: &[u8; 32],
     ciphertext: &[u8],
     nonce: &[u8; 12],
-) -> Result<String, String> {
+) -> Result<String, super::super::error::IpcError> {
+    use super::super::error::IpcError;
     tracing::info!("decrypting token");
     let cipher = ChaCha20Poly1305::new(key.into());
     let n = Nonce::from_slice(nonce);
     let plaintext = cipher
         .decrypt(n, ciphertext)
-        .map_err(|e| format!("decryption failed: {e}"))?;
-    String::from_utf8(plaintext).map_err(|e| format!("invalid UTF-8: {e}"))
+        .map_err(|e| IpcError::Crypto(format!("decryption failed: {e}")))?;
+    String::from_utf8(plaintext).map_err(|e| IpcError::Crypto(format!("invalid UTF-8: {e}")))
 }
 
 // --- T8049: File watcher ---
@@ -93,7 +94,8 @@ pub fn credential_watch_paths() -> Vec<(PathBuf, String)> {
 
 pub fn watch_credential_files(
     tx: tokio::sync::mpsc::Sender<CredentialChange>,
-) -> Result<(), String> {
+) -> Result<(), super::super::error::IpcError> {
+    use super::super::error::IpcError;
     use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
     let paths = credential_watch_paths();
     let tx_clone = tx.clone();
@@ -121,7 +123,7 @@ pub fn watch_credential_files(
         },
         Config::default(),
     )
-    .map_err(|e| format!("watcher init: {e}"))?;
+    .map_err(|e| IpcError::Other(format!("watcher init: {e}")))?;
 
     for (path, _) in &paths {
         if path.exists() {

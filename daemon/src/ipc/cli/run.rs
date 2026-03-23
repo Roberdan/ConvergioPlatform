@@ -7,7 +7,7 @@ use super::args::{
 };
 use super::output::format_response;
 
-pub async fn run_ipc(args: IpcArgs) -> Result<(), String> {
+pub async fn run_ipc(args: IpcArgs) -> Result<(), super::super::error::IpcError> {
     let socket = args.socket.unwrap_or_else(default_socket_path);
     let db = args.db.unwrap_or_else(default_db_path);
     let json = args.json;

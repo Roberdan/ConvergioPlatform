@@ -2,6 +2,7 @@ pub mod background;
 pub mod background_sync;
 pub mod db;
 pub mod digest;
+pub mod errors;
 pub mod hooks;
 pub mod ipc;
 pub mod lock;
