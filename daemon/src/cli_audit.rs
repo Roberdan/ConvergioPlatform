@@ -213,7 +213,7 @@ pub fn format_violation(v: &Violation) -> String {
 }
 
 /// Entry point called from main.rs dispatch.
-pub fn handle(path: PathBuf) {
+pub fn handle(path: PathBuf) -> Result<(), crate::cli_error::CliError> {
     let root = if path.as_os_str().is_empty() || path == std::path::Path::new(".") {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     } else {
@@ -223,13 +223,15 @@ pub fn handle(path: PathBuf) {
     let violations = audit(&root);
     if violations.is_empty() {
         println!("OK — no violations found.");
-        return;
+        return Ok(());
     }
     println!("\n{} violation(s) found:\n", violations.len());
     for v in &violations {
         println!("  {}", format_violation(v));
     }
-    std::process::exit(1);
+    Err(crate::cli_error::CliError::ViolationsFound(
+        format!("{} violation(s) found", violations.len()),
+    ))
 }
 
 #[cfg(test)]

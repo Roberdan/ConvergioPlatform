@@ -1,41 +1,40 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Transpile subcommand implementation — converts skill.yaml + SKILL.md to provider formats.
 
+use crate::cli_error::CliError;
 use std::path::{Path, PathBuf};
 
-pub fn handle_transpile(skill_dir: &Path, output_dir: &Path, provider: &str, human: bool) {
+pub fn handle_transpile(
+    skill_dir: &Path,
+    output_dir: &Path,
+    provider: &str,
+    human: bool,
+) -> Result<(), CliError> {
     let yaml_path = skill_dir.join("skill.yaml");
     let md_path = skill_dir.join("SKILL.md");
 
     for p in [&yaml_path, &md_path] {
         if !p.is_file() {
-            eprintln!("missing: {}", p.display());
-            std::process::exit(2);
+            return Err(CliError::InvalidInput(format!(
+                "missing: {}",
+                p.display()
+            )));
         }
     }
 
-    let yaml_content = match std::fs::read_to_string(&yaml_path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("read error: {e}");
-            std::process::exit(2);
-        }
-    };
-    let md_content = match std::fs::read_to_string(&md_path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("read error: {e}");
-            std::process::exit(2);
-        }
-    };
+    let yaml_content = std::fs::read_to_string(&yaml_path)
+        .map_err(|e| CliError::Io(e))?;
+    let md_content = std::fs::read_to_string(&md_path)
+        .map_err(|e| CliError::Io(e))?;
 
     let output = match provider {
         "claude-code" => transpile_claude(&yaml_content, &md_content, output_dir),
         "copilot-cli" => transpile_copilot(&yaml_content, &md_content, output_dir),
         "generic-llm" => transpile_generic(&yaml_content, &md_content, output_dir),
         other => {
-            eprintln!("unknown provider '{other}'; use: claude-code, copilot-cli, generic-llm");
-            std::process::exit(2);
+            return Err(CliError::InvalidInput(format!(
+                "unknown provider '{other}'; use: claude-code, copilot-cli, generic-llm"
+            )));
         }
     };
 
@@ -49,11 +48,9 @@ pub fn handle_transpile(skill_dir: &Path, output_dir: &Path, provider: &str, hum
                     serde_json::json!({"ok": true, "path": path.display().to_string()})
                 );
             }
+            Ok(())
         }
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(2);
-        }
+        Err(e) => Err(CliError::ApiCallFailed(e)),
     }
 }
 

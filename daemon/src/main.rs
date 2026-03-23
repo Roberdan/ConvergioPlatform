@@ -215,11 +215,11 @@ async fn dispatch(command: Commands) {
                 }
             }
         }
-        Commands::Plan { command } => cli_plan::handle(command).await,
-        Commands::Task { command } => cli_task::handle(command).await,
-        Commands::Wave { command } => cli_wave::handle(command).await,
-        Commands::Agent { command } => cli_agent_format::dispatch(command).await,
-        Commands::Kb { command } => cli_kb::handle(command).await,
+        Commands::Plan { command } => exit_on_err(cli_plan::handle(command).await),
+        Commands::Task { command } => exit_on_err(cli_task::handle(command).await),
+        Commands::Wave { command } => exit_on_err(cli_wave::handle(command).await),
+        Commands::Agent { command } => exit_on_err(cli_agent_format::dispatch(command).await),
+        Commands::Kb { command } => exit_on_err(cli_kb::handle(command).await),
         Commands::Run { command } => exit_on_err(cli_run::handle(command).await),
         Commands::Mesh { command } => cli_ops::handle_mesh(command).await,
         Commands::Session { command } => cli_ops::handle_session(command).await,
@@ -238,15 +238,15 @@ async fn dispatch(command: Commands) {
                     cli_audit_project::handle(&project_id, output, yes, &api_url).await,
                 );
             } else {
-                cli_audit::handle(path);
+                exit_on_err(cli_audit::handle(path));
             }
         }
-        Commands::Skill { command } => cli_skill::handle(command).await,
+        Commands::Skill { command } => exit_on_err(cli_skill::handle(command).await),
         Commands::Bus { command } => cli_bus::handle(command).await,
         Commands::Project { command } => exit_on_err(cli_project::handle(command).await),
         Commands::Metrics { command } => cli_ops::handle_metrics(command).await,
         Commands::Alert { command } => cli_ops::handle_alert(command).await,
-        Commands::Domain { command } => cli_domain::dispatch(command).await,
+        Commands::Domain { command } => exit_on_err(cli_domain::dispatch(command).await),
         Commands::Workspace { command } => cli_workspace::handle(command).await,
     }
 }

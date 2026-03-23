@@ -2,15 +2,16 @@
 // Agent command dispatch + transpile logic — extracted from cli_agent.rs (Plan F, T4-02).
 
 use crate::cli_agent::AgentCommands;
+use crate::cli_error::CliError;
 
-pub(crate) async fn dispatch(cmd: AgentCommands) {
+pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
     match cmd {
         AgentCommands::Transpile {
             name,
             provider,
             api_url,
         } => {
-            handle_transpile(&name, &provider, &api_url).await;
+            handle_transpile(&name, &provider, &api_url).await?;
         }
         AgentCommands::Start {
             name,
@@ -121,9 +122,10 @@ pub(crate) async fn dispatch(cmd: AgentCommands) {
                 .await;
         }
     }
+    Ok(())
 }
 
-async fn handle_transpile(name: &str, provider: &str, api_url: &str) {
+async fn handle_transpile(name: &str, provider: &str, api_url: &str) -> Result<(), CliError> {
     let enc: String = name
         .chars()
         .map(|c| {
@@ -135,23 +137,20 @@ async fn handle_transpile(name: &str, provider: &str, api_url: &str) {
         })
         .collect();
     let url = format!("{api_url}/api/agents/catalog?name={enc}");
-    let resp = reqwest::get(&url).await.unwrap_or_else(|e| {
-        eprintln!("error connecting to daemon: {e}");
-        std::process::exit(2);
-    });
-    let val: serde_json::Value = resp.json().await.unwrap_or_else(|e| {
-        eprintln!("error parsing response: {e}");
-        std::process::exit(2);
-    });
+    let resp = reqwest::get(&url)
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error connecting to daemon: {e}")))?;
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error parsing response: {e}")))?;
     let agent = if val.is_array() {
         val.as_array().and_then(|a| a.first()).cloned()
     } else {
         Some(val)
     };
-    let agent = agent.unwrap_or_else(|| {
-        eprintln!("agent '{name}' not found in catalog");
-        std::process::exit(1);
-    });
+    let agent = agent
+        .ok_or_else(|| CliError::NotFound(format!("agent '{name}' not found in catalog")))?;
     let desc = agent["description"].as_str().unwrap_or("");
     let model = agent["model"].as_str().unwrap_or("claude-sonnet-4-6");
     let tools = agent["tools"].as_str().unwrap_or("view,edit,bash");
@@ -160,9 +159,11 @@ async fn handle_transpile(name: &str, provider: &str, api_url: &str) {
         "copilot-cli" => crate::transpiler::transpile_copilot_cli(name, desc, model, tools),
         "generic-llm" => crate::transpiler::transpile_generic_llm(name, desc, model),
         other => {
-            eprintln!("unknown provider '{other}'; use: claude-code, copilot-cli, generic-llm");
-            std::process::exit(2);
+            return Err(CliError::InvalidInput(format!(
+                "unknown provider '{other}'; use: claude-code, copilot-cli, generic-llm"
+            )));
         }
     };
     print!("{output}");
+    Ok(())
 }

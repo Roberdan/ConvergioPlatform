@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Skill disable subcommand — removes unshared plugins/agents when a skill is disabled.
 
+use crate::cli_error::CliError;
 use crate::cli_skill_validate::{agent_name_valid, yaml_get_list};
 use std::path::{Path, PathBuf};
 
@@ -105,19 +106,16 @@ pub fn deactivate_plugins(
 }
 
 /// Disable a skill: removes unshared plugins and disables unshared agents via daemon API.
-pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
+pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) -> Result<(), CliError> {
     let yaml_path = skill_dir.join("skill.yaml");
     if !yaml_path.is_file() {
-        eprintln!("skill.yaml not found in {}", skill_dir.display());
-        std::process::exit(2);
+        return Err(CliError::InvalidInput(format!(
+            "skill.yaml not found in {}",
+            skill_dir.display()
+        )));
     }
-    let yaml_content = match std::fs::read_to_string(&yaml_path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("read error: {e}");
-            std::process::exit(2);
-        }
-    };
+    let yaml_content = std::fs::read_to_string(&yaml_path)
+        .map_err(|e| CliError::InvalidInput(format!("read error: {e}")))?;
 
     let skill_name = skill_dir
         .file_name()
@@ -224,6 +222,7 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) {
             })
         );
     }
+    Ok(())
 }
 
 #[cfg(test)]

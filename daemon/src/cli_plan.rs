@@ -125,8 +125,8 @@ pub enum PlanCommands {
     },
 }
 
-pub async fn handle(cmd: PlanCommands) {
-    crate::cli_plan_handlers::dispatch(cmd).await;
+pub async fn handle(cmd: PlanCommands) -> Result<(), crate::cli_error::CliError> {
+    crate::cli_plan_handlers::dispatch(cmd).await
 }
 
 #[cfg(test)]

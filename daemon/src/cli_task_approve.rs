@@ -2,18 +2,20 @@
 // Handler for `cvg task approve <task_id>` — finds deliverable linked to task,
 // then approves it via the daemon HTTP API.
 
+use crate::cli_error::CliError;
 use serde_json::Value;
 
 /// Approve the deliverable linked to a task.
 /// Flow: GET /api/deliverables?task_id=<id> → find deliverable → POST approve.
-pub async fn handle(task_id: i64, comment: Option<String>, human: bool, api_url: &str) {
-    let deliverable = match find_deliverable(task_id, api_url).await {
-        Ok(d) => d,
-        Err(msg) => {
-            eprintln!("{msg}");
-            std::process::exit(1);
-        }
-    };
+pub async fn handle(
+    task_id: i64,
+    comment: Option<String>,
+    human: bool,
+    api_url: &str,
+) -> Result<(), CliError> {
+    let deliverable = find_deliverable(task_id, api_url)
+        .await
+        .map_err(CliError::NotFound)?;
 
     let id = deliverable["id"].as_i64().unwrap_or(0);
     let approved_by = comment.unwrap_or_else(|| "cli".to_string());
@@ -22,31 +24,29 @@ pub async fn handle(task_id: i64, comment: Option<String>, human: bool, api_url:
     let url = format!("{api_url}/api/deliverables/{id}/approve");
 
     let client = reqwest::Client::new();
-    match client.post(&url).json(&body).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.json::<Value>().await {
-                Ok(val) => {
-                    if human {
-                        print_approval_human(&val);
-                    } else {
-                        println!("{val}");
-                    }
-                }
-                Err(e) => {
-                    eprintln!("error parsing response: {e}");
-                    std::process::exit(2);
-                }
-            }
-            if !status.is_success() {
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("error connecting to daemon: {e}");
-            std::process::exit(2);
-        }
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error connecting to daemon: {e}")))?;
+
+    let status = resp.status();
+    let val: Value = resp
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("error parsing response: {e}")))?;
+
+    if human {
+        print_approval_human(&val);
+    } else {
+        println!("{val}");
     }
+
+    if !status.is_success() {
+        return Err(CliError::NotFound(format!("daemon returned status {status}")));
+    }
+    Ok(())
 }
 
 /// Find the deliverable linked to a task via GET /api/deliverables?task_id=<id>.

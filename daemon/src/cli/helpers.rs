@@ -38,9 +38,10 @@ pub fn json_ok(data: serde_json::Value) {
 }
 
 pub fn json_err(msg: &str) -> ! {
-    eprintln!("{}", serde_json::to_string_pretty(&serde_json::json!({"success": false, "error": msg}))
-        .unwrap_or_else(|_| format!(r#"{{"success":false,"error":{:?}}}"#, msg)));
-    std::process::exit(1);
+    let output = serde_json::to_string_pretty(&serde_json::json!({"success": false, "error": msg}))
+        .unwrap_or_else(|_| format!(r#"{{"success":false,"error":{:?}}}"#, msg));
+    eprintln!("{output}");
+    panic!("CLI error: {msg}");
 }
 
 pub fn open_token_db() -> rusqlite::Connection {

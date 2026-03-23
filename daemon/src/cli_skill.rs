@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Skill lint+transpile subcommands — replaces skill-lint.sh and skill-transpile-*.sh.
+use crate::cli_error::CliError;
 use clap::Subcommand;
 use std::path::PathBuf;
 
@@ -63,14 +64,14 @@ pub enum SkillCommands {
     },
 }
 
-pub async fn handle(cmd: SkillCommands) {
+pub async fn handle(cmd: SkillCommands) -> Result<(), CliError> {
     match cmd {
         SkillCommands::Lint {
             skill_dir,
             human,
             all,
         } => {
-            handle_lint(&skill_dir, human, all);
+            handle_lint(&skill_dir, human, all)?;
         }
         SkillCommands::Transpile {
             skill_dir,
@@ -78,36 +79,36 @@ pub async fn handle(cmd: SkillCommands) {
             provider,
             human,
         } => {
-            crate::cli_skill_transpile::handle_transpile(&skill_dir, &output_dir, &provider, human);
+            crate::cli_skill_transpile::handle_transpile(&skill_dir, &output_dir, &provider, human)?;
         }
         SkillCommands::Enable {
             skill_dir,
             api_url,
             human,
         } => {
-            crate::cli_skill_enable::handle(&skill_dir, &api_url, human).await;
+            crate::cli_skill_enable::handle(&skill_dir, &api_url, human).await?;
         }
         SkillCommands::Disable {
             skill_dir,
             api_url,
             human,
         } => {
-            crate::cli_skill_disable::handle(&skill_dir, &api_url, human).await;
+            crate::cli_skill_disable::handle(&skill_dir, &api_url, human).await?;
         }
     }
+    Ok(())
 }
 
 // -- Lint --------------------------------------------------------------------
 
-fn handle_lint(skill_dir: &PathBuf, human: bool, all: bool) {
+fn handle_lint(skill_dir: &PathBuf, human: bool, all: bool) -> Result<(), CliError> {
     if all {
-        let entries = match std::fs::read_dir(skill_dir) {
-            Ok(e) => e,
-            Err(err) => {
-                eprintln!("error reading directory {}: {err}", skill_dir.display());
-                std::process::exit(2);
-            }
-        };
+        let entries = std::fs::read_dir(skill_dir).map_err(|err| {
+            CliError::InvalidInput(format!(
+                "error reading directory {}: {err}",
+                skill_dir.display()
+            ))
+        })?;
         let mut results = Vec::new();
         for entry in entries.flatten() {
             if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
@@ -115,8 +116,10 @@ fn handle_lint(skill_dir: &PathBuf, human: bool, all: bool) {
             }
         }
         if results.is_empty() {
-            eprintln!("no skill directories found in {}", skill_dir.display());
-            std::process::exit(1);
+            return Err(CliError::NotFound(format!(
+                "no skill directories found in {}",
+                skill_dir.display()
+            )));
         }
         let pass = results.iter().filter(|r| r.ok).count();
         let fail = results.iter().filter(|r| !r.ok).count();
@@ -137,7 +140,9 @@ fn handle_lint(skill_dir: &PathBuf, human: bool, all: bool) {
             );
         }
         if fail > 0 {
-            std::process::exit(1);
+            return Err(CliError::NotFound(format!(
+                "{fail} skill(s) failed lint"
+            )));
         }
     } else {
         let result = lint_one(skill_dir);
@@ -158,9 +163,10 @@ fn handle_lint(skill_dir: &PathBuf, human: bool, all: bool) {
             );
         }
         if !result.ok {
-            std::process::exit(1);
+            return Err(CliError::NotFound("skill failed lint".into()));
         }
     }
+    Ok(())
 }
 
 pub(crate) struct LintResult {

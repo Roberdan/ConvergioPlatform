@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Handler dispatch for plan subcommands — split from cli_plan.rs for 250-line limit.
 
+use crate::cli_error::CliError;
 use crate::cli_plan::PlanCommands;
 
-pub async fn dispatch(cmd: PlanCommands) {
+pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
     match cmd {
         // --- GET-based subcommands ---
         PlanCommands::List { human, api_url } => {
@@ -77,13 +78,9 @@ pub async fn dispatch(cmd: PlanCommands) {
             human,
             api_url,
         } => {
-            let content = match std::fs::read_to_string(&spec_file) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("error reading spec file '{spec_file}': {e}");
-                    std::process::exit(2);
-                }
-            };
+            let content = std::fs::read_to_string(&spec_file).map_err(|e| {
+                CliError::InvalidInput(format!("error reading spec file '{spec_file}': {e}"))
+            })?;
             let body = serde_json::json!({
                 "plan_id": plan_id,
                 "spec": content,
@@ -156,4 +153,5 @@ pub async fn dispatch(cmd: PlanCommands) {
             .await;
         }
     }
+    Ok(())
 }

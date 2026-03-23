@@ -124,7 +124,9 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
         }
     }
 
-    // T2-03: Graceful shutdown handler
+    // T2-03: Graceful shutdown via notify (no process::exit)
+    let shutdown = Arc::new(tokio::sync::Notify::new());
+    let shutdown_trigger = shutdown.clone();
     let shutdown_state = state.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
@@ -136,7 +138,7 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
         );
         // Give broadcast subscribers time to receive shutdown event
         tokio::time::sleep(Duration::from_millis(500)).await;
-        std::process::exit(0);
+        shutdown_trigger.notify_one();
     });
 
     // Local self-heartbeat: write own node to peer_heartbeats with system stats
@@ -161,24 +163,30 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), String> {
     });
 
     loop {
-        let (mut stream, remote) = listener
-            .accept()
-            .await
-            .map_err(|e| format!("mesh accept failed: {e}"))?;
-        if let Err(err) = inbound_rate_limiter.check(remote) {
-            tracing::warn!("inbound connection rejected from {remote}: {err}");
-            let _ = stream.shutdown().await;
-            continue;
+        tokio::select! {
+            result = listener.accept() => {
+                let (mut stream, remote) = result
+                    .map_err(|e| format!("mesh accept failed: {e}"))?;
+                if let Err(err) = inbound_rate_limiter.check(remote) {
+                    tracing::warn!("inbound connection rejected from {remote}: {err}");
+                    let _ = stream.shutdown().await;
+                    continue;
+                }
+                let _ = apply_socket_tuning(&stream);
+                let cfg = config.clone();
+                let st = state.clone();
+                let limiter = inbound_rate_limiter.clone();
+                tokio::spawn(async move {
+                    let conn_id = format!("inbound-{remote}");
+                    let _ = super::daemon_sync::handle_socket(stream, conn_id, st, cfg, false).await;
+                    limiter.release(remote);
+                });
+            }
+            _ = shutdown.notified() => {
+                tracing::info!("daemon shutting down gracefully");
+                return Ok(());
+            }
         }
-        let _ = apply_socket_tuning(&stream);
-        let cfg = config.clone();
-        let st = state.clone();
-        let limiter = inbound_rate_limiter.clone();
-        tokio::spawn(async move {
-            let conn_id = format!("inbound-{remote}");
-            let _ = super::daemon_sync::handle_socket(stream, conn_id, st, cfg, false).await;
-            limiter.release(remote);
-        });
     }
 }
 
