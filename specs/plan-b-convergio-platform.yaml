@@ -1,0 +1,453 @@
+# Plan B — Convergio Platform
+# Non-code deliverable management, audit extension, /solve auto-creation, skill management.
+# F-01..F-20 from /solve triage.
+
+name: "Plan B — Convergio Platform"
+project: convergio
+version: "1.0.0"
+constitution-version: "2.1.0"
+parallel_mode: standard
+
+requirements:
+  - "F-01: Deliverable filesystem — daemon creates ~/.convergio/projects/<project>/output/<date>_<name>_v<n>/"
+  - "F-02: metadata.json per deliverable — {agent, status, approval, timestamp, output_type}"
+  - "F-03: Deliverable versioning — new version = new folder, previous untouched"
+  - "F-04: cvg project create <name> --input <folder> — register project with read-only input folder"
+  - "F-05: cvg task approve <id> — mark deliverable as user-approved"
+  - "F-06: Plan completion non-code — plan complete when all deliverables approved (not PR merge)"
+  - "F-07: /solve reads from input folder for context, agents write to output folder"
+  - "F-08: Deliverables table in DB — id, task_id, project_id, path, version, status, metadata_json, approved_at"
+  - "F-09: Extend cvg audit — sections: problem, decisions+why, agents/model/cost, deliverables, token costs, timeline, learnings"
+  - "F-10: Audit data from solve_sessions, plans, tasks, agent_catalog, execution_runs"
+  - "F-11: Audit report versioned in project output folder (with --yes or interactive consent)"
+  - "F-12: /solve auto-creation — when triage score < threshold, propose agent creation with scaffold"
+  - "F-13: Auto-creation with user confirmation — show scaffold, ask confirm, cvg agent create + sync"
+  - "F-14: requires-plugins in skill.yaml — list of Claude Code plugins required by the skill"
+  - "F-15: requires-agents in skill.yaml — list of agents required, auto-enable via cvg agent enable"
+  - "F-16: cvg skill lint validates requires-plugins and requires-agents fields"
+  - "F-17: cvg skill enable <name> — auto-activate required agents and suggest plugins"
+  - "F-18: Preflight permissions — cvg project create verifies read on input, write on output before proceeding"
+  - "F-19: Clear errors — insufficient permissions → message with macOS instructions (System Settings → Privacy → Full Disk Access)"
+  - "F-20: --yes flag — all filesystem-writing commands have interactive confirmation, bypassable with --yes"
+  - "F-21: Platform paths via dirs crate — no hardcoded ~/.convergio/, use dirs::data_dir() with fallback, cross-platform ready (macOS/Linux/Windows)"
+
+acceptance_invariants:
+  - "cvg project create test-proj --input /tmp/test-input --yes 2>&1 | grep -q ok"
+  - "test -d ~/.convergio/projects/test-proj/output"
+  - "cvg task approve 1 2>&1 | grep -q ok"
+  - "cvg audit --project convergio 2>&1 | grep -q timeline"
+  - "cvg audit --project convergio 2>&1 | grep -q costs"
+  - "cargo test -- cli_project"
+  - "cargo test -- cli_audit::test_project_audit"
+  - "cargo test -- api_deliverables"
+  - "cargo test -- cli_skill::test_lint_requires"
+  - "cargo test -- cli_skill::test_enable_auto_activates"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Wave 1: Foundation — DB Schema + Project CLI
+# ─────────────────────────────────────────────────────────────────────────────
+waves:
+  - id: W1
+    name: "Foundation — DB Schema + Project CLI"
+    theme: "DB migrations, projects table extension, deliverables table, cvg project subcommand"
+    tasks:
+      - id: T1-01
+        title: |
+          Add DB migration in state_init.rs MIGRATIONS array:
+          1. ALTER projects ADD COLUMN input_path TEXT DEFAULT NULL
+          2. ALTER projects ADD COLUMN output_path TEXT DEFAULT NULL
+          3. ALTER projects ADD COLUMN github_url TEXT DEFAULT NULL (if missing)
+          4. ALTER projects ADD COLUMN icon_path TEXT DEFAULT NULL (if missing)
+          5. CREATE TABLE deliverables (id INTEGER PRIMARY KEY, task_id INTEGER REFERENCES tasks(id),
+             project_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL, version INTEGER DEFAULT 1,
+             status TEXT DEFAULT 'pending' CHECK(status IN ('pending','in_progress','ready','approved','rejected')),
+             output_type TEXT NOT NULL, metadata_json TEXT DEFAULT '{}',
+             created_at DATETIME DEFAULT CURRENT_TIMESTAMP, approved_at DATETIME DEFAULT NULL,
+             approved_by TEXT DEFAULT NULL)
+          6. CREATE INDEX idx_deliverables_project ON deliverables(project_id)
+          7. CREATE INDEX idx_deliverables_task ON deliverables(task_id)
+          8. CREATE TABLE IF NOT EXISTS solve_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             timestamp TEXT NOT NULL DEFAULT (datetime('now')), user_input TEXT NOT NULL,
+             constitution_check TEXT, triage_level TEXT CHECK(triage_level IN ('light','standard','full')),
+             clarification_rounds TEXT, research_findings TEXT, problem_statement TEXT,
+             requirements_json TEXT, acceptance_invariants TEXT, routed_to TEXT,
+             decision_audit TEXT, plan_id INTEGER REFERENCES plans(id), project_id TEXT DEFAULT NULL)
+          9. CREATE INDEX IF NOT EXISTS idx_solve_sessions_project ON solve_sessions(project_id)
+          10. Fix cvg review reset: make plan_id optional (default 0 = reset all) in cli_review.rs
+          11. Add Readiness subcommand to PlanCommands in cli_plan.rs:
+              cvg plan readiness <plan_id> — calls GET /api/plan-db/readiness/<plan_id>,
+              prints gates passed/failed, exits 1 if not ready.
+              This CLI subcommand is MISSING from Plan A — the endpoint exists but no CLI.
+          Verify migration runs idempotently (existing tables not broken).
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- db"
+
+      - id: T1-02
+        title: |
+          Create daemon/src/cli_project.rs — cvg project subcommands:
+          1. Create daemon/src/platform_paths.rs — centralized path resolution (F-21):
+             - convergio_data_dir() → dirs::data_dir()/convergio (macOS: ~/Library/Application Support/Convergio,
+               Linux: ~/.local/share/convergio, Windows: %APPDATA%/Convergio)
+             - Fallback: ~/.convergio/ if dirs unavailable
+             - project_output_dir(project_name) → convergio_data_dir()/projects/<name>/output/
+             - Add dirs = "5" to Cargo.toml dependencies
+          2. ProjectCommands enum: Create, List, Show
+          3. Create: --name <name> --input <folder> [--yes] — validates input folder exists and is readable,
+             creates project output dir via platform_paths (F-18),
+             inserts into projects table with input_path and output_path,
+             interactive confirmation unless --yes (F-20),
+             on permission error: print OS-specific instructions (macOS: Full Disk Access, Linux: chmod) (F-19)
+          4. List: returns JSON array of projects with paths
+          5. Show: returns single project JSON with deliverable count
+          6. Add Project variant to Commands enum in cli_commands.rs
+          7. Add dispatch arm in main.rs
+          Use cli_http pattern for HTTP calls to daemon API where needed,
+          but filesystem ops (mkdir, permission check) happen in CLI directly.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 3
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- cli_project"
+          - "cvg project --help 2>&1 | grep -q create"
+
+      - id: T1-03
+        title: |
+          Create daemon/src/server/api_deliverables.rs — deliverable API endpoints:
+          1. POST /api/deliverables — create deliverable (task_id, project_id, name, output_type)
+             Use platform_paths::project_output_dir() from T1-02 to resolve output directory.
+             Do NOT hardcode ~/.convergio/. Creates <output_dir>/<YYYY-MM-DD>_<name>_v1/
+             Writes metadata.json: {agent, status: "pending", output_type, created_at, version: 1}
+          2. GET /api/deliverables?project_id=<id>&task_id=<id> — list deliverables for project,
+             optional task_id filter (needed by T2-01 approve flow)
+          3. GET /api/deliverables/:id — single deliverable with metadata
+          4. POST /api/deliverables/:id/approve — set status=approved, approved_at=now, approved_by
+             Updates metadata.json on disk
+          5. POST /api/deliverables/:id/version — create new version folder (v2, v3...), copy metadata,
+             increment version, previous folder untouched (F-03)
+          6. Register all routes in api_routes.rs. NOTE: api_routes.rs is at 226 lines —
+             if adding routes pushes it over 250, extract deliverable routes to a sub-constant
+          7. Integration test with in-memory DB (axum test harness)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 3
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- api_deliverables"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 2: Deliverable Lifecycle + Task Approve CLI
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W2
+    name: "Deliverable Lifecycle — Approve, Completion, /solve Integration"
+    theme: "cvg task approve, non-code plan completion, /solve input folder context"
+    depends_on: W1
+    tasks:
+      - id: T2-01
+        title: |
+          Add cvg task approve subcommand. cli_task.rs is at 244 lines — create
+          daemon/src/cli_task_approve.rs for the approve handler to keep cli_task.rs under 250.
+          1. Add Approve variant to TaskCommands in cli_task.rs: task_id (positional), --comment (optional)
+          2. In cli_task_approve.rs: handler that first calls GET /api/deliverables?task_id=<id>
+             to find the deliverable, then calls POST /api/deliverables/:id/approve
+          3. Prints confirmation with deliverable name, path, version
+          4. If no deliverable linked to task: error with helpful message
+          5. Wire: cli_task.rs dispatches Approve to cli_task_approve::handle()
+          Integration test in cli_task_approve.rs: create task → create deliverable → approve → verify status.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- cli_task::test_approve"
+
+      - id: T2-02
+        title: |
+          Implement non-code plan completion logic (F-06):
+          1. In api_plan_db_ops.rs (or lifecycle guards): when checking plan completion,
+             if ALL tasks have output_type != 'pr', completion = all deliverables approved
+             (not waves_merged / waves_total).
+          2. If mixed (some pr, some non-code): both conditions must be met
+             (PRs merged AND non-code deliverables approved).
+          3. Update the merge_pct calculation to account for approved deliverables.
+          4. Add plan completion endpoint test for non-code plans.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- plan_completion"
+
+      - id: T2-03
+        title: |
+          Update /solve skill (claude-config/skills/solve/SKILL.md) for input folder context (F-07):
+          1. In Phase 5 (Parallel Research), add step: if project has input_path set,
+             launch additional Explore agent focused on input folder contents.
+          2. In Phase 4 (Problem Understanding), mention available input documents to user.
+          3. Add note: agents write deliverables to output folder via cvg API, never directly.
+          4. Keep SKILL.md under 6144 bytes token budget.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 1
+        verify:
+          - "wc -c < claude-config/skills/solve/SKILL.md | awk '{if($1 > 6144) exit 1}'"
+          - "grep -q 'input_path\\|input folder\\|input_folder' claude-config/skills/solve/SKILL.md"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 3: Audit Extension
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W3
+    name: "Audit Extension — Project-Level Audit Report"
+    theme: "Extend cvg audit with project audit sections, output to project folder"
+    depends_on: W1
+    tasks:
+      - id: T3-01
+        title: |
+          Extend cli_audit.rs with project audit mode (F-09, F-10):
+          1. Add --project <project_id> flag to Audit command in cli_commands.rs
+          2. When --project is set, run project_audit() instead of file audit:
+             a. Query solve_sessions for this project (problem statement, triage level)
+             b. Query plans + tasks (status, model, effort, timeline)
+             c. Query execution_runs (cost, duration, model usage)
+             d. Query agent_catalog activity (which agents used, how often)
+             e. Query deliverables (status, approval state)
+             f. Query knowledge_base for learnings tagged with project
+          3. All queries via HTTP to daemon API (cli_http pattern), NOT direct sqlite3
+          4. Format as structured JSON report with sections:
+             {problem, decisions, agents, deliverables, costs, timeline, learnings}
+          5. Keep cli_audit.rs under 250 lines — extract project audit to cli_audit_project.rs if needed
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 3
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- cli_audit"
+          - "wc -l < daemon/src/cli_audit.rs | awk '{if($1 > 250) exit 1}'"
+
+      - id: T3-02
+        title: |
+          Add audit API endpoints for project-level data aggregation:
+          1. GET /api/audit/project/:project_id — returns aggregated audit JSON
+             (solve_sessions, plans, tasks, runs, agent activity, deliverables, KB learnings)
+          2. Endpoint does the heavy SQL joins server-side, returns structured response
+          3. Register route in api_routes.rs
+          4. Integration test with seeded data
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- api_audit"
+
+      - id: T3-03
+        title: |
+          Add audit output to project folder (F-11):
+          1. Add --output flag to cvg audit --project: writes report to
+             platform_paths::project_output_dir()/<date>_audit_v<n>/report.json
+             Use platform_paths from T1-02. Do NOT hardcode ~/.convergio/.
+          2. Interactive confirmation before writing (--yes to bypass) (F-20)
+          3. Permission preflight on output directory (F-18)
+          4. On permission error: macOS instructions (F-19)
+          5. Also writes metadata.json alongside report.json
+          6. Creates deliverable record in DB for the audit
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- cli_audit::test_output"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 4: Auto-Creation + Skill Management
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W4
+    name: "Auto-Creation + Skill Enhancement"
+    theme: "/solve auto-creation, skill requires-plugins/requires-agents, cvg skill enable"
+    depends_on: W1
+    tasks:
+      - id: T4-01
+        title: |
+          Enhance agent triage for auto-creation (F-12, F-13):
+          1. In api_agent_triage.rs: add threshold constant (e.g., 0.3).
+             When best score < threshold, include suggest_creation: true in response
+             with scaffold template (name, category, description from problem keywords).
+          2. Add POST /api/agents/scaffold — generates agent .md template from
+             {name, category, description, domain} — returns markdown content.
+          3. Update /solve skill Phase 5: after triage, if suggest_creation is true:
+             a. Show scaffold to user
+             b. Ask for confirmation
+             c. On confirm: call cvg agent create + cvg agent sync
+             d. Proceed with the new agent
+          4. Keep /solve SKILL.md under 6144 bytes
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- api_agent_triage::test_low_score"
+          - "cd daemon && cargo test -- api_agent_triage::test_scaffold"
+          - "wc -c < claude-config/skills/solve/SKILL.md | awk '{if($1 > 6144) exit 1}'"
+
+      - id: T4-02
+        title: |
+          Add requires-plugins and requires-agents to skill schema (F-14, F-15, F-16):
+          cli_skill.rs is AT 250 lines — MUST extract validation helpers to
+          daemon/src/cli_skill_validate.rs before adding new logic.
+          1. Create cli_skill_validate.rs: move yaml_get, yaml_get_list (new), semver_ge,
+             name_format_valid, version_format_valid from cli_skill.rs
+          2. Add yaml_get_list() to parse YAML list fields (- item format)
+          3. In lint_one(): validate requires-plugins (if present, must be non-empty list of strings)
+          4. In lint_one(): validate requires-agents (if present, each must match ^[a-z][a-z0-9-]*$)
+          5. Add [PASS]/[FAIL] messages for both fields
+          6. Both cli_skill.rs and cli_skill_validate.rs MUST stay under 250 lines
+          7. Tests: valid skill with requires-plugins, invalid requires-agents format, missing optional OK
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- cli_skill::test_lint_requires"
+          - "wc -l < daemon/src/cli_skill.rs | awk '{if($1 > 250) exit 1}'"
+
+      - id: T4-03
+        title: |
+          Implement cvg skill enable with auto-activate (F-17):
+          Create daemon/src/cli_skill_enable.rs (cli_skill.rs cannot grow — at 250-line limit).
+          1. Add Enable variant to SkillCommands in cli_skill.rs, dispatch to cli_skill_enable::handle()
+          2. Enable flow:
+             a. Read skill.yaml from skill directory
+             b. Parse requires-agents list
+             c. For each required agent: call POST /api/agents/enable (existing endpoint)
+             d. Parse requires-plugins list
+             e. For each plugin: print suggestion "Enable plugin: <name> via Claude Code settings"
+                (plugins can't be auto-enabled — Claude Code manages them)
+             f. Print summary: N agents enabled, M plugins suggested
+          3. Integration test: create skill.yaml with requires-agents → enable → verify agents enabled
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test -- cli_skill::test_enable"
+          - "cvg skill --help 2>&1 | grep -q enable"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 5 (Final): Tests, Docs, PR
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W5
+    name: "Final — Integration Tests, Docs, Version Bump"
+    theme: "Cross-feature integration tests, CHANGELOG, ADR, version bump"
+    depends_on: "W2,W3,W4"
+    tasks:
+      - id: TF-tests
+        title: |
+          Cross-feature integration tests:
+          1. End-to-end: cvg project create → create deliverable → approve → audit --project
+          2. Skill enable → agents auto-enabled → triage uses new agent
+          3. Permission preflight test: attempt to create project with unreadable input → expect clear error
+          4. Non-code plan completion: create plan with all output_type=document → approve all → verify plan complete
+          All tests use in-memory DB (axum test harness). No direct sqlite3.
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 2
+        verify:
+          - "cd daemon && cargo test"
+
+      - id: TF-doc
+        title: |
+          Documentation updates:
+          1. CHANGELOG.md: add v13.0.0 section with all B1-B4 features
+          2. ADR-0202: Deliverable Management Architecture (filesystem + DB + consent)
+          3. TROUBLESHOOTING.md: add entries for permission errors, deliverable not found
+          4. Update CLAUDE.md commands table with new cvg project/audit commands
+          5. VERSION.md bump to 13.0.0
+        type: documentation
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: doc-validator
+        effort_level: 2
+        verify:
+          - "grep -q '13.0.0' VERSION.md"
+          - "grep -q '13.0.0' CHANGELOG.md"
+          - "test -f docs/adr/0202-deliverable-management.md"
+
+      - id: TF-pr
+        title: |
+          Final PR preparation:
+          1. Run full cargo test suite — all green
+          2. Run cargo clippy — no warnings
+          3. Run cvg audit --path . — no violations
+          4. Verify all new files have copyright headers
+          5. Verify no file exceeds 250 lines
+          6. Create PR with summary of all B1-B4 features
+        type: chore
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 1
+        verify:
+          - "cd daemon && cargo test"
+          - "cd daemon && cargo clippy -- -D warnings"
+
+      - id: TF-deploy-verify
+        title: |
+          Post-merge verification:
+          1. Rebuild daemon: cd daemon && cargo build --release
+          2. Verify cvg symlink works: cvg --help
+          3. Verify new commands: cvg project --help, cvg skill enable --help
+          4. Verify audit: cvg audit --project convergio (no crash)
+          5. Verify version: cvg --version-json | grep 13.0.0
+        type: chore
+        output_type: pr
+        model: claude-sonnet-4-6
+
+        validator_agent: thor-quality-assurance-guardian
+        effort_level: 1
+        verify:
+          - "cvg project --help"
+          - "cvg skill --help 2>&1 | grep -q enable"

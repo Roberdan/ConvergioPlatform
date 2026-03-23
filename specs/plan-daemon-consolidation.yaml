@@ -1,0 +1,329 @@
+name: "Daemon Consolidation — Backend Complete for Frontend"
+description: |
+  Move all bash script logic into the Rust daemon so the dashboard
+  can access everything via REST API. After this plan, bash CLI
+  becomes a thin wrapper calling daemon endpoints via curl.
+  _Why: bash scripts duplicate logic, bypass daemon, invisible to dashboard._
+project: convergio
+parallel_mode: sequential
+
+constraints:
+  - "Max 250 lines per Rust file — split into submodules if needed"
+  - "cargo check + cargo test MUST pass after EACH task"
+  - "All new endpoints follow existing axum patterns (ServerState, ApiError, Json)"
+  - "Keep bash CLI as thin wrapper — replace sqlite3 calls with curl to daemon"
+  - "Every new endpoint MUST have at least 1 test"
+  - "Do NOT break existing endpoints — additive only"
+  - "New modules: add `pub mod api_xxx;` in daemon/src/server/mod.rs"
+  - "Route wiring (ALL 3 steps required): (1) `pub mod api_xxx;` in server/mod.rs (2) `use super::api_xxx;` + `.merge(api_xxx::router())` in routes/mod.rs build_router() (3) add path strings to GET_ROUTES/POST_ROUTES arrays in routes/api_routes.rs"
+  - "coordinator_events uses `handled_at` column (NOT `processed`)"
+  - "Verify commands: NEVER use `wc -l | awk` pipes — use `test $(wc -l < file) -le 250` instead"
+  - "convergio-run-ops.sh is 251 lines — MUST refactor to fit curl changes under 250"
+
+waves:
+  - id: W1
+    name: "execution_runs API + auto-migration"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        do: |
+          Auto-migration on daemon startup. In daemon/src/db/ create
+          migrations.rs module. On init (called from main.rs after DB open):
+          1. Check if execution_runs table exists (sqlite_master query)
+          2. If not, CREATE TABLE execution_runs with all columns:
+             id INTEGER PRIMARY KEY, goal TEXT NOT NULL, team TEXT DEFAULT '[]',
+             status TEXT DEFAULT 'running' CHECK(status IN ('running','completed',
+             'failed','cancelled','paused')), result TEXT, cost_usd REAL DEFAULT 0,
+             agents_used INTEGER DEFAULT 0, plan_id INTEGER, started_at TEXT
+             DEFAULT datetime('now'), completed_at TEXT, duration_minutes REAL,
+             context_path TEXT, paused_at TEXT, paused_context TEXT
+          3. Create indexes: idx_execution_runs_status, _plan_id, _started_at
+          4. Ensure data/runs/ directory exists (std::fs::create_dir_all)
+          Add `pub mod migrations;` to daemon/src/db/mod.rs.
+          Call migrations::run(&conn) in main.rs after DB connection.
+          Idempotent — skip if table already exists.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "grep 'pub mod migrations' daemon/src/db/mod.rs"
+
+      - id: T1-02
+        do: |
+          Create daemon/src/server/api_runs.rs — execution_runs CRUD.
+          Endpoints (all under /api/runs):
+          - GET /api/runs — list recent 50 execution_runs, joined with
+            plans.name for plan_name. Query params: ?status=running&limit=20
+          - GET /api/runs/:id — single run with cost from delegation_log
+            (JOIN by plan_id + timestamp window between started_at and
+            completed_at, NOT by run_id FK which doesn't exist)
+          - POST /api/runs — create run {goal, plan_id, context_path}
+          - PUT /api/runs/:id — update {status, cost_usd, agents_used, completed_at, result}
+          - POST /api/runs/:id/pause — UPDATE status='paused', paused_at=datetime('now')
+          - POST /api/runs/:id/resume — UPDATE status='running', paused_at=NULL
+          Wire ALL 3 steps: (1) `pub mod api_runs;` in server/mod.rs
+          (2) `use super::api_runs;` + `.merge(api_runs::router())` in
+          routes/mod.rs build_router() (3) add path strings to
+          GET_ROUTES/POST_ROUTES/PUT_ROUTES in routes/api_routes.rs.
+          Follow api_ideas.rs pattern (axum handlers, ServerState, ApiError).
+          Max 250 lines — split if needed.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "grep 'pub mod api_runs' daemon/src/server/mod.rs"
+          - "grep 'api/runs' daemon/src/server/routes/api_routes.rs"
+
+      - id: T1-03
+        do: |
+          Create daemon/src/server/api_metrics.rs — metrics query endpoints:
+          - GET /api/metrics/run/:id — single run metrics: duration, cost
+            (SUM delegation_log.cost_estimate WHERE plan_id=run.plan_id AND
+            created_at BETWEEN run.started_at AND COALESCE(run.completed_at, datetime('now'))),
+            agents used (COUNT DISTINCT executor_agent FROM tasks WHERE plan_id=run.plan_id),
+            tasks completed/total, validation pass rate
+          - GET /api/metrics/summary — totals: run count, avg duration,
+            total cost, top 5 agents by usage, runs by status distribution
+          - GET /api/metrics/cost — cost breakdown. Query params:
+            ?days=7&project=convergio. GROUP BY model, project, date
+          Wire ALL 3 steps: (1) `pub mod api_metrics;` in server/mod.rs
+          (2) `use super::api_metrics;` + `.merge(api_metrics::router())` in
+          routes/mod.rs build_router() (3) add path strings to GET_ROUTES
+          in routes/api_routes.rs.
+          Follow api_plan_db_query.rs pattern for SQL.
+          Max 250 lines — split if needed.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "grep 'pub mod api_metrics' daemon/src/server/mod.rs"
+          - "grep 'api/metrics' daemon/src/server/routes/api_routes.rs"
+
+  - id: W2
+    name: "Ingestion API + pause bridge + real-time"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        do: |
+          Create daemon/src/server/api_ingest.rs — ingestion endpoint:
+          - POST /api/ingest — JSON body {source: "/path/to/file", output_dir: "/path/out"}
+            OR {source: "https://example.com/page", output_dir: "/path/out"}
+            Spawns scripts/platform/convergio-ingest.sh as subprocess via
+            tokio::process::Command. Captures stdout/stderr. Returns JSON
+            {ok, output_dir, stdout, stderr, exit_code}.
+          - GET /api/ingest/formats — check which tools are installed
+            (command -v pdftotext, pandoc, trafilatura) and return
+            {pdf: true/false, docx: true/false, url: true/false, ...}
+          Wire ALL 3 steps: (1) `pub mod api_ingest;` in server/mod.rs
+          (2) `use super::api_ingest;` + `.merge(api_ingest::router())` in
+          routes/mod.rs build_router() (3) add path strings to
+          POST_ROUTES/GET_ROUTES in routes/api_routes.rs.
+          Use tokio::process::Command for subprocess spawn.
+          Max 250 lines.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "grep 'pub mod api_ingest' daemon/src/server/mod.rs"
+          - "grep 'api/ingest' daemon/src/server/routes/api_routes.rs"
+
+      - id: T2-02
+        do: |
+          Add background pause bridge to daemon. Create daemon/src/background.rs.
+          On startup (called from main.rs), spawn a tokio task that every 5s:
+          1. Query coordinator_events WHERE event_type='pause_run'
+             AND handled_at IS NOT NULL but check payload for unprocessed
+             pause requests (add a simple in-memory seen-set by event id,
+             or add a column `bridge_handled INTEGER DEFAULT 0` via migration)
+          2. For each new pause event, extract plan_id from payload JSON
+          3. UPDATE execution_runs SET status='paused', paused_at=datetime('now')
+             WHERE plan_id=? AND status='running'
+          4. Same for 'resume_run' events → SET status='running', paused_at=NULL
+          Add `pub mod background;` to daemon/src/lib.rs or main.rs.
+          Spawn in main.rs: tokio::spawn(background::run_pause_bridge(db.clone()));
+          Max 250 lines.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "grep 'pause_bridge\\|background' daemon/src/main.rs"
+
+      - id: T2-03
+        do: |
+          Wire WebSocket broadcast for real-time run updates. In api_runs.rs,
+          after each status change (POST create, PUT update, POST pause/resume),
+          broadcast event on state.ws_tx:
+          state.ws_tx.send(serde_json::to_string(&json!({
+            "type": "run_update", "run_id": id, "status": new_status
+          })).unwrap_or_default()).ok();
+          Follow the pattern in api_coordinator.rs emit handler.
+          Also broadcast from background.rs when pause bridge fires.
+          Max 250 lines — this is a small addition to existing files.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "grep 'run_update' daemon/src/server/api_runs.rs"
+
+  - id: W3
+    name: "CLI thin wrapper"
+    merge_mode: sync
+    tasks:
+      - id: T3-01
+        do: |
+          Rewrite scripts/platform/convergio-run-ops.sh to call daemon API
+          instead of direct sqlite3. Replace:
+          - cmd_solve: after creating run dir + ingestion, POST /api/runs
+            to register run instead of sqlite3 INSERT
+          - cmd_stop: PUT /api/runs/:id with {status:'cancelled'} instead
+            of sqlite3 UPDATE
+          - cmd_pause: POST /api/runs/:id/pause instead of sqlite3 UPDATE
+          - cmd_resume: POST /api/runs/:id/resume instead of sqlite3 UPDATE
+          Use: curl -s -X POST http://localhost:8420/api/runs/...
+          Add fallback: if curl fails (daemon not running), warn and use
+          sqlite3 directly. Keep _validate_id() and other helpers.
+          Keep under 250 lines.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "grep 'curl.*localhost:8420' scripts/platform/convergio-run-ops.sh"
+          - "grep 'api/runs' scripts/platform/convergio-run-ops.sh"
+          - "test $(wc -l < scripts/platform/convergio-run-ops.sh) -le 250"
+
+      - id: T3-02
+        do: |
+          Rewrite scripts/platform/convergio-metrics.sh to call daemon API:
+          - cmd_run: GET /api/metrics/run/:id | format output
+          - cmd_runs: GET /api/runs | format as table
+          - cmd_report: GET /api/metrics/summary | format output
+          Use curl to localhost:8420. Format JSON with jq if available,
+          fallback to manual printf formatting.
+          Add fallback to sqlite3 if daemon not running.
+          Keep under 250 lines.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "grep 'curl.*localhost:8420' scripts/platform/convergio-metrics.sh"
+          - "grep 'api/metrics\\|api/runs' scripts/platform/convergio-metrics.sh"
+          - "test $(wc -l < scripts/platform/convergio-metrics.sh) -le 250"
+
+      - id: T3-03
+        do: |
+          Rewrite scripts/platform/convergio-autopilot-helpers.sh to call
+          daemon API for execution_runs operations:
+          - execution_runs_start: POST /api/runs {goal, plan_id}
+          - execution_runs_update_wave: PUT /api/runs/:id {cost_usd, agents_used}
+          - execution_runs_complete: PUT /api/runs/:id {status:'completed', completed_at}
+          - apply_pause_events: REMOVE entirely — daemon background task
+            handles this now (T2-02). Replace with a no-op comment.
+          Use curl to localhost:8420. Fallback to sqlite3 if daemon down.
+          Keep under 250 lines.
+        type: feature
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "grep 'curl.*localhost:8420' scripts/platform/convergio-autopilot-helpers.sh"
+          - "grep 'api/runs' scripts/platform/convergio-autopilot-helpers.sh"
+          - "test $(wc -l < scripts/platform/convergio-autopilot-helpers.sh) -le 250"
+
+  - id: W4
+    name: "Tests + docs + PR"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        do: |
+          Integration tests for all new daemon endpoints.
+          Add tests to daemon/src/server/api_tests/ (follow existing pattern):
+          1. POST /api/runs — create run, verify 201 + id returned
+          2. GET /api/runs — verify list includes new run
+          3. POST /api/runs/:id/pause — verify status='paused'
+          4. POST /api/runs/:id/resume — verify status='running'
+          5. PUT /api/runs/:id — update cost, verify persisted
+          6. GET /api/metrics/run/:id — verify metrics returned
+          7. GET /api/metrics/summary — verify summary structure
+          8. GET /api/ingest/formats — verify format list returned
+          9. Update route contract test counts in tests/ported_route_contracts.rs
+          All tests must pass: cd daemon && cargo test
+        type: test
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo test"
+          - "cd daemon && cargo test api_runs"
+
+      - id: TF-doc
+        do: |
+          Update documentation:
+          - CHANGELOG.md: entry for v3.4.0 daemon consolidation
+          - docs/adr/0107-daemon-consolidation.md: ADR for bash→daemon migration
+          - TROUBLESHOOTING.md: "daemon not running" fallback behavior
+          - .github/agents/Convergio.agent.md: add new API endpoints to table
+          - README.md: update API section
+        type: documentation
+        output_type: document
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "grep -i 'consolidat\\|3.4.0' CHANGELOG.md"
+          - "test -f docs/adr/0107-daemon-consolidation.md"
+
+      - id: TF-pr
+        do: |
+          Final PR: VERSION.md bump to 3.4.0, verify CHANGELOG matches,
+          cargo test passes, constitution check (0 files >250), push, create PR.
+        type: release
+        output_type: pr
+        model: gpt-5
+        executor_agent: task-executor-copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo test"
+          - "grep '3.4.0' VERSION.md"
+          - "cd daemon && cargo test"
