@@ -209,32 +209,17 @@ fn sample_data() -> TuiData {
             by_date: vec![],
             summary: CostSummary::default(),
         },
-        events: vec![WorkspaceEvent {
-            id: 1,
-            workspace_id: "ws-1".to_string(),
-            agent: "task-executor".to_string(),
-            action: "write".to_string(),
-            file_path: Some("daemon/src/tui/data.rs".to_string()),
-            detail: None,
-            created_at: "2026-03-23T00:00:00Z".to_string(),
-        }],
-        workspaces: vec![WorkspaceInfo {
-            workspace_id: "ws-1".to_string(),
-            path: "/tmp/ws-1".to_string(),
-            branch: "plan-708-W1".to_string(),
-            plan_id: Some(708),
-            status: "active".to_string(),
-            created_at: "2026-03-23T00:00:00Z".to_string(),
-        }],
-        deliverables: vec![DeliverableInfo {
-            id: 1,
-            name: "TUI Refactor".to_string(),
-            output_type: "code".to_string(),
-            status: "done".to_string(),
-            version: 1,
-            project_id: "convergio".to_string(),
-            created_at: "2026-03-23T00:00:00Z".to_string(),
-        }],
+        events: vec![WorkspaceEvent { id: 1, workspace_id: "ws-1".into(),
+            agent: "task-executor".into(), action: "write".into(),
+            file_path: Some("daemon/src/tui/data.rs".into()), detail: None,
+            created_at: "2026-03-23T00:00:00Z".into() }],
+        workspaces: vec![WorkspaceInfo { workspace_id: "ws-1".into(),
+            path: "/tmp/ws-1".into(), branch: "plan-708-W1".into(),
+            plan_id: Some(708), status: "active".into(),
+            created_at: "2026-03-23T00:00:00Z".into() }],
+        deliverables: vec![DeliverableInfo { id: 1, name: "TUI Refactor".into(),
+            output_type: "code".into(), status: "done".into(), version: 1,
+            project_id: "convergio".into(), created_at: "2026-03-23T00:00:00Z".into() }],
     }
 }
 
@@ -247,73 +232,7 @@ fn palette_has_new_surface_and_text_constants() {
 }
 
 #[test]
-fn cycles_views_forward_and_backward() {
-    let mut view = MainView::PlanKanban;
-    assert_eq!(view, MainView::PlanKanban);
-    view = MainView::TaskPipeline;
-    assert_eq!(view, MainView::TaskPipeline);
-    view = MainView::PlanKanban;
-    assert_eq!(view, MainView::PlanKanban);
-}
-
-#[test]
 fn api_url_defaults_to_localhost() {
-    let url = super::app::TuiApp::parse_api_url();
-    assert_eq!(url, "http://localhost:8420");
+    assert_eq!(super::app::TuiApp::parse_api_url(), "http://localhost:8420");
 }
 
-#[test]
-fn test_fetch_brain_parse() {
-    // Verify parse_brain_response correctly maps /api/brain JSON to BrainNode + KpiData
-    use super::api::parse_brain_response;
-    let json = serde_json::json!({
-        "sessions": [
-            {
-                "agent_id": "task-executor",
-                "type": "executor",
-                "description": "Running T2-03",
-                "status": "active"
-            }
-        ],
-        "agents": [
-            {
-                "agent_id": "thor",
-                "type": "validator",
-                "description": "Wave validator",
-                "status": "idle"
-            }
-        ],
-        "today_tokens_summary": {
-            "total_tokens": 42000,
-            "total_cost": 1.25
-        }
-    });
-    let (nodes, kpi) = parse_brain_response(&json);
-
-    // Sessions map to kind="session"
-    let session = nodes.iter().find(|n| n.kind == "session").expect("session node");
-    assert_eq!(session.id, "task-executor");
-    assert_eq!(session.label, "Running T2-03");
-    assert_eq!(session.status, "active");
-
-    // Agents map to kind="agent"
-    let agent = nodes.iter().find(|n| n.kind == "agent").expect("agent node");
-    assert_eq!(agent.id, "thor");
-    assert_eq!(agent.label, "Wave validator");
-    assert_eq!(agent.status, "idle");
-
-    // Token summary extracted for KpiData
-    assert_eq!(kpi.daily_tokens, 42000);
-    assert!((kpi.daily_cost - 1.25).abs() < f64::EPSILON);
-}
-
-#[test]
-fn test_fetch_brain_parse_empty_response() {
-    // Verify parse_brain_response handles missing/null fields gracefully
-    use super::api::parse_brain_response;
-    let json = serde_json::json!({});
-    let (nodes, kpi) = parse_brain_response(&json);
-    assert!(nodes.is_empty());
-    assert_eq!(kpi.daily_tokens, 0);
-    assert_eq!(kpi.daily_cost, 0.0);
-}

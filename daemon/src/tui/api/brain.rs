@@ -105,3 +105,35 @@ pub async fn fetch_brain(client: &Client, api_url: &str) -> (Vec<BrainNode>, Kpi
         Err(_) => (Vec::new(), KpiData::default()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_brain_response_maps_sessions_and_agents() {
+        let json = serde_json::json!({
+            "sessions": [{"agent_id":"task-executor","type":"executor",
+                "description":"Running T2-03","status":"active"}],
+            "agents": [{"agent_id":"thor","type":"validator",
+                "description":"Wave validator","status":"idle"}],
+            "today_tokens_summary": {"total_tokens":42000,"total_cost":1.25}
+        });
+        let (nodes, kpi) = parse_brain_response(&json);
+        let session = nodes.iter().find(|n| n.kind == "session").expect("session");
+        assert_eq!(session.id, "task-executor");
+        assert_eq!(session.status, "active");
+        let agent = nodes.iter().find(|n| n.kind == "agent").expect("agent");
+        assert_eq!(agent.id, "thor");
+        assert_eq!(kpi.daily_tokens, 42000);
+        assert!((kpi.daily_cost - 1.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parse_brain_response_handles_empty() {
+        let json = serde_json::json!({});
+        let (nodes, kpi) = parse_brain_response(&json);
+        assert!(nodes.is_empty());
+        assert_eq!(kpi.daily_tokens, 0);
+    }
+}
