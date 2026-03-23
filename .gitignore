@@ -165,6 +165,14 @@ claude-config/rules/rules
 scripts/platform/convergio-menubar
 scripts/platform/cvg
 
+# Session artifacts and runtime data
+.claude/agent-memory/
+.claude/scripts
+.copilot-tracking/
+claude-config/agent-catalog/
+data/runs/
+data/*.bak-*
+
 # Sensitive/binary dotfile backups
 claude-config/config/dotfiles-backup/**/development_credentials
 claude-config/config/dotfiles-backup/**/settings.local.json
