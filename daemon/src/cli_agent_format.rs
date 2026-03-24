@@ -20,6 +20,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({
+                "agent_id": name,
                 "name": name,
                 "task_id": task_id,
             });

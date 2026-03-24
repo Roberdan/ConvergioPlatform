@@ -20,6 +20,18 @@ Code/comments/docs: English | Conversation: Italian or English | Override: expli
 
 @rules/compliance.md
 
+## Agent Identity (NON-NEGOTIABLE)
+
+On session start, register with the daemon so the coordinator knows who is working:
+```bash
+cvg agent start "claude-$(hostname -s)-$$"
+```
+On session end (before `/exit`), complete:
+```bash
+cvg agent complete "claude-$(hostname -s)-$$"
+```
+If working on a plan, include `--task-id` in start. This is how `cvg who agents` and `cvg delegation status` track active work. Unregistered agents are invisible — a zombie that no one can find.
+
 ## Core Rules (NON-NEGOTIABLE)
 
 1. Verify before claim (read file first). 2. Act, don't suggest. 3. Minimum complexity. 4. Plan started = plan finished. 5. "done" needs evidence. 6. Max 250 lines/file. 7. Compaction preservation (`rules/compaction-preservation.md`).

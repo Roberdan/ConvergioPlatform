@@ -4,6 +4,15 @@
 
 Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 
+## Agent Identity (NON-NEGOTIABLE)
+
+Every agent session MUST register on start and complete on end:
+```bash
+cvg agent start "<type>-$(hostname -s)-$$"    # type: claude, copilot, executor
+cvg agent complete "<type>-$(hostname -s)-$$"  # before /exit
+```
+Unregistered agents are invisible. `cvg who agents` shows only registered sessions.
+
 ## Governance
 
 Constitution articles are NON-NEGOTIABLE. All agents bound.

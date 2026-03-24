@@ -14,6 +14,18 @@ Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 
 Stack: axum, rusqlite WAL, tokio, ssh2, ratatui, serde, hmac+sha2+aes-gcm, reqwest, sysinfo, tracing.
 
+## Agent Identity (NON-NEGOTIABLE)
+
+On session start, register with the daemon:
+```bash
+cvg agent start "copilot-$(hostname -s)-$$"
+```
+On session end, complete:
+```bash
+cvg agent complete "copilot-$(hostname -s)-$$"
+```
+If working on a plan, include `--task-id`. This is how `cvg who agents` tracks active work. Unregistered agents are invisible zombies.
+
 ## Agent Naming
 
 Every agent has a unique name. Cross-platform agents share the same plan-db and worktree discipline.
