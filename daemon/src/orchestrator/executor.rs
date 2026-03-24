@@ -26,10 +26,9 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
     // 2. Find repo path on peer
     let repo_path = find_peer_repo(&client, peer).await?;
 
-    // 3. Sync repo: try coordinator remote (SSH), fallback to origin
+    // 3. Sync repo from origin (GitHub is the single source of truth)
     let sync = format!(
-        "cd '{repo_path}' && \
-         (git pull coordinator main --ff-only 2>/dev/null || git pull origin main --ff-only 2>/dev/null) | tail -2"
+        "cd '{repo_path}' && git pull origin main --ff-only 2>&1 | tail -2"
     );
     let _ = exec_on_peer(&client, peer, &sync).await;
 
@@ -44,8 +43,8 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
         "#!/usr/bin/env bash\n\
          set -euo pipefail\n\
          cd '{repo_path}'\n\
-         # Sync back: try coordinator (SSH), fallback to origin\n\
-         git push coordinator main 2>/dev/null || git push origin main 2>/dev/null || echo 'WARN: push failed'\n\
+         # Sync back to origin (GitHub). NEVER push to coordinator directly.\n\
+         git push origin main 2>/dev/null || echo 'WARN: push to origin failed — run manually'\n\
          # Signal completion to Ali via IPC\n\
          PAYLOAD='{{\"sender_name\":\"executor-{peer}\",\"channel\":\"#orchestration\",\"content\":\"{{\\\"type\\\":\\\"plan_done\\\",\\\"plan_id\\\":{plan_id}}}\"}}'\n\
          curl -sf -X POST http://localhost:8420/api/ipc/send \\\n\
