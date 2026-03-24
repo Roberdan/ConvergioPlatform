@@ -1,0 +1,216 @@
+name: "Plan I — Checklist Engine"
+version: "19.0.0"
+project: convergio
+depends_on: [plan-h-hardening-nasa]
+description: >
+  Formal checklist engine inspired by aviation and surgical safety checklists.
+  Supports DO-CONFIRM and READ-DO paradigms with YAML-defined rule packs.
+  Integrates with Thor validator for plan completion verification.
+
+requirements:
+  - id: F-01
+    title: ChecklistEngine trait
+    description: "Core trait defining checklist lifecycle: load, execute, validate, report"
+  - id: F-02
+    title: DO-CONFIRM runner
+    description: "Executor performs actions then confirms each item. Blocks on unconfirmed items."
+  - id: F-03
+    title: READ-DO runner
+    description: "Executor reads item and performs action sequentially. Strict order enforcement."
+  - id: F-04
+    title: YAML registry
+    description: "Checklists defined in YAML with items, conditions, severity levels, and dependencies"
+  - id: F-05
+    title: NASA rules pack
+    description: "Built-in checklist pack implementing Plan H hardening rules as executable checklist items"
+  - id: F-06
+    title: Thor integration
+    description: "Thor validator uses checklists to verify plan completion. Checklist pass = plan verified."
+  - id: F-07
+    title: CLI interface
+    description: "cvg checklist run|list|status|validate commands"
+  - id: F-08
+    title: API endpoints
+    description: "REST API: POST /api/checklists/run, GET /api/checklists/status, GET /api/checklists/list"
+  - id: F-09
+    title: Telemetry
+    description: "Checklist execution metrics: pass/fail rates, duration, common failures"
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+
+waves:
+  - id: W1
+    name: "Core Engine"
+    tasks:
+      - id: T1-01
+        title: >
+          Define ChecklistEngine trait in daemon/src/checklist/engine.rs.
+          Trait methods: load(path) → Checklist, validate(checklist) → Vec<CheckResult>,
+          execute(checklist, mode: CheckMode) → ExecutionReport.
+          CheckMode enum: DoConfirm, ReadDo. CheckResult: item_id, status, message, timestamp.
+          ExecutionReport: checklist_id, mode, results, passed, failed, skipped, duration.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01]
+        files: [daemon/src/checklist/engine.rs, daemon/src/checklist/mod.rs]
+        verify:
+          - "test -f daemon/src/checklist/engine.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "ChecklistEngine trait compiles with all required methods and types."
+
+      - id: T1-02
+        title: >
+          Implement DO-CONFIRM runner. After all actions complete, iterate items and
+          request confirmation for each. Block on unconfirmed items with configurable
+          timeout. Track confirmation timestamps. Report unconfirmed items as failures.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T1-01]
+        f_xx: [F-02]
+        files: [daemon/src/checklist/runners/do_confirm.rs, daemon/src/checklist/runners/mod.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- checklist::runners::do_confirm"
+        test_criteria: "DO-CONFIRM runner executes items, collects confirmations, blocks on unconfirmed."
+
+      - id: T1-03
+        title: >
+          Implement READ-DO runner. Strict sequential execution: present item, execute,
+          verify, proceed to next. No skipping or reordering. Failed item halts execution
+          with option to retry or abort. Track execution order.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T1-01]
+        f_xx: [F-03]
+        files: [daemon/src/checklist/runners/read_do.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- checklist::runners::read_do"
+        test_criteria: "READ-DO runner enforces strict order. Failed item halts execution."
+
+  - id: W2
+    name: "Registry & Rules"
+    tasks:
+      - id: T2-01
+        title: >
+          Implement YAML checklist registry. Parse checklist definitions from YAML files
+          in config/checklists/. Schema: name, version, mode (do-confirm|read-do),
+          items: [{id, title, command, expected, severity (critical|warning|info),
+          depends_on}]. Load all checklists on startup. Hot-reload on file change.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-04]
+        files: [daemon/src/checklist/registry.rs, config/checklists/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- checklist::registry"
+        test_criteria: "YAML checklists load and parse correctly. Hot-reload works."
+
+      - id: T2-02
+        title: >
+          Create NASA rules pack as YAML checklist. Items: bounded_loops_check,
+          function_size_check, error_swallowing_check, narrow_state_check,
+          nesting_gate_check, assertions_check, side_effect_naming_check.
+          Each item runs the corresponding verification command from Plan H.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-01]
+        f_xx: [F-05]
+        files: [config/checklists/nasa-rules.yaml]
+        verify:
+          - "test -f config/checklists/nasa-rules.yaml"
+        test_criteria: "NASA rules pack defines 7 checklist items matching Plan H requirements."
+
+      - id: T2-03
+        title: >
+          Integrate checklists with Thor validator. Thor runs relevant checklists before
+          marking a plan as done. All critical items must pass. Warning items logged but
+          don't block. Add ChecklistGate to Thor's validation pipeline.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T2-01]
+        f_xx: [F-06]
+        files: [daemon/src/checklist/thor_gate.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- checklist::thor_gate"
+        test_criteria: "Thor blocks plan closure on critical checklist failures."
+
+  - id: W3
+    name: "CLI, API & Telemetry"
+    tasks:
+      - id: T3-01
+        title: >
+          Add CLI commands: cvg checklist run <name> [--mode do-confirm|read-do],
+          cvg checklist list, cvg checklist status <run-id>,
+          cvg checklist validate <name>. Output as table with pass/fail/skip counts.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-07]
+        files: [daemon/src/server/checklist.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "CLI commands execute and produce correct output."
+
+      - id: T3-02
+        title: >
+          Add REST API endpoints: POST /api/checklists/run with body {name, mode},
+          GET /api/checklists/status/{run_id}, GET /api/checklists/list,
+          GET /api/checklists/results/{run_id}. JSON responses with full execution reports.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T3-01]
+        f_xx: [F-08]
+        files: [daemon/src/server/api/checklist.rs, daemon/src/server/routes.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "API endpoints return correct JSON. Run/list/status work."
+
+      - id: T3-03
+        title: >
+          Add checklist telemetry. Track per-checklist: run count, pass rate, avg duration,
+          most common failures. Store in dashboard.db checklist_runs table. Expose via
+          GET /api/checklists/metrics. Display in TUI if available.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T3-02]
+        f_xx: [F-09]
+        files: [daemon/src/checklist/telemetry.rs, daemon/src/db/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- checklist::telemetry"
+        test_criteria: "Metrics collected, stored, and exposed via API."

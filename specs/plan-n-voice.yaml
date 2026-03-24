@@ -1,0 +1,220 @@
+name: "Plan N — Voice"
+version: "24.0.0"
+project: convergio
+depends_on: [plan-m-inference-router]
+description: >
+  Voice interface for ConvergioPlatform. Voice Activity Detection, wake word, ASR via
+  Whisper, intent extraction, TTS via CosyVoice, full voice pipeline, speaker verification,
+  VoiceOver accessibility, and CLI integration.
+
+requirements:
+  - id: F-01
+    title: Voice Activity Detection
+    description: "Real-time VAD to detect speech onset/offset. Low latency (<50ms). Noise-robust."
+  - id: F-02
+    title: Wake word
+    description: "Custom wake word detection ('Hey Convergio' or configurable). Always-listening with minimal CPU."
+  - id: F-03
+    title: ASR Whisper
+    description: "Speech-to-text via Whisper (local MLX or API). Support English and Italian. Streaming transcription."
+  - id: F-04
+    title: Intent extraction
+    description: "Extract structured intent from transcribed text. Map to platform commands and agent actions."
+  - id: F-05
+    title: TTS CosyVoice
+    description: "Text-to-speech via CosyVoice for natural voice responses. Voice cloning support. Streaming output."
+  - id: F-06
+    title: Voice pipeline
+    description: "End-to-end: microphone → VAD → wake → ASR → intent → execute → TTS → speaker. Full duplex."
+  - id: F-07
+    title: Speaker verification
+    description: "Verify speaker identity before executing privileged commands. Enrollment and verification modes."
+  - id: F-08
+    title: VoiceOver integration
+    description: "macOS VoiceOver support for accessibility. TUI announces state changes. Screen reader compatible."
+  - id: F-09
+    title: CLI commands
+    description: "cvg voice start|stop|status|enroll|test commands"
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+
+waves:
+  - id: W1
+    name: "Input Pipeline"
+    tasks:
+      - id: T1-01
+        title: >
+          Implement Voice Activity Detection in daemon/src/voice/vad.rs. Use WebRTC VAD
+          algorithm or silero-vad via ONNX runtime. Real-time processing of audio frames
+          (16kHz, 16-bit). Detect speech onset within 50ms. Configurable sensitivity
+          threshold. Output: speech/non-speech segments with timestamps.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01]
+        files: [daemon/src/voice/vad.rs, daemon/src/voice/mod.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "VAD detects speech onset within 50ms on test audio."
+
+      - id: T1-02
+        title: >
+          Implement wake word detection. Lightweight keyword spotter running continuously.
+          Default wake word: "Hey Convergio". Custom words via enrollment (3 repetitions).
+          Uses small neural model or DTW matching. CPU usage < 5% when idle listening.
+          Triggers ASR pipeline on detection.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-02]
+        files: [daemon/src/voice/wake_word.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "Wake word detected with < 5% CPU. Custom words enrollable."
+
+      - id: T1-03
+        title: >
+          Implement ASR via Whisper. Use whisper-rs with MLX backend for local inference
+          on Apple Silicon. Support whisper-small and whisper-medium models. Streaming
+          transcription with partial results. Language support: English, Italian (auto-detect).
+          Fallback to Whisper API if local model unavailable.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-03]
+        files: [daemon/src/voice/asr.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "Whisper transcribes English and Italian. Streaming partial results work."
+
+      - id: T1-04
+        title: >
+          Implement intent extraction. Parse transcribed text into structured intents.
+          Intent types: command (mapped to cvg CLI commands), query (information request),
+          control (start/stop/status), navigation (switch view/tab). Use inference router
+          for classification. Intent confidence threshold. Disambiguation dialog for
+          ambiguous intents.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-03]
+        f_xx: [F-04]
+        files: [daemon/src/voice/intent.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- voice::intent"
+        test_criteria: "Intent extraction maps voice commands to platform actions."
+
+  - id: W2
+    name: "Output Pipeline & Integration"
+    tasks:
+      - id: T2-01
+        title: >
+          Implement TTS via CosyVoice. Local inference on Apple Silicon via MLX.
+          Natural-sounding voice synthesis. Voice cloning: enroll with 10s sample,
+          generate in cloned voice. Streaming audio output. Configurable: voice,
+          speed, pitch. Fallback to system TTS (say command) if model unavailable.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-05]
+        files: [daemon/src/voice/tts.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "TTS generates audio. Voice cloning produces recognizable output."
+
+      - id: T2-02
+        title: >
+          Wire full voice pipeline. End-to-end: microphone capture → VAD → wake word →
+          ASR → intent extraction → command execution → TTS response → audio output.
+          Full duplex: can interrupt TTS with new speech. Pipeline state machine:
+          Idle → Listening → Processing → Speaking → Idle. Error recovery at each stage.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T2-01]
+        f_xx: [F-06]
+        files: [daemon/src/voice/pipeline.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- voice::pipeline"
+        test_criteria: "Full pipeline processes voice input to audio output."
+
+      - id: T2-03
+        title: >
+          Implement speaker verification. Enroll speaker: record 3x passphrase, extract
+          voiceprint (speaker embedding). Verify: compare live audio against enrolled
+          voiceprint. Confidence threshold configurable. Required for privileged commands
+          (kill switch, security config, budget override). Voiceprints stored encrypted
+          in Keychain.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T2-02]
+        f_xx: [F-07]
+        files: [daemon/src/voice/speaker_verify.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- voice::speaker_verify"
+        test_criteria: "Speaker enrolled and verified. Unauthorized speaker rejected."
+
+      - id: T2-04
+        title: >
+          Implement VoiceOver accessibility integration. TUI announces state changes
+          via macOS accessibility API. Screen reader compatible labels on all TUI
+          elements. Keyboard-only navigation preserved. WCAG 2.1 AA compliance for
+          voice interface. Announce: view changes, alerts, errors, command results.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-08]
+        files: [daemon/src/voice/accessibility.rs, daemon/src/tui/]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "VoiceOver announces TUI state changes. Keyboard nav works."
+
+      - id: T2-05
+        title: >
+          Add CLI commands: cvg voice start (begin listening), cvg voice stop,
+          cvg voice status (pipeline state, active model, CPU usage),
+          cvg voice enroll (speaker enrollment wizard), cvg voice test (record and
+          playback to verify setup). API: POST /api/voice/start, /stop, /status,
+          /enroll, GET /api/voice/status.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-02]
+        f_xx: [F-09]
+        files: [daemon/src/server/voice.rs, daemon/src/server/routes.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "CLI and API voice commands work."

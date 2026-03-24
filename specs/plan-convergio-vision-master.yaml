@@ -1,0 +1,86 @@
+name: "Convergio Vision — Master Plan"
+version: "18.0.0-24.0.0"
+project_id: convergio
+execution_mode: mixed
+description: >
+  Master plan orchestrating the Convergio Platform vision from hardening through voice.
+  Seven plans (H–N) covering: NASA-grade code hardening, checklist engine, MCP capabilities,
+  agentic memory, security perimeters, inference routing, and voice interface.
+
+plans:
+  - id: plan-h-hardening-nasa
+    name: "Plan H — Hardening NASA"
+    version: "18.1.0"
+    spec: specs/plan-h-hardening-nasa.yaml
+    waves: 2
+    tasks: 7
+    depends_on: []
+    status: planned
+
+  - id: plan-i-checklist-engine
+    name: "Plan I — Checklist Engine"
+    version: "19.0.0"
+    spec: specs/plan-i-checklist-engine.yaml
+    waves: 3
+    tasks: 9
+    depends_on: [plan-h-hardening-nasa]
+    status: planned
+
+  - id: plan-j-mcp-client
+    name: "Plan J — MCP Client"
+    version: "20.0.0"
+    spec: specs/plan-j-mcp-client.yaml
+    waves: 3
+    tasks: 10
+    depends_on: [plan-i-checklist-engine]
+    status: planned
+
+  - id: plan-k-agentic-memory
+    name: "Plan K — Agentic Memory"
+    version: "21.0.0"
+    spec: specs/plan-k-agentic-memory.yaml
+    waves: 3
+    tasks: 8
+    depends_on: [plan-i-checklist-engine]
+    note: "Can run in parallel with Plan J"
+    status: planned
+
+  - id: plan-l-security-perimeters
+    name: "Plan L — Security Perimeters"
+    version: "22.0.0"
+    spec: specs/plan-l-security-perimeters.yaml
+    waves: 2
+    tasks: 8
+    depends_on: [plan-j-mcp-client]
+    status: planned
+
+  - id: plan-m-inference-router
+    name: "Plan M — Inference Router"
+    version: "23.0.0"
+    spec: specs/plan-m-inference-router.yaml
+    waves: 2
+    tasks: 8
+    depends_on: [plan-h-hardening-nasa]
+    note: "Can run in parallel with Plans J through L"
+    status: planned
+
+  - id: plan-n-voice
+    name: "Plan N — Voice"
+    version: "24.0.0"
+    spec: specs/plan-n-voice.yaml
+    waves: 2
+    tasks: 9
+    depends_on: [plan-m-inference-router]
+    status: planned
+
+dependency_graph: |
+  Plan H (Hardening NASA) ─────────┬──→ Plan I (Checklist Engine) ──┬──→ Plan J (MCP Client) ──→ Plan L (Security)
+                                   │                                │
+                                   │                                └──→ Plan K (Agentic Memory) [parallel with J]
+                                   │
+                                   └──→ Plan M (Inference Router) [parallel with J-L] ──→ Plan N (Voice)
+
+totals:
+  plans: 7
+  waves: 17
+  tasks: 59

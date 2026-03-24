@@ -1,0 +1,204 @@
+name: "Plan M — Inference Router"
+version: "23.0.0"
+project: convergio
+depends_on: [plan-h-hardening-nasa]
+description: >
+  Intelligent inference routing across local and cloud models. Tier classification for
+  task complexity, Apple Foundation Model bridge for on-device inference, health checking,
+  metrics, fallback chains, per-agent config, and IPC integration. Can run in parallel
+  with Plans J through L.
+
+requirements:
+  - id: F-01
+    title: InferenceRouter
+    description: "Core router that selects optimal model based on task tier, agent config, model health, and cost"
+  - id: F-02
+    title: Tier classification
+    description: "Classify inference requests: T1 trivial (local), T2 standard (Haiku/local), T3 complex (Sonnet), T4 critical (Opus)"
+  - id: F-03
+    title: Apple FM bridge
+    description: "Bridge to Apple Foundation Models via on-device inference for T1/T2 tasks on Apple Silicon"
+  - id: F-04
+    title: Health check
+    description: "Continuous health monitoring of all inference endpoints. Latency, error rate, availability."
+  - id: F-05
+    title: Metrics
+    description: "Per-model metrics: latency p50/p95/p99, tokens/sec, error rate, cost per request, quality scores"
+  - id: F-06
+    title: Fallback chains
+    description: "Configurable fallback: if primary model unavailable, cascade to next. T1→local→Haiku→Sonnet"
+  - id: F-07
+    title: Per-agent config
+    description: "Each agent specifies preferred model, max tier, budget, latency SLA. Router respects constraints."
+  - id: F-08
+    title: IPC integration
+    description: "Inference requests via daemon IPC. Agents call router through standard IPC protocol."
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+
+waves:
+  - id: W1
+    name: "Core Router & Classification"
+    tasks:
+      - id: T1-01
+        title: >
+          Implement InferenceRouter in daemon/src/inference/router.rs. Core method:
+          route(request: InferenceRequest) → InferenceResponse. Selects model based on:
+          tier classification, agent preferences, model health, cost budget.
+          InferenceRequest: prompt, max_tokens, tier_hint (optional), agent_id,
+          constraints (max_latency_ms, max_cost). InferenceResponse: content, model_used,
+          latency_ms, tokens_used, cost.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01]
+        files: [daemon/src/inference/router.rs, daemon/src/inference/mod.rs, daemon/src/inference/types.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "InferenceRouter compiles with routing logic."
+
+      - id: T1-02
+        title: >
+          Implement tier classification. Analyze request characteristics to assign tier:
+          T1 (trivial): short prompts, simple completions, formatting — route to local.
+          T2 (standard): moderate complexity, summaries, translations — Haiku or local.
+          T3 (complex): code generation, analysis, multi-step reasoning — Sonnet.
+          T4 (critical): architecture decisions, security review, complex planning — Opus.
+          Classifier uses prompt length, keyword signals, and agent-provided tier hints.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-02]
+        files: [daemon/src/inference/classifier.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- inference::classifier"
+        test_criteria: "Classifier assigns correct tiers. Hint override works."
+
+      - id: T1-03
+        title: >
+          Implement Apple Foundation Model bridge. Use Apple's on-device inference
+          for T1/T2 tasks on Apple Silicon Macs. Bridge via mlx-rs or command-line
+          interface to oMLX. Model selection from local catalog. Graceful fallback
+          to cloud if local model unavailable or overloaded.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-03]
+        files: [daemon/src/inference/apple_fm.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "Apple FM bridge compiles and handles unavailable model gracefully."
+
+      - id: T1-04
+        title: >
+          Implement health check system. Periodic probes to all configured inference
+          endpoints (local oMLX, LiteLLM, cloud APIs). Track: latency, error rate,
+          availability percentage. Endpoints marked as degraded (>2s latency or >5%
+          errors) or down (3 consecutive failures). Health status feeds into routing
+          decisions.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T1-01]
+        f_xx: [F-04]
+        files: [daemon/src/inference/health.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- inference::health"
+        test_criteria: "Health checks detect degraded and down endpoints."
+
+  - id: W2
+    name: "Metrics, Fallback & Integration"
+    tasks:
+      - id: T2-01
+        title: >
+          Implement inference metrics collection. Per-model tracking: latency (p50/p95/p99),
+          tokens per second, error rate, cost per request (token pricing), quality scores
+          (optional user feedback). Store in inference_metrics table. Expose via
+          GET /api/inference/metrics. Rolling windows: 1h, 24h, 7d.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-05]
+        files: [daemon/src/inference/metrics.rs, daemon/src/db/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- inference::metrics"
+        test_criteria: "Metrics collected and queryable by time window."
+
+      - id: T2-02
+        title: >
+          Implement fallback chains. Configurable cascade per tier:
+          T1: local → Haiku → Sonnet. T2: Haiku → local → Sonnet. T3: Sonnet → Opus.
+          T4: Opus → Sonnet (with warning). Fallback triggers on: timeout, error,
+          health=down. Max 3 fallback attempts. Log each fallback with reason.
+          Config in config/inference/fallback.yaml.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-01]
+        f_xx: [F-06]
+        files: [daemon/src/inference/fallback.rs, config/inference/fallback.yaml]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- inference::fallback"
+        test_criteria: "Fallback triggers correctly. Cascade follows config. Max attempts enforced."
+
+      - id: T2-03
+        title: >
+          Implement per-agent inference config. Each agent specifies in its config:
+          preferred_model, max_tier (highest tier allowed), budget_tokens_per_day,
+          latency_sla_ms, allowed_models (whitelist). Router respects all constraints.
+          Over-budget agents get downgraded to lower tier. Config in
+          config/agents/{name}/inference.yaml.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-02]
+        f_xx: [F-07]
+        files: [daemon/src/inference/agent_config.rs, config/agents/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- inference::agent_config"
+        test_criteria: "Per-agent constraints respected. Over-budget agents downgraded."
+
+      - id: T2-04
+        title: >
+          Integrate inference router with daemon IPC. Agents send inference requests
+          through standard IPC protocol. Route: IPC → InferenceRouter → model → response
+          → IPC. Add IPC commands: inference.route, inference.status, inference.metrics.
+          Replace direct API calls in existing agents with router calls.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-03]
+        f_xx: [F-08]
+        files: [daemon/src/inference/ipc.rs, daemon/src/ipc/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- inference::ipc"
+        test_criteria: "IPC inference routing works end-to-end."

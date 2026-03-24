@@ -1,0 +1,198 @@
+name: "Plan L — Security Perimeters"
+version: "22.0.0"
+project: convergio
+depends_on: [plan-j-mcp-client]
+description: >
+  Defense-in-depth security perimeters for agentic operations. Per-agent ACL, sandbox
+  execution, macOS Keychain vault, cryptographic audit chain, egress firewall, budget
+  enforcer, kill switch, and MCP security integration.
+
+requirements:
+  - id: F-01
+    title: Per-agent ACL
+    description: "Fine-grained access control lists per agent: filesystem paths, network hosts, API endpoints, DB tables"
+  - id: F-02
+    title: Sandbox execution
+    description: "Agent code runs in sandboxed environment with restricted syscalls, filesystem, and network"
+  - id: F-03
+    title: Keychain vault
+    description: "Secrets stored in macOS Keychain via Security.framework. No plaintext secrets in config or DB."
+  - id: F-04
+    title: Audit chain
+    description: "Cryptographic audit log: every agent action hashed and chained. Tamper-evident. Queryable."
+  - id: F-05
+    title: Egress firewall
+    description: "Per-agent network egress rules. Allowlist-only outbound connections. Block unauthorized exfiltration."
+  - id: F-06
+    title: Budget enforcer
+    description: "Per-agent resource budgets: API calls, tokens, compute time, storage. Hard limits with alerts."
+  - id: F-07
+    title: Kill switch
+    description: "Instant agent termination: single agent, by type, or global halt. Graceful shutdown with state save."
+  - id: F-08
+    title: MCP integration
+    description: "Security perimeters enforce on MCP tool invocations. Ring-level security checks on every call."
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+
+waves:
+  - id: W1
+    name: "Access Control & Sandbox"
+    tasks:
+      - id: T1-01
+        title: >
+          Implement per-agent ACL system in daemon/src/security/acl.rs. Define ACL rules:
+          filesystem (read/write/exec on path globs), network (host:port allowlist),
+          api (endpoint pattern allowlist), db (table:operation allowlist).
+          ACL loaded from config/security/agents/{agent_name}.yaml. Deny by default.
+          Check on every operation via SecurityGuard middleware.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01]
+        files: [daemon/src/security/acl.rs, daemon/src/security/mod.rs, config/security/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::acl"
+        test_criteria: "ACL rules enforced. Unauthorized access denied with audit log entry."
+
+      - id: T1-02
+        title: >
+          Implement sandbox execution environment. Use macOS sandbox-exec or custom
+          seccomp-like restrictions. Restrict: filesystem to agent workspace only,
+          network to ACL allowlist, no subprocess spawning without approval.
+          Sandbox violations logged and agent suspended.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-02]
+        files: [daemon/src/security/sandbox.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::sandbox"
+        test_criteria: "Sandbox restricts filesystem and network. Violations caught and logged."
+
+      - id: T1-03
+        title: >
+          Integrate macOS Keychain for secret storage. Use Security.framework via
+          security-framework crate. Store: API keys, tokens, certificates.
+          Retrieve at runtime via service+account lookup. Never write secrets to
+          config files or DB. Migration tool for existing plaintext secrets.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-03]
+        files: [daemon/src/security/vault.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::vault"
+          - "! grep -rn 'api_key.*=.*\"' daemon/src/ --include='*.rs' | grep -v test"
+        test_criteria: "Secrets stored/retrieved from Keychain. No plaintext secrets in code."
+
+      - id: T1-04
+        title: >
+          Implement cryptographic audit chain. Every agent action produces an AuditEntry:
+          agent_id, action, target, timestamp, params_hash. Each entry includes
+          prev_hash (SHA-256 chain). Store in audit_chain table. Tamper detection:
+          verify chain integrity on startup and periodically. Queryable by agent, action,
+          time range.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-04]
+        files: [daemon/src/security/audit_chain.rs, daemon/src/db/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::audit_chain"
+        test_criteria: "Audit chain records all actions. Tamper detection catches modifications."
+
+  - id: W2
+    name: "Enforcement & Controls"
+    tasks:
+      - id: T2-01
+        title: >
+          Implement per-agent egress firewall. Network allowlist per agent from ACL config.
+          Intercept outbound connections at proxy level. Block unauthorized destinations.
+          Log all egress with destination, size, agent. Alert on blocked attempts.
+          Support wildcard patterns for domains.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-05]
+        files: [daemon/src/security/egress.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::egress"
+        test_criteria: "Egress firewall blocks unauthorized connections. Allowlist enforced."
+
+      - id: T2-02
+        title: >
+          Implement budget enforcer. Per-agent budgets: max_api_calls/hour, max_tokens/day,
+          max_compute_seconds, max_storage_bytes. Track usage in real-time. Soft limit
+          (80%) triggers alert. Hard limit (100%) suspends agent. Budget config in
+          config/security/budgets.yaml. Dashboard widget for usage.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-01]
+        f_xx: [F-06]
+        files: [daemon/src/security/budget.rs, config/security/budgets.yaml]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::budget"
+        test_criteria: "Budget limits enforced. Agent suspended at hard limit."
+
+      - id: T2-03
+        title: >
+          Implement kill switch. Three modes: single agent (by name/id), by type
+          (all claude agents, all executors), global halt (all agents). Graceful
+          shutdown: save state, complete current atomic operation, then terminate.
+          Emergency mode: immediate termination. API: POST /api/security/kill
+          {scope, mode}. CLI: cvg kill <agent|type|all> [--force].
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-07]
+        files: [daemon/src/security/kill_switch.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::kill_switch"
+        test_criteria: "Kill switch terminates agents. Graceful saves state. Force is immediate."
+
+      - id: T2-04
+        title: >
+          Integrate security perimeters with MCP capability system. Every MCP tool
+          invocation passes through SecurityGuard: ACL check, ring-level verification,
+          budget deduction, audit chain entry, egress check for network tools.
+          Denied invocations return structured error with reason.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-03]
+        f_xx: [F-08]
+        files: [daemon/src/security/mcp_guard.rs, daemon/src/capabilities/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- security::mcp_guard"
+        test_criteria: "MCP invocations enforced by security perimeters. Denied calls audited."

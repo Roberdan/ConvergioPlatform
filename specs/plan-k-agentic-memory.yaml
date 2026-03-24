@@ -1,0 +1,180 @@
+name: "Plan K — Agentic Memory"
+version: "21.0.0"
+project: convergio
+depends_on: [plan-i-checklist-engine]
+description: >
+  Persistent agentic memory system. Agents can remember, recall, forget, share, and attest
+  knowledge. Three progressive sprints: SQLite foundation, LanceDB vector search, blob store
+  for large artifacts. Can run in parallel with Plan J.
+
+requirements:
+  - id: F-01
+    title: Remember
+    description: "Agents store typed memories: facts, decisions, preferences, observations with metadata"
+  - id: F-02
+    title: Recall
+    description: "Query memories by type, tag, time range, relevance score. Semantic search via embeddings."
+  - id: F-03
+    title: Forget
+    description: "Explicit deletion, TTL-based expiry, and privacy-compliant bulk purge by agent or category"
+  - id: F-04
+    title: Share
+    description: "Agents share memories with specific agents or groups. Access control per memory."
+  - id: F-05
+    title: Attest
+    description: "Memories can be attested (verified) by other agents. Attestation chain for trust."
+  - id: F-06
+    title: SQLite storage
+    description: "Sprint 4A: SQLite-backed memory store with full-text search via FTS5"
+  - id: F-07
+    title: LanceDB vectors
+    description: "Sprint 4B: Vector embeddings via LanceDB for semantic recall"
+  - id: F-08
+    title: Blob store
+    description: "Sprint 4C: Large artifact storage (files, images, logs) with reference from memories"
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+
+waves:
+  - id: S4A
+    name: "Sprint 4A — SQLite Foundation"
+    tasks:
+      - id: T4A-01
+        title: >
+          Define Memory trait and types in daemon/src/memory/mod.rs. Memory struct:
+          id, agent_id, memory_type (Fact|Decision|Preference|Observation), content,
+          tags: Vec<String>, created_at, expires_at: Option, access_level (Private|Shared|Public),
+          attestations: Vec<Attestation>. MemoryStore trait: remember(), recall(), forget(),
+          share(), attest().
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01, F-02, F-03, F-04, F-05]
+        files: [daemon/src/memory/mod.rs, daemon/src/memory/types.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "Memory trait and all types compile."
+
+      - id: T4A-02
+        title: >
+          Implement SQLite-backed MemoryStore. Create agent_memories table with FTS5 index
+          on content and tags. remember() inserts with metadata. recall() supports filters:
+          by type, tags, time range, full-text search. forget() with soft-delete and
+          TTL reaper task. Store in dashboard.db.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T4A-01]
+        f_xx: [F-01, F-02, F-03, F-06]
+        files: [daemon/src/memory/sqlite_store.rs, daemon/src/db/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- memory::sqlite_store"
+        test_criteria: "CRUD operations work. FTS5 search returns relevant results. TTL expiry runs."
+
+      - id: T4A-03
+        title: >
+          Implement share and attest operations on SQLite store. share() grants access
+          to specific agent_ids or groups. Access check on every recall(). attest()
+          adds attestation record with attesting_agent_id, timestamp, confidence score.
+          Query attestation chain for trust verification.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T4A-02]
+        f_xx: [F-04, F-05]
+        files: [daemon/src/memory/sharing.rs, daemon/src/memory/attestation.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- memory::sharing"
+          - "cargo test --manifest-path daemon/Cargo.toml -- memory::attestation"
+        test_criteria: "Sharing enforces access control. Attestation chain tracked."
+
+  - id: S4B
+    name: "Sprint 4B — Vector Search"
+    tasks:
+      - id: T4B-01
+        title: >
+          Integrate LanceDB for vector embeddings. On remember(), generate embedding
+          from content using local model (or API). Store embedding in LanceDB with
+          memory_id reference. recall() with semantic_query option uses cosine similarity
+          search. Hybrid search: FTS5 + vector similarity with configurable weights.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-07]
+        files: [daemon/src/memory/vector_store.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- memory::vector_store"
+        test_criteria: "Semantic search returns relevant memories. Hybrid search works."
+
+      - id: T4B-02
+        title: >
+          Add memory API endpoints and CLI. REST: POST /api/memory/remember,
+          GET /api/memory/recall?query=&type=&agent=, DELETE /api/memory/forget/{id},
+          POST /api/memory/share, POST /api/memory/attest. CLI: cvg memory remember|recall|
+          forget|share|attest. Include semantic search in recall.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T4B-01]
+        f_xx: [F-01, F-02, F-03, F-04, F-05]
+        files: [daemon/src/server/api/memory.rs, daemon/src/server/routes.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "API and CLI expose all memory operations."
+
+  - id: S4C
+    name: "Sprint 4C — Blob Store"
+    tasks:
+      - id: T4C-01
+        title: >
+          Implement blob store for large artifacts. Store files, images, logs in
+          data/blobs/ with content-addressed naming (SHA-256). Memory records reference
+          blobs by hash. Upload/download via streaming. Garbage collection for unreferenced
+          blobs. Size limits per agent configurable.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-08]
+        files: [daemon/src/memory/blob_store.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- memory::blob_store"
+        test_criteria: "Blob upload, download, GC work. Content-addressed storage correct."
+
+      - id: T4C-02
+        title: >
+          Integration tests for full memory system. Test remember→recall→share→attest
+          flow across SQLite + LanceDB + blob store. Test TTL expiry. Test privacy
+          purge. Test concurrent access. Performance test: 10k memories recall < 100ms.
+        type: test
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T4C-01]
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08]
+        files: [daemon/src/memory/tests/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- memory"
+        test_criteria: "Full pipeline tested. 10k memory recall under 100ms."

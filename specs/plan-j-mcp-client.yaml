@@ -1,0 +1,242 @@
+name: "Plan J — MCP Client"
+version: "20.0.0"
+project: convergio
+depends_on: [plan-i-checklist-engine]
+description: >
+  Model Context Protocol client with 4-ring capability model. MCP connector for tool
+  discovery and invocation, YAML registry, proxy layer, per-agent permissions, and
+  checklist integration. Stripe demo as reference implementation.
+
+requirements:
+  - id: F-01
+    title: Capability trait
+    description: "Core Capability trait with invoke(), describe(), validate_input(), ring_level() methods"
+  - id: F-02
+    title: 4-ring model
+    description: "Ring 0: core platform, Ring 1: trusted tools, Ring 2: community tools, Ring 3: sandboxed external"
+  - id: F-03
+    title: MCP connector
+    description: "MCP protocol client: tool discovery, schema negotiation, invocation, result parsing"
+  - id: F-04
+    title: Registry YAML
+    description: "Capability registry in YAML with tool definitions, ring assignments, permission requirements"
+  - id: F-05
+    title: Proxy layer
+    description: "Transparent proxy for MCP tool calls with logging, rate limiting, and circuit breaking"
+  - id: F-06
+    title: Per-agent permissions
+    description: "Each agent has a permission set defining which rings and specific tools it can access"
+  - id: F-07
+    title: Checklist integration
+    description: "New capability additions require checklist pass. Ring promotion requires security review checklist."
+  - id: F-08
+    title: CLI interface
+    description: "cvg capability list|invoke|register|permissions commands"
+  - id: F-09
+    title: API endpoints
+    description: "REST API: POST /api/capabilities/invoke, GET /api/capabilities/list, PUT /api/capabilities/permissions"
+  - id: F-10
+    title: Stripe demo
+    description: "Reference MCP integration with Stripe API as Ring 2 capability"
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+
+waves:
+  - id: W1
+    name: "Core Capability Model"
+    tasks:
+      - id: T1-01
+        title: >
+          Define Capability trait in daemon/src/capabilities/mod.rs. Methods:
+          invoke(input: Value) → Result<Value>, describe() → ToolSchema,
+          validate_input(input: &Value) → Result<()>, ring_level() → Ring.
+          Ring enum: Core(0), Trusted(1), Community(2), Sandboxed(3).
+          ToolSchema struct: name, description, input_schema (JSON Schema), output_schema.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01]
+        files: [daemon/src/capabilities/mod.rs, daemon/src/capabilities/types.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "Capability trait and Ring model compile with all required types."
+
+      - id: T1-02
+        title: >
+          Implement 4-ring permission model. Ring 0 (Core): unrestricted platform access.
+          Ring 1 (Trusted): verified tools with full I/O. Ring 2 (Community): sandboxed
+          with limited I/O. Ring 3 (External): fully sandboxed, no filesystem, network
+          filtered. Enforce ring boundaries at invocation time.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-02]
+        files: [daemon/src/capabilities/rings.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- capabilities::rings"
+        test_criteria: "Ring boundaries enforced. Unauthorized ring access denied."
+
+      - id: T1-03
+        title: >
+          Implement MCP protocol connector. JSON-RPC transport over stdio and HTTP.
+          Tool discovery via initialize/tools/list. Schema negotiation for input/output.
+          Invocation via tools/call. Result parsing with error handling. Connection
+          lifecycle: connect, discover, invoke, disconnect.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-03]
+        files: [daemon/src/capabilities/mcp/connector.rs, daemon/src/capabilities/mcp/mod.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- capabilities::mcp"
+        test_criteria: "MCP connector discovers tools, negotiates schemas, invokes tools."
+
+  - id: W2
+    name: "Registry & Permissions"
+    tasks:
+      - id: T2-01
+        title: >
+          Implement YAML capability registry. Parse tool definitions from
+          config/capabilities/. Schema: name, description, ring, mcp_server (optional),
+          input_schema, permissions_required. Load on startup, hot-reload on change.
+          Validate ring assignments against policy.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-04]
+        files: [daemon/src/capabilities/registry.rs, config/capabilities/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- capabilities::registry"
+        test_criteria: "YAML registry loads, validates, and hot-reloads."
+
+      - id: T2-02
+        title: >
+          Implement proxy layer for MCP tool calls. Transparent proxy that logs all
+          invocations, enforces rate limits per agent per tool, implements circuit
+          breaking (open after 5 failures in 60s, half-open after 30s). Proxy sits
+          between agent and MCP connector.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T2-01]
+        f_xx: [F-05]
+        files: [daemon/src/capabilities/proxy.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- capabilities::proxy"
+        test_criteria: "Proxy logs, rate-limits, and circuit-breaks correctly."
+
+      - id: T2-03
+        title: >
+          Implement per-agent permission sets. Each agent config specifies allowed_rings
+          and allowed_tools (whitelist). Permission check on every invoke(). Deny by
+          default. Store permissions in agent config YAML. API to query and update
+          permissions at runtime.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-01]
+        f_xx: [F-06]
+        files: [daemon/src/capabilities/permissions.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- capabilities::permissions"
+        test_criteria: "Per-agent permissions enforced. Unauthorized access denied."
+
+      - id: T2-04
+        title: >
+          Integrate capability system with checklist engine. New capability registration
+          triggers a security checklist. Ring promotion (e.g., Ring 2 → Ring 1) requires
+          security review checklist pass. Create security-review.yaml checklist pack.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-03]
+        f_xx: [F-07]
+        files: [daemon/src/capabilities/checklist_gate.rs, config/checklists/security-review.yaml]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- capabilities::checklist_gate"
+        test_criteria: "Ring promotion blocked without checklist pass."
+
+  - id: W3
+    name: "CLI, API & Demo"
+    tasks:
+      - id: T3-01
+        title: >
+          Add CLI commands: cvg capability list [--ring N], cvg capability invoke <name> <input>,
+          cvg capability register <yaml-path>, cvg capability permissions <agent> [--grant|--revoke tool].
+          Table output with ring, name, status, last_used.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-08]
+        files: [daemon/src/server/capabilities.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "CLI commands execute and produce correct output."
+
+      - id: T3-02
+        title: >
+          Add REST API: POST /api/capabilities/invoke {name, input, agent_id},
+          GET /api/capabilities/list?ring=N, PUT /api/capabilities/permissions/{agent_id}
+          {allowed_rings, allowed_tools}, GET /api/capabilities/schema/{name}.
+          JSON responses with full invocation results.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T3-01]
+        f_xx: [F-09]
+        files: [daemon/src/server/api/capabilities.rs, daemon/src/server/routes.rs]
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+        test_criteria: "API endpoints return correct JSON. Invoke, list, permissions work."
+
+      - id: T3-03
+        title: >
+          Create Stripe MCP demo as reference implementation. Register Stripe API as
+          Ring 2 capability. MCP server config for Stripe tools: create_customer,
+          create_payment_intent, list_charges. Demo agent invokes Stripe tools through
+          capability system. Include mock mode for testing without live API key.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T3-02]
+        f_xx: [F-10]
+        files: [config/capabilities/stripe.yaml, daemon/src/capabilities/demos/stripe.rs]
+        verify:
+          - "test -f config/capabilities/stripe.yaml"
+          - "cargo test --manifest-path daemon/Cargo.toml -- capabilities::demos::stripe"
+        test_criteria: "Stripe demo invokes tools through capability system in mock mode."

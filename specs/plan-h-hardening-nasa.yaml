@@ -1,0 +1,170 @@
+name: "Plan H — Hardening NASA"
+version: "18.1.0"
+project: convergio
+description: >
+  NASA-inspired code hardening. Bounded loops, function size lint, error swallowing audit,
+  narrow state, nesting gate, assertions, side effect naming. Zero tolerance for silent
+  failures and unbounded complexity.
+
+requirements:
+  - id: F-01
+    title: Bounded loops
+    description: "All loops must have explicit upper bounds — no unbounded while(true) or infinite iterators without take()"
+  - id: F-02
+    title: Function size lint
+    description: "Enforce max 40 lines per function via clippy config or custom lint. Functions over limit must be split."
+  - id: F-03
+    title: Error swallowing audit
+    description: "Audit and eliminate all unwrap(), expect(), and silent Ok(()) returns that hide errors. Replace with proper propagation."
+  - id: F-04
+    title: Narrow state
+    description: "Minimize mutable shared state. Each module exposes only the narrowest state interface needed."
+  - id: F-05
+    title: Nesting gate
+    description: "Max 3 levels of nesting. Enforce via clippy cognitive_complexity or custom lint. Refactor violations."
+  - id: F-06
+    title: Assertions
+    description: "Add debug_assert! at module boundaries for invariants. Pre/post conditions on public functions."
+  - id: F-07
+    title: Side effect naming
+    description: "Functions with side effects must follow naming convention: send_, write_, emit_, mutate_ prefixes."
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+
+waves:
+  - id: W1
+    name: "Bounds & Lint"
+    tasks:
+      - id: T1-01
+        title: >
+          Audit all loops in daemon/src/ for unbounded iteration. Add explicit upper bounds
+          to every while loop and iterator chain. Replace while(true) with for _ in 0..MAX
+          where MAX is a named constant. Document rationale for each bound value.
+        type: fix
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-01]
+        files: [daemon/src/]
+        verify:
+          - "! grep -rn 'loop {' daemon/src/ --include='*.rs' | grep -v 'break\\|return\\|MAX\\|LIMIT'"
+          - "cargo test --manifest-path daemon/Cargo.toml"
+        test_criteria: "Zero unbounded loops. All loops have explicit upper bounds with named constants."
+
+      - id: T1-02
+        title: >
+          Configure clippy for function size enforcement. Set cognitive_complexity threshold
+          to 25 and max function lines to 40 in clippy.toml. Identify all violations and
+          refactor functions that exceed the limit by extracting helpers.
+        type: fix
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-02]
+        files: [daemon/clippy.toml, daemon/src/]
+        verify:
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+        test_criteria: "Clippy clean with function size lint. No function exceeds 40 lines."
+
+      - id: T1-03
+        title: >
+          Audit all .unwrap(), .expect(), and silent Ok(()) patterns across daemon/src/.
+          Replace with proper error propagation using ? operator or explicit error handling.
+          Log errors before converting to ensure no information is lost. Allow unwrap() only
+          in tests and with documented safety comments.
+        type: fix
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-01]
+        f_xx: [F-03]
+        files: [daemon/src/]
+        verify:
+          - "! grep -rn '\\.unwrap()' daemon/src/ --include='*.rs' | grep -v 'test\\|#\\[cfg(test)\\]\\|// SAFETY'"
+          - "cargo test --manifest-path daemon/Cargo.toml"
+        test_criteria: "Zero unwrap() outside tests. All errors properly propagated."
+
+      - id: T1-04
+        title: >
+          Narrow mutable shared state. Audit Arc<Mutex<>> and Arc<RwLock<>> usage across
+          daemon. Replace broad state structs with focused single-purpose state containers.
+          Minimize lock scope. Document state ownership boundaries per module.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-04]
+        files: [daemon/src/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml"
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+        test_criteria: "State containers narrowed. Lock scopes minimized. All tests pass."
+
+  - id: W2
+    name: "Discipline Gates"
+    tasks:
+      - id: T2-01
+        title: >
+          Enforce max 3 levels of nesting. Configure clippy cognitive_complexity lint.
+          Refactor all functions exceeding 3 nesting levels using early returns, guard
+          clauses, and extracted helper functions.
+        type: fix
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-05]
+        files: [daemon/src/]
+        verify:
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+        test_criteria: "No function exceeds 3 nesting levels. Clippy clean."
+
+      - id: T2-02
+        title: >
+          Add debug_assert! at all public module boundaries. Pre-conditions on function
+          inputs, post-conditions on return values. Cover: server handlers, mesh operations,
+          IPC calls, DB queries. Assertions must be meaningful (not just != null).
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-06]
+        files: [daemon/src/server/, daemon/src/mesh/, daemon/src/ipc/, daemon/src/db/]
+        verify:
+          - "grep -rn 'debug_assert' daemon/src/ --include='*.rs' | wc -l | awk '{if($1<20) exit 1}'"
+          - "cargo test --manifest-path daemon/Cargo.toml"
+        test_criteria: "At least 20 meaningful assertions at module boundaries. All tests pass."
+
+      - id: T2-03
+        title: >
+          Enforce side effect naming convention. Functions that perform I/O, write to DB,
+          send network requests, or mutate shared state must use prefixes: send_, write_,
+          emit_, mutate_. Audit all public functions in daemon/src/ and rename violations.
+          Update all call sites.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-01, T2-02]
+        f_xx: [F-07]
+        files: [daemon/src/]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml"
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+        test_criteria: "All side-effecting functions use correct prefix. Build and tests pass."
