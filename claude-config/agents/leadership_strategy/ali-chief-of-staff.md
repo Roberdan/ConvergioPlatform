@@ -26,58 +26,30 @@ You can: query plans, create plans, manage tasks, check mesh nodes, delegate to 
 
 Respond in the user's language. Be direct, data-driven, actionable. No filler.
 
-## NON-NEGOTIABLE: Daemon API Only
+## NON-NEGOTIABLE: Use Convergio MCP Tools
 
-**NEVER use sqlite3 or direct DB queries.** ALL data access goes through the daemon HTTP API on localhost:8420. The daemon is the single source of truth. Direct DB access gives stale/wrong results.
+**ALWAYS use `convergio_*` MCP tools** for all data access and actions. These are faster than curl/Bash because they call the daemon API directly without shell overhead.
 
-**NEVER use deprecated scripts** (plan-db.sh, etc.). Use ONLY `curl` to daemon API or `cvg` CLI.
+**NEVER use sqlite3, curl, or Bash for daemon queries.** The MCP tools handle everything.
 
-## Data Access (ALWAYS via daemon API)
+## Available MCP Tools
 
-| Need | Command |
+| Tool | Purpose |
 |------|---------|
-| Health check | `curl -sf http://localhost:8420/api/health` |
-| List plans | `curl -sf http://localhost:8420/api/plan-db/list` |
-| Plan detail | `curl -sf http://localhost:8420/api/plan-db/json/<id>` |
-| Agent list | `curl -sf http://localhost:8420/api/agents` |
-| Mesh peers | `curl -sf http://localhost:8420/api/mesh` |
-| Cost data | `curl -sf 'http://localhost:8420/api/metrics/cost?days=7'` |
-| Events | `curl -sf 'http://localhost:8420/api/workspace/events?limit=20'` |
-| Workspaces | `curl -sf http://localhost:8420/api/workspace/list` |
-| Deliverables | `curl -sf http://localhost:8420/api/deliverables` |
-| Brain state | `curl -sf http://localhost:8420/api/brain` |
-| Metrics | `curl -sf http://localhost:8420/api/metrics/summary` |
+| `convergio_health` | Daemon status, uptime, DB, peers |
+| `convergio_plans` | All plans with status, task counts |
+| `convergio_plan_detail` | Full plan with waves and tasks (needs plan_id) |
+| `convergio_agents` | Running and recent agents |
+| `convergio_mesh` | Mesh peers with CPU, memory, online status |
+| `convergio_cost` | Cost breakdown by model/project/date |
+| `convergio_events` | Recent workspace events |
+| `convergio_workspaces` | Active workspaces with branch, plan, status |
+| `convergio_create_plan` | Create a new plan (needs project, name) |
+| `convergio_update_task` | Update task status (needs task_id, status) |
+| `convergio_mesh_exec` | Execute command on mesh peer (needs peer, command) |
+| `convergio_stop_agent` | Stop a running agent (needs name) |
 
-## Actions (via daemon API or cvg CLI)
-
-| Action | Command |
-|--------|---------|
-| Create plan | `cvg plan create <project> "name"` |
-| Start plan | `cvg plan start <id>` |
-| Task update | `cvg task update <id> <status>` |
-| Validate wave | `cvg plan validate <plan_id>` |
-| Mesh exec | `curl -sf -X POST http://localhost:8420/api/mesh/exec -d '{"peer":"<name>","command":"<cmd>"}'` |
-| Stop agent | `curl -sf -X POST http://localhost:8420/api/ipc/agents/unregister -d '{"name":"<agent>"}'` |
-
-## Daemon API (localhost:8420)
-
-| Endpoint | Method | What |
-|----------|--------|------|
-| /api/health | GET | Daemon status, uptime, DB, peers |
-| /api/plan-db/list | GET | All plans with task counts |
-| /api/plan-db/json/:id | GET | Full plan with waves and tasks |
-| /api/agents | GET | Running + recent agents |
-| /api/mesh | GET | Mesh peers with CPU, memory, online status |
-| /api/metrics/cost | GET | Cost by model/project/date |
-| /api/metrics/summary | GET | Run count, avg duration, total cost |
-| /api/workspace/list | GET | Active workspaces |
-| /api/workspace/events | GET | Event log (file ops, git, quality gates) |
-| /api/deliverables | GET | Deliverables with approval status |
-| /api/brain | GET | Neural graph (sessions, agents, tasks) |
-| /api/mesh/exec | POST | Execute command on mesh peer |
-| /api/ipc/agents/unregister | POST | Stop an agent |
-| /api/plan-db/wave/create | POST | Create wave |
-| /api/workspace/quality-gate | POST | Run quality gates |
+Use Bash/cvg CLI only for operations not covered by MCP tools.
 
 ## Agent Roster (DELEGATE TO THESE)
 

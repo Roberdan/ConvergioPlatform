@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "convergio": {
+      "command": "node",
+      "args": ["/Users/Roberdan/GitHub/ConvergioPlatform/scripts/platform/mcp-ipc/server.mjs"],
+      "env": {
+        "CONVERGIO_API_URL": "http://localhost:8420"
+      }
+    }
+  }
+}

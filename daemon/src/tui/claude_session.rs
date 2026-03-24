@@ -6,6 +6,21 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
+/// Resolve MCP config path relative to the repo root.
+fn mcp_config_path() -> String {
+    // Try DASHBOARD_DB parent (repo root), fallback to cwd.
+    if let Ok(db) = std::env::var("DASHBOARD_DB") {
+        if let Some(parent) = std::path::Path::new(&db).parent() {
+            let p = parent.join("../config/mcp-ali.json");
+            if p.exists() {
+                return p.to_string_lossy().to_string();
+            }
+        }
+    }
+    // Fallback: relative to cwd
+    "config/mcp-ali.json".to_string()
+}
+
 /// Events emitted by the Claude session reader task.
 #[derive(Debug, Clone)]
 pub enum ChatEvent {
@@ -37,6 +52,7 @@ impl ClaudeSession {
                 "--agent", "ali-chief-of-staff",
                 "--model", "opus",
                 "--dangerously-skip-permissions",
+                "--mcp-config", &mcp_config_path(),
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
