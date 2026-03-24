@@ -150,7 +150,9 @@ impl TuiApp {
         if self.chat.sending && !self.chat.input.is_empty() {
             let content = std::mem::take(&mut self.chat.input);
             chat_handler::push_user_message(&mut self.data, &content);
-            if self.chat.send_to_session(&content).await {
+            // Inject live platform data so Ali doesn't need tool calls.
+            let enriched = chat_handler::enrich_with_context(&content, &self.data);
+            if self.chat.send_to_session(&enriched).await {
                 self.chat.streaming = true;
                 self.chat.scroll_offset = 0; // follow new content
                 // Add empty assistant message that will be filled by streaming.

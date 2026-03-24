@@ -133,6 +133,68 @@ pub fn handle_chat_key(code: KeyCode, state: &mut ChatState) -> bool {
     }
 }
 
+/// Enrich user message with live platform data so Ali can answer without tools.
+pub fn enrich_with_context(question: &str, data: &TuiData) -> String {
+    let mut ctx = String::from("[Convergio Platform — live snapshot]\n");
+
+    // Plans
+    if !data.plans.is_empty() {
+        ctx.push_str("Plans:\n");
+        for p in &data.plans {
+            ctx.push_str(&format!(
+                "  #{} {} | {} | {}/{} tasks\n",
+                p.id, p.name, p.status, p.tasks_done, p.tasks_total
+            ));
+        }
+    }
+
+    // KPIs
+    ctx.push_str(&format!(
+        "KPI: {} active plans, {} agents, {}k tokens today, ${:.2} cost, {} mesh peers\n",
+        data.kpis.plans_active, data.kpis.agents_running,
+        data.kpis.daily_tokens / 1000, data.kpis.daily_cost,
+        data.kpis.mesh_online,
+    ));
+
+    // Agents
+    if !data.agents.is_empty() {
+        ctx.push_str("Agents:\n");
+        for a in &data.agents {
+            let task = a.active_task.as_deref().unwrap_or("-");
+            ctx.push_str(&format!("  {} ({}) on {} | {}\n", a.name, a.role, a.host, task));
+        }
+    }
+
+    // Mesh
+    if !data.mesh_nodes.is_empty() {
+        ctx.push_str("Mesh:\n");
+        for n in &data.mesh_nodes {
+            let status = if n.online { "online" } else { "offline" };
+            ctx.push_str(&format!(
+                "  {} | {} | {} | cpu:{:.0}%\n",
+                n.name, n.role, status, n.cpu_percent
+            ));
+        }
+    }
+
+    // Pipeline (active tasks)
+    if !data.pipeline.is_empty() {
+        ctx.push_str("Active tasks:\n");
+        for t in data.pipeline.iter().take(10) {
+            ctx.push_str(&format!(
+                "  {} {} | {} | agent:{}\n",
+                t.task_id, t.title, t.status, t.agent
+            ));
+        }
+    }
+
+    ctx.push_str("[End snapshot]\n\n");
+    ctx.push_str("Answer from this data WITHOUT using tools when possible. ");
+    ctx.push_str("Only use tools for actions (create plan, stop agent, etc.).\n\n");
+    ctx.push_str(question);
+    ctx
+}
+
 /// Build a `ChatMessage` for the user turn and append it to `data`.
 pub fn push_user_message(data: &mut TuiData, content: &str) {
     data.chat_messages.push(ChatMessage {
