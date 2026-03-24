@@ -1,0 +1,198 @@
+// Project hierarchy tree view — replaces flat kanban with master/child structure.
+
+use ratatui::{
+    style::Style,
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Paragraph, Wrap},
+};
+
+use crate::tui::data::{ProjectTreeData, ProjectTreeNode, TuiData};
+use crate::tui::widgets::{selected_style, ACCENT, FAIL, MUTED, OK, TEXT_PRIMARY, TEXT_SECONDARY, WARN};
+
+fn status_color(status: &str) -> ratatui::style::Color {
+    match status {
+        "done" => OK,
+        "doing" => WARN,
+        "blocked" => FAIL,
+        "cancelled" => MUTED,
+        _ => TEXT_SECONDARY, // draft, todo
+    }
+}
+
+fn status_icon(status: &str) -> &'static str {
+    match status {
+        "done" => "\u{2713}",     // ✓
+        "doing" => "\u{25c9}",    // ◉
+        "blocked" => "\u{2715}",  // ✕
+        "cancelled" => "\u{2012}",// ‒
+        _ => "\u{25cb}",          // ○
+    }
+}
+
+fn progress_bar(done: i64, total: i64, width: usize) -> Vec<Span<'static>> {
+    if total == 0 {
+        return vec![Span::styled(
+            format!("[{}]", "\u{2591}".repeat(width)),
+            Style::default().fg(MUTED),
+        )];
+    }
+    let pct = ((done * 100) / total) as u16;
+    let filled = ((pct as usize) * width / 100).min(width);
+    let empty = width - filled;
+    let color = if pct >= 80 { OK } else if pct >= 50 { WARN } else { FAIL };
+    vec![
+        Span::raw("["),
+        Span::styled("\u{2588}".repeat(filled), Style::default().fg(color)),
+        Span::styled("\u{2591}".repeat(empty), Style::default().fg(MUTED)),
+        Span::raw("]"),
+    ]
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= max {
+        s.to_string()
+    } else {
+        chars[..max.saturating_sub(1)].iter().collect::<String>() + "\u{2026}"
+    }
+}
+
+/// Compute aggregate progress from children (fallback to own if no children).
+fn aggregate(node: &ProjectTreeNode) -> (i64, i64) {
+    if node.children.is_empty() {
+        return (node.tasks_done, node.tasks_total);
+    }
+    node.children
+        .iter()
+        .fold((0, 0), |(d, t), c| (d + c.tasks_done, t + c.tasks_total))
+}
+
+fn depends_label(dep: &Option<String>) -> String {
+    match dep {
+        Some(d) => format!(" \u{2190} {d}"),
+        None => String::new(),
+    }
+}
+
+fn mode_badge(mode: &Option<String>) -> String {
+    match mode.as_deref() {
+        Some(m) if !m.is_empty() => format!(" [{m}]"),
+        _ => String::new(),
+    }
+}
+
+/// Flatten tree into renderable lines. Returns (lines, total_selectable_items).
+pub fn build_tree_lines(
+    tree: &ProjectTreeData,
+    selected: usize,
+    expanded: &[i64],
+) -> (Vec<Line<'static>>, usize) {
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut idx: usize = 0;
+
+    // Header
+    let pct = if tree.total_tasks > 0 {
+        (tree.done_tasks * 100 / tree.total_tasks) as u16
+    } else {
+        0
+    };
+    let header = format!(
+        "  {} \u{2014} {}/{} tasks ({pct}%)",
+        tree.project_name, tree.done_tasks, tree.total_tasks,
+    );
+    lines.push(Line::from(Span::styled(header, Style::default().fg(ACCENT).bold())));
+    lines.push("".into());
+
+    let (masters, orphans): (Vec<_>, Vec<_>) =
+        tree.plans.iter().partition(|p| p.is_master);
+
+    for master in &masters {
+        let is_expanded = expanded.contains(&master.id);
+        let (agg_done, agg_total) = aggregate(master);
+        let toggle = if is_expanded { "\u{25bc}" } else { "\u{25b6}" };
+        let is_sel = idx == selected;
+        idx += 1;
+
+        let name = truncate(&master.name, 50);
+        let badge = mode_badge(&master.execution_mode);
+        let frac = format!("{agg_done}/{agg_total}");
+
+        let mut spans = vec![
+            Span::styled(format!(" {toggle} "), Style::default().fg(ACCENT)),
+            Span::styled(
+                format!("{name}{badge}"),
+                if is_sel { selected_style() } else { Style::default().fg(TEXT_PRIMARY).bold() },
+            ),
+            Span::raw("  "),
+        ];
+        spans.extend(progress_bar(agg_done, agg_total, 16));
+        spans.push(Span::styled(format!(" {frac}"), Style::default().fg(TEXT_SECONDARY)));
+        lines.push(Line::from(spans));
+
+        if is_expanded {
+            for child in &master.children {
+                let is_sel = idx == selected;
+                idx += 1;
+                render_child(&mut lines, child, is_sel);
+            }
+        }
+        lines.push("".into());
+    }
+
+    if !orphans.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " \u{2500}\u{2500} Other Plans \u{2500}\u{2500}",
+            Style::default().fg(MUTED),
+        )));
+        for orphan in &orphans {
+            let is_sel = idx == selected;
+            idx += 1;
+            render_child(&mut lines, orphan, is_sel);
+        }
+        lines.push("".into());
+    }
+
+    if tree.plans.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " No project data available",
+            Style::default().fg(MUTED),
+        )));
+    }
+
+    (lines, idx)
+}
+
+fn render_child(lines: &mut Vec<Line<'static>>, node: &ProjectTreeNode, is_sel: bool) {
+    let icon = status_icon(&node.status);
+    let color = status_color(&node.status);
+    let name = truncate(&node.name, 44);
+    let dep = depends_label(&node.depends_on);
+    let frac = format!("{}/{}", node.tasks_done, node.tasks_total);
+
+    let name_style = if is_sel {
+        selected_style()
+    } else {
+        Style::default().fg(TEXT_PRIMARY)
+    };
+
+    let mut spans = vec![
+        Span::styled(format!("   {icon} "), Style::default().fg(color)),
+        Span::styled(format!("#{:<4} ", node.id), Style::default().fg(ACCENT)),
+        Span::styled(name, name_style),
+    ];
+    if !dep.is_empty() {
+        spans.push(Span::styled(dep, Style::default().fg(MUTED)));
+    }
+    spans.push(Span::raw("  "));
+    spans.extend(progress_bar(node.tasks_done, node.tasks_total, 12));
+    spans.push(Span::styled(format!(" {frac}"), Style::default().fg(TEXT_SECONDARY)));
+    lines.push(Line::from(spans));
+}
+
+/// Top-level widget: renders the project tree into a Paragraph.
+pub fn project_tree_view(data: &TuiData, selected: usize, expanded: &[i64]) -> Paragraph<'static> {
+    let (lines, _count) = build_tree_lines(&data.project_tree, selected, expanded);
+    Paragraph::new(Text::from(lines))
+        .block(Block::default().title(" Project Tree ").borders(Borders::ALL))
+        .wrap(Wrap { trim: false })
+}

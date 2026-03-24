@@ -16,12 +16,13 @@ pub mod deliverables;
 pub mod events;
 pub mod help;
 pub mod popup;
+pub mod project_tree;
 pub mod workspace;
 
 pub use popup::{render_rich_popup, PopupContent};
 
 const ALL_VIEWS: &[(MainView, &str)] = &[
-    (MainView::PlanKanban, "Kanban"),
+    (MainView::PlanKanban, "Tree"),
     (MainView::Chat, "◆ Chat"),
     (MainView::TaskPipeline, "Pipeline"),
     (MainView::MeshStatus, "Mesh"),
@@ -53,6 +54,7 @@ pub fn render_view(
     popup_content: Option<&PopupContent>,
     show_all_plans: bool,
     chat_scroll: u16,
+    expanded_masters: &[i64],
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -66,7 +68,7 @@ pub fn render_view(
 
     render_tab_bar(frame, chunks[0], view);
     frame.render_widget(widgets::kpi_strip(data), chunks[1]);
-    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans, chat_scroll);
+    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans, chat_scroll, expanded_masters);
     render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs);
 
     if show_help {
@@ -124,10 +126,17 @@ fn render_content(
     chat_sending: bool,
     show_all_plans: bool,
     chat_scroll: u16,
+    expanded_masters: &[i64],
 ) {
     match view {
         MainView::PlanKanban => {
-            frame.render_widget(widgets::plan_kanban(data, selected, show_all_plans), area);
+            if data.project_tree.plans.is_empty() {
+                frame.render_widget(widgets::plan_kanban(data, selected, show_all_plans), area);
+            } else {
+                frame.render_widget(
+                    project_tree::project_tree_view(data, selected, expanded_masters), area,
+                );
+            }
         }
         MainView::TaskPipeline => {
             frame.render_widget(widgets::task_pipeline(data, selected), area);
@@ -209,7 +218,7 @@ pub fn render_command_footer(frame: &mut Frame<'_>, area: Rect, command_input: O
     let text = if let Some(input) = command_input {
         format!("> {}", input)
     } else {
-        " [1]Kanban [2]Chat [3]Pipeline [4]Mesh [5]Agents [6]Brain [7]Cost [8]Events [9]WS [0]Deliv  /  Tab  q".to_string()
+        " [1]Tree [2]Chat [3]Pipeline [4]Mesh [5]Agents [6]Brain [7]Cost [8]Events [9]WS [0]Deliv  /  Tab  q".to_string()
     };
     let paragraph = Paragraph::new(text).block(
         Block::default()

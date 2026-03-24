@@ -22,6 +22,8 @@ pub struct InteractiveState {
     pub action_pending: Option<(String, String)>,
     pub show_all_plans: bool,
     pub pending_drill_down: Option<DrillDownRequest>,
+    /// IDs of expanded master plans in the project tree view.
+    pub expanded_masters: Vec<i64>,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.

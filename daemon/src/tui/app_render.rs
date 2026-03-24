@@ -23,12 +23,13 @@ impl TuiApp {
         let chat_scroll = self.chat.scroll_offset;
         let popup_content = self.istate.popup_open.then(|| self.istate.popup_content.clone()).flatten();
         let show_all_plans = self.istate.show_all_plans;
+        let expanded_masters = self.istate.expanded_masters.clone();
         self.terminal.draw(|frame| {
             views::render_view(
                 frame, frame.area(), view, data, selected, &api_url,
                 show_help, auto_refresh, refresh_interval_secs,
                 &chat_input, chat_sending, popup_content.as_ref(), show_all_plans,
-                chat_scroll,
+                chat_scroll, &expanded_masters,
             );
             // Rich popup overlay (if open)
             if let Some(ref pc) = popup_content {

@@ -210,7 +210,13 @@ impl TuiApp {
 
     pub fn list_len(&self) -> usize {
         match self.active_view {
-            MainView::PlanKanban => self.data.plans.len(),
+            MainView::PlanKanban => if self.data.project_tree.plans.is_empty() {
+                self.data.plans.len()
+            } else {
+                crate::tui::views::project_tree::build_tree_lines(
+                    &self.data.project_tree, self.selected_index, &self.istate.expanded_masters,
+                ).1
+            },
             MainView::TaskPipeline => self.data.pipeline.len(),
             MainView::MeshStatus => self.data.mesh_nodes.len(),
             MainView::AgentOrgChart => self.data.agents.len(),

@@ -18,8 +18,10 @@ impl TuiApp {
     pub fn handle_enter(&mut self) {
         match self.active_view {
             MainView::PlanKanban => {
-                // Navigate to TaskPipeline filtered by selected plan.
-                if let Some(plan) = self.data.plans.get(self.selected_index) {
+                if !self.data.project_tree.plans.is_empty() {
+                    // Project tree mode: toggle expand or drill into child.
+                    self.handle_tree_enter();
+                } else if let Some(plan) = self.data.plans.get(self.selected_index) {
                     self.istate.selected_plan_id = Some(plan.id);
                     self.active_view = MainView::TaskPipeline;
                     self.selected_index = 0;

@@ -7,6 +7,7 @@ pub mod data;
 pub mod drill_down;
 pub mod input;
 pub mod refresh;
+mod tree_nav;
 pub mod views;
 pub mod widgets;
 pub mod ws_client;

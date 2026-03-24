@@ -5,12 +5,14 @@ pub mod cost;
 pub mod deliverables;
 pub mod detail;
 pub mod events;
+pub mod project_tree;
 pub mod workspace;
 pub use actions::{mesh_heartbeat, mesh_provision, stop_agent};
 pub use brain::{fetch_brain, parse_brain_response};
 pub use cost::{fetch_cost, fetch_metrics_summary};
 pub use deliverables::{fetch_deliverables, parse_deliverables_response};
 pub use events::{fetch_events, parse_events_response};
+pub use project_tree::{fetch_project_tree, parse_tree_response};
 pub use workspace::{fetch_workspaces, parse_workspaces_response};
 use reqwest::Client;
 use serde::Deserialize;
@@ -220,18 +222,10 @@ pub async fn fetch_agents(client: &Client, api_url: &str) -> Vec<AgentOrgNode> {
     }
 }
 
-#[allow(dead_code)]
-async fn fetch_json<T: serde::de::DeserializeOwned>(client: &Client, url: &str) -> Vec<T> {
-    match client.get(url).send().await {
-        Ok(resp) => resp.json::<Vec<T>>().await.unwrap_or_default(),
-        Err(_) => Vec::new(),
-    }
-}
-
 /// Fetch all TUI data in parallel, return updated TuiData.
 pub async fn refresh_all(client: &Client, url: &str, data: &mut super::data::TuiData) {
     let (kpis, plans, tasks, mesh, agents, (brain_nodes, brain_kpi),
-        cost_resp, summary, events, workspaces, deliverables,
+        cost_resp, summary, events, workspaces, deliverables, project_tree,
     ) = tokio::join!(
         fetch_overview(client, url), fetch_plans(client, url),
         fetch_all_tasks(client, url), fetch_mesh(client, url),
@@ -239,6 +233,7 @@ pub async fn refresh_all(client: &Client, url: &str, data: &mut super::data::Tui
         cost::fetch_cost(client, url), cost::fetch_metrics_summary(client, url),
         events::fetch_events(client, url), workspace::fetch_workspaces(client, url),
         deliverables::fetch_deliverables(client, url),
+        project_tree::fetch_project_tree(client, url),
     );
     let has_brain_kpi = brain_kpi.daily_tokens > 0 || brain_kpi.daily_cost > 0.0;
     data.kpis = if has_brain_kpi { super::data::KpiData {
@@ -246,6 +241,10 @@ pub async fn refresh_all(client: &Client, url: &str, data: &mut super::data::Tui
     }} else { kpis };
     data.plans = plans; data.pipeline = tasks; data.mesh_nodes = mesh;
     data.agents = agents; data.brain_nodes = brain_nodes;
-    data.events = events; data.workspaces = workspaces; data.deliverables = deliverables;
-    data.cost = super::data::CostData { by_model: cost_resp.by_model, by_project: cost_resp.by_project, by_date: cost_resp.by_date, summary };
+    data.events = events; data.workspaces = workspaces;
+    data.deliverables = deliverables; data.project_tree = project_tree;
+    data.cost = super::data::CostData {
+        by_model: cost_resp.by_model, by_project: cost_resp.by_project,
+        by_date: cost_resp.by_date, summary,
+    };
 }

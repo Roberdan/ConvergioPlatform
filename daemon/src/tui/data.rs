@@ -131,6 +131,29 @@ pub struct ChatMessage {
     pub timestamp: String,
 }
 
+// --- Project Tree data ---
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProjectTreeNode {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+    pub tasks_done: i64,
+    pub tasks_total: i64,
+    pub is_master: bool,
+    pub depends_on: Option<String>,
+    pub execution_mode: Option<String>,
+    pub children: Vec<ProjectTreeNode>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProjectTreeData {
+    pub project_name: String,
+    pub total_tasks: i64,
+    pub done_tasks: i64,
+    pub plans: Vec<ProjectTreeNode>,
+}
+
 // --- Aggregate view model ---
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -147,6 +170,7 @@ pub struct TuiData {
     pub deliverables: Vec<DeliverableInfo>,
     pub chat_messages: Vec<ChatMessage>,
     pub chat_session_id: Option<String>,
+    pub project_tree: ProjectTreeData,
 }
 
 #[cfg(test)]
@@ -166,6 +190,7 @@ mod tests {
         assert!(data.deliverables.is_empty());
         assert!(data.chat_messages.is_empty());
         assert!(data.chat_session_id.is_none());
+        assert!(data.project_tree.plans.is_empty());
     }
 
     #[test]
