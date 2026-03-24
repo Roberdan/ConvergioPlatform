@@ -13,6 +13,9 @@ extension JSONDecoder {
             if let date = makeFormatter(options: [.withInternetDateTime]).date(from: value) {
                 return date
             }
+            if let date = sqliteDateFormatter.date(from: value) {
+                return date
+            }
             throw DecodingError.dataCorruptedError(
                 in: container,
                 debugDescription: "Unsupported timestamp: \(value)"
@@ -36,3 +39,11 @@ private func makeFormatter(options: ISO8601DateFormatter.Options) -> ISO8601Date
     formatter.formatOptions = options
     return formatter
 }
+
+private let sqliteDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = TimeZone(identifier: "UTC")
+    return f
+}()
