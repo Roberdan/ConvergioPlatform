@@ -20,8 +20,8 @@ pub fn handle_transpile(
         }
     }
 
-    let yaml_content = std::fs::read_to_string(&yaml_path).map_err(|e| CliError::Io(e))?;
-    let md_content = std::fs::read_to_string(&md_path).map_err(|e| CliError::Io(e))?;
+    let yaml_content = std::fs::read_to_string(&yaml_path).map_err(CliError::Io)?;
+    let md_content = std::fs::read_to_string(&md_path).map_err(CliError::Io)?;
 
     let output = match provider {
         "claude-code" => transpile_claude(&yaml_content, &md_content, output_dir),

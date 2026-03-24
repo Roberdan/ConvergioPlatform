@@ -1,6 +1,4 @@
-// Modern card-based kanban for the Plan Kanban view.
-// Redesigned with rounded borders, color-gradient progress bars, and compact/expanded modes.
-
+// Modern card-based kanban with rounded borders and color-gradient progress bars.
 use std::collections::BTreeMap;
 
 use ratatui::{
@@ -89,13 +87,13 @@ fn expanded_card(
     let pct = if plan.tasks_total > 0 {
         ((plan.tasks_done * 100) / plan.tasks_total) as u16
     } else { 0 };
-    let id_str = format!("#{}", plan.id);
+    let id_str = format!("{:>6}", format!("#{}", plan.id));
     let name = truncate(&plan.name, 48);
-    // Row 1: "  │  #708   Plan Name                              │"
-    let content_used = 2 + id_str.len() + 3 + name.chars().count();
+    // Row 1: "  │    #708 Plan Name                              │"
+    let content_used = 2 + 6 + 1 + name.chars().count();
     let pad1 = CARD_W.saturating_sub(content_used);
     if is_selected {
-        let inner = format!("  {}   {}{}", id_str, name, " ".repeat(pad1));
+        let inner = format!("  {} {}{}", id_str, name, " ".repeat(pad1));
         lines.push(Line::from(vec![
             Span::styled("  \u{2502}", Style::default().fg(MUTED)),
             Span::styled(inner, selected_style()),
@@ -105,7 +103,7 @@ fn expanded_card(
         lines.push(Line::from(vec![
             Span::styled("  \u{2502}  ", Style::default().fg(MUTED)),
             Span::styled(id_str, Style::default().fg(ACCENT).bold()),
-            Span::raw("   "),
+            Span::raw(" "),
             Span::styled(name, Style::default().fg(TEXT_PRIMARY)),
             Span::raw(" ".repeat(pad1)),
             Span::styled("\u{2502}", Style::default().fg(MUTED)),
@@ -156,17 +154,17 @@ fn compact_card(
     let pct = if plan.tasks_total > 0 {
         ((plan.tasks_done * 100) / plan.tasks_total) as u16
     } else { 0 };
-    let id_str = format!("#{}", plan.id);
+    let id_str = format!("{:>6}", format!("#{}", plan.id));
     let name = truncate(&plan.name, 40);
     let frac = format!("{}/{}", plan.tasks_done, plan.tasks_total);
     let icon = progress_icon(pct);
-    // "  │  #705   name                        0/8   ○  │"
-    let left_len = 2 + id_str.len() + 3 + name.chars().count();
+    // "  │    #705 name                        0/8   ○  │"
+    let left_len = 2 + 6 + 1 + name.chars().count();
     let right_len = frac.len() + 3 + 1 + 2;
     let pad = CARD_W.saturating_sub(left_len + right_len);
     if is_selected {
         let inner = format!(
-            "  {}   {}{}{}   {}  ",
+            "  {} {}{}{}   {}  ",
             id_str, name, " ".repeat(pad), frac, icon,
         );
         lines.push(Line::from(vec![
@@ -178,7 +176,7 @@ fn compact_card(
         lines.push(Line::from(vec![
             Span::styled("  \u{2502}  ", Style::default().fg(MUTED)),
             Span::styled(id_str, Style::default().fg(ACCENT).bold()),
-            Span::raw("   "),
+            Span::raw(" "),
             Span::styled(name, Style::default().fg(TEXT_PRIMARY)),
             Span::raw(" ".repeat(pad)),
             Span::raw(format!("{}   ", frac)),
@@ -189,7 +187,7 @@ fn compact_card(
     }
 }
 
-pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
+pub fn plan_kanban(data: &TuiData, selected: usize, show_all: bool) -> Paragraph<'static> {
     let mut cols: BTreeMap<&str, Vec<(usize, &crate::tui::data::PlanCard)>> = BTreeMap::new();
     for key in ["BLOCKED", "DOING", "DONE", "TODO"] {
         cols.insert(key, Vec::new());
@@ -202,12 +200,18 @@ pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
         cols.entry(key).or_default().push((i, plan));
     }
 
-    let mut lines: Vec<Line<'static>> = vec!["".into()];
-
+    let hint = if show_all { "[a] Active only" } else { "[a] Show all" };
+    let mut lines: Vec<Line<'static>> = vec![
+        Line::from(Span::styled(format!("  {hint}"), Style::default().fg(MUTED))), "".into(),
+    ];
     for (key, icon) in SECTIONS {
-        let items = cols.get(key).map(|v| v.as_slice()).unwrap_or(&[]);
+        let all_items = cols.get(key).map(|v| v.as_slice()).unwrap_or(&[]);
+        // Limit DONE/TODO to 10 unless show_all
+        let max = if !show_all && (*key == "DONE" || *key == "TODO") { 10 } else { usize::MAX };
+        let items = &all_items[..all_items.len().min(max)];
+        let hidden = all_items.len().saturating_sub(max);
         let col_color = section_color(key);
-        lines.push(section_header(icon, key, items.len()));
+        lines.push(section_header(icon, key, all_items.len()));
 
         if items.is_empty() {
             lines.push("".into());
@@ -216,15 +220,13 @@ pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
 
         let is_expanded = *key == "DOING" || *key == "BLOCKED";
         if is_expanded {
-            // Each card gets its own rounded border box.
-            for (_li, (gi, plan)) in items.iter().enumerate() {
+            for (gi, plan) in items.iter() {
                 let is_sel = *gi == selected;
                 lines.push(border_top());
                 expanded_card(plan, is_sel, &mut lines);
                 lines.push(border_bottom());
             }
         } else {
-            // All compact cards share one border box.
             lines.push(border_top());
             for (li, (gi, plan)) in items.iter().enumerate() {
                 let is_sel = *gi == selected;
@@ -235,9 +237,12 @@ pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
             }
             lines.push(border_bottom());
         }
+        if hidden > 0 {
+            lines.push(Line::from(Span::styled(
+                format!("  ... +{hidden} more [a]"), Style::default().fg(MUTED))));
+        }
         lines.push("".into());
     }
-
     Paragraph::new(Text::from(lines))
         .block(Block::default().title(" Plans ").borders(Borders::ALL))
         .wrap(Wrap { trim: false })

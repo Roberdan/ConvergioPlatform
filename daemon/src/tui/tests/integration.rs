@@ -1,5 +1,6 @@
-// Integration-style tests: help overlay, detail popup, command footer, progress bar.
-use super::super::views::{render_command_footer, render_detail_popup};
+// Integration-style tests: help overlay, rich popup, command footer, progress bar.
+use super::super::views::{render_command_footer, render_rich_popup, PopupContent};
+use super::super::views::popup::PopupSection;
 use super::super::MainView;
 use super::{render_to_text_full, sample_data};
 
@@ -54,16 +55,24 @@ fn show_help_field_defaults_false() {
 }
 
 #[test]
-fn detail_popup_renders_when_detail_text_set() {
+fn rich_popup_renders_title_and_section() {
     let backend = ratatui::backend::TestBackend::new(120, 40);
     let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
-    let detail = "task_id: T1-01\ntitle: My Task\nstatus: done";
+    let content = PopupContent {
+        title: "Node Detail".to_string(),
+        sections: vec![PopupSection {
+            label: "Status".to_string(),
+            lines: vec!["T1-01".to_string(), "My Task".to_string(), "done".to_string()],
+        }],
+        actions: vec![('p', "Provision".to_string())],
+    };
     terminal
-        .draw(|frame| render_detail_popup(frame, frame.area(), detail))
+        .draw(|frame| render_rich_popup(frame, frame.area(), &content))
         .expect("draw");
     let all = buf_to_string(&terminal, 120);
     assert!(all.contains("T1-01"), "popup must show task_id");
     assert!(all.contains("My Task"), "popup must show title");
+    assert!(all.contains("Node Detail") || all.contains("Node"), "popup must show content title");
 }
 
 #[test]

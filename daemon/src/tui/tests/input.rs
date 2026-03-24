@@ -1,4 +1,4 @@
-// Command mode and key handling tests.
+// Command mode, basic key handling, and interval tests.
 use super::super::app::TuiApp;
 use super::super::input::{handle_key, parse_and_apply_command, InteractiveState};
 use super::super::MainView;
@@ -62,9 +62,15 @@ fn handle_command_esc_exits_command_mode() {
 }
 
 #[test]
-fn handle_esc_closes_detail_popup() {
+fn handle_esc_closes_rich_popup() {
+    use super::super::views::PopupContent;
     let mut state = InteractiveState {
-        detail_text: Some("task detail".into()),
+        popup_open: true,
+        popup_content: Some(PopupContent {
+            title: "Detail".to_string(),
+            sections: vec![],
+            actions: vec![],
+        }),
         ..Default::default()
     };
     handle_key(
@@ -72,7 +78,8 @@ fn handle_esc_closes_detail_popup() {
         crossterm::event::KeyModifiers::NONE,
         &mut state,
     );
-    assert!(state.detail_text.is_none(), "Esc must close detail popup");
+    assert!(!state.popup_open, "Esc must close rich popup");
+    assert!(state.popup_content.is_none(), "Esc must clear popup content");
 }
 
 #[test]
@@ -137,7 +144,6 @@ fn parse_command_quit_sets_quit_flag() {
 
 #[test]
 fn auto_refresh_defaults_to_true() {
-    // TuiApp::parse_auto_refresh_defaults() is a pure fn we can test without I/O
     assert!(TuiApp::default_auto_refresh(), "auto_refresh must default to true");
 }
 
@@ -149,8 +155,6 @@ fn default_refresh_interval_is_5s() {
 #[test]
 fn shift_r_toggles_auto_refresh() {
     let mut state = InteractiveState::default();
-    // InteractiveState tracks auto_refresh toggle request
-    // shift+R sends KeyCode::Char('R') with SHIFT modifier
     handle_key(
         crossterm::event::KeyCode::Char('R'),
         crossterm::event::KeyModifiers::SHIFT,
@@ -188,10 +192,10 @@ fn interval_steps_are_correct() {
     assert_eq!(TuiApp::next_interval(5), 10);
     assert_eq!(TuiApp::next_interval(10), 30);
     assert_eq!(TuiApp::next_interval(30), 60);
-    assert_eq!(TuiApp::next_interval(60), 60); // at max, stays at 60
+    assert_eq!(TuiApp::next_interval(60), 60);
     assert_eq!(TuiApp::prev_interval(60), 30);
     assert_eq!(TuiApp::prev_interval(30), 10);
     assert_eq!(TuiApp::prev_interval(10), 5);
     assert_eq!(TuiApp::prev_interval(5), 3);
-    assert_eq!(TuiApp::prev_interval(3), 3); // at min, stays at 3
+    assert_eq!(TuiApp::prev_interval(3), 3);
 }

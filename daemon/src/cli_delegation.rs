@@ -63,7 +63,7 @@ pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliErr
                 if doing.is_empty() {
                     println!("No active plans.");
                 } else {
-                    println!("{:<6} {:<45} {:<12} {}", "ID", "NAME", "HOST", "PROGRESS");
+                    println!("{:<6} {:<45} {:<12} PROGRESS", "ID", "NAME", "HOST");
                     println!("{}", "-".repeat(80));
                     for p in &doing {
                         let id = p["id"].as_i64().unwrap_or(0);

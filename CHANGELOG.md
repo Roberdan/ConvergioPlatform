@@ -1,5 +1,19 @@
 # Changelog
 
+## [17.1.0] — 24 Marzo 2026
+
+### Added
+- TUI: Enter drill-down for all views (plan detail, task detail, node info, agent info)
+- TUI: Mesh actions — [p]rovision and [h]eartbeat from node popup
+- TUI: Agent stop — [s]top from agent popup via IPC unregister
+- TUI: Chat delegation via daemon mesh/exec (no API keys, uses logged-in Claude session)
+- TUI: Rich popup system with sections, action keys, rounded borders
+- TUI: Show all plans toggle ([a] key in kanban)
+
+### Fixed
+- TUI: Table column alignment in Pipeline, Mesh, Events, Deliverables views
+- TUI: Mesh API parsing for nested {peers:[...]} response format
+
 ## [17.0.0] — 24 Marzo 2026
 
 ### Added

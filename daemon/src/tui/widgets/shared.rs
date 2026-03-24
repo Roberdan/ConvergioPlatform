@@ -11,7 +11,7 @@ use super::{selected_style, ACCENT, FAIL, MUTED, OK, TEXT_PRIMARY, TEXT_SECONDAR
 pub fn task_pipeline(data: &TuiData, selected: usize) -> Paragraph<'static> {
     let mut lines: Vec<Line<'static>> = vec![
         "TASK PIPELINE".bold().fg(ACCENT).into(),
-        "ID       Status        Agent       Title".fg(WARN).into(),
+        "ID       Status        Agent        Title".fg(WARN).into(),
         "".into(),
     ];
     for (i, task) in data.pipeline.iter().enumerate() {
@@ -26,7 +26,7 @@ pub fn task_pipeline(data: &TuiData, selected: usize) -> Paragraph<'static> {
         let style = if i == selected { base.reversed() } else { base };
         lines.push(
             Line::from(format!(
-                "{:<8} {:<13} {:<10} {}",
+                "{:<8} {:<13} {:<12} {}",
                 task.task_id, status, task.agent, task.title
             ))
             .style(style),
@@ -56,8 +56,7 @@ pub fn mesh_status(data: &TuiData, selected: usize) -> Paragraph<'static> {
         "".into(),
         Line::from(vec![
             Span::styled(
-                format!("{:<16} {:<4} {:<12} {:<6} {}",
-                    "Node", "St", "Role", "CPU", "Load"),
+                "Node             \u{25cf}  Role         CPU     Load".to_string(),
                 Style::default().fg(TEXT_SECONDARY),
             ),
         ]),
@@ -76,18 +75,17 @@ pub fn mesh_status(data: &TuiData, selected: usize) -> Paragraph<'static> {
         if is_sel {
             lines.push(
                 Line::from(format!(
-                    " {dot} {:<14} {:<12} {:>3}%  {spark_str}",
+                    "{:<16} {dot} {:<12} {:>4}%  {spark_str}",
                     node.name, node.role, cpu_int,
                 ))
                 .style(selected_style()),
             );
         } else {
             lines.push(Line::from(vec![
-                Span::raw(" "),
+                Span::styled(format!("{:<16} ", node.name), Style::default().fg(TEXT_PRIMARY)),
                 Span::styled(format!("{dot} "), Style::default().fg(color)),
-                Span::styled(format!("{:<14} ", node.name), Style::default().fg(TEXT_PRIMARY)),
                 Span::styled(format!("{:<12} ", node.role), Style::default().fg(TEXT_SECONDARY)),
-                Span::styled(format!("{:>3}%", cpu_int), Style::default().fg(cpu_color)),
+                Span::styled(format!("{:>4}%", cpu_int), Style::default().fg(cpu_color)),
                 Span::raw("  "),
                 Span::styled(spark_str, base.fg(cpu_color)),
             ]));
@@ -101,68 +99,6 @@ pub fn mesh_status(data: &TuiData, selected: usize) -> Paragraph<'static> {
     }
     Paragraph::new(Text::from(lines))
         .block(Block::default().title(" Mesh ").borders(Borders::ALL))
-        .wrap(Wrap { trim: true })
-}
-
-/// Agent org chart with tree connectors and status dots.
-pub fn agent_org_chart(data: &TuiData, selected: usize) -> Paragraph<'static> {
-    let active = data.agents.iter().filter(|a| a.active_task.is_some()).count();
-    let total = data.agents.len();
-    let mut lines: Vec<Line<'static>> = vec![
-        Line::from(vec![
-            Span::styled("AGENT ORG CHART", Style::default().fg(ACCENT).bold()),
-            Span::raw("  "),
-            Span::styled(
-                format!("{active}/{total} active"),
-                Style::default().fg(if active > 0 { OK } else { MUTED }),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(" \u{25c9} ", Style::default().fg(ACCENT)),
-            Span::styled("ControlRoom", Style::default().fg(WARN)),
-        ]),
-    ];
-    for (i, agent) in data.agents.iter().enumerate() {
-        let is_last = i + 1 == data.agents.len();
-        let branch = if is_last { "\u{2514}\u{2500}\u{2500}" } else { "\u{251c}\u{2500}\u{2500}" };
-        let task = agent.active_task.clone().unwrap_or_else(|| "idle".to_string());
-        let is_active = task != "idle";
-        let (dot, dot_color) = if is_active {
-            ("\u{25cf}", OK) // ●
-        } else {
-            ("\u{25cb}", MUTED) // ○
-        };
-        let is_sel = i == selected;
-        if is_sel {
-            lines.push(
-                Line::from(format!(
-                    " {branch} {dot} {} ({}) @{} [{task}]",
-                    agent.name, agent.role, agent.host,
-                ))
-                .style(selected_style()),
-            );
-        } else {
-            lines.push(Line::from(vec![
-                Span::styled(format!(" {branch} "), Style::default().fg(MUTED)),
-                Span::styled(format!("{dot} "), Style::default().fg(dot_color)),
-                Span::styled(format!("{} ", agent.name), Style::default().fg(TEXT_PRIMARY).bold()),
-                Span::styled(format!("({}) ", agent.role), Style::default().fg(TEXT_SECONDARY)),
-                Span::styled(format!("@{} ", agent.host), Style::default().fg(MUTED)),
-                Span::styled(
-                    format!("[{task}]"),
-                    Style::default().fg(if is_active { OK } else { MUTED }),
-                ),
-            ]));
-        }
-    }
-    if data.agents.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled(" \u{2514}\u{2500}\u{2500} ", Style::default().fg(MUTED)),
-            Span::styled("\u{25cb} no active agents", Style::default().fg(MUTED)),
-        ]));
-    }
-    Paragraph::new(Text::from(lines))
-        .block(Block::default().title(" Agents ").borders(Borders::ALL))
         .wrap(Wrap { trim: true })
 }
 
@@ -190,4 +126,125 @@ pub fn progress_bar_line(pct: u16, width: u16) -> Line<'static> {
         Span::styled("\u{2591}".repeat(empty), Style::default().fg(MUTED)),
         Span::raw("]"),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tui::{
+        data::{MeshNode, TaskPipelineItem},
+        TuiData,
+    };
+
+    fn sample_pipeline() -> Vec<TaskPipelineItem> {
+        vec![TaskPipelineItem {
+            task_id: "T1-01".to_string(),
+            title: "Fix column alignment".to_string(),
+            status: "in_progress".to_string(),
+            agent: "executor".to_string(),
+        }]
+    }
+
+    fn sample_mesh() -> Vec<MeshNode> {
+        vec![MeshNode {
+            name: "macProM1".to_string(),
+            online: true,
+            role: "coordinator".to_string(),
+            cpu_percent: 42.0,
+        }]
+    }
+
+    // --- Pipeline column-width tests ---
+
+    #[test]
+    fn pipeline_header_uses_12_char_agent_column() {
+        // Header must use {:<12} for agent, not {:<10}
+        let data = TuiData {
+            pipeline: sample_pipeline(),
+            ..TuiData::default()
+        };
+        let p = task_pipeline(&data, 0);
+        let debug = format!("{p:?}");
+        // "ID       Status        Agent        Title" — 12 spaces after "Agent" padded
+        assert!(
+            debug.contains("Agent        "),
+            "Pipeline header must pad Agent to 12 chars: {debug}"
+        );
+    }
+
+    #[test]
+    fn pipeline_row_agent_padded_to_12() {
+        // Data row must use {:<12} for agent
+        let data = TuiData {
+            pipeline: sample_pipeline(),
+            ..TuiData::default()
+        };
+        let p = task_pipeline(&data, 0);
+        let debug = format!("{p:?}");
+        // "executor    " — 8 chars + 4 spaces = 12
+        assert!(
+            debug.contains("executor    "),
+            "Pipeline row must pad agent to 12 chars: {debug}"
+        );
+    }
+
+    // --- Mesh column-width tests ---
+
+    #[test]
+    fn mesh_header_uses_correct_labels() {
+        let data = TuiData {
+            mesh_nodes: sample_mesh(),
+            ..TuiData::default()
+        };
+        let p = mesh_status(&data, 0);
+        let debug = format!("{p:?}");
+        assert!(
+            debug.contains("Node"),
+            "Mesh header must contain Node: {debug}"
+        );
+        assert!(
+            debug.contains("Role"),
+            "Mesh header must contain Role: {debug}"
+        );
+        assert!(
+            debug.contains("CPU"),
+            "Mesh header must contain CPU: {debug}"
+        );
+        assert!(
+            debug.contains("Load"),
+            "Mesh header must contain Load: {debug}"
+        );
+    }
+
+    #[test]
+    fn mesh_row_name_padded_to_16() {
+        // "macProM1" (8 chars) should be padded to 16
+        let data = TuiData {
+            mesh_nodes: sample_mesh(),
+            ..TuiData::default()
+        };
+        let p = mesh_status(&data, 0);
+        let debug = format!("{p:?}");
+        // name padded to 16: "macProM1        "
+        assert!(
+            debug.contains("macProM1        "),
+            "Mesh row must pad name to 16 chars: {debug}"
+        );
+    }
+
+    #[test]
+    fn mesh_row_role_padded_to_12() {
+        // "coordinator" (11 chars) padded to 12
+        let data = TuiData {
+            mesh_nodes: sample_mesh(),
+            ..TuiData::default()
+        };
+        let p = mesh_status(&data, 0);
+        let debug = format!("{p:?}");
+        // "coordinator " — 11 chars + 1 space = 12
+        assert!(
+            debug.contains("coordinator "),
+            "Mesh row must pad role to 12 chars: {debug}"
+        );
+    }
 }

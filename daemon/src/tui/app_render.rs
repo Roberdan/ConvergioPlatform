@@ -18,25 +18,19 @@ impl TuiApp {
             .istate
             .command_mode
             .then(|| self.istate.command_input.clone());
-        let detail = self.istate.detail_text.clone();
         let chat_input = self.chat.input.clone();
         let chat_sending = self.chat.sending;
+        let popup_content = self.istate.popup_open.then(|| self.istate.popup_content.clone()).flatten();
+        let show_all_plans = self.istate.show_all_plans;
         self.terminal.draw(|frame| {
             views::render_view(
-                frame,
-                frame.area(),
-                view,
-                data,
-                selected,
-                &api_url,
-                show_help,
-                auto_refresh,
-                refresh_interval_secs,
-                &chat_input,
-                chat_sending,
+                frame, frame.area(), view, data, selected, &api_url,
+                show_help, auto_refresh, refresh_interval_secs,
+                &chat_input, chat_sending, popup_content.as_ref(), show_all_plans,
             );
-            if let Some(d) = &detail {
-                views::render_detail_popup(frame, frame.area(), d);
+            // Rich popup overlay (if open)
+            if let Some(ref pc) = popup_content {
+                views::popup::render_rich_popup(frame, frame.area(), pc);
             }
             if cmd_input.is_some() {
                 let area = frame.area();

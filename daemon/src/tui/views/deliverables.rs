@@ -31,12 +31,12 @@ fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
-/// Format a deliverable row: name (24), type (8), status (10), version (4), project (16).
+/// Format a deliverable row: name (30), type (10), status (10), version (4), project (15).
 fn format_deliverable_row(d: &DeliverableInfo) -> String {
-    let name = truncate(&d.name, 24);
-    let proj = truncate(&d.project_id, 16);
+    let name = truncate(&d.name, 30);
+    let proj = truncate(&d.project_id, 15);
     format!(
-        "{:<24} {:<8} {:<10} {:>4}  {}",
+        "{:<30} {:<10} {:<10} {:>4}  {}",
         name, d.output_type, d.status, d.version, proj
     )
 }
@@ -76,12 +76,12 @@ pub fn deliverables_view(data: &TuiData, selected: usize) -> Paragraph<'static> 
     // Column headers
     lines.push(
         Line::from(format!(
-            "{:<24} {:<8} {:<10} {:>4}  {}",
+            "{:<30} {:<10} {:<10} {:>4}  {}",
             "Name", "Type", "Status", "Ver", "Project"
         ))
         .style(Style::default().fg(TEXT_SECONDARY)),
     );
-    lines.push(Line::from("─".repeat(72)).style(Style::default().fg(MUTED)));
+    lines.push(Line::from("─".repeat(80)).style(Style::default().fg(MUTED)));
 
     // Deliverable rows
     for (i, d) in deliverables.iter().enumerate() {
