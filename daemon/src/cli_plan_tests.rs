@@ -38,10 +38,24 @@ fn plan_commands_create_variant_exists() {
         project_id: "convergio".to_string(),
         name: "Migration Plan".to_string(),
         source_file: Some("/tmp/spec.yaml".to_string()),
+        parent: None,
         human: false,
         api_url: "http://localhost:8420".to_string(),
     };
     assert!(matches!(cmd, PlanCommands::Create { .. }));
+}
+
+#[test]
+fn plan_commands_create_with_parent_variant_exists() {
+    let cmd = PlanCommands::Create {
+        project_id: "convergio".to_string(),
+        name: "Sub Plan".to_string(),
+        source_file: None,
+        parent: Some(42),
+        human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
+    assert!(matches!(cmd, PlanCommands::Create { parent: Some(42), .. }));
 }
 
 #[test]

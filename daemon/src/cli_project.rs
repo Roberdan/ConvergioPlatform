@@ -36,6 +36,14 @@ pub enum ProjectCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Show hierarchical plan tree for a project
+    Plans {
+        /// Project ID
+        id: String,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: ProjectCommands) -> Result<(), CliError> {
@@ -48,6 +56,7 @@ pub async fn handle(cmd: ProjectCommands) -> Result<(), CliError> {
         } => handle_create(&name, &input, yes, &api_url).await,
         ProjectCommands::List { api_url } => handle_list(&api_url).await,
         ProjectCommands::Show { id, api_url } => handle_show(&id, &api_url).await,
+        ProjectCommands::Plans { id, api_url } => handle_plans(&id, &api_url).await,
     }
 }
 
@@ -170,6 +179,15 @@ async fn handle_show(id: &str, api_url: &str) -> Result<(), CliError> {
         }
         None => Err(CliError::NotFound(format!("project not found: {id}"))),
     }
+}
+
+async fn handle_plans(id: &str, api_url: &str) -> Result<(), CliError> {
+    let url = format!("{api_url}/api/project/{id}/tree");
+    let val = crate::cli_http::get_and_return(&url)
+        .await
+        .map_err(|_| CliError::ApiCallFailed("failed to fetch project tree".into()))?;
+    crate::cli_project_tree::print_project_tree(&val, id);
+    Ok(())
 }
 
 async fn fetch_deliverable_count(project_id: &str, api_url: &str) -> i64 {

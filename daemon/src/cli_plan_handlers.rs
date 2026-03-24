@@ -61,6 +61,7 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             project_id,
             name,
             source_file,
+            parent,
             human,
             api_url,
         } => {
@@ -68,6 +69,7 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
                 "project_id": project_id,
                 "name": name,
                 "source_file": source_file,
+                "parent_plan_id": parent,
             });
             crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/create"), &body, human)
                 .await;

@@ -87,6 +87,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/workspace/status/:workspace_id",
     "/api/workspace/events",
     "/api/workspace/deliverables",
+    "/api/project/:id/tree",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",

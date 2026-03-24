@@ -60,6 +60,9 @@ pub enum PlanCommands {
         /// Source spec file path
         #[arg(long)]
         source_file: Option<String>,
+        /// Parent plan ID (makes this a sub-plan, promotes parent to master)
+        #[arg(long)]
+        parent: Option<i64>,
         #[arg(long)]
         human: bool,
         #[arg(long, default_value = "http://localhost:8420")]

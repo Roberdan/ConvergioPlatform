@@ -15,7 +15,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// POST /api/plan-db/create — create a new plan
-/// Body: {project_id, name, source_file?, description?}
+/// Body: {project_id, name, source_file?, description?, parent_plan_id?}
 pub(super) async fn handle_create(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -30,15 +30,25 @@ pub(super) async fn handle_create(
         .ok_or_else(|| ApiError::bad_request("missing name"))?;
     let source_file = body.get("source_file").and_then(Value::as_str);
     let description = body.get("description").and_then(Value::as_str);
+    let parent_plan_id = body.get("parent_plan_id").and_then(Value::as_i64);
 
     let conn = state.get_conn()?;
     let conn = &conn;
 
+    // If parent specified, promote it to master
+    if let Some(pid) = parent_plan_id {
+        conn.execute(
+            "UPDATE plans SET is_master = 1 WHERE id = ?1 AND is_master = 0",
+            rusqlite::params![pid],
+        )
+        .map_err(|e| ApiError::internal(format!("promote parent failed: {e}")))?;
+    }
+
     conn.execute(
         "INSERT INTO plans (project_id, name, status, source_file, description, \
-         created_at, updated_at) \
-         VALUES (?1, ?2, 'draft', ?3, ?4, datetime('now'), datetime('now'))",
-        rusqlite::params![project_id, name, source_file, description],
+         parent_plan_id, created_at, updated_at) \
+         VALUES (?1, ?2, 'draft', ?3, ?4, ?5, datetime('now'), datetime('now'))",
+        rusqlite::params![project_id, name, source_file, description, parent_plan_id],
     )
     .map_err(|e| ApiError::internal(format!("create failed: {e}")))?;
 
@@ -50,6 +60,7 @@ pub(super) async fn handle_create(
         "ok": true,
         "plan_id": plan_id,
         "status": "draft",
+        "parent_plan_id": parent_plan_id,
     })))
 }
 
@@ -221,26 +232,17 @@ pub(super) async fn handle_approve(
     Path(plan_id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
-    let conn = &conn;
-
     let changed = conn
         .execute(
-            "UPDATE plans SET status = 'approved', \
-             updated_at = datetime('now') \
+            "UPDATE plans SET status = 'approved', updated_at = datetime('now') \
              WHERE id = ?1 AND status IN ('draft', 'todo')",
             rusqlite::params![plan_id],
         )
         .map_err(|e| ApiError::internal(format!("approve failed: {e}")))?;
-
     if changed == 0 {
         return Err(ApiError::bad_request(format!(
             "plan {plan_id} not found or not in approvable state"
         )));
     }
-
-    Ok(Json(json!({
-        "ok": true,
-        "plan_id": plan_id,
-        "status": "approved",
-    })))
+    Ok(Json(json!({ "ok": true, "plan_id": plan_id, "status": "approved" })))
 }

@@ -18,6 +18,7 @@ mod cli_ops;
 mod cli_plan;
 mod cli_plan_handlers;
 mod cli_project;
+mod cli_project_tree;
 mod cli_review;
 mod cli_run;
 mod cli_skill;
