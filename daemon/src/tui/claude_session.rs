@@ -35,7 +35,7 @@ impl ClaudeSession {
                 "--output-format", "stream-json",
                 "--verbose",
                 "--agent", "ali-chief-of-staff",
-                "--model", "sonnet",
+                "--model", "opus",
                 "--dangerously-skip-permissions",
             ])
             .stdin(Stdio::piped())
