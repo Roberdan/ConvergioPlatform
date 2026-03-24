@@ -66,10 +66,17 @@ async fn handle_message(
             let plan_id = require_i64(&payload, "plan_id")?;
             handlers::on_task_done(engine, db_path, &task_id, plan_id).await?;
         }
-        "wave_done" => {
+        "wave_done" | "wave_needs_validation" => {
             let wave_id = require_i64(&payload, "wave_id")?;
             let plan_id = require_i64(&payload, "plan_id")?;
-            handlers::on_wave_done(engine, wave_id, plan_id)?;
+            if event_type == "wave_done" {
+                handlers::on_wave_done(engine, wave_id, plan_id)?;
+            } else {
+                // Auto-validate for now (Thor is not a daemon service yet).
+                // TODO: integrate Thor as daemon service in Plan I (Checklist Engine).
+                tracing::info!("ali: auto-validating wave {wave_id} (Thor not yet a service)");
+                handlers::on_wave_validated(engine, db_path, wave_id, plan_id)?;
+            }
         }
         "wave_validated" => {
             let wave_id = require_i64(&payload, "wave_id")?;
