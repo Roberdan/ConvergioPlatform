@@ -13,6 +13,8 @@ pub struct ChatState {
     pub session: Option<ClaudeSession>,
     /// True while streaming a response (show partial text).
     pub streaming: bool,
+    /// Manual scroll offset from bottom (0 = auto-scroll to bottom).
+    pub scroll_offset: u16,
 }
 
 impl Default for ChatState {
@@ -22,6 +24,7 @@ impl Default for ChatState {
             sending: false,
             session: None,
             streaming: false,
+            scroll_offset: 0,
         }
     }
 }
@@ -88,6 +91,8 @@ pub fn handle_chat_key(code: KeyCode, state: &mut ChatState) -> bool {
     match code {
         KeyCode::Char(c) => {
             state.input.push(c);
+            // Reset scroll to bottom when typing.
+            state.scroll_offset = 0;
             true
         }
         KeyCode::Backspace => {
@@ -96,6 +101,23 @@ pub fn handle_chat_key(code: KeyCode, state: &mut ChatState) -> bool {
         }
         KeyCode::Esc => {
             state.input.clear();
+            state.scroll_offset = 0;
+            true
+        }
+        KeyCode::Up => {
+            state.scroll_offset = state.scroll_offset.saturating_add(3);
+            true
+        }
+        KeyCode::Down => {
+            state.scroll_offset = state.scroll_offset.saturating_sub(3);
+            true
+        }
+        KeyCode::PageUp => {
+            state.scroll_offset = state.scroll_offset.saturating_add(20);
+            true
+        }
+        KeyCode::PageDown => {
+            state.scroll_offset = state.scroll_offset.saturating_sub(20);
             true
         }
         // Enter handled separately in app.rs (needs async context).

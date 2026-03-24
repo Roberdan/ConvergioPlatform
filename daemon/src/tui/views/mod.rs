@@ -22,6 +22,7 @@ pub use popup::{render_rich_popup, PopupContent};
 
 const ALL_VIEWS: &[(MainView, &str)] = &[
     (MainView::PlanKanban, "Kanban"),
+    (MainView::Chat, "◆ Chat"),
     (MainView::TaskPipeline, "Pipeline"),
     (MainView::MeshStatus, "Mesh"),
     (MainView::AgentOrgChart, "Agents"),
@@ -30,7 +31,6 @@ const ALL_VIEWS: &[(MainView, &str)] = &[
     (MainView::EventStream, "Events"),
     (MainView::WorkspaceView, "WS"),
     (MainView::Deliverables, "Deliv"),
-    (MainView::Chat, "◆ Chat"),
 ];
 
 /// Renders tab bar, KPI strip, active view, status bar, and optional overlays.
@@ -52,6 +52,7 @@ pub fn render_view(
     chat_sending: bool,
     popup_content: Option<&PopupContent>,
     show_all_plans: bool,
+    chat_scroll: u16,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -65,7 +66,7 @@ pub fn render_view(
 
     render_tab_bar(frame, chunks[0], view);
     frame.render_widget(widgets::kpi_strip(data), chunks[1]);
-    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans);
+    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans, chat_scroll);
     render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs);
 
     if show_help {
@@ -122,6 +123,7 @@ fn render_content(
     chat_input: &str,
     chat_sending: bool,
     show_all_plans: bool,
+    chat_scroll: u16,
 ) {
     match view {
         MainView::PlanKanban => {
@@ -152,7 +154,7 @@ fn render_content(
             frame.render_widget(deliverables::deliverables_view(data, selected), area);
         }
         MainView::Chat => {
-            chat::render_chat_view(frame, area, data, chat_input, chat_sending);
+            chat::render_chat_view(frame, area, data, chat_input, chat_sending, chat_scroll);
         }
     }
 }
@@ -207,7 +209,7 @@ pub fn render_command_footer(frame: &mut Frame<'_>, area: Rect, command_input: O
     let text = if let Some(input) = command_input {
         format!("> {}", input)
     } else {
-        " [1]Kanban [2]Pipeline [3]Mesh [4]Agents [5]Brain [6]Cost [7]Events [8]WS [9]Deliv [0]Chat  /  Tab  q ".to_string()
+        " [1]Kanban [2]Chat [3]Pipeline [4]Mesh [5]Agents [6]Brain [7]Cost [8]Events [9]WS [0]Deliv  /  Tab  q".to_string()
     };
     let paragraph = Paragraph::new(text).block(
         Block::default()

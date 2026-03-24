@@ -20,6 +20,7 @@ impl TuiApp {
             .then(|| self.istate.command_input.clone());
         let chat_input = self.chat.input.clone();
         let chat_sending = self.chat.sending || self.chat.streaming;
+        let chat_scroll = self.chat.scroll_offset;
         let popup_content = self.istate.popup_open.then(|| self.istate.popup_content.clone()).flatten();
         let show_all_plans = self.istate.show_all_plans;
         self.terminal.draw(|frame| {
@@ -27,6 +28,7 @@ impl TuiApp {
                 frame, frame.area(), view, data, selected, &api_url,
                 show_help, auto_refresh, refresh_interval_secs,
                 &chat_input, chat_sending, popup_content.as_ref(), show_all_plans,
+                chat_scroll,
             );
             // Rich popup overlay (if open)
             if let Some(ref pc) = popup_content {
@@ -62,16 +64,8 @@ impl TuiApp {
     fn view_index(v: MainView) -> usize {
         use MainView::*;
         [
-            PlanKanban,
-            TaskPipeline,
-            MeshStatus,
-            AgentOrgChart,
-            BrainCanvas,
-            CostCenter,
-            EventStream,
-            WorkspaceView,
-            Deliverables,
-            Chat,
+            PlanKanban, Chat, TaskPipeline, MeshStatus, AgentOrgChart,
+            BrainCanvas, CostCenter, EventStream, WorkspaceView, Deliverables,
         ]
         .iter()
         .position(|x| *x == v)
@@ -81,16 +75,8 @@ impl TuiApp {
     fn view_at(idx: usize) -> MainView {
         use MainView::*;
         [
-            PlanKanban,
-            TaskPipeline,
-            MeshStatus,
-            AgentOrgChart,
-            BrainCanvas,
-            CostCenter,
-            EventStream,
-            WorkspaceView,
-            Deliverables,
-            Chat,
+            PlanKanban, Chat, TaskPipeline, MeshStatus, AgentOrgChart,
+            BrainCanvas, CostCenter, EventStream, WorkspaceView, Deliverables,
         ]
         .get(idx)
         .copied()

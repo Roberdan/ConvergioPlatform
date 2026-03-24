@@ -177,11 +177,7 @@ impl TuiApp {
         match code {
             KeyCode::Char('q') => return true,
             KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
-            KeyCode::Char('0') => {
-                self.selected_index = 0;
-                self.active_view = MainView::Chat;
-            }
-            KeyCode::Char(n @ '1'..='9') => self.switch_view(n as u8 - b'0'),
+            KeyCode::Char(n @ '0'..='9') => self.switch_view(n as u8 - b'0'),
             KeyCode::Tab => self.next_view(),
             KeyCode::BackTab => self.prev_view(),
             KeyCode::Up => {
@@ -206,9 +202,10 @@ impl TuiApp {
     fn switch_view(&mut self, n: u8) {
         use MainView::*;
         self.selected_index = 0;
-        let views = [PlanKanban, TaskPipeline, MeshStatus, AgentOrgChart,
-                     BrainCanvas, CostCenter, EventStream, WorkspaceView, Deliverables];
-        self.active_view = views[(n as usize).saturating_sub(1).min(8)];
+        // 0 = Deliverables (10th), 1-9 = ordered views
+        let views = [Deliverables, PlanKanban, Chat, TaskPipeline, MeshStatus,
+                     AgentOrgChart, BrainCanvas, CostCenter, EventStream, WorkspaceView];
+        self.active_view = views[(n as usize).min(9)];
     }
 
     pub fn list_len(&self) -> usize {
