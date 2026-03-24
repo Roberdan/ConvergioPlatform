@@ -13,7 +13,7 @@ use super::chat_handler::{self, ChatState};
 use super::data::{MainView, TuiData};
 use super::input::{self, InteractiveState};
 use super::ws_client::WsClient;
-use super::{api, views};
+use super::api;
 
 pub struct TuiApp {
     pub data: TuiData,
