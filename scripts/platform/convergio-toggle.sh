@@ -83,6 +83,10 @@ enable() {
     fi
   done
 
+  # Session hooks: auto-register Claude/Copilot sessions with daemon
+  echo ""
+  bash "$SCRIPT_DIR/setup-session-hooks.sh" install
+
   echo "convergio: ON — workflow available in ALL repos"
   echo "  /planner /execute /prompt /check + Thor + agents"
 }
@@ -101,6 +105,9 @@ disable() {
       fi
     fi
   done
+
+  # Remove session hooks
+  bash "$SCRIPT_DIR/setup-session-hooks.sh" remove
 
   echo "convergio: OFF — clean Claude/Copilot"
 }
