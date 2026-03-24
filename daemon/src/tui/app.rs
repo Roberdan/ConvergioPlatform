@@ -138,9 +138,9 @@ impl TuiApp {
             let is_view_switch = matches!(code,
                 KeyCode::Char('0'..='9') | KeyCode::Tab | KeyCode::BackTab);
             if !is_view_switch {
-                // Enter triggers send (handled async in process_post_key).
+                // Enter triggers chat send via handle_enter -> process_post_key.
                 if code == KeyCode::Enter {
-                    self.istate.force_refresh = false; // sentinel: chat send pending
+                    self.handle_enter();
                     return false;
                 }
                 if chat_handler::handle_chat_key(code, &mut self.chat) {
