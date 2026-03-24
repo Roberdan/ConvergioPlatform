@@ -185,7 +185,7 @@ pub async fn on_delegation_failed(
 
     if let Some(peer) = alt_peer {
         tracing::info!("ali: retrying plan {plan_id} on peer {peer}");
-        actions::delegate_to_peer(engine, plan_id, &peer).await
+        super::executor::delegate_to_peer(engine, plan_id, &peer).await
     } else {
         tracing::warn!("ali: no peers available for plan {plan_id}, requesting human intervention");
         actions::emit(

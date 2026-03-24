@@ -70,57 +70,7 @@ pub async fn delegate_plan(engine: &Arc<IpcEngine>, db_path: &Path, plan_id: i64
         return Ok(());
     };
 
-    delegate_to_peer(engine, plan_id, &peer_name).await
-}
-
-/// Delegate a plan to a specific peer via the mesh API.
-pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str) -> AliResult {
-    let url = format!("{DAEMON_BASE}/api/mesh/delegate");
-    let payload = serde_json::json!({"plan_id": plan_id, "peer": peer});
-
-    tracing::info!("ali: delegating plan {plan_id} to peer {peer}");
-
-    let client = reqwest::Client::new();
-    let resp = client.post(&url).json(&payload).send().await;
-
-    match resp {
-        Ok(r) if r.status().is_success() => {
-            emit(
-                engine,
-                "plan_delegated",
-                &serde_json::json!({"plan_id": plan_id, "peer": peer}),
-            )?;
-            Ok(())
-        }
-        Ok(r) => {
-            let status = r.status();
-            let body = r.text().await.unwrap_or_default();
-            tracing::error!("ali: delegation failed: {status} — {body}");
-            emit(
-                engine,
-                "delegation_failed",
-                &serde_json::json!({
-                    "plan_id": plan_id,
-                    "peer": peer,
-                    "reason": format!("HTTP {status}: {body}"),
-                }),
-            )?;
-            Ok(())
-        }
-        Err(e) => {
-            tracing::error!("ali: delegation request failed: {e}");
-            emit(
-                engine,
-                "delegation_failed",
-                &serde_json::json!({
-                    "plan_id": plan_id,
-                    "peer": peer,
-                    "reason": e.to_string(),
-                }),
-            )?;
-            Ok(())
-        }
-    }
+    super::executor::delegate_to_peer(engine, plan_id, &peer_name).await
 }
 
 /// Check for sibling plans that are now unblocked after a plan completes.
