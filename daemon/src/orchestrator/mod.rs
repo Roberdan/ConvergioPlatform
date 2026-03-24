@@ -7,14 +7,21 @@ mod reactor;
 
 use crate::ipc::IpcEngine;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 pub const ALI_AGENT: &str = "ali-orchestrator";
 pub const CHANNEL: &str = "#orchestration";
 
+static ALI_SPAWNED: AtomicBool = AtomicBool::new(false);
+
 /// Spawn the Ali orchestrator as a background tokio task.
-/// Registers on the IPC bus and runs the event reactor loop.
+/// Safe to call multiple times — only the first call spawns Ali.
 pub fn spawn_ali(engine: Arc<IpcEngine>, db_path: PathBuf) {
+    if ALI_SPAWNED.swap(true, Ordering::SeqCst) {
+        tracing::debug!("ali-orchestrator: already running, skipping duplicate spawn");
+        return;
+    }
     tokio::spawn(async move {
         tracing::info!("ali-orchestrator: starting");
         let _ = engine.channel_create(CHANNEL, Some("Plan orchestration events"), ALI_AGENT);

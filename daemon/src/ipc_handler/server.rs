@@ -4,6 +4,28 @@ use tracing::{info, warn};
 use super::types::IpcHandlerError;
 use super::utils::{default_db_path, default_peers_conf};
 
+/// Kill any existing process listening on a port (prevents "Address already in use").
+fn kill_stale_listeners(port: u16) {
+    let output = std::process::Command::new("lsof")
+        .args(["-ti", &format!(":{port}")])
+        .output();
+    if let Ok(out) = output {
+        let pids = String::from_utf8_lossy(&out.stdout);
+        let my_pid = std::process::id();
+        for pid_str in pids.split_whitespace() {
+            if let Ok(pid) = pid_str.parse::<u32>() {
+                if pid != my_pid {
+                    info!("killing stale process {pid} on port {port}");
+                    let _ = std::process::Command::new("kill").args(["-9", pid_str]).output();
+                }
+            }
+        }
+        if !pids.is_empty() {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
+}
+
 pub async fn run_serve(
     bind: String,
     static_dir: Option<PathBuf>,
@@ -23,6 +45,12 @@ pub async fn run_serve(
     });
     info!("claude-core serve → {effective_bind} (static: {dir:?})");
     eprintln!("claude-core serve → {effective_bind} (static: {dir:?})");
+
+    // Kill stale processes on our ports before binding
+    kill_stale_listeners(8420);
+    if mesh_enabled {
+        kill_stale_listeners(9420);
+    }
 
     // Unified daemon: ONE shared IPC engine for HTTP + mesh + Ali
     let db_path = default_db_path();

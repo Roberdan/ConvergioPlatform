@@ -170,24 +170,27 @@ pub async fn api_ipc_send(
     State(state): State<ServerState>,
     Json(body): Json<SendMessage>,
 ) -> Result<Json<Value>, ApiError> {
-    ensure_ipc_schema(&state)?;
-    let conn = state.get_conn()?;
     let channel = body.channel.as_deref().unwrap_or("general");
 
-    conn.execute(
-        "INSERT INTO ipc_channels(name) VALUES (?1)
-             ON CONFLICT(name) DO NOTHING",
-        rusqlite::params![channel],
-    )
-    .map_err(|e| ApiError::internal(format!("channel upsert failed: {e}")))?;
-
-    conn.execute(
-        "INSERT INTO ipc_messages(id, channel, from_agent, content) VALUES (
-             lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
-             ?1, ?2, ?3)",
-        rusqlite::params![channel, body.sender_name, body.content],
-    )
-    .map_err(|e| ApiError::internal(format!("message insert failed: {e}")))?;
+    // Use the shared IPC engine for consistent schema + Notify wake
+    if let Some(ref ipc) = state.ipc_engine {
+        ipc.broadcast(&body.sender_name, &body.content, "event", Some(channel))
+            .map_err(|e| ApiError::internal(format!("ipc broadcast failed: {e}")))?;
+    } else {
+        // Fallback: direct DB write (no Notify, legacy path)
+        ensure_ipc_schema(&state)?;
+        let conn = state.get_conn()?;
+        conn.execute(
+            "INSERT INTO ipc_channels(name) VALUES (?1) ON CONFLICT(name) DO NOTHING",
+            rusqlite::params![channel],
+        ).map_err(|e| ApiError::internal(format!("channel upsert failed: {e}")))?;
+        conn.execute(
+            "INSERT INTO ipc_messages(id, channel, from_agent, content) VALUES (
+                 lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
+                 ?1, ?2, ?3)",
+            rusqlite::params![channel, body.sender_name, body.content],
+        ).map_err(|e| ApiError::internal(format!("message insert failed: {e}")))?;
+    }
 
     let _ = state.ws_tx.send(json!({
         "type": "ipc_message",
@@ -195,11 +198,6 @@ pub async fn api_ipc_send(
         "sender": body.sender_name,
         "content": body.content,
     }));
-
-    // Wake Ali and any other agents waiting on receive_wait
-    if let Some(ref ipc) = state.ipc_engine {
-        ipc.notify.notify_waiters();
-    }
 
     Ok(Json(json!({ "ok": true })))
 }

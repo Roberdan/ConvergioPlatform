@@ -10,15 +10,25 @@ const DAEMON_BASE: &str = "http://localhost:8420";
 
 /// Find an available online peer from mesh status.
 /// Optionally exclude a specific peer (for retry after failure).
+/// Retries up to 3 times with 2s backoff if HTTP not ready yet.
 pub async fn find_available_peer(db_path: &Path, exclude: Option<&str>) -> Option<String> {
     let url = format!("{DAEMON_BASE}/api/mesh/status");
-    let resp = match reqwest::get(&url).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("ali: mesh status request failed: {e}");
-            return None;
+    let mut resp = None;
+    for attempt in 0..3 {
+        match reqwest::get(&url).await {
+            Ok(r) => { resp = Some(r); break; }
+            Err(e) => {
+                if attempt < 2 {
+                    tracing::debug!("ali: mesh status attempt {}, retrying in 2s: {e}", attempt + 1);
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                } else {
+                    tracing::warn!("ali: mesh status failed after 3 attempts: {e}");
+                    return None;
+                }
+            }
         }
-    };
+    }
+    let resp = resp?;
 
     let body: serde_json::Value = match resp.json().await {
         Ok(v) => v,

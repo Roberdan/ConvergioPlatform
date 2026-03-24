@@ -52,6 +52,12 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
         }
     });
 
+    // Ali orchestrator — only spawn here if NOT running in unified mode.
+    // In unified mode (`cvg serve --mesh true`), Ali is spawned in ipc_handler/server.rs
+    // with the shared IPC engine. Spawning here would create a SECOND Ali with a
+    // DIFFERENT Notify, unable to receive events from the HTTP server.
+    // The mesh-only daemon (`cvg daemon start`) still spawns Ali here.
+
     // Spawn Ali orchestrator
     let ali_engine = ipc_engine.clone();
     let ali_db = config.db_path.clone();
