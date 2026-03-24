@@ -1,0 +1,227 @@
+use ratatui::{
+    layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Paragraph},
+    Frame,
+};
+
+use super::{MainView, TuiData};
+use crate::tui::widgets::{self, ACCENT, MUTED, OK, TEXT_PRIMARY};
+
+pub mod brain;
+pub mod chat;
+pub mod cost;
+pub mod deliverables;
+pub mod events;
+pub mod help;
+pub mod workspace;
+
+const ALL_VIEWS: &[(MainView, &str)] = &[
+    (MainView::PlanKanban, "Kanban"),
+    (MainView::TaskPipeline, "Pipeline"),
+    (MainView::MeshStatus, "Mesh"),
+    (MainView::AgentOrgChart, "Agents"),
+    (MainView::BrainCanvas, "Brain"),
+    (MainView::CostCenter, "Cost"),
+    (MainView::EventStream, "Events"),
+    (MainView::WorkspaceView, "WS"),
+    (MainView::Deliverables, "Deliv"),
+    (MainView::Chat, "◆ Chat"),
+];
+
+/// Renders tab bar, KPI strip, active view, status bar, and optional help overlay.
+#[allow(clippy::too_many_arguments)]
+pub fn render_view(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    view: MainView,
+    data: &TuiData,
+    selected: usize,
+    api_url: &str,
+    show_help: bool,
+    auto_refresh: bool,
+    refresh_interval_secs: u64,
+    chat_input: &str,
+    chat_sending: bool,
+) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // tab bar
+            Constraint::Length(3), // KPI strip
+            Constraint::Min(1),    // content
+            Constraint::Length(3), // status bar
+        ])
+        .split(area);
+
+    render_tab_bar(frame, chunks[0], view);
+    frame.render_widget(widgets::kpi_strip(data), chunks[1]);
+    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending);
+    render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs);
+
+    if show_help {
+        help::render_help_overlay(frame, area);
+    }
+}
+
+// --- Tab bar ---
+
+fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, active: MainView) {
+    let mut spans: Vec<Span<'static>> = vec![Span::styled(
+        " ◆ Convergio  ",
+        Style::default().fg(ACCENT).bold(),
+    )];
+
+    for (view, label) in ALL_VIEWS {
+        let sep = Span::styled("│", Style::default().fg(MUTED));
+        spans.push(sep);
+        if *view == active {
+            spans.push(Span::styled(
+                format!(" {} ", label),
+                Style::default().fg(ACCENT).bold().reversed(),
+            ));
+        } else {
+            spans.push(Span::styled(
+                format!(" {} ", label),
+                Style::default().fg(MUTED),
+            ));
+        }
+    }
+
+    let paragraph = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded),
+    );
+    frame.render_widget(paragraph, area);
+}
+
+// --- Content dispatch ---
+
+fn render_content(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    view: MainView,
+    data: &TuiData,
+    selected: usize,
+    chat_input: &str,
+    chat_sending: bool,
+) {
+    match view {
+        MainView::PlanKanban => {
+            frame.render_widget(widgets::plan_kanban(data, selected), area);
+        }
+        MainView::TaskPipeline => {
+            frame.render_widget(widgets::task_pipeline(data, selected), area);
+        }
+        MainView::MeshStatus => {
+            frame.render_widget(widgets::mesh_status(data, selected), area);
+        }
+        MainView::AgentOrgChart => {
+            frame.render_widget(widgets::agent_org_chart(data, selected), area);
+        }
+        MainView::BrainCanvas => {
+            frame.render_widget(brain::brain_canvas(data, selected), area);
+        }
+        MainView::CostCenter => {
+            frame.render_widget(cost::cost_center(data, selected), area);
+        }
+        MainView::EventStream => {
+            frame.render_widget(events::event_stream(data, selected), area);
+        }
+        MainView::WorkspaceView => {
+            frame.render_widget(workspace::workspace_view(data, selected), area);
+        }
+        MainView::Deliverables => {
+            frame.render_widget(deliverables::deliverables_view(data, selected), area);
+        }
+        MainView::Chat => {
+            chat::render_chat_view(frame, area, data, chat_input, chat_sending);
+        }
+    }
+}
+
+// --- Status bar ---
+
+fn render_status_bar(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    api_url: &str,
+    auto_refresh: bool,
+    refresh_interval_secs: u64,
+) {
+    // Strip scheme for compact display: "http://localhost:8420" → "localhost:8420"
+    let host = api_url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+
+    // Refresh state indicator: "Auto: 5s" or "Auto: OFF"
+    let refresh_str = if auto_refresh {
+        format!("Auto: {}s", refresh_interval_secs)
+    } else {
+        "Auto: OFF".to_string()
+    };
+
+    // Right side hints differ based on refresh state.
+    let right = if auto_refresh {
+        format!(" {} │ R Toggle  +/- Interval  ↑↓ Navigate  ? Help  q Quit ", refresh_str)
+    } else {
+        format!(" {} │ R Toggle  r Refresh  ↑↓ Navigate  ? Help  q Quit ", refresh_str)
+    };
+
+    let left = format!(" ◆ Connected {}  │  WS: active ", host);
+
+    let paragraph = Paragraph::new(Line::from(vec![
+        Span::styled(left, Style::default().fg(OK)),
+        Span::styled("│", Style::default().fg(MUTED)),
+        Span::styled(right, Style::default().fg(TEXT_PRIMARY)),
+    ]))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded),
+    );
+    frame.render_widget(paragraph, area);
+}
+
+// --- Detail popup ---
+
+/// Renders a centered detail popup with arbitrary text content.
+pub fn render_detail_popup(frame: &mut Frame<'_>, area: Rect, detail: &str) {
+    use ratatui::widgets::Clear;
+    let width = (area.width * 3 / 4).max(40);
+    let height = (detail.lines().count() as u16 + 4).min(area.height.saturating_sub(4));
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    let popup = Rect { x, y, width, height };
+
+    frame.render_widget(Clear, popup);
+    let paragraph = Paragraph::new(detail.to_string())
+        .block(
+            Block::default()
+                .title(" Detail ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: true });
+    frame.render_widget(paragraph, popup);
+}
+
+// --- Command footer ---
+
+/// Renders the bottom command bar. Shows input when in command mode, hints otherwise.
+pub fn render_command_footer(frame: &mut Frame<'_>, area: Rect, command_input: Option<&str>) {
+    let text = if let Some(input) = command_input {
+        format!("> {}", input)
+    } else {
+        " [1]Kanban [2]Pipeline [3]Mesh [4]Agents [5]Brain [6]Cost [7]Events [8]WS [9]Deliv [0]Chat  /  Tab  q ".to_string()
+    };
+    let paragraph = Paragraph::new(text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .style(Style::default().fg(MUTED)),
+    );
+    frame.render_widget(paragraph, area);
+}

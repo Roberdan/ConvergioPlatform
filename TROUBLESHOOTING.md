@@ -121,6 +121,23 @@ sqlite3 "$DASHBOARD_DB" "SELECT count(*) FROM ipc_agent_skills;" 2>/dev/null
 scripts/platform/agent-skills-sync.sh --platform-dir "$(pwd)"
 ```
 
+## TUI
+
+**TUI won't connect to daemon**
+- Symptom: Views show no data, "No brain data" message
+- Cause: Daemon not running or wrong --api-url
+- Fix: Start daemon (`./daemon/start.sh serve`), verify with `curl http://localhost:8420/api/health`
+
+**Brain view empty**
+- Symptom: "No brain data — waiting for WebSocket connection"
+- Cause: No agents registered, or /ws/brain endpoint unreachable
+- Fix: Check daemon is running, verify agents with `curl http://localhost:8420/api/agents`
+
+**TUI crashes on startup**
+- Symptom: Terminal not restored after crash
+- Cause: Panic in TUI code
+- Fix: Check data/logs/daemon-crash.log for panic details. Run `reset` to restore terminal.
+
 ## Problem: Agent heartbeat missing / stale
 
 **Symptom:** Agent shows old `last_heartbeat` in GET /api/ipc/agents

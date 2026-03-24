@@ -2,12 +2,9 @@
 //! Marked #[ignore] — they bind a real TCP listener and fetch live endpoints.
 
 use claude_core::server::routes::build_router_with_db;
-use claude_core::tui::{
-    views, AgentOrgNode, KpiData, MainView, MeshNode, PlanCard, TaskPipelineItem, TuiData,
-};
+use claude_core::tui::{views, KpiData, MainView, TuiData};
 use ratatui::{backend::TestBackend, Terminal};
 use reqwest::Client;
-use serde_json::json;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
@@ -91,10 +88,9 @@ async fn tui_renders_real_api_plan_data() {
 
     let client = Client::new();
     let base = format!("http://{addr}");
-    std::env::set_var("CONVERGIO_API_URL", &base);
 
     // Fetch plans via TUI API function
-    let plans = claude_core::tui::api::fetch_plans(&client).await;
+    let plans = claude_core::tui::api::fetch_plans(&client, &base).await;
     assert!(!plans.is_empty(), "plans should not be empty");
     assert_eq!(plans[0].name, "Dashboard Restructure");
     assert_eq!(plans[0].status, "doing");
@@ -124,9 +120,9 @@ async fn tui_kpi_strip_populated_from_api() {
     let addr = start_server(db_path).await;
 
     let client = Client::new();
-    std::env::set_var("CONVERGIO_API_URL", format!("http://{addr}"));
+    let base = format!("http://{addr}");
 
-    let kpis = claude_core::tui::api::fetch_overview(&client).await;
+    let kpis = claude_core::tui::api::fetch_overview(&client, &base).await;
     // Seeded DB has 1 active plan, 1 running agent, 1 online peer
     assert!(kpis.plans_active >= 1, "expected at least 1 active plan");
 
@@ -153,14 +149,14 @@ async fn tui_views_cycle_with_real_data() {
     let addr = start_server(db_path).await;
 
     let client = Client::new();
-    std::env::set_var("CONVERGIO_API_URL", format!("http://{addr}"));
+    let base = format!("http://{addr}");
 
     let (kpis, plans, tasks, mesh, agents) = tokio::join!(
-        claude_core::tui::api::fetch_overview(&client),
-        claude_core::tui::api::fetch_plans(&client),
-        claude_core::tui::api::fetch_all_tasks(&client),
-        claude_core::tui::api::fetch_mesh(&client),
-        claude_core::tui::api::fetch_agents(&client),
+        claude_core::tui::api::fetch_overview(&client, &base),
+        claude_core::tui::api::fetch_plans(&client, &base),
+        claude_core::tui::api::fetch_all_tasks(&client, &base),
+        claude_core::tui::api::fetch_mesh(&client, &base),
+        claude_core::tui::api::fetch_agents(&client, &base),
     );
 
     let data = TuiData {
@@ -169,6 +165,7 @@ async fn tui_views_cycle_with_real_data() {
         pipeline: tasks,
         mesh_nodes: mesh,
         agents,
+        ..TuiData::default()
     };
 
     // Every view renders without panic
@@ -177,6 +174,11 @@ async fn tui_views_cycle_with_real_data() {
         MainView::TaskPipeline,
         MainView::MeshStatus,
         MainView::AgentOrgChart,
+        MainView::BrainCanvas,
+        MainView::CostCenter,
+        MainView::EventStream,
+        MainView::WorkspaceView,
+        MainView::Deliverables,
     ] {
         let text = render_to_text(&data, view);
         assert!(!text.trim().is_empty(), "view {:?} rendered empty", view);
@@ -201,7 +203,7 @@ fn render_to_text(data: &TuiData, view: MainView) -> String {
     let mut terminal = Terminal::new(backend).expect("terminal");
     terminal
         .draw(|frame| {
-            views::render_view(frame, frame.area(), view, data, 0);
+            views::render_view(frame, frame.area(), view, data, 0, "http://localhost:8420", false, true, 5, "", false);
         })
         .expect("draw");
     let mut all = String::new();
