@@ -26,17 +26,23 @@ public struct ConvergioCardModifier: ViewModifier {
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
-                    .strokeBorder(ConvergioTokens.Border.borderSubtle, lineWidth: 1)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.12), Color.white.opacity(0.04)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
             )
+            .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+            .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
     }
 
     // MARK: Private helpers
 
     @ViewBuilder
     private var cardBackground: some View {
-        // regularMaterial gives frosted-glass appearance on all supported macOS versions.
-        // Glass effect is applied via .glassEffect() modifier on the outer view when
-        // the caller opts in (macOS 26+) — we don't replicate it here to avoid double-blur.
         RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
             .fill(.regularMaterial)
     }

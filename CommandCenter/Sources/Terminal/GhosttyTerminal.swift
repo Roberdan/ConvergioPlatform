@@ -18,7 +18,7 @@ struct GhosttyTerminal: View {
                 ContentUnavailableView(
                     "No terminal sessions",
                     systemImage: "terminal",
-                    description: Text("Open a local shell or attach to a tmux session to start streaming PTY output.")
+                    description: Text("Open a local shell or attach to a tmux session.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -48,12 +48,14 @@ struct GhosttyTerminal: View {
         }
     }
 
+    // MARK: - Header
+
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Ghostty Terminal")
                     .font(.largeTitle.weight(.bold))
-                Text("WS-PTY shell streams with node-aware tabs, tmux attach, and keyboard passthrough.")
+                Text("PTY shell streams with node-aware tabs and tmux attach.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -62,79 +64,91 @@ struct GhosttyTerminal: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 12) {
-                    Picker("Node", selection: preferredPeerBinding) {
-                        ForEach(model.availablePeerNames, id: \.self) { peer in
-                            Text(displayPeer(peer)).tag(peer)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 190)
-                    .accessibilityLabel("Target node selector")
-
-                    Button {
-                        Task { await model.openShell() }
-                    } label: {
-                        Label("New Shell", systemImage: "plus.rectangle.on.rectangle")
-                    }
-                    .accessibilityLabel("Open new shell on \(displayPeer(model.preferredPeer))")
-
-                    Button {
-                        Task { await model.presentTmuxPicker() }
-                    } label: {
-                        Label("Tmux Sessions", systemImage: "rectangle.stack.badge.person.crop")
-                    }
-                    .accessibilityLabel("Browse and attach tmux sessions")
+                    peerSelector
+                    headerButtons
                 }
-
-                Text("\(model.tabs.count)/\(model.maxSessions) sessions open. The daemon enforces the 10-session PTY cap.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                sessionCountBadge
             }
         }
     }
+
+    private var peerSelector: some View {
+        Picker("Node", selection: preferredPeerBinding) {
+            ForEach(model.availablePeerNames, id: \.self) { peer in
+                Text(displayPeer(peer)).tag(peer)
+            }
+        }
+        .labelsHidden()
+        .frame(width: 190)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(ConvergioTokens.Border.borderSubtle, lineWidth: 1)
+        )
+        .accessibilityLabel("Target node selector")
+    }
+
+    private var headerButtons: some View {
+        HStack(spacing: 8) {
+            Button {
+                Task { await model.openShell() }
+            } label: {
+                Label("New Shell", systemImage: "plus.rectangle.on.rectangle")
+            }
+            .accessibilityLabel("Open new shell on \(displayPeer(model.preferredPeer))")
+
+            Button {
+                Task { await model.presentTmuxPicker() }
+            } label: {
+                Label("Tmux Sessions", systemImage: "rectangle.stack.badge.person.crop")
+            }
+            .accessibilityLabel("Browse and attach tmux sessions")
+        }
+    }
+
+    private var sessionCountBadge: some View {
+        HStack(spacing: 6) {
+            Text("\(model.tabs.count)")
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(ConvergioTokens.Surface.surface)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(ConvergioTokens.Brand.gialloFerrari, in: Capsule())
+
+            Text("/ \(model.maxSessions) sessions")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Tab strip
 
     private var tabStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 ForEach(model.tabs) { tab in
-                    let isActive = model.selectedTabID == tab.id
-                    HStack(spacing: 8) {
-                        Button(tab.title) {
-                            model.select(tabID: tab.id)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(
-                            isActive
-                                ? ConvergioTokens.Surface.surface
-                                : ConvergioTokens.Text.textPrimary
-                        )
-                        .accessibilityLabel("Terminal tab: \(tab.title)\(isActive ? ", active" : "")")
-
-                        Button {
-                            model.close(tabID: tab.id)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(
-                                    isActive
-                                        ? ConvergioTokens.Surface.surface.opacity(0.7)
-                                        : ConvergioTokens.Text.textMuted
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Close tab \(tab.title)")
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        isActive
-                            ? ConvergioTokens.Brand.gialloFerrari
-                            : ConvergioTokens.Surface.surfaceRaised,
-                        in: Capsule()
+                    TerminalTabPill(
+                        tab: tab,
+                        isActive: model.selectedTabID == tab.id,
+                        onSelect: { model.select(tabID: tab.id) },
+                        onClose: { model.close(tabID: tab.id) }
                     )
                 }
             }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 2)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(ConvergioTokens.Border.borderSubtle, lineWidth: 1)
+        )
     }
+
+    // MARK: - Terminal pane
 
     private func terminalPane(for tab: TerminalSession) -> some View {
         VStack(spacing: 0) {
@@ -144,6 +158,10 @@ struct GhosttyTerminal: View {
                     Task { await tab.send(data: data) }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(ConvergioTokens.Border.border.opacity(0.5), lineWidth: 1)
+                )
                 .onAppear {
                     Task { await tab.resize(cols: viewport.cols, rows: viewport.rows) }
                 }
@@ -153,26 +171,7 @@ struct GhosttyTerminal: View {
             }
             .frame(minHeight: 520)
 
-            HStack(spacing: 12) {
-                // Peer status indicator: green dot = connected, red = disconnected
-                Circle()
-                    .fill(tab.isConnected ? ConvergioTokens.Status.success : ConvergioTokens.Brand.rossoCorsa)
-                    .frame(width: 7, height: 7)
-                    .accessibilityLabel("Status: \(tab.isConnected ? "Connected" : "Disconnected")")
-                Label(displayPeer(tab.peer), systemImage: tab.peer == "local" ? "desktopcomputer" : "point.3.connected.trianglepath.dotted")
-                if !tab.tmuxSession.isEmpty {
-                    Label(tab.tmuxSession, systemImage: "rectangle.stack")
-                }
-                Spacer()
-                Text(tab.statusText)
-                    .foregroundStyle(
-                        tab.isConnected
-                            ? ConvergioTokens.Status.success
-                            : ConvergioTokens.Text.textMuted
-                    )
-            }
-            .font(.caption)
-            .modifier(ConvergioCardModifier())
+            terminalStatusBar(for: tab)
 
             if let errorMessage = tab.errorMessage {
                 Text(errorMessage)
@@ -184,25 +183,54 @@ struct GhosttyTerminal: View {
         }
     }
 
+    private func terminalStatusBar(for tab: TerminalSession) -> some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(ConvergioTokens.Border.borderSubtle)
+                .frame(height: 1)
+
+            HStack(spacing: 12) {
+                // Peer status dot with glow
+                Circle()
+                    .fill(tab.isConnected ? ConvergioTokens.Status.success : ConvergioTokens.Brand.rossoCorsa)
+                    .frame(width: 7, height: 7)
+                    .shadow(
+                        color: (tab.isConnected ? ConvergioTokens.Status.success : ConvergioTokens.Brand.rossoCorsa).opacity(0.7),
+                        radius: 4
+                    )
+                    .accessibilityLabel("Status: \(tab.isConnected ? "Connected" : "Disconnected")")
+
+                Label(displayPeer(tab.peer), systemImage: tab.peer == "local" ? "desktopcomputer" : "point.3.connected.trianglepath.dotted")
+                if !tab.tmuxSession.isEmpty {
+                    Label(tab.tmuxSession, systemImage: "rectangle.stack")
+                }
+                Spacer()
+                Text(tab.statusText)
+                    .foregroundStyle(
+                        tab.isConnected ? ConvergioTokens.Status.success : ConvergioTokens.Text.textMuted
+                    )
+            }
+            .font(.caption)
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.xs)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(ConvergioTokens.Border.borderSubtle, lineWidth: 1))
+            .padding(.top, 8)
+        }
+    }
+
+    // MARK: - Bindings + helpers
+
     private var preferredPeerBinding: Binding<String> {
-        Binding(
-            get: { model.preferredPeer },
-            set: { model.preferredPeer = $0 }
-        )
+        Binding(get: { model.preferredPeer }, set: { model.preferredPeer = $0 })
     }
 
     private var pickerPresentedBinding: Binding<Bool> {
-        Binding(
-            get: { model.isPickerPresented },
-            set: { model.isPickerPresented = $0 }
-        )
+        Binding(get: { model.isPickerPresented }, set: { model.isPickerPresented = $0 })
     }
 
     private var newSessionNameBinding: Binding<String> {
-        Binding(
-            get: { model.newSessionName },
-            set: { model.newSessionName = $0 }
-        )
+        Binding(get: { model.newSessionName }, set: { model.newSessionName = $0 })
     }
 
     private func displayPeer(_ peer: String) -> String {

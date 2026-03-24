@@ -20,6 +20,16 @@ struct CostDashboardView: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 320)
+                    .padding(Spacing.xxs)
+                    .background(
+                        RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 2)
                     .accessibilityLabel("Cost time window selector")
 
                     kpiGrid
@@ -125,14 +135,29 @@ struct CostDashboardView: View {
     private func summaryChip(_ text: String, icon: String, iconColor: Color) -> some View {
         Label {
             Text(text)
+                .foregroundStyle(ConvergioTokens.Text.textPrimary)
         } icon: {
             Image(systemName: icon)
-                .foregroundStyle(iconColor)
+                .font(.caption)
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(
+                    Circle().fill(
+                        LinearGradient(
+                            colors: [iconColor, iconColor.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                )
+                .shadow(color: iconColor.opacity(0.4), radius: 4, x: 0, y: 2)
         }
         .font(.caption.weight(.medium))
-        .padding(.horizontal, Spacing.xs)
-        .padding(.vertical, Spacing.xxs)
-        .background(ConvergioTokens.Border.borderSubtle, in: Capsule())
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, Spacing.xxs + 2)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         .accessibilityLabel("Status: \(text)")
     }
 
@@ -160,28 +185,31 @@ struct CostDashboardView: View {
     }
 }
 
-// MARK: — Usage window KPI card
+// MARK: - Usage window KPI card
 
 private struct UsageWindowCard: View {
     let window: UsageWindowSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            HStack(spacing: Spacing.xxs) {
-                // cost icon colored gialloFerrari per Maranello token spec
-                Image(systemName: "dollarsign.circle")
-                    .foregroundStyle(ConvergioTokens.Brand.gialloFerrari)
-                Text(window.range.title)
-                    .font(.cardTitle)
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "dollarsign.circle.fill")
+                    .font(.body).foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(LinearGradient(
+                        colors: [ConvergioTokens.Brand.gialloFerrari, ConvergioTokens.Brand.gialloFerrari.opacity(0.7)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    .shadow(color: ConvergioTokens.Brand.gialloFerrari.opacity(0.4), radius: 6, x: 0, y: 2)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(window.range.title).font(.cardTitle)
+                    Text("\(window.runCount) runs").font(.caption).foregroundStyle(ConvergioTokens.Text.textMuted)
+                }
+                Spacer()
             }
-
             Text(currency(window.costUsd))
-                .font(.heroTitle)
+                .font(.system(size: 34, weight: .bold, design: .rounded))
                 .foregroundStyle(ConvergioTokens.Text.textPrimary)
-
-            Text("\(window.runCount) runs · \(avgDuration)")
-                .font(.caption)
-                .foregroundStyle(ConvergioTokens.Text.textMuted)
+            Text(avgDuration).font(.caption).foregroundStyle(ConvergioTokens.Text.textMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(ConvergioCardModifier())
@@ -190,14 +218,12 @@ private struct UsageWindowCard: View {
     }
 
     private var avgDuration: String {
-        guard let avgDurationSecs = window.avgDurationSecs else { return "No duration baseline" }
-        return String(format: "Avg %.0fm", avgDurationSecs / 60)
+        guard let avg = window.avgDurationSecs else { return "No duration baseline" }
+        return String(format: "Avg %.0fm", avg / 60)
     }
 
     private func currency(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        return formatter.string(from: NSNumber(value: value)) ?? "$0.00"
+        let f = NumberFormatter(); f.numberStyle = .currency; f.currencyCode = "USD"
+        return f.string(from: NSNumber(value: value)) ?? "$0.00"
     }
 }

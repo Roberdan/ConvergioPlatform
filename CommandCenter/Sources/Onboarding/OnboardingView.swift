@@ -1,3 +1,4 @@
+import AppKit
 import Observation
 import SwiftUI
 
@@ -7,21 +8,26 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Brand background
             ConvergioTokens.Surface.surface
                 .ignoresSafeArea()
 
-            // Subtle giallo-ferrari gradient accent at the top
-            LinearGradient(
-                colors: [ConvergioTokens.Brand.gialloFerrari.opacity(0.18), .clear],
-                startPoint: .top,
-                endPoint: .bottom
+            // Warm radial glow behind the hero area
+            RadialGradient(
+                colors: [ConvergioTokens.Brand.gialloFerrari.opacity(0.2), .clear],
+                center: .top,
+                startRadius: 20,
+                endRadius: 400
             )
-            .frame(height: 200)
+            .frame(height: 320)
             .ignoresSafeArea()
 
             cardContent
                 .modifier(ConvergioCardModifier())
+                .overlay(
+                    RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
+                        .strokeBorder(ConvergioTokens.Brand.gialloFerrari.opacity(0.12), lineWidth: 1)
+                )
+                .shadow(color: ConvergioTokens.Brand.gialloFerrari.opacity(0.08), radius: 24, y: 8)
                 .frame(maxWidth: 720)
                 .padding(Spacing.xxl)
         }
@@ -40,13 +46,15 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Header with golden glow icon
 
     private var header: some View {
         HStack(spacing: Spacing.md) {
             Image(systemName: "bolt.shield.fill")
-                .font(.system(size: 44, weight: .regular))
+                .font(.system(size: 52, weight: .regular))
                 .foregroundStyle(ConvergioTokens.Brand.gialloFerrari)
+                .shadow(color: ConvergioTokens.Brand.gialloFerrari.opacity(0.6), radius: 16)
+                .shadow(color: ConvergioTokens.Brand.gialloFerrari.opacity(0.3), radius: 28)
                 .accessibilityLabel("Command Center shield icon")
 
             VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -56,7 +64,7 @@ struct OnboardingView: View {
 
                 Text(
                     "Generate a daemon token, set CONVERGIO_AUTH_TOKEN on the server, "
-                        + "then verify the connection before entering the native UI."
+                    + "then verify the connection."
                 )
                 .font(.bodyMedium)
                 .foregroundStyle(ConvergioTokens.Text.textMuted)
@@ -64,14 +72,14 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step indicator
+    // MARK: - Step indicator with progress line
 
     private var stepIndicator: some View {
         let stepLabels = [
             "Copy the generated 32-byte token.",
             "Set CONVERGIO_AUTH_TOKEN on the daemon host.",
             "Confirm the daemon URL and run verification.",
-            "Token is stored in Keychain and onboarding dismisses.",
+            "Token stored in Keychain — onboarding dismisses.",
         ]
         let currentStep = model.verificationSucceeded ? 5 :
             (model.isVerifying ? 3 : (model.daemonURL.isEmpty ? 1 : 2))
@@ -116,9 +124,7 @@ struct OnboardingView: View {
     private func stepCircle(number: Int, isCompleted: Bool, isCurrent: Bool) -> some View {
         ZStack {
             Circle()
-                .fill(isCompleted
-                      ? ConvergioTokens.Brand.gialloFerrari
-                      : .clear)
+                .fill(isCompleted ? ConvergioTokens.Brand.gialloFerrari : .clear)
                 .overlay(
                     Circle()
                         .strokeBorder(
@@ -145,7 +151,7 @@ struct OnboardingView: View {
         .accessibilityLabel("Step \(number): \(isCompleted ? "completed" : isCurrent ? "current" : "upcoming")")
     }
 
-    // MARK: - Token section
+    // MARK: - Token section (code-style card)
 
     private var tokenSection: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -153,18 +159,35 @@ struct OnboardingView: View {
                 .font(.cardTitle)
                 .foregroundStyle(ConvergioTokens.Text.textPrimary)
 
-            Text(model.generatedToken)
-                .font(.mono)
-                .foregroundStyle(ConvergioTokens.Text.textPrimary)
-                .textSelection(.enabled)
-                .padding(Spacing.sm)
-                .background(ConvergioTokens.Surface.surfaceRaised,
-                            in: RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous)
-                        .strokeBorder(ConvergioTokens.Border.borderSubtle, lineWidth: 1)
-                )
-                .accessibilityLabel("Generated daemon authentication token")
+            HStack {
+                Text(model.generatedToken)
+                    .font(.mono)
+                    .foregroundStyle(ConvergioTokens.Text.textPrimary)
+                    .textSelection(.enabled)
+
+                Spacer()
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(model.generatedToken, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.caption)
+                        .foregroundStyle(ConvergioTokens.Text.textMuted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Copy token to clipboard")
+            }
+            .padding(Spacing.sm)
+            .background(
+                ConvergioTokens.Surface.surfaceSunken,
+                in: RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous)
+                    .strokeBorder(ConvergioTokens.Border.border, lineWidth: 1)
+            )
+            .accessibilityLabel("Generated daemon authentication token")
 
             Button("Generate another token") { model.regenerateToken() }
                 .font(.label)
@@ -187,22 +210,12 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Feedback row
+    // MARK: - Feedback row with success animation
 
     @ViewBuilder
     private var feedbackRow: some View {
         if model.verificationSucceeded {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(ConvergioTokens.Brand.verdeRacing)
-                    .font(.title3)
-                    .scaleEffect(model.verificationSucceeded ? 1.0 : 0.1)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.55), value: model.verificationSucceeded)
-                    .accessibilityLabel("Status: Verification successful")
-                Text(model.helperText)
-                    .foregroundStyle(ConvergioTokens.Brand.verdeRacing)
-                    .font(.bodyMedium)
-            }
+            OnboardingSuccessBadge(helperText: model.helperText)
         } else if let err = model.errorMessage {
             Text(err)
                 .foregroundStyle(ConvergioTokens.Status.error)
@@ -216,7 +229,7 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Connect button
+    // MARK: - Connect button (gradient, larger)
 
     private var connectButton: some View {
         HStack {
@@ -224,14 +237,14 @@ struct OnboardingView: View {
             Button(model.isVerifying ? "Verifying..." : "Connect") {
                 Task {
                     await model.verifyConnection()
-                    if model.verificationSucceeded {
-                        onComplete(model.daemonURL)
-                    }
+                    if model.verificationSucceeded { onComplete(model.daemonURL) }
                 }
             }
-            .buttonStyle(AccentButtonStyle())
+            .buttonStyle(OnboardingConnectButtonStyle())
             .disabled(model.isVerifying)
-            .accessibilityLabel(model.isVerifying ? "Verifying connection, please wait" : "Verify daemon connection and continue")
+            .accessibilityLabel(
+                model.isVerifying ? "Verifying connection" : "Verify daemon connection"
+            )
         }
     }
 }

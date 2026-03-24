@@ -29,11 +29,20 @@ public struct StatusBadge: View {
 
     public var body: some View {
         Text(label)
-            .font(.label)                          // caption, semibold
+            .font(.label)
             .foregroundStyle(contrastText)
-            .padding(.horizontal, Spacing.xs)      // 8 pt
-            .padding(.vertical, Spacing.xxs)       // 4 pt
-            .background(Capsule().fill(color))
+            .padding(.horizontal, Spacing.xs)
+            .padding(.vertical, Spacing.xxs)
+            .background(
+                Capsule().fill(
+                    LinearGradient(
+                        colors: [color, color.opacity(0.7)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            )
+            .shadow(color: color.opacity(0.4), radius: 4, x: 0, y: 2)
     }
 
     // MARK: Private

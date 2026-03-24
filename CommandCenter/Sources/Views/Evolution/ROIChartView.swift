@@ -70,8 +70,14 @@ struct ROIChartView: View {
                         x: .value("Status", bucket.statusLabel),
                         y: .value("Count", bucket.count)
                     )
-                    .foregroundStyle(barColor(for: bucket.status))
-                    .cornerRadius(4)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [barColor(for: bucket.status), barColor(for: bucket.status).opacity(0.5)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .cornerRadius(6)
                 }
                 .frame(height: 180)
 
@@ -113,20 +119,25 @@ struct ROIChartView: View {
     }
 
     private func metricPill(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(ConvergioTokens.Text.textMuted)
             Text(value)
-                .font(.headline)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(ConvergioTokens.Text.textPrimary)
         }
         .padding(Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ConvergioTokens.Border.borderSubtle,
+            .ultraThinMaterial,
             in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
     }
 }
 

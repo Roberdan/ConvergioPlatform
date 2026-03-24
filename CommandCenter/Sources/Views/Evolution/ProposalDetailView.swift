@@ -112,20 +112,38 @@ struct ProposalDetailView: View {
         icon: String,
         iconColor: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon)
-                .font(.caption)
-                .foregroundStyle(iconColor)
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Image(systemName: icon)
+                .font(.callout)
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle().fill(
+                        LinearGradient(
+                            colors: [iconColor, iconColor.opacity(0.6)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                )
+                .shadow(color: iconColor.opacity(0.35), radius: 4, x: 0, y: 2)
+
             Text(value)
-                .font(.headline)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundStyle(ConvergioTokens.Text.textPrimary)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(ConvergioTokens.Text.textMuted)
         }
         .padding(Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            ConvergioTokens.Border.borderSubtle,
-            in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
     }
 }
 
@@ -143,8 +161,19 @@ private struct ProposalActionButtonStyle: ButtonStyle {
             .padding(.vertical, Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous)
-                    .fill(configuration.isPressed ? color.opacity(0.75) : color)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                color,
+                                color.opacity(0.7)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             )
-            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
+            .shadow(color: color.opacity(configuration.isPressed ? 0.2 : 0.45), radius: 8, x: 0, y: 3)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }

@@ -8,8 +8,30 @@ struct RunHistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Run History")
-                .font(.sectionTitle)
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.body)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle().fill(
+                            LinearGradient(
+                                colors: [
+                                    ConvergioTokens.Brand.azzurro,
+                                    ConvergioTokens.Brand.azzurro.opacity(0.6)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    )
+                    .shadow(
+                        color: ConvergioTokens.Brand.azzurro.opacity(0.35),
+                        radius: 4, x: 0, y: 2
+                    )
+                Text("Run History")
+                    .font(.sectionTitle)
+            }
 
             Label(note, systemImage: "info.circle")
                 .font(.footnote)

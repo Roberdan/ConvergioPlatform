@@ -28,11 +28,12 @@ struct TerminalOutputView: NSViewRepresentable {
             red: 0xFF / 255.0, green: 0xC7 / 255.0, blue: 0x2C / 255.0, alpha: 1.0
         )
         textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-        textView.textContainerInset = NSSize(width: 12, height: 14)
+        textView.textContainerInset = NSSize(width: 16, height: 18)
 
         let scrollView = NSScrollView()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
+        scrollView.scrollerStyle = .overlay
         scrollView.borderType = .noBorder
         scrollView.documentView = textView
         return scrollView
@@ -69,7 +70,7 @@ struct TerminalCursorView: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color(red: 0xFF / 255.0, green: 0xC7 / 255.0, blue: 0x2C / 255.0))
+            .fill(ConvergioTokens.Brand.gialloFerrari)
             .frame(width: 2, height: 16)
             .opacity(cursorOpacity)
             .onAppear {

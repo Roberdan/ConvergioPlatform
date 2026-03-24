@@ -9,21 +9,29 @@ struct PlanDashboard: View {
         _model = State(initialValue: PlanDashboardModel(client: client))
     }
 
+    @State private var hoveredPlanID: Int?
+
     var body: some View {
         HSplitView {
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: Spacing.lg) {
+                    Text("Plans")
+                        .sectionHeader()
+                        .padding(.bottom, Spacing.xs)
                     ForEach(model.plans) { plan in
                         Button {
                             Task { await model.selectPlan(plan.id) }
                         } label: {
                             planCard(plan)
+                                .scaleEffect(hoveredPlanID == plan.id ? 1.01 : 1.0)
+                                .animation(.easeOut(duration: 0.15), value: hoveredPlanID)
                         }
                         .buttonStyle(.plain)
+                        .onHover { inside in hoveredPlanID = inside ? plan.id : nil }
                         .accessibilityLabel("Plan \(plan.name), status \(plan.status)")
                     }
                 }
-                .padding(24)
+                .padding(Spacing.lg)
             }
             .frame(minWidth: 320, idealWidth: 360, maxWidth: 420)
 
@@ -78,9 +86,19 @@ struct PlanDashboard: View {
                     .foregroundStyle(ConvergioTokens.Text.textMuted)
             }
 
-            ProgressView(value: plan.mergeProgress)
-                .tint(ConvergioTokens.Brand.gialloFerrari)
-                .accessibilityLabel("Merge progress \(Int((plan.mergeProgress) * 100)) percent")
+            // Custom progress bar with glow
+            GeometryReader { geo in
+                let w = geo.size.width * CGFloat(plan.mergeProgress)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(ConvergioTokens.Border.border).frame(height: 6)
+                    Capsule()
+                        .fill(ConvergioTokens.Brand.gialloFerrari)
+                        .frame(width: max(w, 0), height: 6)
+                        .shadow(color: ConvergioTokens.Brand.gialloFerrari.opacity(0.5), radius: 6, y: 1)
+                }
+            }
+            .frame(height: 6)
+            .accessibilityLabel("Merge progress \(Int((plan.mergeProgress) * 100)) percent")
 
             HStack {
                 Label("\(plan.wavesMerged ?? 0)/\(plan.wavesTotal ?? 0) merged",
@@ -109,16 +127,23 @@ struct PlanDashboard: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(ConvergioCardModifier())
+        .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "Plan \(plan.name), status \(plan.status), " +
             "\(plan.wavesMerged ?? 0) of \(plan.wavesTotal ?? 0) waves merged, " +
             "\(done) tasks done, \(pending) remaining"
         )
-        // 3 px left status border overlaid on top of the card shape
+        // Gradient left status border
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
-                .fill(planStatusColor(plan.status))
+                .fill(
+                    LinearGradient(
+                        colors: [planStatusColor(plan.status), planStatusColor(plan.status).opacity(0.1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .frame(width: 3)
                 .padding(.vertical, 1)
                 .accessibilityHidden(true)

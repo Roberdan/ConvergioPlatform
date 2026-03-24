@@ -16,22 +16,38 @@ struct AuditTrailView: View {
                 )
             } else {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    let dotColor = actionColor(entry.action)
                     HStack(alignment: .top, spacing: Spacing.sm) {
-                        // Timeline column: dot + connector
+                        // Timeline column: glowing dot with ring + connector
                         VStack(spacing: 0) {
-                            Circle()
-                                .fill(actionColor(entry.action))
-                                .frame(width: 10, height: 10)
-                                .padding(.top, 6)
+                            ZStack {
+                                Circle()
+                                    .fill(dotColor.opacity(0.2))
+                                    .frame(width: 22, height: 22)
+                                Circle()
+                                    .strokeBorder(dotColor.opacity(0.5), lineWidth: 2)
+                                    .frame(width: 18, height: 18)
+                                Circle()
+                                    .fill(dotColor)
+                                    .frame(width: 10, height: 10)
+                                    .shadow(color: dotColor.opacity(0.6), radius: 4, x: 0, y: 0)
+                            }
+                            .padding(.top, 4)
 
                             if index < entries.count - 1 {
                                 Rectangle()
-                                    .fill(ConvergioTokens.Border.borderSubtle)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [dotColor.opacity(0.3), ConvergioTokens.Border.borderSubtle],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
                                     .frame(width: 2)
                                     .frame(maxHeight: .infinity)
                             }
                         }
-                        .frame(width: 10)
+                        .frame(width: 22)
 
                         // Entry card
                         auditCard(entry)

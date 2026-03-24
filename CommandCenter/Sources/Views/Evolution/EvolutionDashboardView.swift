@@ -109,13 +109,25 @@ struct EvolutionDashboardView: View {
 
     // MARK: - Proposal card
 
+    @State private var hoveredProposalID: Int?
+
     private func proposalCard(_ proposal: EvolutionProposal) -> some View {
-        HStack(spacing: 0) {
-            // Left border: color encodes status
+        let borderColor = proposalBorderColor(proposal.status)
+        let isSelected = model.selectedProposalID == proposal.id
+        let isHovered = hoveredProposalID == proposal.id
+
+        return HStack(spacing: 0) {
+            // Left accent: gradient border encoding status
             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(proposalBorderColor(proposal.status))
-                .frame(width: 3)
-                .padding(.vertical, 4)
+                .fill(
+                    LinearGradient(
+                        colors: [borderColor, borderColor.opacity(0.4)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 4)
+                .padding(.vertical, 6)
 
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 HStack {
@@ -126,7 +138,7 @@ struct EvolutionDashboardView: View {
                     Spacer()
                     StatusBadge(
                         label: proposal.statusLabel,
-                        color: proposalBorderColor(proposal.status)
+                        color: borderColor
                     )
                     .accessibilityLabel("Status: \(proposal.statusLabel)")
                 }
@@ -137,7 +149,7 @@ struct EvolutionDashboardView: View {
 
                 HStack {
                     Label(
-                        String(format: "%.1f%% Δ", proposal.expectedDeltaPercent),
+                        String(format: "%.1f%% \u{0394}", proposal.expectedDeltaPercent),
                         systemImage: "chart.line.uptrend.xyaxis"
                     )
                     .foregroundStyle(ConvergioTokens.Brand.verdeRacing)
@@ -152,15 +164,28 @@ struct EvolutionDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            model.selectedProposalID == proposal.id
+            isSelected
                 ? ConvergioTokens.Brand.azzurro.opacity(0.12)
-                : ConvergioTokens.Border.borderSubtle,
+                : Color.clear,
+            in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
+        )
+        .background(
+            .regularMaterial,
             in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
-                .strokeBorder(ConvergioTokens.Border.borderSubtle, lineWidth: 1)
+                .strokeBorder(
+                    isSelected
+                        ? borderColor.opacity(0.4)
+                        : Color.white.opacity(0.07),
+                    lineWidth: 1
+                )
         )
+        .shadow(color: .black.opacity(isHovered ? 0.3 : 0.15), radius: isHovered ? 12 : 6, y: isHovered ? 4 : 2)
+        .scaleEffect(isHovered ? 1.015 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
+        .onHover { hovering in hoveredProposalID = hovering ? proposal.id : nil }
     }
 
     // MARK: - Helpers

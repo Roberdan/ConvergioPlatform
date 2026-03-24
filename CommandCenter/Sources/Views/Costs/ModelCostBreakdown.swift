@@ -52,18 +52,28 @@ struct ModelCostBreakdown: View {
         }
     }
 
-    // Bar chart: each family bar uses its brand color
+    // Bar chart: each family bar uses gradient fill with rounded corners
     private var barChart: some View {
         Chart(models) { datum in
             BarMark(
                 x: .value("Family", datum.family),
                 y: .value("Cost", datum.costUsd)
             )
-            .foregroundStyle(barColor(for: datum.family))
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [barColor(for: datum.family), barColor(for: datum.family).opacity(0.5)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .cornerRadius(6)
             .annotation(position: .top) {
                 Text("\(datum.calls)x")
-                    .font(.caption2)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(ConvergioTokens.Text.textMuted)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(.ultraThinMaterial, in: Capsule())
             }
         }
         .frame(height: 240)

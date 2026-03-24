@@ -12,7 +12,7 @@ struct AgentDetailView: View {
                         .modifier(SectionHeaderModifier())
 
                     if let modelName = agent.model {
-                        modelBadge(modelName)
+                        PremiumModelBadge(modelName: modelName)
                     } else {
                         Text("Model not declared")
                             .foregroundStyle(.secondary)
@@ -25,15 +25,40 @@ struct AgentDetailView: View {
                 .buttonStyle(.borderedProminent)
             }
 
+            // Accent divider
+            Rectangle()
+                .fill(accentGradient)
+                .frame(height: 1)
+
             Text(agent.description ?? "No description available.")
                 .foregroundStyle(.secondary)
 
-            detailRow("Category", agent.category ?? "—")
-            detailRow("Domain", agent.domain ?? "—")
-            detailRow("Tools", (agent.tools ?? []).joined(separator: ", ").ifEmpty("—"))
+            detailRow("Category", agent.category ?? "---")
+            detailRow("Domain", agent.domain ?? "---")
+            detailRow("Tools", toolsText)
             detailRow("Path", agent.path ?? "Not deployed")
         }
         .modifier(ConvergioCardModifier())
+        .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+        .background(
+            RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+    }
+
+    private var toolsText: String {
+        (agent.tools ?? []).joined(separator: ", ").ifEmpty("---")
+    }
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                ConvergioTokens.Brand.gialloFerrari.opacity(0.6),
+                ConvergioTokens.Brand.gialloFerrari.opacity(0.0)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
 
     private func detailRow(_ title: String, _ value: String) -> some View {
@@ -45,26 +70,6 @@ struct AgentDetailView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
-    }
-
-    @ViewBuilder
-    private func modelBadge(_ modelName: String) -> some View {
-        let lower = modelName.lowercased()
-        let (bg, fg): (Color, Color) = {
-            if lower.contains("opus") {
-                return (ConvergioTokens.Brand.gialloFerrari, Color(red: 0.067, green: 0.067, blue: 0.067))
-            } else if lower.contains("haiku") {
-                return (ConvergioTokens.Brand.arancioWarm, .white)
-            } else {
-                return (ConvergioTokens.Roles.role10, .white)
-            }
-        }()
-        Text(modelName)
-            .font(.label)
-            .foregroundStyle(fg)
-            .padding(.horizontal, Spacing.xs)
-            .padding(.vertical, Spacing.xxs)
-            .background(Capsule().fill(bg))
     }
 }
 

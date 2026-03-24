@@ -9,6 +9,7 @@ struct PlanDetailView: View {
     let onMoveTask: (Int, String) -> Void
 
     @State private var dropTargetStatus: String? = nil
+    @State private var hoveredTaskID: Int?
 
     private let columns = ["pending", "in_progress", "submitted", "done"]
 
@@ -24,9 +25,17 @@ struct PlanDetailView: View {
                         x: .value("Wave", datum.wave),
                         y: .value("Completion", datum.completion * 100)
                     )
-                    .foregroundStyle(ConvergioTokens.Brand.azzurro)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [ConvergioTokens.Brand.azzurro, ConvergioTokens.Brand.azzurro.opacity(0.4)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .cornerRadius(4)
                 }
                 .frame(height: 220)
+                .chartYAxis { AxisMarks(position: .leading) }
                 .accessibilityLabel(chartAccessibilityLabel)
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -49,8 +58,6 @@ struct PlanDetailView: View {
         }
     }
 
-    // MARK: - Accessibility helpers
-
     private var chartAccessibilityLabel: String {
         let count = chartData.count
         let sum = chartData.map(\.completion).reduce(0, +)
@@ -58,16 +65,15 @@ struct PlanDetailView: View {
         return "Wave completion chart: \(count) waves, average \(avg) percent complete"
     }
 
-    // MARK: - Wave pill
-
     private func wavePill(_ wave: PlanContextWave) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(wave.waveLabel)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(waveStatusColor(wave.status))
+            Text(wave.name)
                 .font(.cardTitle)
                 .foregroundStyle(ConvergioTokens.Text.textPrimary)
-            Text(wave.name)
-                .font(.label)
-                .foregroundStyle(ConvergioTokens.Text.textMuted)
+                .lineLimit(2)
             StatusBadge(
                 label: wave.status.capitalized,
                 color: waveStatusColor(wave.status)
@@ -75,12 +81,23 @@ struct PlanDetailView: View {
             .accessibilityLabel("Status: \(wave.status.capitalized)")
         }
         .convergioCard()
+        .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
+                .strokeBorder(ConvergioTokens.Border.border.opacity(0.5), lineWidth: 0.5)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(wave.waveLabel) \(wave.name), status \(wave.status)")
-        // 3 px left border with wave status color
+        // Gradient left border with wave status color
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
-                .fill(waveStatusColor(wave.status))
+                .fill(
+                    LinearGradient(
+                        colors: [waveStatusColor(wave.status), waveStatusColor(wave.status).opacity(0.1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .frame(width: 3)
                 .padding(.vertical, 1)
                 .accessibilityHidden(true)
@@ -101,8 +118,6 @@ struct PlanDetailView: View {
         }
     }
 
-    // MARK: - Kanban column
-
     private func kanbanColumn(status: String) -> some View {
         let tasks = context.tasks.filter { $0.status == status }
         let isTarget = dropTargetStatus == status
@@ -118,8 +133,12 @@ struct PlanDetailView: View {
                     in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CornerRadius.md)
-                .stroke(ConvergioTokens.Brand.gialloFerrari, lineWidth: 2)
+                .strokeBorder(
+                    ConvergioTokens.Brand.gialloFerrari,
+                    style: StrokeStyle(lineWidth: 2, dash: [8, 4])
+                )
                 .opacity(isTarget ? 1 : 0)
+                .animation(.easeInOut(duration: 0.2), value: isTarget)
         )
         .dropDestination(for: String.self) { items, _ in
             guard let raw = items.first, let taskID = Int(raw) else { return false }
@@ -130,18 +149,29 @@ struct PlanDetailView: View {
         }
     }
 
-    // MARK: - Column header
-
     private func columnHeader(status: String, count: Int) -> some View {
-        let bg = columnHeaderColor(status)
+        let baseColor = columnHeaderColor(status)
         let label = status.replacingOccurrences(of: "_", with: " ").capitalized
         return Text("\(label) (\(count))")
             .font(.cardTitle)
             .foregroundStyle(ConvergioTokens.Text.textPrimary)
             .padding(.horizontal, Spacing.sm)
-            .padding(.vertical, Spacing.xxs)
+            .padding(.vertical, Spacing.xs)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(bg, in: RoundedRectangle(cornerRadius: CornerRadius.sm, style: .continuous))
+            .background(
+                LinearGradient(
+                    colors: [baseColor, baseColor.opacity(0.4)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ),
+                in: UnevenRoundedRectangle(
+                    topLeadingRadius: CornerRadius.sm,
+                    bottomLeadingRadius: 4,
+                    bottomTrailingRadius: 4,
+                    topTrailingRadius: CornerRadius.sm,
+                    style: .continuous
+                )
+            )
     }
 
     private func columnHeaderColor(_ status: String) -> Color {
@@ -153,8 +183,6 @@ struct PlanDetailView: View {
         default:            return ConvergioTokens.Surface.surface
         }
     }
-
-    // MARK: - Task card
 
     private func taskCard(_ task: PlanContextTask) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -190,6 +218,10 @@ struct PlanDetailView: View {
         }
         .frame(width: 252, alignment: .leading)
         .modifier(ConvergioCardModifier())
+        .shadow(color: .black.opacity(hoveredTaskID == task.id ? 0.35 : 0.15), radius: 8, y: 3)
+        .scaleEffect(hoveredTaskID == task.id ? 1.02 : 1.0)
+        .animation(.easeOut(duration: 0.15), value: hoveredTaskID)
+        .onHover { inside in hoveredTaskID = inside ? task.id : nil }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
@@ -200,8 +232,6 @@ struct PlanDetailView: View {
         .onTapGesture { onSelectTask(task) }
         .draggable(String(task.id))
     }
-
-    // MARK: - Badge helpers
 
     private func modelBadgeColor(_ model: String) -> Color {
         let lowered = model.lowercased()

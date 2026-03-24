@@ -25,7 +25,13 @@ struct ContentView: View {
                     .glassEffect()
             } else {
                 listContent
-                    .background(.thinMaterial)
+                    .background(
+                        LinearGradient(
+                            colors: [ConvergioTokens.Surface.surfaceSunken, ConvergioTokens.Surface.surface],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
             }
         }
     }
@@ -34,21 +40,31 @@ struct ContentView: View {
         VStack(spacing: 0) {
             // Convergio wordmark
             Text("CONVERGIO")
-                .font(.sectionTitle)
+                .font(.system(size: 22, weight: .bold, design: .default))
+                .tracking(6)
                 .foregroundStyle(ConvergioTokens.Brand.gialloFerrari)
+                .shadow(color: ConvergioTokens.Brand.gialloFerrari.opacity(0.4), radius: 8, y: 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Spacing.md)
-                .padding(.top, Spacing.md)
-                .padding(.bottom, Spacing.sm)
+                .padding(.top, Spacing.lg)
+                .padding(.bottom, Spacing.md)
                 .accessibilityLabel("Convergio Command Center")
 
             List(SidebarItem.allCases, selection: $model.selection) { item in
-                Label(item.title, systemImage: item.icon)
-                    .foregroundStyle(.primary)
-                    .labelStyle(ColoredIconLabelStyle(color: item.color))
-                    .tag(Optional(item))
-                    .listRowSeparator(.hidden)
-                    .accessibilityLabel(item.title)
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(ConvergioTokens.Brand.gialloFerrari)
+                        .frame(width: 3, height: 20)
+                        .opacity(model.selection == item ? 1 : 0)
+                    Label(item.title, systemImage: item.icon)
+                        .foregroundStyle(.primary)
+                        .labelStyle(ColoredIconLabelStyle(color: item.color))
+                        .padding(.leading, Spacing.xs)
+                }
+                .tag(Optional(item))
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+                .accessibilityLabel(item.title)
             }
             .listStyle(.sidebar)
             .navigationTitle("")
@@ -56,20 +72,24 @@ struct ContentView: View {
 
             // Daemon status footer
             HStack(spacing: Spacing.xs) {
+                let isReady = model.statusText.contains("Ready")
+                let dotColor = isReady
+                    ? ConvergioTokens.Status.success
+                    : ConvergioTokens.Text.textMuted
                 Circle()
-                    .fill(
-                        model.statusText.contains("Ready")
-                            ? ConvergioTokens.Status.success
-                            : ConvergioTokens.Text.textMuted
-                    )
+                    .fill(dotColor)
                     .frame(width: 8, height: 8)
+                    .shadow(color: isReady ? dotColor.opacity(0.6) : .clear, radius: 6)
                 Text(model.statusText)
                     .font(.label)
                     .foregroundStyle(ConvergioTokens.Text.textMuted)
                 Spacer()
             }
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.sm)
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xs)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.horizontal, Spacing.sm)
+            .padding(.bottom, Spacing.sm)
         }
     }
 
@@ -95,13 +115,15 @@ struct ContentView: View {
                     Circle()
                         .fill(ConvergioTokens.Brand.gialloFerrari)
                         .frame(width: 10, height: 10)
+                        .shadow(color: ConvergioTokens.Brand.gialloFerrari.opacity(0.5), radius: 6)
                         .accessibilityHidden(true)
                     Text(model.statusText)
                         .font(.subheadline.weight(.medium))
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(.thinMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Status: \(model.statusText)")
             }
