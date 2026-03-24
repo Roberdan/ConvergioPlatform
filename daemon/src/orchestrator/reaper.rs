@@ -1,10 +1,12 @@
 // Agent reaper — garbage collector for stale agents, dead delegations, orphan sessions.
 // Runs as a periodic background task alongside Ali.
+// Also cleans up temp files on mesh peers from completed plan delegations.
 
 use std::path::Path;
 
 const STALE_AGENT_MINUTES: i64 = 30;
 const STALE_DELEGATION_HOURS: i64 = 24;
+const DAEMON_BASE: &str = "http://localhost:8420";
 
 /// Reap stale agents (not seen for 30 min), dead delegations, orphan sessions.
 /// Returns (agents_reaped, delegations_cleaned, sessions_cleaned).
@@ -51,12 +53,63 @@ pub fn reap(db_path: &Path) -> Result<(usize, usize, usize), Box<dyn std::error:
     Ok((agents_reaped, delegations_cleaned, sessions_cleaned))
 }
 
+/// Clean up temp files on mesh peers: /tmp/convergio-plan-*.md and done scripts.
+/// Only removes files older than 24 hours to avoid interfering with active plans.
+async fn reap_peer_tmp_files() -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_default();
+
+    let resp = client.get(format!("{DAEMON_BASE}/api/mesh/status")).send().await?;
+    let body: serde_json::Value = resp.json().await?;
+    let peers = body.get("peers").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+
+    let mut cleaned = 0usize;
+    for peer in &peers {
+        let name = peer.get("peer_name").and_then(|v| v.as_str()).unwrap_or("");
+        let online = peer.get("is_online").and_then(|v| v.as_bool()).unwrap_or(false);
+        if !online || name.is_empty() {
+            continue;
+        }
+
+        // Remove temp files older than 24h + kill dead tmux plan sessions
+        let cmd = "find /tmp -name 'convergio-plan-*' -mmin +1440 -delete 2>/dev/null; \
+                   for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^plan-'); do \
+                     if tmux list-panes -t \"$s\" -F '#{pane_dead}' 2>/dev/null | grep -q 1; then \
+                       tmux kill-session -t \"$s\" 2>/dev/null; \
+                     fi; \
+                   done; true";
+
+        let result = client
+            .post(format!("{DAEMON_BASE}/api/mesh/exec"))
+            .json(&serde_json::json!({
+                "peer": name,
+                "command": "bash",
+                "args": ["-c", cmd],
+                "timeout_secs": 15,
+            }))
+            .send()
+            .await;
+
+        if result.is_ok() {
+            cleaned += 1;
+        }
+    }
+
+    if cleaned > 0 {
+        tracing::info!("reaper: cleaned tmp files on {cleaned} peers");
+    }
+    Ok(cleaned)
+}
+
 /// Spawn the reaper as a periodic background task (every 5 min).
 pub fn spawn_reaper(db_path: std::path::PathBuf) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
         loop {
             interval.tick().await;
+            // Local cleanup (sync DB operations)
             match reap(&db_path) {
                 Ok((a, d, s)) => {
                     if a + d + s > 0 {
@@ -64,6 +117,10 @@ pub fn spawn_reaper(db_path: std::path::PathBuf) {
                     }
                 }
                 Err(e) => tracing::warn!("reaper error: {e}"),
+            }
+            // Remote cleanup (async mesh operations)
+            if let Err(e) = reap_peer_tmp_files().await {
+                tracing::debug!("reaper: peer cleanup skipped: {e}");
             }
         }
     });
@@ -133,5 +190,12 @@ mod tests {
         let _ = reap(tmp.path()).unwrap();
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM ipc_file_locks", [], |r| r.get(0)).unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn reap_peer_tmp_files_handles_no_daemon() {
+        // Should return error when daemon is not running, not panic
+        let result = reap_peer_tmp_files().await;
+        assert!(result.is_err(), "should error when daemon is not running");
     }
 }

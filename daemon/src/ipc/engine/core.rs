@@ -31,6 +31,7 @@ impl IpcEngine {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
              PRAGMA synchronous=NORMAL;
+             PRAGMA busy_timeout=5000;
              PRAGMA cache_size=-4000;",
         )?;
         ensure_ipc_schema(&conn)?;
