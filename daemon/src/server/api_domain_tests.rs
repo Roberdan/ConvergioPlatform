@@ -168,8 +168,7 @@ async fn list_domains_returns_expected_fields() {
         .uri("/api/domain/map")
         .header("content-type", "application/json")
         .body(Body::from(
-            json!({"domain": "fields-test", "skill_name": "sk1", "description": "d1"})
-                .to_string(),
+            json!({"domain": "fields-test", "skill_name": "sk1", "description": "d1"}).to_string(),
         ))
         .unwrap();
     router.clone().oneshot(req).await.unwrap();

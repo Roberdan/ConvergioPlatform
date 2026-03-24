@@ -1,4 +1,5 @@
 use crate::hooks::checks::{CheckContext, CheckOutcome, DispatchState, HookCommand};
+use crate::message_error::MessageResult;
 
 use super::checks_support_helpers::{
     contains_any, extract_base_cmd, extract_plan_id, select_account, GhAccountsConfig,
@@ -10,7 +11,7 @@ pub fn check_prefer_ci_summary(
     command: &HookCommand,
     _context: &CheckContext,
     state: &mut DispatchState,
-) -> Result<CheckOutcome, String> {
+) -> MessageResult<CheckOutcome> {
     let base = extract_base_cmd(&command.command);
     if base.starts_with("gh run view") && command.command.contains("--log") {
         return Ok(CheckOutcome::Block(
@@ -46,7 +47,7 @@ pub fn check_gh_auto_token(
     command: &HookCommand,
     context: &CheckContext,
     state: &mut DispatchState,
-) -> Result<CheckOutcome, String> {
+) -> MessageResult<CheckOutcome> {
     if command.command.is_empty()
         || !contains_any(
             &command.command,
@@ -75,7 +76,7 @@ pub fn check_warn_infra_plan_drift(
     command: &HookCommand,
     context: &CheckContext,
     state: &mut DispatchState,
-) -> Result<CheckOutcome, String> {
+) -> MessageResult<CheckOutcome> {
     if !contains_any(
         &command.command,
         &[
@@ -110,7 +111,7 @@ pub fn check_enforce_execution_preflight(
     command: &HookCommand,
     context: &CheckContext,
     _state: &mut DispatchState,
-) -> Result<CheckOutcome, String> {
+) -> MessageResult<CheckOutcome> {
     if !contains_any(
         &command.command,
         &[

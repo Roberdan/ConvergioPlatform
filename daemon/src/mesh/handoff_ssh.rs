@@ -1,5 +1,5 @@
-use crate::mesh::error::MeshError;
 use super::handoff_locking::merge_plan_status;
+use crate::mesh::error::MeshError;
 use ssh2::Session;
 use std::fs;
 use std::io::Read;
@@ -23,12 +23,16 @@ impl SshClient {
         } else {
             format!("{host_port}:22")
         };
-        let tcp = TcpStream::connect(addr).map_err(|e: std::io::Error| MeshError::Network(e.to_string()))?;
+        let tcp = TcpStream::connect(addr)
+            .map_err(|e: std::io::Error| MeshError::Network(e.to_string()))?;
         let _ = tcp.set_read_timeout(Some(timeout));
         let _ = tcp.set_write_timeout(Some(timeout));
-        let mut session = Session::new().map_err(|e: ssh2::Error| MeshError::Network(e.to_string()))?;
+        let mut session =
+            Session::new().map_err(|e: ssh2::Error| MeshError::Network(e.to_string()))?;
         session.set_tcp_stream(tcp);
-        session.handshake().map_err(|e: ssh2::Error| MeshError::Network(e.to_string()))?;
+        session
+            .handshake()
+            .map_err(|e: ssh2::Error| MeshError::Network(e.to_string()))?;
         let auth_user = if user.is_empty() {
             std::env::var("USER").unwrap_or_else(|_| "root".to_string())
         } else {

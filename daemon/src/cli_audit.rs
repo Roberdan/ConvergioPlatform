@@ -229,9 +229,10 @@ pub fn handle(path: PathBuf) -> Result<(), crate::cli_error::CliError> {
     for v in &violations {
         println!("  {}", format_violation(v));
     }
-    Err(crate::cli_error::CliError::ViolationsFound(
-        format!("{} violation(s) found", violations.len()),
-    ))
+    Err(crate::cli_error::CliError::ViolationsFound(format!(
+        "{} violation(s) found",
+        violations.len()
+    )))
 }
 
 #[cfg(test)]

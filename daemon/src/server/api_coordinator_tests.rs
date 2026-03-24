@@ -55,25 +55,19 @@ fn test_router() -> axum::Router {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let tmp = std::env::temp_dir()
-        .join(format!("claude-coord-test-{}-{n}.db", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("claude-coord-test-{}-{n}.db", std::process::id()));
     let conn = rusqlite::Connection::open(&tmp).expect("open tmp db");
     conn.execute_batch(SCHEMA).expect("schema");
     drop(conn);
     super::middleware::set_dev_mode(true);
-    super::routes::build_router_with_db(
-        std::path::PathBuf::from("/tmp"),
-        tmp,
-        None,
-    )
+    super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }
 
 fn test_router_seeded() -> axum::Router {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(100);
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let tmp = std::env::temp_dir()
-        .join(format!("claude-coord-test-{}-{n}.db", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("claude-coord-test-{}-{n}.db", std::process::id()));
     let conn = rusqlite::Connection::open(&tmp).expect("open tmp db");
     conn.execute_batch(SCHEMA).expect("schema");
     conn.execute_batch(
@@ -85,11 +79,7 @@ fn test_router_seeded() -> axum::Router {
     .expect("seed");
     drop(conn);
     super::middleware::set_dev_mode(true);
-    super::routes::build_router_with_db(
-        std::path::PathBuf::from("/tmp"),
-        tmp,
-        None,
-    )
+    super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }
 
 async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
@@ -102,11 +92,7 @@ async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
     (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
 
-async fn post_json(
-    router: &axum::Router,
-    uri: &str,
-    payload: Value,
-) -> (StatusCode, Value) {
+async fn post_json(router: &axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
     let req = Request::builder()
         .uri(uri)
         .method("POST")

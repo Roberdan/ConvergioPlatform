@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Seed the agent_catalog table with default agents from the platform.
 
+use crate::message_error::MessageResult;
 use rusqlite::Connection;
 
 /// Default agent definitions shipped with the platform.
@@ -61,7 +62,7 @@ const DEFAULT_AGENTS: &[(&str, &str, &str, &str)] = &[
 /// Insert default agents into agent_catalog using INSERT OR IGNORE.
 ///
 /// Returns the number of rows actually inserted (ignores duplicates).
-pub fn seed_default_agents(conn: &Connection) -> Result<usize, String> {
+pub fn seed_default_agents(conn: &Connection) -> MessageResult<usize> {
     let mut inserted = 0usize;
     for (name, category, description, model) in DEFAULT_AGENTS {
         let changes = conn

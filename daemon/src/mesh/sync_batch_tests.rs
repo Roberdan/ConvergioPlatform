@@ -115,19 +115,17 @@ async fn write_then_read_delta_frame_roundtrip() {
         node: "delta-peer".into(),
         sent_at_ms: 999,
         last_db_version: 10,
-        changes: vec![
-            DeltaChange {
-                table_name: "tasks".into(),
-                pk: b"pk1".to_vec(),
-                cid: "status".into(),
-                val: Some("done".into()),
-                col_version: 2,
-                db_version: 10,
-                site_id: b"s1".to_vec(),
-                cl: 1,
-                seq: 1,
-            },
-        ],
+        changes: vec![DeltaChange {
+            table_name: "tasks".into(),
+            pk: b"pk1".to_vec(),
+            cid: "status".into(),
+            val: Some("done".into()),
+            col_version: 2,
+            db_version: 10,
+            site_id: b"s1".to_vec(),
+            cl: 1,
+            seq: 1,
+        }],
     };
     let (mut writer, mut reader) = tokio::io::duplex(4096);
     write_frame(&mut writer, &frame).await.expect("write");
@@ -147,7 +145,10 @@ async fn read_frame_returns_none_on_eof() {
 #[tokio::test]
 async fn write_multiple_frames_then_read_sequentially() {
     let frames = vec![
-        MeshSyncFrame::Heartbeat { node: "a".into(), ts: 1 },
+        MeshSyncFrame::Heartbeat {
+            node: "a".into(),
+            ts: 1,
+        },
         MeshSyncFrame::Ack {
             node: "b".into(),
             applied: 5,
@@ -178,10 +179,15 @@ async fn read_frame_rejects_truncated_payload() {
     use tokio::io::AsyncWriteExt;
     let (mut writer, mut reader) = tokio::io::duplex(256);
     // Write a length header claiming 100 bytes but only write 10
-    writer.write_all(&100_u32.to_be_bytes()).await.expect("write len");
+    writer
+        .write_all(&100_u32.to_be_bytes())
+        .await
+        .expect("write len");
     writer.write_all(&[0u8; 10]).await.expect("write partial");
     drop(writer); // EOF after 10 bytes
-    let err = read_frame(&mut reader).await.expect_err("should fail on truncated");
+    let err = read_frame(&mut reader)
+        .await
+        .expect_err("should fail on truncated");
     assert!(
         err.to_string().contains("truncated") || err.to_string().contains("mesh frame"),
         "error should mention truncation: {err}"

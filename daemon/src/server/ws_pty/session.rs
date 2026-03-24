@@ -1,5 +1,6 @@
 //! Peer resolution and PTY session utilities for ws_pty.
 use super::super::state::ServerState;
+use crate::message_error::MessageResult;
 use std::collections::HashSet;
 
 pub(super) const MAX_TMUX_SESSION_LEN: usize = 64;
@@ -24,9 +25,9 @@ pub(super) fn load_known_peers() -> HashSet<String> {
     parse_known_peers(&content)
 }
 
-pub(crate) fn validate_peer(peer: &str, known_peers: &HashSet<String>) -> Result<(), String> {
+pub(crate) fn validate_peer(peer: &str, known_peers: &HashSet<String>) -> MessageResult<()> {
     if peer.len() > MAX_PEER_LEN {
-        return Err(format!("peer exceeds max length ({MAX_PEER_LEN})"));
+        return Err(format!("peer exceeds max length ({MAX_PEER_LEN})").into());
     }
     if peer == "local" || peer == "localhost" {
         return Ok(());
@@ -34,7 +35,7 @@ pub(crate) fn validate_peer(peer: &str, known_peers: &HashSet<String>) -> Result
     if known_peers.contains(peer) {
         Ok(())
     } else {
-        Err(format!("unknown peer: {peer}"))
+        Err(format!("unknown peer: {peer}").into())
     }
 }
 

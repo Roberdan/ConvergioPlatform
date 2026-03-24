@@ -3,7 +3,9 @@
 use super::{ReleaseAgent, ReleaseResult};
 use crate::server::state_init::ConnPool;
 use crate::workspace::events::EventLogger;
-use crate::workspace::git_connector::{AsyncResult, GitConnector, GitError, MergeMethod, PrInfo, PrReadiness};
+use crate::workspace::git_connector::{
+    AsyncResult, GitConnector, GitError, MergeMethod, PrInfo, PrReadiness,
+};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::path::Path;
@@ -105,7 +107,11 @@ impl GitConnector for MockConnector {
                 ci_passed,
                 pending_checks: 0,
                 unresolved_threads: 0,
-                review_status: if mergeable { "clean".into() } else { "blocked".into() },
+                review_status: if mergeable {
+                    "clean".into()
+                } else {
+                    "blocked".into()
+                },
             })
         })
     }
@@ -164,35 +170,6 @@ fn make_agent(connector: Box<dyn GitConnector>, pool: ConnPool) -> ReleaseAgent 
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_release_result_fields() {
-    let r = ReleaseResult {
-        workspace_id: "ws-abc".to_string(),
-        pr_number: 42,
-        pr_url: "https://github.com/org/repo/pull/42".to_string(),
-        quality_gates_passed: true,
-        merged: true,
-    };
-    assert_eq!(r.workspace_id, "ws-abc");
-    assert_eq!(r.pr_number, 42);
-    assert!(r.quality_gates_passed && r.merged);
-    let json = serde_json::to_string(&r).unwrap();
-    assert!(json.contains("ws-abc") && json.contains("42"));
-}
-
-#[tokio::test]
-async fn test_release_workspace_not_found() {
-    let pool = make_pool();
-    let agent = make_agent(Box::new(MockConnector::new_ok()), pool);
-    let result = agent.release("nonexistent", "org/repo").await;
-    assert!(result.is_err());
-    let msg = result.unwrap_err().to_string();
-    assert!(
-        msg.contains("workspace") || msg.contains("not found"),
-        "got: {msg}"
-    );
-}
 
 #[tokio::test]
 async fn test_release_full_pipeline_merged() {
@@ -255,3 +232,6 @@ async fn test_release_records_events() {
 // Additional tests (PR description + struct construction) split to stay under 250 lines.
 #[path = "release_agent_tests2.rs"]
 mod part2;
+
+#[path = "release_agent_tests_basics.rs"]
+mod basics;

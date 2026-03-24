@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// Typed error for all IPC operations, replacing `Result<T, String>`.
+/// Typed error for all IPC operations, replacing stringly-typed results.
 #[derive(Debug, Error)]
 pub enum IpcError {
     #[error("channel error: {0}")]

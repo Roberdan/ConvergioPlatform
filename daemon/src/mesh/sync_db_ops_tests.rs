@@ -232,11 +232,15 @@ fn apply_mixed_tables_counts_only_allowed() {
 fn read_changes_ordered_by_db_version_then_seq() {
     let conn = full_schema_conn();
     conn.execute(
-        "INSERT INTO crsql_changes VALUES('tasks',X'02','c','second',1,5,X'01',1,2)", [],
-    ).expect("insert");
+        "INSERT INTO crsql_changes VALUES('tasks',X'02','c','second',1,5,X'01',1,2)",
+        [],
+    )
+    .expect("insert");
     conn.execute(
-        "INSERT INTO crsql_changes VALUES('tasks',X'01','c','first',1,3,X'01',1,1)", [],
-    ).expect("insert");
+        "INSERT INTO crsql_changes VALUES('tasks',X'01','c','first',1,3,X'01',1,1)",
+        [],
+    )
+    .expect("insert");
     let changes = read_changes_since_from_conn(&conn, 0).expect("read");
     assert_eq!(changes.len(), 2);
     assert_eq!(changes[0].db_version, 3, "lower db_version first");

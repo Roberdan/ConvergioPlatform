@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # Convergio Platform
 
-Unified agentic AI control plane — Rust daemon, dashboard, and evolution engine for orchestrating AI agents across any model, tool, and machine.
+Unified agentic AI control plane — Rust daemon, dashboard, native `CommandCenter`, and evolution engine for orchestrating AI agents across any model, tool, and machine.
 
 > Not affiliated with or endorsed by Microsoft Corporation.
 
@@ -60,6 +60,13 @@ cvg run list                                # list all execution runs
 convergio stop [run_id]                     # abort execution
 ```
 
+### CommandCenter (native macOS app)
+
+`CommandCenter/` is the native operator surface for ConvergioPlatform. It replaces the old
+web-embedded mission control path with first-class SwiftUI views for plans, agents, mesh,
+evolution, run costs, PTY terminal access, the realtime brain graph, and native
+notifications.
+
 ---
 
 ## Architecture
@@ -69,6 +76,7 @@ convergio stop [run_id]                     # abort execution
 | **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI, `cvg` CLI (130+ modules) |
 | **Workspace** | `daemon/src/workspace/` | Rust | Agent workspace isolation, git abstraction, Release Agent, quality gates, event log |
 | **Dashboard** | `dashboard/` | JS | Control Room on Maranello Luce Design — plans, mesh, chat, brain, approvals |
+| **CommandCenter** | `CommandCenter/` | SwiftUI | Native macOS app — onboarding, plans, agents, mesh, evolution, costs, terminal, brain, notifications |
 | **Evolution** | `evolution/` | TS | Self-improvement: telemetry → proposals → experiments |
 | **Scripts** | `scripts/` | Bash | Mesh ops, platform tooling, document ingestion |
 | **Config** | `claude-config/` | MD | 89 agents, 8 commands, 8 rules, 27 validation gates |
@@ -90,6 +98,9 @@ Daemon stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde · hmac+
 ```bash
 cd daemon && cargo build --release   # build daemon
 cd daemon && cargo test              # run daemon tests (900+ tests)
+cd CommandCenter && ruby Scripts/generate_xcodeproj.rb \
+  && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+     xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build
 cd evolution && npx tsc --noEmit     # type-check evolution
 cd evolution && npx vitest run       # run evolution tests (43 tests)
 cd dashboard && ./start.sh           # serve dashboard at :8420

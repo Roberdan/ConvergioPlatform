@@ -126,8 +126,7 @@ pub async fn handle(cmd: WaveCommands) -> Result<(), CliError> {
             human,
             api_url,
         } => {
-            crate::cli_wave_handlers::handle_create(plan_id, wave_id, name, human, api_url)
-                .await?;
+            crate::cli_wave_handlers::handle_create(plan_id, wave_id, name, human, api_url).await?;
         }
         WaveCommands::Merge {
             plan_id,

@@ -3,7 +3,9 @@
 
 use crate::server::state_init::ConnPool;
 use crate::workspace::events::{EventLogger, WorkspaceAction};
-use crate::workspace::git_connector::{AsyncResult, GitConnector, GitError, MergeMethod, PrInfo, PrReadiness};
+use crate::workspace::git_connector::{
+    AsyncResult, GitConnector, GitError, MergeMethod, PrInfo, PrReadiness,
+};
 use crate::workspace::release_agent::ReleaseAgent;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;

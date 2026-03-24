@@ -46,7 +46,10 @@ pub async fn run_serve(
                 crsqlite_path: crsqlite_clone,
                 local_only: false,
             };
-            info!("mesh service starting on {}:{}", config.bind_ip, config.port);
+            info!(
+                "mesh service starting on {}:{}",
+                config.bind_ip, config.port
+            );
             eprintln!("mesh service → {}:{}", config.bind_ip, config.port);
             if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
                 warn!("mesh service failed: {err}");
@@ -57,9 +60,9 @@ pub async fn run_serve(
 
     if let Err(err) = claude_core::server::run(&effective_bind, dir, crsqlite_path).await {
         warn!("server failed: {err}");
-        return Err(IpcHandlerError::ServerFailed(
-            format!("server failed: {err}"),
-        ));
+        return Err(IpcHandlerError::ServerFailed(format!(
+            "server failed: {err}"
+        )));
     }
     Ok(())
 }
@@ -89,9 +92,9 @@ pub async fn run_daemon(
         local_only,
     };
     if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
-        return Err(IpcHandlerError::ServerFailed(
-            format!("daemon start failed: {err}"),
-        ));
+        return Err(IpcHandlerError::ServerFailed(format!(
+            "daemon start failed: {err}"
+        )));
     }
     Ok(())
 }

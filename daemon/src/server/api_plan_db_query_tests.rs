@@ -197,12 +197,20 @@ fn validate_task_not_found_and_wrong_plan() {
     let db = setup_db();
     let conn = db.connection();
     // Nonexistent task returns None
-    let t = query_one(conn, "SELECT id FROM tasks WHERE id = ?1 AND plan_id = ?2",
-        rusqlite::params![999, 1]).expect("query");
+    let t = query_one(
+        conn,
+        "SELECT id FROM tasks WHERE id = ?1 AND plan_id = ?2",
+        rusqlite::params![999, 1],
+    )
+    .expect("query");
     assert!(t.is_none());
     // Task 100 exists in plan 1 but not plan 99
-    let t = query_one(conn, "SELECT id FROM tasks WHERE id = ?1 AND plan_id = ?2",
-        rusqlite::params![100, 99]).expect("query");
+    let t = query_one(
+        conn,
+        "SELECT id FROM tasks WHERE id = ?1 AND plan_id = ?2",
+        rusqlite::params![100, 99],
+    )
+    .expect("query");
     assert!(t.is_none());
 }
 
@@ -212,14 +220,14 @@ fn validate_task_is_validated_logic() {
     let conn = db.connection();
     // Task 103 has validated_by='admin'
     let t = query_one(conn, "SELECT validated_by FROM tasks WHERE id = 103", [])
-        .expect("q").unwrap();
-    let v = t.get("validated_by").is_some()
-        && !t["validated_by"].as_str().unwrap_or("").is_empty();
+        .expect("q")
+        .unwrap();
+    let v = t.get("validated_by").is_some() && !t["validated_by"].as_str().unwrap_or("").is_empty();
     assert!(v, "task 103 should be validated");
     // Task 100 has validated_by=NULL
     let t = query_one(conn, "SELECT validated_by FROM tasks WHERE id = 100", [])
-        .expect("q").unwrap();
-    let v = t.get("validated_by").is_some()
-        && !t["validated_by"].as_str().unwrap_or("").is_empty();
+        .expect("q")
+        .unwrap();
+    let v = t.get("validated_by").is_some() && !t["validated_by"].as_str().unwrap_or("").is_empty();
     assert!(!v, "task 100 should not be validated");
 }

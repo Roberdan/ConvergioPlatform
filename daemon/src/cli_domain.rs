@@ -2,6 +2,7 @@
 // Domain-skill mapping CLI subcommands: `cvg domain list` and `cvg domain map`.
 // Delegates to daemon HTTP API for list; performs direct DB insert for map via API.
 
+use crate::message_error::MessageResult;
 use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
@@ -60,9 +61,8 @@ async fn handle_map(
 ) -> Result<(), crate::cli_error::CliError> {
     // Validate skill directory exists before calling daemon (fast-fail at CLI layer)
     let skill_path = format!("claude-config/skills/{skill}");
-    validate_skill_dir(&skill_path).map_err(|e| {
-        crate::cli_error::CliError::InvalidInput(format!("error: {e}"))
-    })?;
+    validate_skill_dir(&skill_path)
+        .map_err(|e| crate::cli_error::CliError::InvalidInput(format!("error: {e}")))?;
     let body = serde_json::json!({
         "domain": domain,
         "skill_name": skill,
@@ -74,11 +74,11 @@ async fn handle_map(
 
 /// Validate that the skill directory exists at `path`.
 /// Returns Ok(()) if the directory exists, Err(message) otherwise.
-pub(crate) fn validate_skill_dir(path: &str) -> Result<(), String> {
+pub(crate) fn validate_skill_dir(path: &str) -> MessageResult<()> {
     if std::path::Path::new(path).is_dir() {
         Ok(())
     } else {
-        Err(format!("skill directory does not exist: {path}"))
+        Err(format!("skill directory does not exist: {path}").into())
     }
 }
 

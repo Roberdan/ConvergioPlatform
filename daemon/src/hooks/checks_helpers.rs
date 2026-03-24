@@ -1,4 +1,5 @@
 use crate::hooks::checks::{CheckContext, CheckOutcome, DispatchState, HookCommand};
+use crate::message_error::MessageResult;
 use std::path::{Path, PathBuf};
 
 pub fn contains_any(command: &str, values: &[&str]) -> bool {
@@ -21,7 +22,7 @@ pub fn check_worktree_guard(
     command: &HookCommand,
     context: &CheckContext,
     _state: &mut DispatchState,
-) -> Result<CheckOutcome, String> {
+) -> MessageResult<CheckOutcome> {
     if command.command.contains("git worktree add") {
         if let Some(path) = super::checks_support::extract_worktree_add_path(&command.command) {
             let resolved = normalize_path(&context.cwd, &path);
@@ -85,7 +86,7 @@ pub fn check_warn_bash_antipatterns(
     command: &HookCommand,
     _context: &CheckContext,
     state: &mut DispatchState,
-) -> Result<CheckOutcome, String> {
+) -> MessageResult<CheckOutcome> {
     if command.command.contains("sqlite3")
         && command.command.contains("!=")
         && command.command.contains('"')

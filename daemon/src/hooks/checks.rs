@@ -1,3 +1,4 @@
+use crate::message_error::MessageResult;
 use rusqlite::{Connection, OpenFlags};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -88,7 +89,7 @@ impl CheckContext {
         }
     }
 
-    pub fn with_db<T, F>(&self, op: F) -> Result<Option<T>, String>
+    pub fn with_db<T, F>(&self, op: F) -> MessageResult<Option<T>>
     where
         F: FnOnce(&Connection) -> rusqlite::Result<T>,
     {
@@ -112,7 +113,7 @@ impl CheckContext {
 }
 
 pub type CheckFn =
-    fn(&HookCommand, &CheckContext, &mut DispatchState) -> Result<CheckOutcome, String>;
+    fn(&HookCommand, &CheckContext, &mut DispatchState) -> MessageResult<CheckOutcome>;
 
 pub fn bash_checks() -> [CheckFn; 7] {
     [
@@ -130,7 +131,7 @@ pub fn check_plan_db_validation_hints(
     command: &HookCommand,
     _context: &CheckContext,
     state: &mut DispatchState,
-) -> Result<CheckOutcome, String> {
+) -> MessageResult<CheckOutcome> {
     if command.command.contains("plan-db.sh update-task")
         && contains_any(&command.command, &[" done", " submitted"])
     {

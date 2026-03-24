@@ -103,7 +103,9 @@ fn default_db_path_ends_with_dashboard_db() {
     let saved = std::env::var("DASHBOARD_DB").ok();
     std::env::remove_var("DASHBOARD_DB");
     let p = default_db_path();
-    if let Some(v) = saved { std::env::set_var("DASHBOARD_DB", v); }
+    if let Some(v) = saved {
+        std::env::set_var("DASHBOARD_DB", v);
+    }
     assert!(p.ends_with(".claude/data/dashboard.db"), "got: {p:?}");
 }
 
@@ -126,9 +128,7 @@ fn default_peers_conf_ends_with_peers_conf() {
 #[tokio::test]
 async fn handle_ipc_models_bad_db_returns_error() {
     let bad = PathBuf::from("/nonexistent/path/does_not_exist.db");
-    let cmd = IpcCommands::Models {
-        db_path: Some(bad),
-    };
+    let cmd = IpcCommands::Models { db_path: Some(bad) };
     let result = handle_ipc(cmd).await;
     assert!(result.is_err());
     let msg = format!("{}", result.unwrap_err());
@@ -138,9 +138,7 @@ async fn handle_ipc_models_bad_db_returns_error() {
 #[tokio::test]
 async fn handle_ipc_budget_bad_db_returns_error() {
     let bad = PathBuf::from("/nonexistent/bad.db");
-    let cmd = IpcCommands::Budget {
-        db_path: Some(bad),
-    };
+    let cmd = IpcCommands::Budget { db_path: Some(bad) };
     let result = handle_ipc(cmd).await;
     assert!(result.is_err());
 }
@@ -184,9 +182,7 @@ async fn handle_ipc_skills_with_agent_bad_db_returns_error() {
 async fn handle_ipc_auth_list_bad_db_returns_error() {
     let bad = PathBuf::from("/nonexistent/a.db");
     let cmd = IpcCommands::Auth {
-        command: AuthCommands::List {
-            db_path: Some(bad),
-        },
+        command: AuthCommands::List { db_path: Some(bad) },
     };
     let result = handle_ipc(cmd).await;
     assert!(result.is_err());
@@ -232,9 +228,7 @@ async fn handle_ipc_rate_skill_bad_db_returns_error() {
 async fn handle_ipc_sub_list_bad_db_returns_error() {
     let bad = PathBuf::from("/nonexistent/sub.db");
     let cmd = IpcCommands::Sub {
-        command: SubCommands::List {
-            db_path: Some(bad),
-        },
+        command: SubCommands::List { db_path: Some(bad) },
     };
     let result = handle_ipc(cmd).await;
     assert!(result.is_err());

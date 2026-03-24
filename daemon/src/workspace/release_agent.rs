@@ -30,7 +30,11 @@ impl ReleaseAgent {
         event_logger: EventLogger,
         pool: ConnPool,
     ) -> Self {
-        Self { connector, event_logger, pool }
+        Self {
+            connector,
+            event_logger,
+            pool,
+        }
     }
 
     /// Full release pipeline: quality gate -> commit -> push -> PR -> merge.
@@ -55,50 +59,92 @@ impl ReleaseAgent {
         );
         self.event_logger
             .record_event(
-                workspace_id, "release-agent",
-                if all_passed { WorkspaceAction::QualityGatePass }
-                else { WorkspaceAction::QualityGateFail },
-                None, Some(&gate_summary), None,
+                workspace_id,
+                "release-agent",
+                if all_passed {
+                    WorkspaceAction::QualityGatePass
+                } else {
+                    WorkspaceAction::QualityGateFail
+                },
+                None,
+                Some(&gate_summary),
+                None,
             )
             .ok();
 
         if !all_passed {
-            let failures: Vec<String> = gates.iter()
+            let failures: Vec<String> = gates
+                .iter()
                 .filter(|g| !g.passed)
                 .map(|g| format!("{}: {}", g.gate_name, g.message))
                 .collect();
             return Err(WorkspaceError::Validation(format!(
-                "Quality gates failed:\n{}", failures.join("\n")
+                "Quality gates failed:\n{}",
+                failures.join("\n")
             )));
         }
 
-        let _sha = self.connector
-            .commit(path, &format!("feat: release from workspace {workspace_id}"))
+        let _sha = self
+            .connector
+            .commit(
+                path,
+                &format!("feat: release from workspace {workspace_id}"),
+            )
             .map_err(|e| WorkspaceError::Git(e.to_string()))?;
         self.event_logger
-            .record_event(workspace_id, "release-agent", WorkspaceAction::GitCommit, None, None, None)
+            .record_event(
+                workspace_id,
+                "release-agent",
+                WorkspaceAction::GitCommit,
+                None,
+                None,
+                None,
+            )
             .ok();
 
         let _ = self.connector.rebase(path, "origin/main");
 
-        self.connector.push(path, &branch, true).map_err(|e| WorkspaceError::Git(e.to_string()))?;
+        self.connector
+            .push(path, &branch, true)
+            .map_err(|e| WorkspaceError::Git(e.to_string()))?;
         self.event_logger
-            .record_event(workspace_id, "release-agent", WorkspaceAction::GitPush, None, None, None)
+            .record_event(
+                workspace_id,
+                "release-agent",
+                WorkspaceAction::GitPush,
+                None,
+                None,
+                None,
+            )
             .ok();
 
         let pr_body = self.generate_pr_description(workspace_id);
-        let pr = self.connector
-            .create_pr(repo_slug, &branch, "main", &format!("feat: workspace {workspace_id}"), &pr_body)
+        let pr = self
+            .connector
+            .create_pr(
+                repo_slug,
+                &branch,
+                "main",
+                &format!("feat: workspace {workspace_id}"),
+                &pr_body,
+            )
             .await
             .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
         self.event_logger
             .record_event(
-                workspace_id, "release-agent", WorkspaceAction::PrCreated,
-                None, Some(&format!("PR #{}", pr.number)), None,
+                workspace_id,
+                "release-agent",
+                WorkspaceAction::PrCreated,
+                None,
+                Some(&format!("PR #{}", pr.number)),
+                None,
             )
             .ok();
 
-        let readiness = self.connector.pr_readiness(repo_slug, pr.number).await
+        let readiness = self
+            .connector
+            .pr_readiness(repo_slug, pr.number)
+            .await
             .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
         if !readiness.mergeable || !readiness.ci_passed {
             return Ok(ReleaseResult {
@@ -110,12 +156,18 @@ impl ReleaseAgent {
             });
         }
 
-        self.connector.merge_pr(repo_slug, pr.number, MergeMethod::Squash).await
+        self.connector
+            .merge_pr(repo_slug, pr.number, MergeMethod::Squash)
+            .await
             .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
         self.event_logger
             .record_event(
-                workspace_id, "release-agent", WorkspaceAction::PrMerged,
-                None, Some(&format!("PR #{} merged", pr.number)), None,
+                workspace_id,
+                "release-agent",
+                WorkspaceAction::PrMerged,
+                None,
+                Some(&format!("PR #{} merged", pr.number)),
+                None,
             )
             .ok();
 
@@ -136,10 +188,12 @@ impl ReleaseAgent {
 
     /// Build a PR description from workspace_events.
     pub fn generate_pr_description(&self, workspace_id: &str) -> String {
-        let events = self.event_logger
+        let events = self
+            .event_logger
             .query_events(workspace_id, Some(50), None)
             .unwrap_or_default();
-        let file_writes: Vec<String> = events.iter()
+        let file_writes: Vec<String> = events
+            .iter()
             .filter(|e| e.action == "file_write")
             .filter_map(|e| e.file_path.clone())
             .collect();

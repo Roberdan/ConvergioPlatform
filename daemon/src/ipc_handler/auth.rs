@@ -20,9 +20,9 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
         } => match claude_core::ipc::auth_sync::store_token(&conn, &service, &token, &secret) {
             Ok(()) => println!("stored token for {service}"),
             Err(e) => {
-                return Err(IpcHandlerError::OperationFailed(
-                    format!("store failed: {e}"),
-                ));
+                return Err(IpcHandlerError::OperationFailed(format!(
+                    "store failed: {e}"
+                )));
             }
         },
         AuthCommands::List { .. } => match claude_core::ipc::auth_sync::list_tokens(&conn) {
@@ -34,9 +34,9 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
                 println!("\n{} token(s)", tokens.len());
             }
             Err(e) => {
-                return Err(IpcHandlerError::OperationFailed(
-                    format!("list failed: {e}"),
-                ));
+                return Err(IpcHandlerError::OperationFailed(format!(
+                    "list failed: {e}"
+                )));
             }
         },
         AuthCommands::Get {
@@ -44,14 +44,12 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
         } => match claude_core::ipc::auth_sync::get_token(&conn, &service, &secret) {
             Ok(Some(val)) => println!("{val}"),
             Ok(None) => {
-                return Err(IpcHandlerError::NotFound(
-                    format!("no token found for {service}"),
-                ));
+                return Err(IpcHandlerError::NotFound(format!(
+                    "no token found for {service}"
+                )));
             }
             Err(e) => {
-                return Err(IpcHandlerError::OperationFailed(
-                    format!("get failed: {e}"),
-                ));
+                return Err(IpcHandlerError::OperationFailed(format!("get failed: {e}")));
             }
         },
         AuthCommands::Revoke { service, host, .. } => {
@@ -63,9 +61,9 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
             match claude_core::ipc::auth_sync::revoke_token(&conn, &service, &h) {
                 Ok(n) => println!("revoked {n} token(s) for {service}@{h}"),
                 Err(e) => {
-                    return Err(IpcHandlerError::OperationFailed(
-                        format!("revoke failed: {e}"),
-                    ));
+                    return Err(IpcHandlerError::OperationFailed(format!(
+                        "revoke failed: {e}"
+                    )));
                 }
             }
         }
@@ -76,9 +74,9 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
         } => match claude_core::ipc::auth_sync::rotate_keys(&conn, &old_secret, &new_secret) {
             Ok(n) => println!("rotated {n} token(s)"),
             Err(e) => {
-                return Err(IpcHandlerError::OperationFailed(
-                    format!("rotate failed: {e}"),
-                ));
+                return Err(IpcHandlerError::OperationFailed(format!(
+                    "rotate failed: {e}"
+                )));
             }
         },
     }

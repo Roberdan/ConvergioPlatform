@@ -19,9 +19,9 @@ pub fn handle_route(
                 serde_json::to_string_pretty(&plan).unwrap_or_default()
             ),
             Err(e) => {
-                return Err(IpcHandlerError::OperationFailed(
-                    format!("parallel route: {e}"),
-                ));
+                return Err(IpcHandlerError::OperationFailed(format!(
+                    "parallel route: {e}"
+                )));
             }
         }
     } else if dry_run {
@@ -126,9 +126,9 @@ pub fn handle_request_skill(
             }
         }
         Err(e) => {
-            return Err(IpcHandlerError::OperationFailed(
-                format!("request-skill: {e}"),
-            ));
+            return Err(IpcHandlerError::OperationFailed(format!(
+                "request-skill: {e}"
+            )));
         }
     }
     Ok(())
@@ -145,9 +145,9 @@ pub fn handle_respond_skill(
     match claude_core::ipc::skills::complete_skill_request(&conn, &request_id, &result) {
         Ok(()) => println!("Request {request_id} completed"),
         Err(e) => {
-            return Err(IpcHandlerError::OperationFailed(
-                format!("respond-skill: {e}"),
-            ));
+            return Err(IpcHandlerError::OperationFailed(format!(
+                "respond-skill: {e}"
+            )));
         }
     }
     Ok(())
@@ -164,9 +164,7 @@ pub fn handle_rate_skill(
     match claude_core::ipc::skills::rate_skill_response(&conn, &request_id, rating) {
         Ok(()) => println!("Rated request {request_id}: {rating}"),
         Err(e) => {
-            return Err(IpcHandlerError::OperationFailed(
-                format!("rate-skill: {e}"),
-            ));
+            return Err(IpcHandlerError::OperationFailed(format!("rate-skill: {e}")));
         }
     }
     Ok(())

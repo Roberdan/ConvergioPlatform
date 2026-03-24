@@ -10,19 +10,13 @@ use tower::ServiceExt;
 fn test_router() -> (axum::Router, std::path::PathBuf) {
     static CTR: AtomicU64 = AtomicU64::new(0);
     let n = CTR.fetch_add(1, Ordering::SeqCst);
-    let tmp = std::env::temp_dir().join(format!(
-        "claude-audit-test-{}-{n}.db",
-        std::process::id()
-    ));
+    let tmp = std::env::temp_dir().join(format!("claude-audit-test-{}-{n}.db", std::process::id()));
     let conn = rusqlite::Connection::open(&tmp).expect("open");
     conn.execute_batch(SCHEMA).expect("schema");
     drop(conn);
     super::middleware::set_dev_mode(true);
-    let router = super::routes::build_router_with_db(
-        std::path::PathBuf::from("/tmp"),
-        tmp.clone(),
-        None,
-    );
+    let router =
+        super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp.clone(), None);
     (router, tmp)
 }
 
@@ -71,9 +65,7 @@ async fn body_json(body: Body) -> Value {
 fn seed_db(path: &std::path::Path) {
     let conn = rusqlite::Connection::open(path).expect("open for seed");
     // Ensure columns the audit endpoint queries but init may not create
-    let _ = conn.execute_batch(
-        "ALTER TABLE agent_activity ADD COLUMN action TEXT DEFAULT ''",
-    );
+    let _ = conn.execute_batch("ALTER TABLE agent_activity ADD COLUMN action TEXT DEFAULT ''");
     conn.execute_batch(SEED).expect("seed data");
 }
 
@@ -165,10 +157,7 @@ async fn audit_tasks_contain_model_and_status() {
     let json = body_json(resp.into_body()).await;
     let tasks = json["tasks"].as_array().unwrap();
     assert_eq!(tasks.len(), 3);
-    let done_tasks: Vec<_> = tasks
-        .iter()
-        .filter(|t| t["status"] == "done")
-        .collect();
+    let done_tasks: Vec<_> = tasks.iter().filter(|t| t["status"] == "done").collect();
     assert_eq!(done_tasks.len(), 2);
 }
 

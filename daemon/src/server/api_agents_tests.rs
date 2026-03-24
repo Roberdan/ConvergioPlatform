@@ -10,19 +10,14 @@ use tower::ServiceExt;
 pub(super) fn test_router() -> (axum::Router, std::path::PathBuf) {
     static CTR: AtomicU64 = AtomicU64::new(0);
     let n = CTR.fetch_add(1, Ordering::SeqCst);
-    let tmp = std::env::temp_dir().join(format!(
-        "claude-agents-test-{}-{n}.db",
-        std::process::id()
-    ));
+    let tmp =
+        std::env::temp_dir().join(format!("claude-agents-test-{}-{n}.db", std::process::id()));
     let conn = rusqlite::Connection::open(&tmp).expect("open");
     conn.execute_batch(SCHEMA).expect("schema");
     drop(conn);
     super::middleware::set_dev_mode(true);
-    let router = super::routes::build_router_with_db(
-        std::path::PathBuf::from("/tmp"),
-        tmp.clone(),
-        None,
-    );
+    let router =
+        super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp.clone(), None);
     (router, tmp)
 }
 
@@ -65,9 +60,7 @@ pub(super) fn seed_db(path: &std::path::Path) {
           tokens_in, tokens_out, tokens_total, cost_usd, host, region) \
          VALUES(?1,?2,?3,?4,'running',datetime('now'),\
           100,200,300,0.05,'local','prefrontal')",
-        rusqlite::params![
-            "session-cli-001", "copilot-cli", "opus", "Primary session"
-        ],
+        rusqlite::params!["session-cli-001", "copilot-cli", "opus", "Primary session"],
     )
     .unwrap();
     conn.execute(
@@ -76,7 +69,10 @@ pub(super) fn seed_db(path: &std::path::Path) {
           tokens_total, cost_usd, parent_session, plan_id) \
          VALUES(?1,?2,?3,?4,'running',datetime('now'),150,0.03,?5,1)",
         rusqlite::params![
-            "worker-A", "task", "sonnet", "Sub-agent worker",
+            "worker-A",
+            "task",
+            "sonnet",
+            "Sub-agent worker",
             "session-cli-001"
         ],
     )
@@ -87,9 +83,7 @@ pub(super) fn seed_db(path: &std::path::Path) {
           completed_at, tokens_total, cost_usd, duration_s) \
          VALUES(?1,?2,?3,?4,'completed',datetime('now','-30 minutes'),\
           datetime('now','-25 minutes'),500,0.10,300.0)",
-        rusqlite::params![
-            "worker-done", "task", "haiku", "Completed worker"
-        ],
+        rusqlite::params!["worker-done", "task", "haiku", "Completed worker"],
     )
     .unwrap();
 }

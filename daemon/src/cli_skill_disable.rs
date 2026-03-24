@@ -3,6 +3,7 @@
 
 use crate::cli_error::CliError;
 use crate::cli_skill_validate::{agent_name_valid, yaml_get_list};
+use crate::message_error::MessageResult;
 use std::path::{Path, PathBuf};
 
 /// Result of deactivating plugins for a disabled skill.
@@ -50,7 +51,7 @@ pub fn deactivate_plugins(
     skills_dir: &Path,
     disabled_skill_name: &str,
     claude_dir: &Path,
-) -> Result<DeactivatePluginsResult, String> {
+) -> MessageResult<DeactivatePluginsResult> {
     let plugins = yaml_get_list(yaml_content, "requires-plugins").unwrap_or_default();
     if plugins.is_empty() {
         return Ok(DeactivatePluginsResult {

@@ -87,7 +87,10 @@ fn inbound_rate_limiter_rejects_excessive_connections_from_single_ip() {
     let err = limiter
         .check(remote)
         .expect_err("11th connection in one second should be rejected");
-    assert!(err.to_string().contains("per-second"), "unexpected error: {err}");
+    assert!(
+        err.to_string().contains("per-second"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]

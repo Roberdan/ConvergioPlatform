@@ -93,10 +93,7 @@ async fn write_report(
         "output_path": dest.to_string_lossy(),
     });
     let meta_path = dest.join("metadata.json");
-    fs::write(
-        &meta_path,
-        serde_json::to_string_pretty(&metadata).unwrap(),
-    )?;
+    fs::write(&meta_path, serde_json::to_string_pretty(&metadata).unwrap())?;
 
     eprintln!("Report written to: {}", dest.display());
 

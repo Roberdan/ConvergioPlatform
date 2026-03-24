@@ -137,13 +137,9 @@ fn checkpoint_save_query_empty_plan_has_no_tasks() {
 fn checkpoint_save_snapshot_can_be_serialized() {
     let db = setup_db();
     let conn = db.connection();
-    let plan = query_one(
-        conn,
-        "SELECT id, name, status FROM plans WHERE id = 1",
-        [],
-    )
-    .expect("query")
-    .unwrap();
+    let plan = query_one(conn, "SELECT id, name, status FROM plans WHERE id = 1", [])
+        .expect("query")
+        .unwrap();
     let waves = query_rows(
         conn,
         "SELECT id, wave_id, name FROM waves WHERE plan_id = 1",

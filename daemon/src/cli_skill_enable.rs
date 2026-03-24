@@ -3,6 +3,7 @@
 
 use crate::cli_error::CliError;
 use crate::cli_skill_validate::{agent_name_valid, yaml_get_list};
+use crate::message_error::MessageResult;
 use std::path::{Path, PathBuf};
 
 /// Result of activating plugins into settings.json.
@@ -17,7 +18,7 @@ pub struct PluginActivationResult {
 pub fn activate_plugins(
     yaml_content: &str,
     claude_dir: &Path,
-) -> Result<PluginActivationResult, String> {
+) -> MessageResult<PluginActivationResult> {
     let plugins = yaml_get_list(yaml_content, "requires-plugins").unwrap_or_default();
     if plugins.is_empty() {
         return Ok(PluginActivationResult {

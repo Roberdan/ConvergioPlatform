@@ -3,6 +3,7 @@
 // then approves it via the daemon HTTP API.
 
 use crate::cli_error::CliError;
+use crate::message_error::MessageResult;
 use serde_json::Value;
 
 /// Approve the deliverable linked to a task.
@@ -15,7 +16,7 @@ pub async fn handle(
 ) -> Result<(), CliError> {
     let deliverable = find_deliverable(task_id, api_url)
         .await
-        .map_err(CliError::NotFound)?;
+        .map_err(|e| CliError::NotFound(e.to_string()))?;
 
     let id = deliverable["id"].as_i64().unwrap_or(0);
     let approved_by = comment.unwrap_or_else(|| "cli".to_string());
@@ -44,21 +45,23 @@ pub async fn handle(
     }
 
     if !status.is_success() {
-        return Err(CliError::NotFound(format!("daemon returned status {status}")));
+        return Err(CliError::NotFound(format!(
+            "daemon returned status {status}"
+        )));
     }
     Ok(())
 }
 
 /// Find the deliverable linked to a task via GET /api/deliverables?task_id=<id>.
 /// Returns the first deliverable or an error message.
-async fn find_deliverable(task_id: i64, api_url: &str) -> Result<Value, String> {
+async fn find_deliverable(task_id: i64, api_url: &str) -> MessageResult<Value> {
     let url = format!("{api_url}/api/deliverables?task_id={task_id}");
     let resp = reqwest::get(&url)
         .await
         .map_err(|e| format!("error connecting to daemon: {e}"))?;
 
     if !resp.status().is_success() {
-        return Err(format!("daemon returned status {}", resp.status()));
+        return Err(format!("daemon returned status {}", resp.status()).into());
     }
 
     let list: Value = resp
@@ -74,7 +77,8 @@ async fn find_deliverable(task_id: i64, api_url: &str) -> Result<Value, String> 
         return Err(format!(
             "no deliverable linked to task {task_id}. \
              Create one first with: cvg deliverable create --task-id {task_id}"
-        ));
+        )
+        .into());
     }
 
     // Return the most recent (first, since ordered by id DESC)
