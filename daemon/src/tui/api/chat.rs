@@ -11,14 +11,19 @@ pub async fn create_session(client: &Client, api_url: &str) -> Option<String> {
         .or_else(|| val.get("session").and_then(|s| s.get("id")).and_then(Value::as_str).map(String::from))
 }
 
-/// Run `claude --print '<message>'` locally via tokio::process::Command.
+/// Run `claude --print` with Ali (Chief of Staff) persona locally.
 /// Uses the logged-in Claude session — no API key needed.
 pub async fn send_message(
     _client: &Client, _api_url: &str, _session_id: &str, content: &str,
 ) -> Option<String> {
     use tokio::process::Command;
+    let ali_prompt = "You are Ali, Chief of Staff of the Convergio Platform. \
+        You orchestrate all agents, know every plan, task, and mesh node. \
+        Respond concisely in the user's language. You have full context on \
+        ConvergioPlatform: daemon (Rust), dashboard, evolution engine, mesh network. \
+        Be helpful, direct, and actionable.";
     let output = Command::new("claude")
-        .args(["--print", content])
+        .args(["--print", "--append-system-prompt", ali_prompt, content])
         .output()
         .await
         .ok()?;
