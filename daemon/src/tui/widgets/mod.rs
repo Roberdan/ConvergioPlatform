@@ -31,4 +31,7 @@ pub mod kpi;
 pub mod shared;
 
 pub use kpi::kpi_strip;
-pub use shared::{agent_org_chart, mesh_status, plan_kanban, progress_bar, spark, task_pipeline};
+pub use shared::{
+    agent_org_chart, mesh_status, plan_kanban, progress_bar, progress_bar_line, spark,
+    task_pipeline,
+};
