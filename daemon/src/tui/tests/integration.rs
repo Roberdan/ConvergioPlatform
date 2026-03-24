@@ -42,7 +42,7 @@ fn help_overlay_hidden_when_show_help_false() {
     let data = sample_data();
     let rendered = render_to_text_full(&data, MainView::PlanKanban, "http://localhost:8420", false);
     assert!(
-        rendered.contains("PLAN KANBAN"),
+        rendered.contains("Plans") || rendered.contains("DOING") || rendered.contains("TODO"),
         "kanban view must be visible when help is hidden"
     );
 }

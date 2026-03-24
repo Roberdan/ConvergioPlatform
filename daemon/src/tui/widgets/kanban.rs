@@ -1,10 +1,10 @@
 // Modern card-based kanban for the Plan Kanban view.
-// Extracted from shared.rs to keep file sizes under 250 lines.
+// Redesigned with rounded borders, color-gradient progress bars, and compact/expanded modes.
 
 use std::collections::BTreeMap;
 
 use ratatui::{
-    style::{Style, Stylize},
+    style::Style,
     text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
@@ -13,13 +13,15 @@ use crate::tui::TuiData;
 
 use super::{selected_style, ACCENT, FAIL, MUTED, OK, TEXT_PRIMARY, WARN};
 
-// Section display order and metadata.
-const SECTIONS: &[(&str, &str, &str)] = &[
-    ("DOING", "◉", "DOING"),
-    ("TODO", "○", "TODO"),
-    ("BLOCKED", "✕", "BLOCKED"),
-    ("DONE", "✓", "DONE"),
+const SECTIONS: &[(&str, &str)] = &[
+    ("DOING", "\u{25c9}"),  // ◉
+    ("TODO", "\u{25cb}"),   // ○
+    ("BLOCKED", "\u{2715}"),// ✕
+    ("DONE", "\u{2713}"),   // ✓
 ];
+
+/// Card width for border drawing (inner content width).
+const CARD_W: usize = 66;
 
 fn section_color(key: &str) -> ratatui::style::Color {
     match key {
@@ -30,180 +32,209 @@ fn section_color(key: &str) -> ratatui::style::Color {
     }
 }
 
-/// Progress icon: ✓ >=100%, ◐ >=50%, ◔ >0%, ○ 0%
 fn progress_icon(pct: u16) -> &'static str {
-    if pct >= 100 { "✓" } else if pct >= 50 { "◐" } else if pct > 0 { "◔" } else { "○" }
+    if pct >= 100 { "\u{2713}" } else if pct >= 50 { "\u{25d0}" } else if pct > 0 { "\u{25d4}" } else { "\u{25cb}" }
 }
 
-/// Colored progress bar string using block chars. Width = number of filled+empty chars.
-fn colored_bar(pct: u16, width: usize) -> (String, String, ratatui::style::Color) {
-    let color = if pct >= 80 { OK } else if pct >= 50 { WARN } else { FAIL };
-    let filled = ((pct as usize) * width / 100).min(width);
-    let empty = width - filled;
-    ("█".repeat(filled), "░".repeat(empty), color)
+fn progress_color(pct: u16) -> ratatui::style::Color {
+    if pct >= 80 { OK } else if pct >= 50 { WARN } else { FAIL }
 }
 
-/// Truncate a string to max_chars, appending … if truncated.
-fn truncate(s: &str, max_chars: usize) -> String {
+fn truncate(s: &str, max: usize) -> String {
     let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= max_chars {
-        s.to_string()
+    if chars.len() <= max { s.to_string() } else {
+        chars[..max.saturating_sub(1)].iter().collect::<String>() + "\u{2026}"
+    }
+}
+
+fn border_top() -> Line<'static> {
+    let inner = "\u{2500}".repeat(CARD_W);
+    Line::from(Span::styled(
+        format!("  \u{256d}{inner}\u{256e}"), Style::default().fg(MUTED),
+    ))
+}
+
+fn border_bottom() -> Line<'static> {
+    let inner = "\u{2500}".repeat(CARD_W);
+    Line::from(Span::styled(
+        format!("  \u{2570}{inner}\u{256f}"), Style::default().fg(MUTED),
+    ))
+}
+
+fn border_sep() -> Line<'static> {
+    let inner = "\u{2500}".repeat(CARD_W);
+    Line::from(Span::styled(
+        format!("  \u{251c}{inner}\u{2524}"), Style::default().fg(MUTED),
+    ))
+}
+
+/// Render the section header: " ◉ DOING                          3 plans"
+fn section_header(icon: &str, label: &str, count: usize) -> Line<'static> {
+    let col = section_color(label);
+    let count_str = format!("{} plan{}", count, if count == 1 { "" } else { "s" });
+    let pad = CARD_W.saturating_sub(icon.len() + 1 + label.len() + 1 + count_str.len()) + 2;
+    Line::from(vec![
+        Span::raw("  "),
+        Span::styled(format!("{icon} "), Style::default().fg(col).bold()),
+        Span::styled(label.to_string(), Style::default().fg(col).bold()),
+        Span::raw(" ".repeat(pad)),
+        Span::styled(count_str, Style::default().fg(MUTED)),
+    ])
+}
+
+/// Expanded card for DOING: two lines (name + progress bar).
+fn expanded_card(
+    plan: &crate::tui::data::PlanCard, is_selected: bool, lines: &mut Vec<Line<'static>>,
+) {
+    let pct = if plan.tasks_total > 0 {
+        ((plan.tasks_done * 100) / plan.tasks_total) as u16
+    } else { 0 };
+    let id_str = format!("#{}", plan.id);
+    let name = truncate(&plan.name, 48);
+    // Row 1: "  │  #708   Plan Name                              │"
+    let content_used = 2 + id_str.len() + 3 + name.chars().count();
+    let pad1 = CARD_W.saturating_sub(content_used);
+    if is_selected {
+        let inner = format!("  {}   {}{}", id_str, name, " ".repeat(pad1));
+        lines.push(Line::from(vec![
+            Span::styled("  \u{2502}", Style::default().fg(MUTED)),
+            Span::styled(inner, selected_style()),
+            Span::styled("\u{2502}", Style::default().fg(MUTED)),
+        ]));
     } else {
-        chars[..max_chars.saturating_sub(1)].iter().collect::<String>() + "…"
+        lines.push(Line::from(vec![
+            Span::styled("  \u{2502}  ", Style::default().fg(MUTED)),
+            Span::styled(id_str, Style::default().fg(ACCENT).bold()),
+            Span::raw("   "),
+            Span::styled(name, Style::default().fg(TEXT_PRIMARY)),
+            Span::raw(" ".repeat(pad1)),
+            Span::styled("\u{2502}", Style::default().fg(MUTED)),
+        ]));
+    }
+    // Row 2: "  │  ████████████░░░░░░░░  80%  12/18  ◐          │"
+    let bar_w = 36;
+    let filled = ((pct as usize) * bar_w / 100).min(bar_w);
+    let empty = bar_w - filled;
+    let bar_filled = "\u{2588}".repeat(filled);
+    let bar_empty = "\u{2591}".repeat(empty);
+    let pct_str = format!("{:>3}%", pct);
+    let frac = format!("{}/{}", plan.tasks_done, plan.tasks_total);
+    let icon = progress_icon(pct);
+    let bar_color = progress_color(pct);
+    // Calculate remaining space: 2(pad) + bar_w + 2 + pct(4) + 3 + frac + 2 + icon + 2
+    let tail_len = 2 + bar_w + 2 + 4 + 3 + frac.len() + 2 + 1 + 2;
+    let pad2 = CARD_W.saturating_sub(tail_len);
+    if is_selected {
+        let inner = format!(
+            "  {}{} {} {}  {}  {}",
+            bar_filled, bar_empty, pct_str, frac, icon, " ".repeat(pad2),
+        );
+        lines.push(Line::from(vec![
+            Span::styled("  \u{2502}", Style::default().fg(MUTED)),
+            Span::styled(inner, selected_style()),
+            Span::styled("\u{2502}", Style::default().fg(MUTED)),
+        ]));
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("  \u{2502}  ", Style::default().fg(MUTED)),
+            Span::styled(bar_filled, Style::default().fg(bar_color)),
+            Span::styled(bar_empty, Style::default().fg(MUTED)),
+            Span::raw(format!(" {} ", pct_str)),
+            Span::raw(format!("{}  ", frac)),
+            Span::styled(icon.to_string(), Style::default().fg(bar_color)),
+            Span::raw(" ".repeat(pad2 + 2)),
+            Span::styled("\u{2502}", Style::default().fg(MUTED)),
+        ]));
+    }
+}
+
+/// Compact card for TODO/DONE: single line with right-aligned fraction + icon.
+fn compact_card(
+    plan: &crate::tui::data::PlanCard, col_color: ratatui::style::Color,
+    is_selected: bool, lines: &mut Vec<Line<'static>>,
+) {
+    let pct = if plan.tasks_total > 0 {
+        ((plan.tasks_done * 100) / plan.tasks_total) as u16
+    } else { 0 };
+    let id_str = format!("#{}", plan.id);
+    let name = truncate(&plan.name, 40);
+    let frac = format!("{}/{}", plan.tasks_done, plan.tasks_total);
+    let icon = progress_icon(pct);
+    // "  │  #705   name                        0/8   ○  │"
+    let left_len = 2 + id_str.len() + 3 + name.chars().count();
+    let right_len = frac.len() + 3 + 1 + 2;
+    let pad = CARD_W.saturating_sub(left_len + right_len);
+    if is_selected {
+        let inner = format!(
+            "  {}   {}{}{}   {}  ",
+            id_str, name, " ".repeat(pad), frac, icon,
+        );
+        lines.push(Line::from(vec![
+            Span::styled("  \u{2502}", Style::default().fg(MUTED)),
+            Span::styled(inner, selected_style()),
+            Span::styled("\u{2502}", Style::default().fg(MUTED)),
+        ]));
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("  \u{2502}  ", Style::default().fg(MUTED)),
+            Span::styled(id_str, Style::default().fg(ACCENT).bold()),
+            Span::raw("   "),
+            Span::styled(name, Style::default().fg(TEXT_PRIMARY)),
+            Span::raw(" ".repeat(pad)),
+            Span::raw(format!("{}   ", frac)),
+            Span::styled(icon.to_string(), Style::default().fg(col_color)),
+            Span::raw("  "),
+            Span::styled("\u{2502}", Style::default().fg(MUTED)),
+        ]));
     }
 }
 
 pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
-    // Bucket plans by status key.
     let mut cols: BTreeMap<&str, Vec<(usize, &crate::tui::data::PlanCard)>> = BTreeMap::new();
     for key in ["BLOCKED", "DOING", "DONE", "TODO"] {
         cols.insert(key, Vec::new());
     }
     for (i, plan) in data.plans.iter().enumerate() {
         let key = match plan.status.as_str() {
-            "todo" => "TODO",
-            "doing" => "DOING",
-            "blocked" => "BLOCKED",
-            "done" => "DONE",
-            _ => "TODO",
+            "todo" => "TODO", "doing" => "DOING", "blocked" => "BLOCKED",
+            "done" => "DONE", _ => "TODO",
         };
         cols.entry(key).or_default().push((i, plan));
     }
 
     let mut lines: Vec<Line<'static>> = vec!["".into()];
 
-    for (key, icon, label) in SECTIONS {
+    for (key, icon) in SECTIONS {
         let items = cols.get(key).map(|v| v.as_slice()).unwrap_or(&[]);
-        let count = items.len();
         let col_color = section_color(key);
-
-        // Section header: "  ◉ DOING (3)"
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(format!("{} ", icon), Style::default().fg(col_color).bold()),
-            Span::styled(format!("{} ", label), Style::default().fg(col_color).bold()),
-            Span::styled(format!("({})", count), Style::default().fg(MUTED)),
-        ]));
+        lines.push(section_header(icon, key, items.len()));
 
         if items.is_empty() {
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled("(none)", Style::default().fg(MUTED)),
-            ]));
             lines.push("".into());
             continue;
         }
 
-        // Top border of card block.
-        lines.push(Line::from(Span::styled(
-            "  ┌────────────────────────────────────────────────────────────┐",
-            Style::default().fg(MUTED),
-        )));
-
-        for (list_idx, (global_idx, plan)) in items.iter().enumerate() {
-            let is_selected = *global_idx == selected;
-            let pct = if plan.tasks_total > 0 {
-                ((plan.tasks_done * 100) / plan.tasks_total) as u16
-            } else {
-                0
-            };
-            let name = truncate(&plan.name, 46);
-            let id_str = format!("#{:<5}", plan.id);
-
-            // First line: id + name
-            let name_pad = 55usize.saturating_sub(id_str.len() + 2 + name.chars().count());
-            let row1_text = format!(" {} {}{}│", id_str, name, " ".repeat(name_pad));
-            let row1 = if is_selected {
-                Line::from(vec![
-                    Span::raw("  │"),
-                    Span::styled(row1_text, selected_style()),
-                ])
-            } else {
-                Line::from(vec![
-                    Span::styled("  │", Style::default().fg(MUTED)),
-                    Span::styled(
-                        format!(" {} ", id_str),
-                        Style::default().fg(ACCENT).bold(),
-                    ),
-                    Span::styled(name.clone(), Style::default().fg(TEXT_PRIMARY)),
-                    Span::raw(" ".repeat(name_pad)),
-                    Span::styled("│", Style::default().fg(MUTED)),
-                ])
-            };
-            lines.push(row1);
-
-            // Second line for DOING/BLOCKED: progress bar + fraction + icon.
-            // For DONE/TODO compact: just fraction + icon.
-            if *key == "DOING" || *key == "BLOCKED" {
-                let icon_str = progress_icon(pct);
-                let fraction = format!("{}/{}", plan.tasks_done, plan.tasks_total);
-                let (filled, empty, bar_color) = colored_bar(pct, 20);
-                let pct_str = format!("{:>3}%", pct);
-                let tail = format!(
-                    " {} {}  {}  ",
-                    pct_str, icon_str, fraction
-                );
-                let tail_pad = 55usize
-                    .saturating_sub(1 + filled.chars().count() + empty.chars().count() + tail.chars().count());
-
-                let row2 = if is_selected {
-                    Line::from(vec![
-                        Span::raw("  │"),
-                        Span::styled(
-                            format!(" {}{}{}{} │",
-                                filled, empty, tail, " ".repeat(tail_pad)),
-                            selected_style(),
-                        ),
-                    ])
-                } else {
-                    Line::from(vec![
-                        Span::styled("  │ ", Style::default().fg(MUTED)),
-                        Span::styled(filled, Style::default().fg(bar_color)),
-                        Span::styled(empty, Style::default().fg(MUTED)),
-                        Span::raw(tail),
-                        Span::raw(" ".repeat(tail_pad)),
-                        Span::styled("│", Style::default().fg(MUTED)),
-                    ])
-                };
-                lines.push(row2);
-            } else {
-                // Compact: just fraction + icon, right-aligned.
-                let icon_str = progress_icon(pct);
-                let fraction = format!("{}/{}", plan.tasks_done, plan.tasks_total);
-                let compact = format!(" {} {}  ", icon_str, fraction);
-                let pad = 55usize.saturating_sub(compact.chars().count());
-                let row2 = if is_selected {
-                    Line::from(vec![
-                        Span::raw("  │"),
-                        Span::styled(format!("{}{} │", " ".repeat(pad), compact), selected_style()),
-                    ])
-                } else {
-                    Line::from(vec![
-                        Span::styled("  │", Style::default().fg(MUTED)),
-                        Span::raw(" ".repeat(pad)),
-                        Span::styled(icon_str, Style::default().fg(col_color)),
-                        Span::raw(format!(" {}  ", fraction)),
-                        Span::styled("│", Style::default().fg(MUTED)),
-                    ])
-                };
-                lines.push(row2);
+        let is_expanded = *key == "DOING" || *key == "BLOCKED";
+        if is_expanded {
+            // Each card gets its own rounded border box.
+            for (_li, (gi, plan)) in items.iter().enumerate() {
+                let is_sel = *gi == selected;
+                lines.push(border_top());
+                expanded_card(plan, is_sel, &mut lines);
+                lines.push(border_bottom());
             }
-
-            // Separator between cards (not after the last one).
-            let is_last = list_idx + 1 == items.len();
-            if !is_last {
-                lines.push(Line::from(Span::styled(
-                    "  ├────────────────────────────────────────────────────────────┤",
-                    Style::default().fg(MUTED),
-                )));
+        } else {
+            // All compact cards share one border box.
+            lines.push(border_top());
+            for (li, (gi, plan)) in items.iter().enumerate() {
+                let is_sel = *gi == selected;
+                compact_card(plan, col_color, is_sel, &mut lines);
+                if li + 1 < items.len() {
+                    lines.push(border_sep());
+                }
             }
+            lines.push(border_bottom());
         }
-
-        // Bottom border.
-        lines.push(Line::from(Span::styled(
-            "  └────────────────────────────────────────────────────────────┘",
-            Style::default().fg(MUTED),
-        )));
         lines.push("".into());
     }
 
