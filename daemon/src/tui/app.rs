@@ -110,6 +110,8 @@ impl TuiApp {
                     }
                 }
                 _ = render_tick.tick() => {
+                    // Poll streaming chat events every render tick (100ms).
+                    self.poll_chat_events();
                     self.render()?;
                 }
                 maybe_event = events.next() => {

@@ -20,6 +20,16 @@ fn log_dir() -> PathBuf {
 /// Returns a guard that must be held alive for the lifetime of the daemon —
 /// dropping it flushes remaining log entries to disk.
 pub fn init() -> WorkerGuard {
+    init_inner(true)
+}
+
+/// File-only logging for TUI mode — no stderr output that would corrupt
+/// the ratatui alternate screen.
+pub fn init_file_only() -> WorkerGuard {
+    init_inner(false)
+}
+
+fn init_inner(with_stderr: bool) -> WorkerGuard {
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
 
@@ -29,22 +39,28 @@ pub fn init() -> WorkerGuard {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,tower_http=warn"));
 
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(
-            fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false)
-                .with_target(true)
-                .with_thread_ids(true),
-        )
-        .with(
-            fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_ansi(true)
-                .with_target(false),
-        )
-        .init();
+    let file_layer = fmt::layer()
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .with_target(true)
+        .with_thread_ids(true);
+
+    if with_stderr {
+        let stderr_layer = fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_ansi(true)
+            .with_target(false);
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(file_layer)
+            .with(stderr_layer)
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(file_layer)
+            .init();
+    }
 
     install_panic_hook(&dir);
 

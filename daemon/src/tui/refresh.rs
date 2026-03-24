@@ -149,7 +149,6 @@ impl TuiApp {
         // Chat send: push user message, send through persistent session.
         if self.chat.sending && !self.chat.input.is_empty() {
             let content = std::mem::take(&mut self.chat.input);
-            tracing::info!(content = %content, "chat: user message via persistent session");
             chat_handler::push_user_message(&mut self.data, &content);
             if self.chat.send_to_session(&content).await {
                 self.chat.streaming = true;
@@ -162,46 +161,8 @@ impl TuiApp {
             }
             self.chat.sending = false;
         }
-        // Poll streaming events from persistent session (non-blocking).
-        {
-            use crate::tui::claude_session::ChatEvent;
-            let events = self.chat.poll_events();
-            for event in events {
-                match event {
-                    ChatEvent::TextDelta(delta) => {
-                        // Append delta to the last assistant message.
-                        if let Some(last) = self.data.chat_messages.last_mut() {
-                            if last.role == "assistant" {
-                                last.content.push_str(&delta);
-                            }
-                        }
-                    }
-                    ChatEvent::MessageComplete(text) => {
-                        tracing::info!("chat: Ali response complete");
-                        // Replace last assistant message with complete text.
-                        if let Some(last) = self.data.chat_messages.last_mut() {
-                            if last.role == "assistant" {
-                                last.content = text;
-                            }
-                        }
-                        self.chat.streaming = false;
-                    }
-                    ChatEvent::SessionReady(sid) => {
-                        tracing::info!(session_id = %sid, "chat: session ready");
-                        self.data.chat_session_id = Some(sid);
-                    }
-                    ChatEvent::Error(msg) => {
-                        tracing::warn!(error = %msg, "chat: session error");
-                        if self.chat.streaming {
-                            chat_handler::push_assistant_message(
-                                &mut self.data, &format!("(Error: {msg})"),
-                            );
-                            self.chat.streaming = false;
-                        }
-                    }
-                }
-            }
-        }
+        // Also poll chat events here (in addition to render_tick).
+        self.poll_chat_events();
 
         if self.istate.force_refresh {
             self.istate.force_refresh = false;
@@ -223,6 +184,43 @@ impl TuiApp {
             if nv != self.refresh_interval_secs { self.refresh_interval_secs = nv; changed = true; }
         }
         changed
+    }
+
+    /// Poll streaming chat events from the persistent Claude session.
+    /// Called every render tick (100ms) so responses appear without keypress.
+    pub fn poll_chat_events(&mut self) {
+        use crate::tui::claude_session::ChatEvent;
+        let events = self.chat.poll_events();
+        for event in events {
+            match event {
+                ChatEvent::TextDelta(delta) => {
+                    if let Some(last) = self.data.chat_messages.last_mut() {
+                        if last.role == "assistant" {
+                            last.content.push_str(&delta);
+                        }
+                    }
+                }
+                ChatEvent::MessageComplete(text) => {
+                    if let Some(last) = self.data.chat_messages.last_mut() {
+                        if last.role == "assistant" {
+                            last.content = text;
+                        }
+                    }
+                    self.chat.streaming = false;
+                }
+                ChatEvent::SessionReady(sid) => {
+                    self.data.chat_session_id = Some(sid);
+                }
+                ChatEvent::Error(msg) => {
+                    if self.chat.streaming {
+                        chat_handler::push_assistant_message(
+                            &mut self.data, &format!("(Error: {msg})"),
+                        );
+                        self.chat.streaming = false;
+                    }
+                }
+            }
+        }
     }
 
     pub fn default_auto_refresh() -> bool { true }

@@ -57,8 +57,14 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    // Initialize logging + panic hook before anything else
-    let _log_guard = daemon_logging::init();
+    // Initialize logging + panic hook before anything else.
+    // TUI mode uses file-only logging to avoid corrupting ratatui display.
+    let is_tui = env::args().any(|a| a == "tui");
+    let _log_guard = if is_tui {
+        daemon_logging::init_file_only()
+    } else {
+        daemon_logging::init()
+    };
 
     // argv[0] detection: agent-ipc symlink routes to `ipc`, cvg symlink routes to CLI
     let args: Vec<String> = env::args().collect();
