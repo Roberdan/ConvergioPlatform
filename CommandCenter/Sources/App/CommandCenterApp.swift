@@ -21,5 +21,9 @@ struct CommandCenterApp: App {
                 .frame(minWidth: 1_100, minHeight: 720)
         }
         .windowResizability(.contentMinSize)
+
+        MenuBarExtra("Convergio", image: "MenuBarIcon") {
+            MenuBarView(model: model)
+        }
     }
 }

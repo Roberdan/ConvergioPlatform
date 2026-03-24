@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "1E9F7488D07A3262BEE74F61"
+               BlueprintIdentifier = "B4FFCD45C358F4EBEE066FCB"
                BuildableName = "CommandCenter.app"
                BlueprintName = "CommandCenter"
                ReferencedContainer = "container:CommandCenter.xcodeproj">
@@ -28,7 +28,7 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "12524FC87CACEE70456510C2"
+               BlueprintIdentifier = "C92CE1805772C8F00E3B1ED5"
                BuildableName = "CommandCenterTests.xctest"
                BlueprintName = "CommandCenterTests"
                ReferencedContainer = "container:CommandCenter.xcodeproj">
@@ -44,7 +44,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1E9F7488D07A3262BEE74F61"
+            BlueprintIdentifier = "B4FFCD45C358F4EBEE066FCB"
             BuildableName = "CommandCenter.app"
             BlueprintName = "CommandCenter"
             ReferencedContainer = "container:CommandCenter.xcodeproj">
@@ -55,7 +55,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "12524FC87CACEE70456510C2"
+               BlueprintIdentifier = "C92CE1805772C8F00E3B1ED5"
                BuildableName = "CommandCenterTests.xctest"
                BlueprintName = "CommandCenterTests"
                ReferencedContainer = "container:CommandCenter.xcodeproj">
@@ -77,7 +77,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1E9F7488D07A3262BEE74F61"
+            BlueprintIdentifier = "B4FFCD45C358F4EBEE066FCB"
             BuildableName = "CommandCenter.app"
             BlueprintName = "CommandCenter"
             ReferencedContainer = "container:CommandCenter.xcodeproj">
@@ -94,7 +94,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1E9F7488D07A3262BEE74F61"
+            BlueprintIdentifier = "B4FFCD45C358F4EBEE066FCB"
             BuildableName = "CommandCenter.app"
             BlueprintName = "CommandCenter"
             ReferencedContainer = "container:CommandCenter.xcodeproj">

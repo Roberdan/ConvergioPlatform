@@ -70,6 +70,15 @@ end
 
 app_target.add_file_references(source_refs)
 
+# Add asset catalogs
+asset_refs = Dir.glob(SOURCES_PATH.join('**/*.xcassets')).sort.map do |asset|
+    relative = Pathname(asset).relative_path_from(ROOT)
+    group = ensure_group(project.main_group, relative.dirname)
+    ref = group.new_file(relative.basename.to_s)
+    ref
+end
+app_target.add_resources(asset_refs) unless asset_refs.empty?
+
 test_refs = Dir.glob(TESTS_PATH.join('**/*.swift')).sort.map do |source|
     relative = Pathname(source).relative_path_from(ROOT)
     group = ensure_group(project.main_group, relative.dirname)
