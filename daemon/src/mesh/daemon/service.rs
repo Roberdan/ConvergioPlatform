@@ -189,8 +189,8 @@ pub async fn handle_ws_client(
     request: &str,
     state: DaemonState,
 ) -> Result<(), MeshError> {
-    let key = websocket_key(request)
-        .ok_or_else(|| MeshError::Network("missing websocket key".into()))?;
+    let key =
+        websocket_key(request).ok_or_else(|| MeshError::Network("missing websocket key".into()))?;
     let accept = websocket_accept(&key);
     let response = format!(
         "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"

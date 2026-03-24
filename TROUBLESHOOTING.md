@@ -424,3 +424,38 @@ curl -X POST http://localhost:8420/api/ipc/agents/register \
   -d '{"agent_id":"test-copilot","host":"'$(hostname)'"}'
 curl -s http://localhost:8420/api/ipc/agents | jq '.agents'
 ```
+
+## Problem: CommandCenter build uses CommandLineTools instead of full Xcode
+
+**Symptom:** `xcodebuild` for `CommandCenter` fails early or cannot resolve the correct macOS SDK.
+**Cause:** The machine is pointing at `/Library/Developer/CommandLineTools` instead of the full Xcode app bundle.
+**Fix:**
+```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+cd CommandCenter
+ruby Scripts/generate_xcodeproj.rb
+xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build
+```
+
+## Problem: CommandCenter.xcodeproj is missing or stale
+
+**Symptom:** `xcodebuild` reports missing files or the project does not contain newly added SwiftUI views.
+**Cause:** `CommandCenter.xcodeproj` is generated from `Scripts/generate_xcodeproj.rb` and needs to be regenerated after adding files.
+**Fix:**
+```bash
+gem install xcodeproj --user-install --no-document
+cd CommandCenter
+ruby Scripts/generate_xcodeproj.rb
+```
+
+## Problem: PTY terminal rejects tmux session names
+
+**Symptom:** The native terminal view connects, but a tmux-backed session refuses to start.
+**Cause:** `/ws/pty` only accepts tmux session names using `[A-Za-z0-9_-]` and a maximum length of 64.
+**Fix:**
+```bash
+# valid examples
+main
+session_1
+mesh-debug
+```

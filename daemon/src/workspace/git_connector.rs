@@ -81,9 +81,7 @@ impl GitConnector for GitHubConnector {
         body: &'a str,
     ) -> AsyncResult<'a, PrInfo> {
         Box::pin(async move {
-            let client = reqwest::Client::builder()
-                .timeout(GITHUB_TIMEOUT)
-                .build()?;
+            let client = reqwest::Client::builder().timeout(GITHUB_TIMEOUT).build()?;
             let url = format!("https://api.github.com/repos/{repo}/pulls");
             let resp = client
                 .post(&url)
@@ -121,9 +119,7 @@ impl GitConnector for GitHubConnector {
         method: MergeMethod,
     ) -> AsyncResult<'a, ()> {
         Box::pin(async move {
-            let client = reqwest::Client::builder()
-                .timeout(GITHUB_TIMEOUT)
-                .build()?;
+            let client = reqwest::Client::builder().timeout(GITHUB_TIMEOUT).build()?;
             let url = format!("https://api.github.com/repos/{repo}/pulls/{pr_number}/merge");
             let method_str = match method {
                 MergeMethod::Squash => "squash",
@@ -149,9 +145,7 @@ impl GitConnector for GitHubConnector {
 
     fn pr_readiness<'a>(&'a self, repo: &'a str, pr_number: i64) -> AsyncResult<'a, PrReadiness> {
         Box::pin(async move {
-            let client = reqwest::Client::builder()
-                .timeout(GITHUB_TIMEOUT)
-                .build()?;
+            let client = reqwest::Client::builder().timeout(GITHUB_TIMEOUT).build()?;
             let url = format!("https://api.github.com/repos/{repo}/pulls/{pr_number}");
             let resp = client
                 .get(&url)

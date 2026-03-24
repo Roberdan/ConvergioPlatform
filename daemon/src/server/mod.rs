@@ -60,6 +60,7 @@ pub mod sse_stream;
 pub mod state;
 pub mod state_init;
 pub mod state_init_canon;
+mod state_init_migrations;
 pub mod ws;
 pub mod ws_brain;
 pub mod ws_pty;
@@ -67,7 +68,19 @@ pub mod ws_pty;
 #[cfg(test)]
 mod api_agent_catalog_tests;
 #[cfg(test)]
+mod api_agents_brain_tests;
+#[cfg(test)]
 mod api_agents_legacy_tests;
+#[cfg(test)]
+mod api_agents_tests;
+#[cfg(test)]
+mod api_audit_tests;
+#[cfg(test)]
+mod api_chat_tests;
+#[cfg(test)]
+mod api_chat_tests_msg;
+#[cfg(test)]
+mod api_coordinator_tests;
 #[cfg(test)]
 mod api_cross_feature_helpers;
 #[cfg(test)]
@@ -77,13 +90,33 @@ mod api_cross_feature_tests;
 #[cfg(test)]
 mod api_deliverables_tests;
 #[cfg(test)]
+mod api_domain_tests;
+#[cfg(test)]
+mod api_evolution_tests;
+#[cfg(test)]
+mod api_github_tests;
+#[cfg(test)]
+mod api_heartbeat_tests;
+#[cfg(test)]
 mod api_ideas_tests;
 #[cfg(test)]
 mod api_ideas_tests_filter;
 #[cfg(test)]
+mod api_ingest_tests;
+#[cfg(test)]
 mod api_ipc_tests;
 #[cfg(test)]
+mod api_metrics_tests;
+#[cfg(test)]
 mod api_openclaw_tests;
+#[cfg(test)]
+mod api_peers_tests;
+#[cfg(test)]
+mod api_plan_db_checkpoint_tests;
+#[cfg(test)]
+mod api_plan_db_query_tests;
+#[cfg(test)]
+mod api_plans_tests;
 #[cfg(test)]
 mod api_runs_tests;
 #[cfg(test)]
@@ -99,41 +132,9 @@ mod api_workspace_integration_tests;
 #[cfg(test)]
 mod api_workspace_tests;
 #[cfg(test)]
-mod api_chat_tests;
-#[cfg(test)]
-mod api_chat_tests_msg;
-#[cfg(test)]
-mod api_coordinator_tests;
-#[cfg(test)]
-mod api_domain_tests;
-#[cfg(test)]
-mod api_evolution_tests;
-#[cfg(test)]
-mod api_github_tests;
-#[cfg(test)]
 mod state_init_tests;
 #[cfg(test)]
 mod ws_pty_tests;
-#[cfg(test)]
-mod api_heartbeat_tests;
-#[cfg(test)]
-mod api_ingest_tests;
-#[cfg(test)]
-mod api_metrics_tests;
-#[cfg(test)]
-mod api_peers_tests;
-#[cfg(test)]
-mod api_plans_tests;
-#[cfg(test)]
-mod api_plan_db_checkpoint_tests;
-#[cfg(test)]
-mod api_plan_db_query_tests;
-#[cfg(test)]
-mod api_agents_tests;
-#[cfg(test)]
-mod api_agents_brain_tests;
-#[cfg(test)]
-mod api_audit_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};
@@ -150,11 +151,7 @@ pub fn resolve_dashboard_static_dir(repo_root: impl AsRef<Path>) -> PathBuf {
 
 /// Inner logic: given the token presence state, determine effective bind address.
 /// Separated for deterministic unit testing without env-var races.
-pub(crate) fn resolve_bind_addr_with(
-    requested: &str,
-    dev_mode: bool,
-    has_token: bool,
-) -> String {
+pub(crate) fn resolve_bind_addr_with(requested: &str, dev_mode: bool, has_token: bool) -> String {
     if dev_mode && !has_token {
         // Force 127.0.0.1 to prevent accidental network exposure of an
         // unauthenticated server. Keep the original port if parseable.
@@ -188,10 +185,36 @@ pub async fn run(
 ) -> Result<(), state::ApiError> {
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await
-        .map_err(|e| state::ApiError::internal(format!("server listen failed on {bind_addr}: {e}")))?;
+        .map_err(|e| {
+            state::ApiError::internal(format!("server listen failed on {bind_addr}: {e}"))
+        })?;
     axum::serve(listener, app(static_dir, crsqlite_path).into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(|e| state::ApiError::internal(format!("server runtime failed: {e}")))
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
+            sigterm.recv().await;
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = terminate => {}
+    }
 }
 
 #[cfg(test)]

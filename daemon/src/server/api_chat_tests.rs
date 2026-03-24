@@ -10,8 +10,7 @@ fn test_router() -> axum::Router {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let tmp =
-        std::env::temp_dir().join(format!("claude-chat-test-{}-{n}.db", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("claude-chat-test-{}-{n}.db", std::process::id()));
     super::middleware::set_dev_mode(true);
     super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }

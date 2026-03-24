@@ -79,7 +79,12 @@ pub async fn handle(cmd: SkillCommands) -> Result<(), CliError> {
             provider,
             human,
         } => {
-            crate::cli_skill_transpile::handle_transpile(&skill_dir, &output_dir, &provider, human)?;
+            crate::cli_skill_transpile::handle_transpile(
+                &skill_dir,
+                &output_dir,
+                &provider,
+                human,
+            )?;
         }
         SkillCommands::Enable {
             skill_dir,
@@ -140,9 +145,7 @@ fn handle_lint(skill_dir: &PathBuf, human: bool, all: bool) -> Result<(), CliErr
             );
         }
         if fail > 0 {
-            return Err(CliError::NotFound(format!(
-                "{fail} skill(s) failed lint"
-            )));
+            return Err(CliError::NotFound(format!("{fail} skill(s) failed lint")));
         }
     } else {
         let result = lint_one(skill_dir);

@@ -1,6 +1,8 @@
 // DB migration and schema init extracted from state.rs (250-line split).
+// DDL including CREATE TABLE and CREATE INDEX lives in state_init_migrations.rs.
 use super::state::ApiError;
 use super::state_init_canon::canonicalize_existing_project_paths;
+use super::state_init_migrations::MIGRATIONS;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
@@ -82,114 +84,6 @@ pub fn ensure_agent_activity_schema(conn: &Connection) -> Result<(), ApiError> {
 
     Ok(())
 }
-
-const MIGRATIONS: &[&str] = &[
-    // ── Core tables (BUG-1 fix: must exist before any ALTER/INDEX migration) ──
-    "CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
-    "CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL, name TEXT NOT NULL, source_file TEXT, status TEXT NOT NULL DEFAULT 'todo', tasks_total INTEGER DEFAULT 0, tasks_done INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, started_at DATETIME, completed_at DATETIME, description TEXT, human_summary TEXT, execution_host TEXT, parallel_mode TEXT, lines_added INTEGER, lines_removed INTEGER, cancelled_at DATETIME, cancelled_reason TEXT, updated_at DATETIME, worktree_path TEXT, constraints_json TEXT, is_master INTEGER DEFAULT 0, waves_total INTEGER DEFAULT 0, waves_merged INTEGER DEFAULT 0)",
-    "CREATE TABLE IF NOT EXISTS waves (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, project_id TEXT, wave_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', tasks_done INTEGER DEFAULT 0, tasks_total INTEGER DEFAULT 0, position INTEGER DEFAULT 0, started_at DATETIME, completed_at DATETIME, cancelled_at DATETIME, theme TEXT, depends_on TEXT, pr_number INTEGER, pr_url TEXT, cancelled_reason TEXT, merge_mode TEXT DEFAULT 'sync', estimated_hours INTEGER DEFAULT 8, worktree_path TEXT)",
-    "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL DEFAULT '', wave_id TEXT NOT NULL DEFAULT '', task_id TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', tokens INTEGER DEFAULT 0, wave_id_fk INTEGER, plan_id INTEGER, model TEXT DEFAULT 'haiku', output_data TEXT, started_at DATETIME, completed_at DATETIME, notes TEXT, output_type TEXT DEFAULT 'pr', validator_agent TEXT DEFAULT 'thor', effort_level INTEGER DEFAULT 1, validated_at DATETIME, validated_by TEXT, validation_report TEXT, priority TEXT, type TEXT, assignee TEXT, description TEXT, test_criteria TEXT, executor_host TEXT, executor_agent TEXT, duration_minutes REAL)",
-    "CREATE TABLE IF NOT EXISTS knowledge_base (id INTEGER PRIMARY KEY, domain TEXT, title TEXT, content TEXT, created_at TEXT DEFAULT (datetime('now')), hit_count INTEGER DEFAULT 0)",
-    "CREATE TABLE IF NOT EXISTS peer_heartbeats (peer_name TEXT PRIMARY KEY, last_seen INTEGER NOT NULL, load_json TEXT, capabilities TEXT)",
-    "CREATE TABLE IF NOT EXISTS token_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, plan_id INTEGER, model TEXT, input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
-    "CREATE TABLE IF NOT EXISTS mesh_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, source_peer TEXT NOT NULL DEFAULT '', payload TEXT, status TEXT DEFAULT 'pending', created_at INTEGER DEFAULT (unixepoch()))",
-    "CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
-    // Missing tables found in DB audit (23 Marzo 2026)
-    "CREATE TABLE IF NOT EXISTS delegation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, task_id INTEGER, peer_name TEXT, delegated_at TEXT DEFAULT (datetime('now')), completed_at TEXT, status TEXT DEFAULT 'pending', cost_usd REAL DEFAULT 0, tokens_total INTEGER DEFAULT 0)",
-    "CREATE TABLE IF NOT EXISTS host_heartbeats (hostname TEXT PRIMARY KEY, last_seen INTEGER, status TEXT DEFAULT 'active', metadata TEXT)",
-    "CREATE TABLE IF NOT EXISTS chat_sessions (id TEXT PRIMARY KEY, project_id INTEGER, plan_id INTEGER, task_db_id INTEGER, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_message_at TEXT)",
-    "CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, requirement_id INTEGER, model TEXT, tokens_in INTEGER DEFAULT 0, tokens_out INTEGER DEFAULT 0, metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
-    // Core table indexes (high-traffic WHERE columns)
-    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_status ON tasks(plan_id, status)",
-    "CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status)",
-    "CREATE INDEX IF NOT EXISTS idx_plans_project_id ON plans(project_id)",
-    "CREATE INDEX IF NOT EXISTS idx_waves_plan_id ON waves(plan_id)",
-    // ── End core tables ──
-    "CREATE TABLE IF NOT EXISTS daemon_config (key TEXT PRIMARY KEY NOT NULL, value TEXT, updated_at TEXT DEFAULT (datetime('now')))",
-    "CREATE TABLE IF NOT EXISTS coordinator_events (id INTEGER PRIMARY KEY, event_type TEXT NOT NULL DEFAULT '', payload TEXT, source_node TEXT, handled_at TEXT DEFAULT (datetime('now')))",
-    "CREATE TABLE IF NOT EXISTS notification_queue (id INTEGER PRIMARY KEY, severity TEXT DEFAULT 'info', title TEXT NOT NULL DEFAULT '', message TEXT, plan_id INTEGER, link TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')), delivered_at TEXT)",
-    "CREATE INDEX IF NOT EXISTS idx_notification_queue_status ON notification_queue(status)",
-    "CREATE INDEX IF NOT EXISTS idx_coordinator_events_type ON coordinator_events(event_type)",
-    "CREATE TABLE IF NOT EXISTS agent_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, wave_id TEXT, task_id TEXT, agent_name TEXT, agent_role TEXT, model TEXT, peer_name TEXT, status TEXT DEFAULT 'running', started_at TEXT DEFAULT (datetime('now')), last_heartbeat TEXT, current_task TEXT)",
-    "CREATE TABLE IF NOT EXISTS nightly_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, job_name TEXT DEFAULT 'guardian', started_at DATETIME DEFAULT CURRENT_TIMESTAMP, finished_at DATETIME, host TEXT, status TEXT NOT NULL CHECK(status IN ('running','ok','action_required','failed')), sentry_unresolved INTEGER DEFAULT 0, github_open_issues INTEGER DEFAULT 0, processed_items INTEGER DEFAULT 0, fixed_items INTEGER DEFAULT 0, branch_name TEXT, pr_url TEXT, summary TEXT, report_json TEXT)",
-    "CREATE TABLE IF NOT EXISTS nightly_job_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, description TEXT, schedule TEXT NOT NULL DEFAULT '0 3 * * *', script_path TEXT NOT NULL, target_host TEXT DEFAULT 'local', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
-    "CREATE TABLE IF NOT EXISTS github_events (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, event_type TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')))",
-    "CREATE TABLE IF NOT EXISTS earned_skills (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, domain TEXT, content TEXT NOT NULL, confidence TEXT DEFAULT 'low', hit_count INTEGER DEFAULT 0, source TEXT DEFAULT 'earned', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))",
-    "CREATE TABLE IF NOT EXISTS plan_commits (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, commit_sha TEXT, commit_message TEXT, lines_added INTEGER DEFAULT 0, lines_removed INTEGER DEFAULT 0, files_changed INTEGER DEFAULT 0, authored_at TEXT, created_at TEXT DEFAULT (datetime('now')))",
-    "CREATE INDEX IF NOT EXISTS idx_agent_activity_status ON agent_activity(status)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_activity_plan ON agent_activity(plan_id)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_activity_task ON agent_activity(task_db_id)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_activity_started_at ON agent_activity(started_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_activity_status_started ON agent_activity(status, started_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_activity_status_completed ON agent_activity(status, completed_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_activity_model ON agent_activity(model)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at ON agent_runs(started_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status)",
-    "CREATE INDEX IF NOT EXISTS idx_agent_runs_peer ON agent_runs(peer_name)",
-    "CREATE INDEX IF NOT EXISTS idx_nightly_jobs_started ON nightly_jobs(started_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_mesh_events_created_at ON mesh_events(created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_mesh_events_status ON mesh_events(status)",
-    "CREATE INDEX IF NOT EXISTS idx_token_usage_model ON token_usage(model)",
-    "CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at)",
-    "CREATE INDEX IF NOT EXISTS idx_github_events_plan_status ON github_events(plan_id, status)",
-    "CREATE INDEX IF NOT EXISTS idx_plan_commits_plan_id ON plan_commits(plan_id)",
-    "CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name COLLATE NOCASE)",
-    "CREATE TABLE IF NOT EXISTS ideas (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT, tags TEXT, priority TEXT DEFAULT 'P2' CHECK(priority IN ('P0','P1','P2','P3')), status TEXT DEFAULT 'draft' CHECK(status IN ('draft','elaborating','ready','promoted','archived')), project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, links TEXT, plan_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
-    "CREATE TABLE IF NOT EXISTS idea_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
-    "CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status)",
-    "CREATE INDEX IF NOT EXISTS idx_ideas_project ON ideas(project_id)",
-    "CREATE INDEX IF NOT EXISTS idx_idea_notes_idea ON idea_notes(idea_id)",
-    "ALTER TABLE nightly_jobs ADD COLUMN job_name TEXT DEFAULT 'guardian'",
-    "ALTER TABLE nightly_jobs ADD COLUMN log_stdout TEXT",
-    "ALTER TABLE nightly_jobs ADD COLUMN log_stderr TEXT",
-    "ALTER TABLE nightly_jobs ADD COLUMN log_file_path TEXT",
-    "ALTER TABLE nightly_jobs ADD COLUMN duration_sec INTEGER",
-    "ALTER TABLE nightly_jobs ADD COLUMN config_snapshot TEXT",
-    "ALTER TABLE nightly_jobs ADD COLUMN exit_code INTEGER",
-    "ALTER TABLE nightly_jobs ADD COLUMN error_detail TEXT",
-    "ALTER TABLE nightly_jobs ADD COLUMN trigger_source TEXT DEFAULT 'scheduled'",
-    "ALTER TABLE nightly_jobs ADD COLUMN parent_run_id TEXT",
-    "ALTER TABLE nightly_job_definitions ADD COLUMN project_id TEXT DEFAULT 'mirrorbuddy'",
-    "ALTER TABLE nightly_job_definitions ADD COLUMN run_fixes INTEGER DEFAULT 1",
-    "ALTER TABLE nightly_job_definitions ADD COLUMN timeout_sec INTEGER DEFAULT 5400",
-    "ALTER TABLE agent_activity ADD COLUMN parent_session TEXT",
-    "ALTER TABLE plans ADD COLUMN waves_total INTEGER DEFAULT 0",
-    "ALTER TABLE plans ADD COLUMN waves_merged INTEGER DEFAULT 0",
-    "CREATE TABLE IF NOT EXISTS plan_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, reviewer_agent TEXT NOT NULL, verdict TEXT NOT NULL, suggestions TEXT, raw_report TEXT, reviewed_at TEXT NOT NULL DEFAULT (datetime('now')))",
-    "CREATE TABLE IF NOT EXISTS agent_catalog (name TEXT PRIMARY KEY, category TEXT, description TEXT, model TEXT, tools TEXT, skills TEXT, source_repo TEXT, constitution_version TEXT, version TEXT, created_at DATETIME DEFAULT (datetime('now')), updated_at DATETIME DEFAULT (datetime('now')))",
-    // Plan 689 — project metadata columns
-    "ALTER TABLE projects ADD COLUMN input_path TEXT DEFAULT NULL",
-    "ALTER TABLE projects ADD COLUMN output_path TEXT DEFAULT NULL",
-    "ALTER TABLE projects ADD COLUMN github_url TEXT DEFAULT NULL",
-    "ALTER TABLE projects ADD COLUMN icon_path TEXT DEFAULT NULL",
-    // Plan 689 — deliverables table
-    "CREATE TABLE IF NOT EXISTS deliverables (id INTEGER PRIMARY KEY, task_id INTEGER REFERENCES tasks(id), project_id TEXT NOT NULL, name TEXT NOT NULL, output_path TEXT, version INTEGER DEFAULT 1, status TEXT DEFAULT 'pending' CHECK(status IN ('pending','in_progress','ready','approved','rejected')), output_type TEXT NOT NULL, metadata_json TEXT DEFAULT '{}', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, approved_at DATETIME DEFAULT NULL, approved_by TEXT DEFAULT NULL, updated_at DATETIME DEFAULT NULL)",
-    "CREATE INDEX IF NOT EXISTS idx_deliverables_project ON deliverables(project_id)",
-    "CREATE INDEX IF NOT EXISTS idx_deliverables_task ON deliverables(task_id)",
-    // Plan 689 — solve_sessions table
-    "CREATE TABLE IF NOT EXISTS solve_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL DEFAULT (datetime('now')), user_input TEXT NOT NULL, constitution_check TEXT, triage_level TEXT CHECK(triage_level IN ('light','standard','full')), clarification_rounds TEXT, research_findings TEXT, problem_statement TEXT, requirements_json TEXT, acceptance_invariants TEXT, routed_to TEXT, decision_audit TEXT, plan_id INTEGER REFERENCES plans(id), project_id TEXT DEFAULT NULL)",
-    // Column added after initial table creation — ALTER is idempotent via error handling
-    "ALTER TABLE solve_sessions ADD COLUMN project_id TEXT DEFAULT NULL",
-    "CREATE INDEX IF NOT EXISTS idx_solve_sessions_project ON solve_sessions(project_id)",
-    // Plan 698 — workspace layer tables
-    "CREATE TABLE IF NOT EXISTS workspaces (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, wave_db_id INTEGER, workspace_id TEXT UNIQUE NOT NULL, path TEXT NOT NULL, branch TEXT, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','merged','deleted')), created_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)",
-    "CREATE INDEX IF NOT EXISTS idx_workspaces_plan ON workspaces(plan_id)",
-    "CREATE INDEX IF NOT EXISTS idx_workspaces_status ON workspaces(status)",
-    "CREATE INDEX IF NOT EXISTS idx_workspaces_workspace_id ON workspaces(workspace_id)",
-    "CREATE TABLE IF NOT EXISTS workspace_events (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, agent TEXT NOT NULL, action TEXT NOT NULL, file_path TEXT, detail TEXT, metadata TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))",
-    "CREATE INDEX IF NOT EXISTS idx_workspace_events_workspace ON workspace_events(workspace_id)",
-    "CREATE INDEX IF NOT EXISTS idx_workspace_events_agent ON workspace_events(agent)",
-    "CREATE INDEX IF NOT EXISTS idx_workspace_events_created ON workspace_events(created_at DESC)",
-    // Plan 706 — performance indexes on hot query paths
-    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk)",
-    "CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
-    "CREATE INDEX IF NOT EXISTS idx_waves_plan_id ON waves(plan_id)",
-];
 
 /// Run DB migrations and return a connection pool for `db_path`.
 /// Called once during ServerState::new.

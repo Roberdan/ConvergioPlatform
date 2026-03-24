@@ -1,3 +1,4 @@
+use crate::message_error::MessageResult;
 use std::path::PathBuf;
 
 pub fn convergio_dir() -> PathBuf {
@@ -6,7 +7,7 @@ pub fn convergio_dir() -> PathBuf {
         .join(".convergio")
 }
 
-pub fn load_or_create_secret() -> Result<Vec<u8>, String> {
+pub fn load_or_create_secret() -> MessageResult<Vec<u8>> {
     let path = convergio_dir().join("mesh-secret");
     if path.exists() {
         let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;

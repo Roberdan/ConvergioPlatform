@@ -88,36 +88,6 @@ fn install_panic_hook(log_dir: &std::path::Path) {
     }));
 }
 
-/// Spawn a tokio task that listens for SIGTERM/SIGINT and logs before exit.
-pub fn spawn_shutdown_watcher() {
-    tokio::spawn(async {
-        let ctrl_c = tokio::signal::ctrl_c();
-        #[cfg(unix)]
-        {
-            use tokio::signal::unix::{signal, SignalKind};
-            let mut sigterm = signal(SignalKind::terminate())
-                .expect("failed to register SIGTERM handler");
-            tokio::select! {
-                _ = ctrl_c => {
-                    tracing::warn!("received SIGINT, shutting down");
-                }
-                _ = sigterm.recv() => {
-                    tracing::warn!("received SIGTERM, shutting down");
-                }
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = ctrl_c.await;
-            tracing::warn!("received Ctrl+C, shutting down");
-        }
-        tracing::info!("graceful shutdown initiated");
-        // Give tracing 500ms to flush
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        std::process::exit(0);
-    });
-}
-
 fn chrono_now() -> String {
     // Avoid chrono dep — use system time formatted manually
     let now = std::time::SystemTime::now()

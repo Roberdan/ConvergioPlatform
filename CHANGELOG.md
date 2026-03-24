@@ -1,8 +1,15 @@
 # Changelog
 
-## [17.0.0] - 2026-03-23
+## [17.0.0] — 24 Marzo 2026
 
 ### Added
+- Native macOS `CommandCenter` app with onboarding, auth token storage, and SwiftUI routing
+- Native Plans, Agents, Mesh, Evolution, Costs, Terminal, and Brain surfaces
+- Run cost dashboard backed by `/api/metrics/*` and `/api/runs/*`
+- WS-PTY terminal tabs with peer routing, tmux attach/create, and keyboard passthrough
+- Brain visualization with realtime `/api/brain` + `/ws/brain` data and Metal-backed rendering
+- Native macOS notifications with category preferences and Thor approve/reject actions
+- ADR-0110: Plan F Command Center decisions
 - TUI: Brain Canvas view with session/agent/task tree visualization
 - TUI: Cost/Token Center with model/project/date breakdown
 - TUI: Events Stream with action-colored live feed
@@ -13,9 +20,10 @@
 - TUI: Maranello ANSI 256-color palette (BG_SURFACE, TEXT_PRIMARY, TEXT_SECONDARY)
 
 ### Changed
+- Project docs now describe `CommandCenter` alongside the daemon, dashboard, and evolution engine
+- Troubleshooting now covers Xcode selection, project generation, PTY session naming, and brain shader behavior
 - TUI: Module restructure — views/, widgets/, api/ sub-modules (all under 250 lines)
 - TUI: Tab navigation extended to 9 views (keys 1-9)
-
 ## [16.0.0] — 23 Marzo 2026
 
 ### Added

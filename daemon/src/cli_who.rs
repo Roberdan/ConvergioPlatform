@@ -28,15 +28,28 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
             let workers = body.get("workers").and_then(|w| w.as_array());
             match workers {
                 Some(list) if !list.is_empty() => {
-                    println!("{:<30} {:<15} {:<10} {:<8} {}", "AGENT", "HOST", "MODEL", "PLAN", "DESCRIPTION");
+                    println!(
+                        "{:<30} {:<15} {:<10} {:<8} {}",
+                        "AGENT", "HOST", "MODEL", "PLAN", "DESCRIPTION"
+                    );
                     println!("{}", "-".repeat(90));
                     for w in list {
                         let agent = w["agent_id"].as_str().unwrap_or("?");
                         let host = w["host"].as_str().unwrap_or("?");
                         let model = w["model"].as_str().unwrap_or("?");
-                        let plan = w["plan_id"].as_i64().map(|v| v.to_string()).unwrap_or("-".into());
+                        let plan = w["plan_id"]
+                            .as_i64()
+                            .map(|v| v.to_string())
+                            .unwrap_or("-".into());
                         let desc = w["description"].as_str().unwrap_or("");
-                        println!("{:<30} {:<15} {:<10} {:<8} {}", agent, host, model, plan, &desc[..desc.len().min(40)]);
+                        println!(
+                            "{:<30} {:<15} {:<10} {:<8} {}",
+                            agent,
+                            host,
+                            model,
+                            plan,
+                            &desc[..desc.len().min(40)]
+                        );
                     }
                 }
                 _ => println!("No active workers."),
@@ -45,11 +58,18 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
             let peers_url = format!("{api_url}/api/heartbeat/status");
             if let Ok(pb) = cli_http::get_and_return(&peers_url).await {
                 if let Some(peers) = pb["peers"].as_array() {
-                    let online: Vec<_> = peers.iter().filter(|p| p["age_secs"].as_i64().map(|a| a < 300).unwrap_or(false)).collect();
+                    let online: Vec<_> = peers
+                        .iter()
+                        .filter(|p| p["age_secs"].as_i64().map(|a| a < 300).unwrap_or(false))
+                        .collect();
                     if !online.is_empty() {
                         println!("\nOnline peers ({}):", online.len());
                         for p in &online {
-                            println!("  {} ({}s ago)", p["peer_name"].as_str().unwrap_or("?"), p["age_secs"].as_i64().unwrap_or(0));
+                            println!(
+                                "  {} ({}s ago)",
+                                p["peer_name"].as_str().unwrap_or("?"),
+                                p["age_secs"].as_i64().unwrap_or(0)
+                            );
                         }
                     }
                 }
@@ -61,13 +81,21 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
             let url = format!("{api_url}/api/workers");
             let body = cli_http::get_and_return(&url).await.map_err(api_err)?;
             if let Some(list) = body["workers"].as_array() {
-                let active: Vec<_> = list.iter().filter(|w| w["plan_id"].as_i64() == Some(plan_id)).collect();
+                let active: Vec<_> = list
+                    .iter()
+                    .filter(|w| w["plan_id"].as_i64() == Some(plan_id))
+                    .collect();
                 if active.is_empty() {
                     println!("No active workers on plan {plan_id}.");
                 } else {
                     println!("Workers on plan {plan_id}:");
                     for w in &active {
-                        println!("  {} on {} ({})", w["agent_id"].as_str().unwrap_or("?"), w["host"].as_str().unwrap_or("?"), w["model"].as_str().unwrap_or("?"));
+                        println!(
+                            "  {} on {} ({})",
+                            w["agent_id"].as_str().unwrap_or("?"),
+                            w["host"].as_str().unwrap_or("?"),
+                            w["model"].as_str().unwrap_or("?")
+                        );
                     }
                 }
             }
@@ -75,12 +103,20 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
             let tree_url = format!("{api_url}/api/plan-db/json/{plan_id}");
             if let Ok(ctx) = cli_http::get_and_return(&tree_url).await {
                 if let Some(tasks) = ctx["tasks"].as_array() {
-                    let active: Vec<_> = tasks.iter().filter(|t| t["status"].as_str() == Some("in_progress")).collect();
+                    let active: Vec<_> = tasks
+                        .iter()
+                        .filter(|t| t["status"].as_str() == Some("in_progress"))
+                        .collect();
                     if !active.is_empty() {
                         println!("\nTasks in progress:");
                         for t in &active {
                             let title = t["title"].as_str().unwrap_or("");
-                            println!("  {} [{}]: {}...", t["task_id"].as_str().unwrap_or("?"), t["executor_host"].as_str().unwrap_or("local"), &title[..title.len().min(60)]);
+                            println!(
+                                "  {} [{}]: {}...",
+                                t["task_id"].as_str().unwrap_or("?"),
+                                t["executor_host"].as_str().unwrap_or("local"),
+                                &title[..title.len().min(60)]
+                            );
                         }
                     }
                 }
@@ -96,7 +132,10 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
                     let agent = w["agent_id"].as_str().unwrap_or("?");
                     let complete_url = format!("{api_url}/api/plan-db/agent/complete");
                     let payload = serde_json::json!({"agent_id": agent, "status": "pruned"});
-                    if cli_http::post_and_return(&complete_url, &payload).await.is_ok() {
+                    if cli_http::post_and_return(&complete_url, &payload)
+                        .await
+                        .is_ok()
+                    {
                         pruned += 1;
                         println!("  pruned: {agent}");
                     }

@@ -33,12 +33,19 @@ pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliErr
             let workers_url = format!("{api_url}/api/workers");
             if let Ok(wb) = cli_http::get_and_return(&workers_url).await {
                 if let Some(list) = wb["workers"].as_array() {
-                    let active: Vec<_> = list.iter().filter(|w| w["plan_id"].as_i64() == Some(plan_id)).collect();
+                    let active: Vec<_> = list
+                        .iter()
+                        .filter(|w| w["plan_id"].as_i64() == Some(plan_id))
+                        .collect();
                     if active.is_empty() {
                         println!("No active workers.");
                     } else {
                         for w in &active {
-                            println!("  worker: {} on {}", w["agent_id"].as_str().unwrap_or("?"), w["host"].as_str().unwrap_or("?"));
+                            println!(
+                                "  worker: {} on {}",
+                                w["agent_id"].as_str().unwrap_or("?"),
+                                w["host"].as_str().unwrap_or("?")
+                            );
                         }
                     }
                 }
@@ -49,7 +56,10 @@ pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliErr
             let url = format!("{api_url}/api/plan-db/list");
             let body = cli_http::get_and_return(&url).await.map_err(api_err)?;
             if let Some(plans) = body["plans"].as_array() {
-                let doing: Vec<_> = plans.iter().filter(|p| p["status"].as_str() == Some("doing")).collect();
+                let doing: Vec<_> = plans
+                    .iter()
+                    .filter(|p| p["status"].as_str() == Some("doing"))
+                    .collect();
                 if doing.is_empty() {
                     println!("No active plans.");
                 } else {

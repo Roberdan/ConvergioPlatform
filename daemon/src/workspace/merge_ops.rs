@@ -66,16 +66,31 @@ pub async fn merge_wave(
         .commit(path, &commit_msg)
         .map_err(|e| WorkspaceError::Git(e.to_string()))?;
     event_logger
-        .record_event(&workspace_id, "merge_ops", WorkspaceAction::GitCommit, None, Some(&sha), None)
+        .record_event(
+            &workspace_id,
+            "merge_ops",
+            WorkspaceAction::GitCommit,
+            None,
+            Some(&sha),
+            None,
+        )
         .map_err(|e| WorkspaceError::Event(e.to_string()))?;
 
-    connector.rebase(path, "origin/main").map_err(|e| WorkspaceError::Git(e.to_string()))?;
+    connector
+        .rebase(path, "origin/main")
+        .map_err(|e| WorkspaceError::Git(e.to_string()))?;
 
-    connector.push(path, &branch, true).map_err(|e| WorkspaceError::Git(e.to_string()))?;
+    connector
+        .push(path, &branch, true)
+        .map_err(|e| WorkspaceError::Git(e.to_string()))?;
     event_logger
         .record_event(
-            &workspace_id, "merge_ops", WorkspaceAction::GitPush,
-            None, Some(&format!("pushed {branch}")), None,
+            &workspace_id,
+            "merge_ops",
+            WorkspaceAction::GitPush,
+            None,
+            Some(&format!("pushed {branch}")),
+            None,
         )
         .map_err(|e| WorkspaceError::Event(e.to_string()))?;
 
@@ -89,8 +104,12 @@ pub async fn merge_wave(
         .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
     event_logger
         .record_event(
-            &workspace_id, "merge_ops", WorkspaceAction::PrCreated,
-            None, Some(&format!("PR #{}", pr_info.number)), Some(&pr_info.url),
+            &workspace_id,
+            "merge_ops",
+            WorkspaceAction::PrCreated,
+            None,
+            Some(&format!("PR #{}", pr_info.number)),
+            Some(&pr_info.url),
         )
         .map_err(|e| WorkspaceError::Event(e.to_string()))?;
 
@@ -123,8 +142,12 @@ pub async fn merge_wave(
         .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
     event_logger
         .record_event(
-            &workspace_id, "merge_ops", WorkspaceAction::PrMerged,
-            None, Some(&format!("PR #{} squash-merged", pr_info.number)), None,
+            &workspace_id,
+            "merge_ops",
+            WorkspaceAction::PrMerged,
+            None,
+            Some(&format!("PR #{} squash-merged", pr_info.number)),
+            None,
         )
         .map_err(|e| WorkspaceError::Event(e.to_string()))?;
 

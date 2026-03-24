@@ -94,14 +94,12 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
         } => {
             let url = format!("{api_url}/api/plan-db/validate-task/{task_id}/{plan_id}");
             let resp = reqwest::get(&url).await.map_err(|e| {
-                crate::cli_error::CliError::ApiCallFailed(
-                    format!("error connecting to daemon: {e}"),
-                )
+                crate::cli_error::CliError::ApiCallFailed(format!(
+                    "error connecting to daemon: {e}"
+                ))
             })?;
             let val: serde_json::Value = resp.json().await.map_err(|e| {
-                crate::cli_error::CliError::ApiCallFailed(
-                    format!("error parsing response: {e}"),
-                )
+                crate::cli_error::CliError::ApiCallFailed(format!("error parsing response: {e}"))
             })?;
             if human {
                 print_mechanical_human(&val);

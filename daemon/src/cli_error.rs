@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Structured error type for CLI subcommands — replaces process::exit calls.
+// Structured error type for CLI subcommands — replaces direct CLI termination calls.
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CliError {
@@ -20,7 +20,9 @@ pub(crate) enum CliError {
 impl CliError {
     pub(crate) fn exit_code(&self) -> i32 {
         match self {
-            CliError::NotFound(_) | CliError::ValidationRejected(_) | CliError::ViolationsFound(_) => 1,
+            CliError::NotFound(_)
+            | CliError::ValidationRejected(_)
+            | CliError::ViolationsFound(_) => 1,
             _ => 2,
         }
     }

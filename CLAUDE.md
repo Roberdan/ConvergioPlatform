@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # ConvergioPlatform
 
-Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
+Unified control plane: Rust daemon (107 modules) + dashboard + CommandCenter + evolution engine.
 
 ## Agent Identity (NON-NEGOTIABLE)
 
@@ -31,6 +31,8 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | `cd daemon && cargo run -- tui` | Launch TUI (plan/task/agent ops) |
 | `./daemon/start.sh` | Run daemon (auto release/debug/build) |
 | `cd dashboard && ./start.sh` | Run Control Room (reads DASHBOARD_DB) |
+| `cd CommandCenter && ruby Scripts/generate_xcodeproj.rb && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build` | Build native CommandCenter |
+| `cd CommandCenter && ruby Scripts/generate_xcodeproj.rb && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build` | Build native CommandCenter |
 | `cd evolution && npx tsc --noEmit` | Type check evolution |
 | `cd evolution && npx vitest run` | Evolution tests |
 | `cvg plan status convergio` | Plan status |
@@ -47,6 +49,8 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 |---|---|---|---|
 | Daemon | `daemon/` | Rust | mesh(40) server(32) ipc(15) db(7) hooks(3) tui(3) |
 | Dashboard | `dashboard/` | JS (Maranello DS) | app, KPI, mesh, chat, brain, IPC (served by daemon) |
+| CommandCenter | `CommandCenter/` | SwiftUI | Native macOS Command Center: onboarding, plans, agents, mesh, evolution, costs, terminal, brain, notifications |
+| CommandCenter | `CommandCenter/` | SwiftUI | Native macOS Command Center: onboarding, plans, agents, mesh, evolution, costs, terminal, brain, notifications |
 | Evolution | `evolution/` | TypeScript | core/types, adapters (claude, maranello, dashboard) |
 | Scripts | `scripts/` | Bash | mesh(12), platform(5) |
 | Data | `data/dashboard.db` | SQLite WAL | plans, tasks, waves, KB, heartbeats |
@@ -58,6 +62,8 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | Path | What |
 |---|---|
 | `data/dashboard.db` | Platform DB (env: `DASHBOARD_DB`) |
+| `CommandCenter/` | Native macOS app source, Xcode generator, SwiftUI views, notifications, terminal, brain |
+| `CommandCenter/` | Native macOS app source, Xcode generator, SwiftUI views, notifications, terminal, brain |
 | `~/.claude/data/dashboard.db` | Symlink to above |
 | `~/.claude/scripts/*.sh` | Symlinks to `claude-config/scripts/*.sh` (via bootstrap) |
 | `~/.claude/scripts/lib/*.sh` | Symlinks to `claude-config/scripts/lib/*.sh` |

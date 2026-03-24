@@ -63,8 +63,7 @@ where
     let mut stream = resp.bytes_stream();
     let mut buf = String::new();
     while let Some(chunk) = stream.next().await {
-        let bytes = chunk
-            .map_err(|e| ApiError::internal(format!("stream read error: {e}")))?;
+        let bytes = chunk.map_err(|e| ApiError::internal(format!("stream read error: {e}")))?;
         buf.push_str(&String::from_utf8_lossy(&bytes));
         while let Some(pos) = buf.find("\n\n") {
             let block = buf[..pos].to_string();

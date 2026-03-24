@@ -10,19 +10,13 @@ use tower::ServiceExt;
 fn test_router() -> axum::Router {
     static CTR: AtomicU64 = AtomicU64::new(0);
     let n = CTR.fetch_add(1, Ordering::SeqCst);
-    let tmp = std::env::temp_dir().join(format!(
-        "claude-ingest-test-{}-{n}.db",
-        std::process::id()
-    ));
+    let tmp =
+        std::env::temp_dir().join(format!("claude-ingest-test-{}-{n}.db", std::process::id()));
     let conn = rusqlite::Connection::open(&tmp).expect("open");
     conn.execute_batch(SCHEMA).expect("schema");
     drop(conn);
     super::middleware::set_dev_mode(true);
-    super::routes::build_router_with_db(
-        std::path::PathBuf::from("/tmp"),
-        tmp,
-        None,
-    )
+    super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }
 
 const SCHEMA: &str = "

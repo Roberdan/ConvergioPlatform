@@ -15,10 +15,7 @@ use tower::ServiceExt;
 
 #[test]
 fn extract_nwo_standard_url() {
-    assert_eq!(
-        extract_nwo("https://github.com/Owner/Repo"),
-        "Owner/Repo"
-    );
+    assert_eq!(extract_nwo("https://github.com/Owner/Repo"), "Owner/Repo");
 }
 
 #[test]
@@ -31,10 +28,7 @@ fn extract_nwo_with_git_suffix() {
 
 #[test]
 fn extract_nwo_with_trailing_slash() {
-    assert_eq!(
-        extract_nwo("https://github.com/Owner/Repo/"),
-        "Owner/Repo"
-    );
+    assert_eq!(extract_nwo("https://github.com/Owner/Repo/"), "Owner/Repo");
 }
 
 #[test]

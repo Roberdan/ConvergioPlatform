@@ -3,6 +3,7 @@
 pub mod session;
 
 use super::state::ServerState;
+use crate::message_error::MessageResult;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::response::Response;
@@ -57,7 +58,7 @@ pub(crate) fn sanitize_tmux_session(session: &str) -> Option<String> {
     }
 }
 
-fn validate_pty_params(params: PtyParams) -> Result<PtyParams, String> {
+fn validate_pty_params(params: PtyParams) -> MessageResult<PtyParams> {
     let known_peers = load_known_peers();
     validate_peer(&params.peer, &known_peers)?;
     let tmux_session = sanitize_tmux_session(&params.tmux_session)

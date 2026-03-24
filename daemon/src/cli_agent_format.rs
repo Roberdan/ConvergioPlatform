@@ -150,8 +150,8 @@ async fn handle_transpile(name: &str, provider: &str, api_url: &str) -> Result<(
     } else {
         Some(val)
     };
-    let agent = agent
-        .ok_or_else(|| CliError::NotFound(format!("agent '{name}' not found in catalog")))?;
+    let agent =
+        agent.ok_or_else(|| CliError::NotFound(format!("agent '{name}' not found in catalog")))?;
     let desc = agent["description"].as_str().unwrap_or("");
     let model = agent["model"].as_str().unwrap_or("claude-sonnet-4-6");
     let tools = agent["tools"].as_str().unwrap_or("view,edit,bash");

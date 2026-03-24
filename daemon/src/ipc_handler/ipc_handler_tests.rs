@@ -90,9 +90,7 @@ fn ipc_commands_request_skill_variant() {
         db_path: None,
     };
     match cmd {
-        IpcCommands::RequestSkill {
-            skill, payload, ..
-        } => {
+        IpcCommands::RequestSkill { skill, payload, .. } => {
             assert_eq!(skill, "code-review");
             assert!(payload.contains("main.rs"));
         }
@@ -213,7 +211,11 @@ fn sub_commands_add() {
     };
     match cmd {
         SubCommands::Add {
-            name, budget, reset_day, models, ..
+            name,
+            budget,
+            reset_day,
+            models,
+            ..
         } => {
             assert_eq!(name, "anthropic-pro");
             assert!((budget - 100.0).abs() < f64::EPSILON);

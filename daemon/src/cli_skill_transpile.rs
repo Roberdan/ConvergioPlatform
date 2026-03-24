@@ -2,6 +2,7 @@
 // Transpile subcommand implementation — converts skill.yaml + SKILL.md to provider formats.
 
 use crate::cli_error::CliError;
+use crate::message_error::MessageResult;
 use std::path::{Path, PathBuf};
 
 pub fn handle_transpile(
@@ -15,17 +16,12 @@ pub fn handle_transpile(
 
     for p in [&yaml_path, &md_path] {
         if !p.is_file() {
-            return Err(CliError::InvalidInput(format!(
-                "missing: {}",
-                p.display()
-            )));
+            return Err(CliError::InvalidInput(format!("missing: {}", p.display())));
         }
     }
 
-    let yaml_content = std::fs::read_to_string(&yaml_path)
-        .map_err(|e| CliError::Io(e))?;
-    let md_content = std::fs::read_to_string(&md_path)
-        .map_err(|e| CliError::Io(e))?;
+    let yaml_content = std::fs::read_to_string(&yaml_path).map_err(|e| CliError::Io(e))?;
+    let md_content = std::fs::read_to_string(&md_path).map_err(|e| CliError::Io(e))?;
 
     let output = match provider {
         "claude-code" => transpile_claude(&yaml_content, &md_content, output_dir),
@@ -50,11 +46,11 @@ pub fn handle_transpile(
             }
             Ok(())
         }
-        Err(e) => Err(CliError::ApiCallFailed(e)),
+        Err(e) => Err(CliError::ApiCallFailed(e.to_string())),
     }
 }
 
-pub fn transpile_claude(yaml: &str, md: &str, output_dir: &Path) -> Result<PathBuf, String> {
+pub fn transpile_claude(yaml: &str, md: &str, output_dir: &Path) -> MessageResult<PathBuf> {
     let name = crate::cli_skill::yaml_get(yaml, "name").ok_or("skill.yaml missing 'name'")?;
     let version =
         crate::cli_skill::yaml_get(yaml, "version").ok_or("skill.yaml missing 'version'")?;
@@ -82,7 +78,7 @@ pub fn transpile_claude(yaml: &str, md: &str, output_dir: &Path) -> Result<PathB
     Ok(out_path)
 }
 
-pub fn transpile_copilot(yaml: &str, md: &str, output_dir: &Path) -> Result<PathBuf, String> {
+pub fn transpile_copilot(yaml: &str, md: &str, output_dir: &Path) -> MessageResult<PathBuf> {
     let name = crate::cli_skill::yaml_get(yaml, "name").ok_or("skill.yaml missing 'name'")?;
     let description = crate::cli_skill::yaml_get(yaml, "description").unwrap_or_default();
     let model = crate::cli_skill::yaml_get(yaml, "model").unwrap_or_default();
@@ -107,7 +103,7 @@ pub fn transpile_copilot(yaml: &str, md: &str, output_dir: &Path) -> Result<Path
     Ok(out_path)
 }
 
-pub fn transpile_generic(yaml: &str, md: &str, output_dir: &Path) -> Result<PathBuf, String> {
+pub fn transpile_generic(yaml: &str, md: &str, output_dir: &Path) -> MessageResult<PathBuf> {
     let name = crate::cli_skill::yaml_get(yaml, "name").ok_or("skill.yaml missing 'name'")?;
     let description = crate::cli_skill::yaml_get(yaml, "description").unwrap_or_default();
     let domain = crate::cli_skill::yaml_get(yaml, "domain").unwrap_or_else(|| "general".into());

@@ -40,7 +40,12 @@ impl GitConnector for MockGitConnector {
         Ok("abc1234567890123456789012345678901234567890".to_string())
     }
 
-    fn push(&self, _path: &Path, _branch: &str, _force_with_lease: bool) -> std::result::Result<(), GitError> {
+    fn push(
+        &self,
+        _path: &Path,
+        _branch: &str,
+        _force_with_lease: bool,
+    ) -> std::result::Result<(), GitError> {
         self.push_call("push");
         Ok(())
     }
@@ -67,7 +72,12 @@ impl GitConnector for MockGitConnector {
         })
     }
 
-    fn merge_pr<'a>(&'a self, _repo: &'a str, _pr_number: i64, _method: MergeMethod) -> AsyncResult<'a, ()> {
+    fn merge_pr<'a>(
+        &'a self,
+        _repo: &'a str,
+        _pr_number: i64,
+        _method: MergeMethod,
+    ) -> AsyncResult<'a, ()> {
         self.push_call("merge_pr");
         Box::pin(async { Ok(()) })
     }
@@ -153,7 +163,9 @@ async fn merge_pipeline_calls_in_correct_order() {
     let connector = MockGitConnector::new(true);
     let event_logger = EventLogger::new(pool.clone());
 
-    let result = merge_wave(1, "example/repo", &connector, &event_logger, &pool).await.unwrap();
+    let result = merge_wave(1, "example/repo", &connector, &event_logger, &pool)
+        .await
+        .unwrap();
 
     let calls = connector.recorded_calls();
     assert_eq!(calls[0], "commit", "commit must be first");
@@ -175,7 +187,9 @@ async fn merge_pipeline_updates_waves_table() {
     let connector = MockGitConnector::new(true);
     let event_logger = EventLogger::new(pool.clone());
 
-    merge_wave(2, "example/repo", &connector, &event_logger, &pool).await.unwrap();
+    merge_wave(2, "example/repo", &connector, &event_logger, &pool)
+        .await
+        .unwrap();
 
     let conn = pool.get().unwrap();
     let (status, pr_number, pr_url): (String, Option<i64>, Option<String>) = conn
@@ -209,7 +223,9 @@ async fn merge_pipeline_fails_when_no_workspace() {
 #[tokio::test]
 async fn pr_readiness_check_delegates_to_connector() {
     let connector = MockGitConnector::new(true);
-    let readiness = pr_readiness_check(&connector, "example/repo", 42).await.unwrap();
+    let readiness = pr_readiness_check(&connector, "example/repo", 42)
+        .await
+        .unwrap();
     assert!(readiness.mergeable);
     assert!(readiness.ci_passed);
     assert_eq!(readiness.review_status, "clean");

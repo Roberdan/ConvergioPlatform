@@ -100,7 +100,9 @@ pub(super) async fn handle_socket(
                                 },
                             )
                             .await?;
-                            Err(MeshError::Auth(format!("auth failed for {node}: HMAC mismatch")))
+                            Err(MeshError::Auth(format!(
+                                "auth failed for {node}: HMAC mismatch"
+                            )))
                         }
                     }
                     _ => Err(MeshError::Auth("expected AuthResponse".into())),
@@ -171,7 +173,9 @@ pub(super) async fn handle_socket(
     Ok(())
 }
 
-pub(super) fn load_required_shared_secret(peers_conf: &std::path::Path) -> Result<Vec<u8>, MeshError> {
+pub(super) fn load_required_shared_secret(
+    peers_conf: &std::path::Path,
+) -> Result<Vec<u8>, MeshError> {
     auth::load_shared_secret(peers_conf).ok_or_else(|| {
         MeshError::Config(format!(
             "mesh auth requires non-empty [mesh].shared_secret in peers.conf: {:?}",

@@ -20,9 +20,9 @@ pub fn handle_models(db_path: Option<PathBuf>) -> Result<(), IpcHandlerError> {
             println!("\n{} model(s)", models.len());
         }
         Err(e) => {
-            return Err(IpcHandlerError::OperationFailed(
-                format!("list models: {e}"),
-            ));
+            return Err(IpcHandlerError::OperationFailed(format!(
+                "list models: {e}"
+            )));
         }
     }
     Ok(())
@@ -56,9 +56,7 @@ pub fn handle_sub(command: SubCommands) -> Result<(), IpcHandlerError> {
             match claude_core::ipc::models::add_subscription(&conn, &sub) {
                 Ok(()) => println!("added subscription {}", sub.name),
                 Err(e) => {
-                    return Err(IpcHandlerError::OperationFailed(
-                        format!("add sub: {e}"),
-                    ));
+                    return Err(IpcHandlerError::OperationFailed(format!("add sub: {e}")));
                 }
             }
         }
@@ -82,18 +80,14 @@ pub fn handle_sub(command: SubCommands) -> Result<(), IpcHandlerError> {
                 println!("\n{} subscription(s)", subs.len());
             }
             Err(e) => {
-                return Err(IpcHandlerError::OperationFailed(
-                    format!("list subs: {e}"),
-                ));
+                return Err(IpcHandlerError::OperationFailed(format!("list subs: {e}")));
             }
         },
         SubCommands::Remove { name, .. } => {
             match claude_core::ipc::models::remove_subscription(&conn, &name) {
                 Ok(n) => println!("removed {n} subscription(s)"),
                 Err(e) => {
-                    return Err(IpcHandlerError::OperationFailed(
-                        format!("remove sub: {e}"),
-                    ));
+                    return Err(IpcHandlerError::OperationFailed(format!("remove sub: {e}")));
                 }
             }
         }
@@ -143,6 +137,5 @@ pub fn handle_budget(db_path: Option<PathBuf>) -> Result<(), IpcHandlerError> {
 
 fn open_db(db_path: Option<PathBuf>) -> Result<rusqlite::Connection, IpcHandlerError> {
     let path = db_path.unwrap_or_else(default_db_path);
-    rusqlite::Connection::open(&path)
-        .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))
+    rusqlite::Connection::open(&path).map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))
 }

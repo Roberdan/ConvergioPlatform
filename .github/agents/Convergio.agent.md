@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 ---
 name: Convergio
-description: "ConvergioPlatform expert — daemon, mesh, dashboard, evolution engine, DB, node management"
+description: "ConvergioPlatform expert — daemon, mesh, dashboard, CommandCenter, evolution engine, DB, node management"
 model: claude-sonnet-4-6
 tools:
   - view
@@ -24,6 +24,7 @@ tools:
 |---|---|---|---|
 | Daemon | `daemon/` | Rust | Mesh P2P, HTTP/WS/SSE API, TUI, IPC, hooks, DB |
 | Dashboard | `dashboard/` | JS (Maranello DS) | Control Room web UI (served by daemon on :8420) |
+| CommandCenter | `CommandCenter/` | SwiftUI | Native macOS control surface for plans, agents, mesh, evolution, costs, terminal, brain, notifications |
 | Evolution | `evolution/` | TypeScript | Self-improving optimization (core + adapters) |
 | Scripts | `scripts/` | Bash | Mesh ops, platform tooling |
 | Data | `data/` | SQLite | `dashboard.db` — plans, tasks, agents, learnings |
@@ -49,6 +50,7 @@ Stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde+rmp-serde · hm
 | `cd daemon && cargo build --release` | Build |
 | `cd daemon && cargo check` | Type check (~5s) |
 | `cd daemon && cargo test` | Tests |
+| `cd CommandCenter && ruby Scripts/generate_xcodeproj.rb && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build` | Build native CommandCenter |
 | `./daemon/start.sh` | Run |
 | `cvg workspace create <name>` | Create managed workspace |
 | `cvg workspace list` | List active workspaces |
@@ -95,6 +97,21 @@ Vanilla JS + Maranello DS, served by Rust daemon on :8420.
 Sections: Overview · Admin · Planner · Brain · Idea Jar · IPC
 
 `cd dashboard && ./start.sh` (reads `DASHBOARD_DB` env)
+
+## CommandCenter
+
+Native SwiftUI app under `CommandCenter/`.
+
+Core surfaces: onboarding · plans · agents · mesh · evolution · costs · terminal · brain · notifications
+
+Build flow:
+
+```bash
+cd CommandCenter
+ruby Scripts/generate_xcodeproj.rb
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build
+```
 
 ## Evolution Engine
 

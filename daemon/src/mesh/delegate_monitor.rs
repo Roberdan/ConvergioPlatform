@@ -80,7 +80,9 @@ async fn poll_delegated_tasks(
 pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<String, MeshError> {
     let parsed: DelegateCompletePayload = serde_json::from_value(payload.clone())
         .map_err(|e| MeshError::Serialization(format!("invalid delegate_complete payload: {e}")))?;
-    let conn = state.get_conn().map_err(|e| MeshError::Db(format!("{e:?}")))?;
+    let conn = state
+        .get_conn()
+        .map_err(|e| MeshError::Db(format!("{e:?}")))?;
     let new_status = match parsed.result.as_str() {
         "failed" | "error" => "failed",
         _ => "done",
@@ -112,7 +114,9 @@ pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<
 }
 
 fn load_active_delegations(state: &ServerState) -> Result<Vec<Delegation>, MeshError> {
-    let conn = state.get_conn().map_err(|e| MeshError::Db(format!("{e:?}")))?;
+    let conn = state
+        .get_conn()
+        .map_err(|e| MeshError::Db(format!("{e:?}")))?;
     let mut stmt = conn
         .prepare(
             "SELECT ar.task_id, ar.plan_id, ar.peer_name, ar.status \
@@ -163,7 +167,10 @@ async fn query_remote_agents(
     if !resp.status().is_success() {
         return Err(MeshError::Network(format!("HTTP {}: {url}", resp.status())));
     }
-    let body: Value = resp.json().await.map_err(|e| MeshError::Network(format!("JSON: {e}")))?;
+    let body: Value = resp
+        .json()
+        .await
+        .map_err(|e| MeshError::Network(format!("JSON: {e}")))?;
     let agents = body
         .get("agents")
         .and_then(Value::as_array)
@@ -187,8 +194,14 @@ fn update_delegation_status(
     delegation: &Delegation,
     new_status: &str,
 ) -> Result<(), MeshError> {
-    let conn = state.get_conn().map_err(|e| MeshError::Db(format!("{e:?}")))?;
-    let task_status = if is_terminal(new_status) { new_status } else { "in_progress" };
+    let conn = state
+        .get_conn()
+        .map_err(|e| MeshError::Db(format!("{e:?}")))?;
+    let task_status = if is_terminal(new_status) {
+        new_status
+    } else {
+        "in_progress"
+    };
     conn.execute(
         "UPDATE tasks SET status = ?1 WHERE id = ?2",
         rusqlite::params![task_status, delegation.task_id],
@@ -215,33 +228,5 @@ fn broadcast_status_change(state: &ServerState, delegation: &Delegation, new_sta
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn delegate_complete_payload_deserializes() {
-        let val = json!({"task_id": "T6-03", "result": "success", "output": "all good"});
-        let p: DelegateCompletePayload = serde_json::from_value(val).unwrap();
-        assert_eq!(p.task_id, "T6-03");
-        assert_eq!(p.result, "success");
-        assert_eq!(p.output.as_deref(), Some("all good"));
-    }
-
-    #[test]
-    fn delegate_complete_payload_minimal() {
-        let val = json!({"task_id": "T1-01", "result": "done"});
-        let p: DelegateCompletePayload = serde_json::from_value(val).unwrap();
-        assert_eq!(p.task_id, "T1-01");
-        assert!(p.output.is_none());
-    }
-
-    #[test]
-    fn terminal_status_check() {
-        assert!(is_terminal("done"));
-        assert!(is_terminal("completed"));
-        assert!(is_terminal("failed"));
-        assert!(is_terminal("cancelled"));
-        assert!(!is_terminal("running"));
-        assert!(!is_terminal("pending"));
-    }
-}
+#[path = "delegate_monitor_tests.rs"]
+mod tests;

@@ -88,12 +88,7 @@ pub async fn handle(cmd: RunCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({});
-            post_and_print(
-                &format!("{api_url}/api/runs/{run_id}/pause"),
-                &body,
-                human,
-            )
-            .await
+            post_and_print(&format!("{api_url}/api/runs/{run_id}/pause"), &body, human).await
         }
         RunCommands::Resume {
             run_id,
@@ -101,12 +96,7 @@ pub async fn handle(cmd: RunCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({});
-            post_and_print(
-                &format!("{api_url}/api/runs/{run_id}/resume"),
-                &body,
-                human,
-            )
-            .await
+            post_and_print(&format!("{api_url}/api/runs/{run_id}/resume"), &body, human).await
         }
     }
 }
@@ -127,11 +117,7 @@ async fn fetch_and_print(url: &str, human: bool) -> Result<(), CliError> {
     Ok(())
 }
 
-async fn post_and_print(
-    url: &str,
-    body: &serde_json::Value,
-    human: bool,
-) -> Result<(), CliError> {
+async fn post_and_print(url: &str, body: &serde_json::Value, human: bool) -> Result<(), CliError> {
     let client = reqwest::Client::new();
     let resp = client
         .post(url)

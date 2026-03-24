@@ -3,6 +3,7 @@ pub(crate) mod checks_helpers;
 mod checks_support;
 mod checks_support_helpers;
 
+use crate::message_error::MessageResult;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -31,7 +32,7 @@ pub struct HookToolInput {
 pub fn dispatch_pre_tool(
     input_json: &str,
     context: &checks::CheckContext,
-) -> Result<Option<Value>, String> {
+) -> MessageResult<Option<Value>> {
     let payload: HookPayload = serde_json::from_str(input_json).map_err(|err| err.to_string())?;
     let tool_name = payload.tool_name.to_ascii_lowercase();
     if tool_name.is_empty() || (tool_name != "bash" && tool_name != "shell") {
@@ -52,7 +53,7 @@ pub fn dispatch_pre_tool(
                     json!({"permissionDecision":"deny","permissionDecisionReason": reason}),
                 ))
             }
-            checks::CheckOutcome::Block(message) => return Err(message),
+            checks::CheckOutcome::Block(message) => return Err(message.into()),
         }
     }
     if let Some(token) = state.gh_token {

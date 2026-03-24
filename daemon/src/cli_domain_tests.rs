@@ -55,7 +55,7 @@ fn test_map_invalid_skill() {
     let nonexistent = "/tmp/__cvg_test_skill_that_does_not_exist_xyz123__";
     let err = super::validate_skill_dir(nonexistent);
     assert!(err.is_err(), "should error for nonexistent skill dir");
-    let msg = err.unwrap_err();
+    let msg = err.unwrap_err().to_string();
     assert!(
         msg.contains("not found") || msg.contains("does not exist"),
         "error message should mention skill not found: {msg}"

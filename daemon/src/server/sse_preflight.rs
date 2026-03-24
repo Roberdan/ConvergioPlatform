@@ -1,6 +1,7 @@
 /// Real plan preflight checks: TCP reachability, SSH auth, heartbeat freshness.
 /// Streams SSE events per peer: checking -> check (ok/fail) -> done summary.
 use crate::mesh::peers::PeersRegistry;
+use crate::message_error::MessageResult;
 use axum::response::sse::Event;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -51,18 +52,18 @@ pub fn load_active_peers(target: &str) -> Vec<(String, String)> {
 }
 
 /// TCP connect test to peer_ip:9420 with 5s timeout (blocking).
-fn tcp_check(peer_ip: &str) -> Result<(), String> {
+fn tcp_check(peer_ip: &str) -> MessageResult<()> {
     let addr_str = format!("{peer_ip}:{TCP_PORT}");
     let addr: std::net::SocketAddr = addr_str
         .parse()
         .map_err(|e| format!("invalid address {addr_str}: {e}"))?;
-    std::net::TcpStream::connect_timeout(&addr, TCP_TIMEOUT)
+    Ok(std::net::TcpStream::connect_timeout(&addr, TCP_TIMEOUT)
         .map(|_| ())
-        .map_err(|e| format!("{addr_str} unreachable: {e}"))
+        .map_err(|e| format!("{addr_str} unreachable: {e}"))?)
 }
 
 /// SSH auth test via ssh2 crate. Connects to peer_ip:22 and tries agent auth.
-fn ssh_check(peer_ip: &str) -> Result<(), String> {
+fn ssh_check(peer_ip: &str) -> MessageResult<()> {
     let addr_str = format!("{peer_ip}:22");
     let addr: std::net::SocketAddr = addr_str
         .parse()
@@ -80,12 +81,12 @@ fn ssh_check(peer_ip: &str) -> Result<(), String> {
     if sess.authenticated() {
         Ok(())
     } else {
-        Err(format!("SSH auth failed for {user}@{peer_ip}"))
+        Err(format!("SSH auth failed for {user}@{peer_ip}").into())
     }
 }
 
 /// Check peer_heartbeats for recent activity (< 5 min).
-fn heartbeat_check(conn: &Conn, peer_name: &str) -> Result<(), String> {
+fn heartbeat_check(conn: &Conn, peer_name: &str) -> MessageResult<()> {
     let sql = "SELECT last_seen FROM peer_heartbeats WHERE peer_name = ?1 \
                ORDER BY last_seen DESC LIMIT 1";
     let mut stmt = conn
@@ -95,7 +96,7 @@ fn heartbeat_check(conn: &Conn, peer_name: &str) -> Result<(), String> {
         .query_row(rusqlite::params![peer_name], |row| row.get(0))
         .ok();
     match last_seen {
-        None => Err(format!("no heartbeat recorded for {peer_name}")),
+        None => Err(format!("no heartbeat recorded for {peer_name}").into()),
         Some(ts) => {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -105,9 +106,7 @@ fn heartbeat_check(conn: &Conn, peer_name: &str) -> Result<(), String> {
             if age <= HEARTBEAT_STALE_SECS {
                 Ok(())
             } else {
-                Err(format!(
-                    "last heartbeat {age}s ago (threshold {HEARTBEAT_STALE_SECS}s)"
-                ))
+                Err(format!("last heartbeat {age}s ago (threshold {HEARTBEAT_STALE_SECS}s)").into())
             }
         }
     }
@@ -133,7 +132,7 @@ fn push_check(
     all_ok: &mut bool,
     peer: &str,
     check: &str,
-    result: Result<(), String>,
+    result: MessageResult<()>,
     ok_detail: &str,
 ) {
     events.push(Ok(Event::default()
@@ -143,7 +142,7 @@ fn push_check(
         Ok(()) => (true, ok_detail.to_string()),
         Err(e) => {
             *all_ok = false;
-            (false, e)
+            (false, e.to_string())
         }
     };
     events.push(Ok(Event::default().event("check").data(
@@ -204,7 +203,7 @@ pub fn build_preflight_events(conn: &Conn, plan_id: &str, target: &str) -> Vec<S
         if plan_ok {
             Ok(())
         } else {
-            Err(plan_detail.clone())
+            Err(plan_detail.clone().into())
         },
         &plan_detail,
     );

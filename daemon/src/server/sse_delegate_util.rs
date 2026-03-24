@@ -128,8 +128,18 @@ mod tests {
         assert!(is_safe_id("671"));
         assert!(is_safe_id("plan_706"));
         assert!(!is_safe_id(""));
-        for bad in &["; rm -rf /", "$(whoami)", "`id`", "foo && bar", "foo | bar",
-            "foo > /tmp/x", "foo\nbar", "foo'bar", "foo\"bar", "foo bar"] {
+        for bad in &[
+            "; rm -rf /",
+            "$(whoami)",
+            "`id`",
+            "foo && bar",
+            "foo | bar",
+            "foo > /tmp/x",
+            "foo\nbar",
+            "foo'bar",
+            "foo\"bar",
+            "foo bar",
+        ] {
             assert!(!is_safe_id(bad), "expected rejection of: {bad}");
         }
     }
@@ -160,7 +170,8 @@ mod tests {
     #[test]
     fn invalid_cli_and_injection_rejected() {
         let msg = build_agent_command("my-agent", "42", &HashMap::new())
-            .unwrap_err().to_string();
+            .unwrap_err()
+            .to_string();
         assert!(msg.contains("not in the allowed list"), "got: {msg}");
         assert!(build_agent_command("claude; rm -rf /", "42", &HashMap::new()).is_err());
     }
@@ -168,7 +179,8 @@ mod tests {
     #[test]
     fn plan_id_injection_rejected() {
         let msg = build_agent_command("claude", "42; curl attacker.com", &HashMap::new())
-            .unwrap_err().to_string();
+            .unwrap_err()
+            .to_string();
         assert!(msg.contains("plan_id"), "got: {msg}");
         assert!(build_agent_command("claude", "`whoami`", &HashMap::new()).is_err());
     }
@@ -177,12 +189,16 @@ mod tests {
     fn task_wave_id_injection_rejected() {
         let mut qs = HashMap::new();
         qs.insert("task_id".into(), "T1-02 && evil".into());
-        let msg = build_agent_command("claude", "671", &qs).unwrap_err().to_string();
+        let msg = build_agent_command("claude", "671", &qs)
+            .unwrap_err()
+            .to_string();
         assert!(msg.contains("task_id"), "got: {msg}");
 
         let mut qs2 = HashMap::new();
         qs2.insert("wave_id".into(), "W1$(id)".into());
-        let msg2 = build_agent_command("claude", "671", &qs2).unwrap_err().to_string();
+        let msg2 = build_agent_command("claude", "671", &qs2)
+            .unwrap_err()
+            .to_string();
         assert!(msg2.contains("wave_id"), "got: {msg2}");
     }
 
