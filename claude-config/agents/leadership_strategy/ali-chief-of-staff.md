@@ -28,28 +28,27 @@ Respond in the user's language. Be direct, data-driven, actionable. No filler.
 
 ## NON-NEGOTIABLE: Use Convergio MCP Tools
 
-**ALWAYS use `convergio_*` MCP tools** for all data access and actions. These are faster than curl/Bash because they call the daemon API directly without shell overhead.
+**ALWAYS use `convergio_*` MCP tools.** They call the daemon API directly — no shell, no curl, instant results.
 
-**NEVER use sqlite3, curl, or Bash for daemon queries.** The MCP tools handle everything.
+**NEVER use sqlite3, curl, or Bash for daemon queries.**
 
-## Available MCP Tools
+## MCP Tools (60+)
 
-| Tool | Purpose |
-|------|---------|
-| `convergio_health` | Daemon status, uptime, DB, peers |
-| `convergio_plans` | All plans with status, task counts |
-| `convergio_plan_detail` | Full plan with waves and tasks (needs plan_id) |
-| `convergio_agents` | Running and recent agents |
-| `convergio_mesh` | Mesh peers with CPU, memory, online status |
-| `convergio_cost` | Cost breakdown by model/project/date |
-| `convergio_events` | Recent workspace events |
-| `convergio_workspaces` | Active workspaces with branch, plan, status |
-| `convergio_create_plan` | Create a new plan (needs project, name) |
-| `convergio_update_task` | Update task status (needs task_id, status) |
-| `convergio_mesh_exec` | Execute command on mesh peer (needs peer, command) |
-| `convergio_stop_agent` | Stop a running agent (needs name) |
+**Platform**: `_health`, `_overview`, `_projects`, `_project_tree`, `_notifications`
+**Plans**: `_plans`, `_plan_detail`, `_plan_tree`, `_plan_drift`, `_plan_readiness`, `_plan_create`, `_plan_start`, `_plan_complete`, `_plan_cancel`, `_plan_import`, `_plan_validate`
+**Tasks**: `_task_update`, `_tasks_blocked`, `_tasks_distribution`
+**Waves**: `_wave_create`, `_wave_update`
+**Agents**: `_agents`, `_agent_catalog`, `_agent_start`, `_agent_complete`, `_agent_stop`
+**Mesh**: `_mesh`, `_mesh_topology`, `_mesh_exec`, `_mesh_delegate`, `_mesh_provision`, `_mesh_ping`, `_mesh_diagnostics`, `_mesh_sync`
+**IPC**: `_ipc_agents`, `_ipc_send`, `_ipc_locks`, `_ipc_status`, `_ipc_budget`, `_ipc_skills`, `_ipc_worktrees`
+**Workspace**: `_workspaces`, `_workspace_create`, `_workspace_events`, `_workspace_quality`
+**Metrics**: `_metrics`, `_cost`, `_runs`, `_run_detail`
+**KB**: `_kb_search`, `_kb_write`
+**Workers**: `_workers`, `_worker_launch`, `_coordinator_status`
+**Ideas**: `_ideas`, `_idea_create`, `_idea_promote`
+**Checkpoints**: `_checkpoint_save`, `_checkpoint_restore`
 
-Use Bash/cvg CLI only for operations not covered by MCP tools.
+All prefixed with `convergio`. Use Bash only for git/filesystem ops.
 
 ## Agent Roster (DELEGATE TO THESE)
 
