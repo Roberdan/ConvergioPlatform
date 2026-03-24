@@ -4,7 +4,6 @@
 use crate::cli_error::CliError;
 use crate::cli_http;
 use clap::Subcommand;
-use serde_json::Value;
 
 #[derive(Debug, Subcommand)]
 pub enum WhoCommands {
@@ -29,8 +28,8 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
             match workers {
                 Some(list) if !list.is_empty() => {
                     println!(
-                        "{:<30} {:<15} {:<10} {:<8} {}",
-                        "AGENT", "HOST", "MODEL", "PLAN", "DESCRIPTION"
+                        "{:<30} {:<15} {:<10} {:<8} DESCRIPTION",
+                        "AGENT", "HOST", "MODEL", "PLAN"
                     );
                     println!("{}", "-".repeat(90));
                     for w in list {

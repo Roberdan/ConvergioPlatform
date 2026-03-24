@@ -220,7 +220,7 @@ pub fn plan_kanban(data: &TuiData, selected: usize, show_all: bool) -> Paragraph
 
         let is_expanded = *key == "DOING" || *key == "BLOCKED";
         if is_expanded {
-            for (_li, (gi, plan)) in items.iter().enumerate() {
+            for (gi, plan) in items.iter() {
                 let is_sel = *gi == selected;
                 lines.push(border_top());
                 expanded_card(plan, is_sel, &mut lines);

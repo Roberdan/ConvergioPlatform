@@ -151,10 +151,8 @@ impl TuiApp {
         // Chat view captures most keys for input composition.
         if self.active_view == MainView::Chat && !self.chat.sending {
             // Allow Ctrl-C and view-switch keys to pass through.
-            if modifiers.contains(KeyModifiers::CONTROL) {
-                if code == KeyCode::Char('c') {
-                    return true;
-                }
+            if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('c') {
+                return true;
             }
             // View-switch keys (0-9, Tab) pass through.
             let is_view_switch = matches!(

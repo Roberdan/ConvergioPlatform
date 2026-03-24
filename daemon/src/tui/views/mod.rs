@@ -112,6 +112,7 @@ fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, active: MainView) {
 
 // --- Content dispatch ---
 
+#[allow(clippy::too_many_arguments)]
 fn render_content(
     frame: &mut Frame<'_>,
     area: Rect,
