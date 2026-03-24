@@ -146,39 +146,60 @@ impl TuiApp {
             self.istate.popup_open = true;
         }
 
-        // Chat send: push user message immediately, spawn async send.
+        // Chat send: push user message, send through persistent session.
         if self.chat.sending && !self.chat.input.is_empty() {
             let content = std::mem::take(&mut self.chat.input);
-            tracing::info!(content = %content, "chat: user message, spawning Ali");
+            tracing::info!(content = %content, "chat: user message via persistent session");
             chat_handler::push_user_message(&mut self.data, &content);
-            chat_handler::push_assistant_message(&mut self.data, "⏳ Ali is thinking...");
-            // Spawn non-blocking: response arrives via pending_reply.
-            let client = self.http_client().clone();
-            let api_url = self.api_url.clone();
-            let session_id = self.data.chat_session_id.clone().unwrap_or_default();
-            let tx = self.chat.reply_tx.clone();
-            tokio::spawn(async move {
-                let reply = crate::tui::api::chat::send_message(
-                    &client, &api_url, &session_id, &content,
-                ).await;
-                let _ = tx.send(reply);
-            });
+            if self.chat.send_to_session(&content).await {
+                self.chat.streaming = true;
+                // Add empty assistant message that will be filled by streaming.
+                chat_handler::push_assistant_message(&mut self.data, "");
+            } else {
+                chat_handler::push_assistant_message(
+                    &mut self.data, "(Failed to send — claude CLI not available)",
+                );
+            }
             self.chat.sending = false;
         }
-        // Check for async chat reply (non-blocking).
-        if let Ok(reply) = self.chat.reply_rx.try_recv() {
-            tracing::info!(has_reply = reply.is_some(), "chat: Ali responded");
-            // Remove "thinking..." placeholder
-            if let Some(last) = self.data.chat_messages.last() {
-                if last.content.contains("thinking") {
-                    self.data.chat_messages.pop();
+        // Poll streaming events from persistent session (non-blocking).
+        {
+            use crate::tui::claude_session::ChatEvent;
+            let events = self.chat.poll_events();
+            for event in events {
+                match event {
+                    ChatEvent::TextDelta(delta) => {
+                        // Append delta to the last assistant message.
+                        if let Some(last) = self.data.chat_messages.last_mut() {
+                            if last.role == "assistant" {
+                                last.content.push_str(&delta);
+                            }
+                        }
+                    }
+                    ChatEvent::MessageComplete(text) => {
+                        tracing::info!("chat: Ali response complete");
+                        // Replace last assistant message with complete text.
+                        if let Some(last) = self.data.chat_messages.last_mut() {
+                            if last.role == "assistant" {
+                                last.content = text;
+                            }
+                        }
+                        self.chat.streaming = false;
+                    }
+                    ChatEvent::SessionReady(sid) => {
+                        tracing::info!(session_id = %sid, "chat: session ready");
+                        self.data.chat_session_id = Some(sid);
+                    }
+                    ChatEvent::Error(msg) => {
+                        tracing::warn!(error = %msg, "chat: session error");
+                        if self.chat.streaming {
+                            chat_handler::push_assistant_message(
+                                &mut self.data, &format!("(Error: {msg})"),
+                            );
+                            self.chat.streaming = false;
+                        }
+                    }
                 }
-            }
-            match reply {
-                Some(text) => chat_handler::push_assistant_message(&mut self.data, &text),
-                None => chat_handler::push_assistant_message(
-                    &mut self.data, "(No response — check claude CLI)",
-                ),
             }
         }
 

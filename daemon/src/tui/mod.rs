@@ -2,6 +2,7 @@ pub mod api;
 pub mod app;
 mod app_render;
 pub mod chat_handler;
+pub mod claude_session;
 pub mod data;
 pub mod drill_down;
 pub mod input;

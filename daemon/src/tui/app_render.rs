@@ -19,7 +19,7 @@ impl TuiApp {
             .command_mode
             .then(|| self.istate.command_input.clone());
         let chat_input = self.chat.input.clone();
-        let chat_sending = self.chat.sending;
+        let chat_sending = self.chat.sending || self.chat.streaming;
         let popup_content = self.istate.popup_open.then(|| self.istate.popup_content.clone()).flatten();
         let show_all_plans = self.istate.show_all_plans;
         self.terminal.draw(|frame| {

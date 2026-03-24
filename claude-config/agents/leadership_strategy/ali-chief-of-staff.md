@@ -8,7 +8,7 @@ description: |
 
 tools: ["Task", "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebFetch", "WebSearch", "TaskCreate", "TaskList", "TaskGet", "TaskUpdate"]
 color: "#4A90E2"
-model: "opus"
+model: "sonnet"
 version: "3.0.0"
 memory: user
 maxTurns: 40

@@ -115,7 +115,7 @@ fn render_messages(frame: &mut Frame<'_>, area: Rect, data: &TuiData) {
 
 fn render_input_bar(frame: &mut Frame<'_>, area: Rect, chat_input: &str, sending: bool) {
     let display = if sending {
-        "  Sending...".to_string()
+        "  ◆ Ali is responding...".to_string()
     } else {
         format!(" > {chat_input}")
     };

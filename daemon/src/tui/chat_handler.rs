@@ -1,26 +1,84 @@
-// Chat input handling and async send logic — extracted from app.rs to keep it < 250 lines.
+// Chat input handling and persistent Claude session — extracted from app.rs.
 
 use crossterm::event::KeyCode;
-use reqwest::Client;
 
-use crate::tui::{
-    api::chat as chat_api,
-    data::{ChatMessage, TuiData},
-};
+use crate::tui::claude_session::{ChatEvent, ClaudeSession};
+use crate::tui::data::{ChatMessage, TuiData};
 
 /// State related to the chat view, owned by TuiApp.
 pub struct ChatState {
     pub input: String,
     pub sending: bool,
-    pub pending_reply: Option<Result<String, ()>>,
-    pub reply_tx: tokio::sync::mpsc::UnboundedSender<Option<String>>,
-    pub reply_rx: tokio::sync::mpsc::UnboundedReceiver<Option<String>>,
+    /// Persistent Claude session (spawned lazily on first message).
+    pub session: Option<ClaudeSession>,
+    /// True while streaming a response (show partial text).
+    pub streaming: bool,
 }
 
 impl Default for ChatState {
     fn default() -> Self {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        Self { input: String::new(), sending: false, pending_reply: None, reply_tx: tx, reply_rx: rx }
+        Self {
+            input: String::new(),
+            sending: false,
+            session: None,
+            streaming: false,
+        }
+    }
+}
+
+impl ChatState {
+    /// Ensure the persistent session is running. Returns true if ready.
+    pub fn ensure_session(&mut self) -> bool {
+        // Check if existing session is alive.
+        if let Some(ref mut s) = self.session {
+            if s.is_alive() {
+                return true;
+            }
+            tracing::warn!("claude session died, respawning");
+            self.session = None;
+        }
+        // Spawn new session.
+        match ClaudeSession::spawn() {
+            Ok(session) => {
+                tracing::info!("claude session spawned");
+                self.session = Some(session);
+                true
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "failed to spawn claude session");
+                false
+            }
+        }
+    }
+
+    /// Send a message through the persistent session.
+    pub async fn send_to_session(&mut self, content: &str) -> bool {
+        if !self.ensure_session() {
+            return false;
+        }
+        if let Some(ref mut session) = self.session {
+            match session.send(content).await {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to send to claude");
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Poll for streaming events from the session (non-blocking).
+    /// Returns events received this tick.
+    pub fn poll_events(&mut self) -> Vec<ChatEvent> {
+        let mut events = Vec::new();
+        if let Some(ref mut session) = self.session {
+            while let Ok(event) = session.event_rx.try_recv() {
+                events.push(event);
+            }
+        }
+        events
     }
 }
 
@@ -63,47 +121,18 @@ pub fn push_assistant_message(data: &mut TuiData, content: &str) {
     });
 }
 
-/// Spawn an async task to create a session (if needed) and send `content`.
-/// The result is delivered back via `ChatState::pending_reply` on next poll.
-///
-/// # Safety
-/// Uses `tokio::spawn` — caller must be inside a tokio runtime.
-pub async fn send_message(
-    client: &Client,
-    api_url: &str,
-    data: &mut TuiData,
-    state: &mut ChatState,
-) {
-    // Ensure a session exists before sending.
-    if data.chat_session_id.is_none() {
-        data.chat_session_id = chat_api::create_session(client, api_url).await;
-    }
-
-    let reply = if let Some(sid) = &data.chat_session_id {
-        chat_api::send_message(client, api_url, sid, &state.input).await
-    } else {
-        None
-    };
-
-    state.sending = false;
-    state.pending_reply = Some(reply.ok_or(()));
-}
-
 /// Returns the current timestamp as ISO-8601 string (UTC).
-/// Uses std::time to avoid the chrono dependency.
 fn chrono_now() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    // Format as pseudo-ISO: YYYY-MM-DDTHH:MM:SSZ
     let s = secs;
     let sec = s % 60;
     let min = (s / 60) % 60;
     let hour = (s / 3600) % 24;
     let days = s / 86400;
-    // Approximate date — good enough for display timestamps.
     let year = 1970 + days / 365;
     let day_of_year = days % 365;
     let month = day_of_year / 30 + 1;
@@ -147,7 +176,6 @@ mod tests {
     #[test]
     fn handle_chat_key_enter_not_consumed() {
         let mut state = ChatState::default();
-        // Enter is handled by app.rs in async context — chat_handler does NOT consume it.
         assert!(!handle_chat_key(KeyCode::Enter, &mut state));
     }
 
@@ -173,6 +201,14 @@ mod tests {
     fn chrono_now_produces_nonempty_string() {
         let ts = chrono_now();
         assert!(!ts.is_empty());
-        assert!(ts.contains('T'), "expected ISO-like timestamp with T separator");
+        assert!(ts.contains('T'), "expected ISO-like timestamp");
+    }
+
+    #[test]
+    fn chat_state_default_has_no_session() {
+        let state = ChatState::default();
+        assert!(state.session.is_none());
+        assert!(!state.sending);
+        assert!(!state.streaming);
     }
 }
