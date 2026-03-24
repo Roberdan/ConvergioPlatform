@@ -9,14 +9,19 @@ use crate::tui::{
 };
 
 /// State related to the chat view, owned by TuiApp.
-#[derive(Default)]
 pub struct ChatState {
-    /// Text currently being composed in the chat input bar.
     pub input: String,
-    /// True while an HTTP request is in flight.
     pub sending: bool,
-    /// Queued assistant reply to inject on the next tick (set by background task).
     pub pending_reply: Option<Result<String, ()>>,
+    pub reply_tx: tokio::sync::mpsc::UnboundedSender<Option<String>>,
+    pub reply_rx: tokio::sync::mpsc::UnboundedReceiver<Option<String>>,
+}
+
+impl Default for ChatState {
+    fn default() -> Self {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        Self { input: String::new(), sending: false, pending_reply: None, reply_tx: tx, reply_rx: rx }
+    }
 }
 
 /// Handle a key press while the Chat view is active.

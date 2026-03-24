@@ -146,29 +146,39 @@ impl TuiApp {
             self.istate.popup_open = true;
         }
 
-        // Chat send: triggered when chat.sending=true and input is non-empty.
+        // Chat send: push user message immediately, spawn async send.
         if self.chat.sending && !self.chat.input.is_empty() {
             let content = std::mem::take(&mut self.chat.input);
+            tracing::info!(content = %content, "chat: user message, spawning Ali");
             chat_handler::push_user_message(&mut self.data, &content);
-            // Temporarily move content back so send_message can read it.
-            self.chat.input = content;
+            chat_handler::push_assistant_message(&mut self.data, "⏳ Ali is thinking...");
+            // Spawn non-blocking: response arrives via pending_reply.
             let client = self.http_client().clone();
-            chat_handler::send_message(
-                &client,
-                &self.api_url,
-                &mut self.data,
-                &mut self.chat,
-            ).await;
-            self.chat.input.clear();
-            // Apply the pending reply if present.
-            if let Some(result) = self.chat.pending_reply.take() {
-                match result {
-                    Ok(reply) => chat_handler::push_assistant_message(&mut self.data, &reply),
-                    Err(()) => chat_handler::push_assistant_message(
-                        &mut self.data,
-                        "(No response — check daemon connection)",
-                    ),
+            let api_url = self.api_url.clone();
+            let session_id = self.data.chat_session_id.clone().unwrap_or_default();
+            let tx = self.chat.reply_tx.clone();
+            tokio::spawn(async move {
+                let reply = crate::tui::api::chat::send_message(
+                    &client, &api_url, &session_id, &content,
+                ).await;
+                let _ = tx.send(reply);
+            });
+            self.chat.sending = false;
+        }
+        // Check for async chat reply (non-blocking).
+        if let Ok(reply) = self.chat.reply_rx.try_recv() {
+            tracing::info!(has_reply = reply.is_some(), "chat: Ali responded");
+            // Remove "thinking..." placeholder
+            if let Some(last) = self.data.chat_messages.last() {
+                if last.content.contains("thinking") {
+                    self.data.chat_messages.pop();
                 }
+            }
+            match reply {
+                Some(text) => chat_handler::push_assistant_message(&mut self.data, &text),
+                None => chat_handler::push_assistant_message(
+                    &mut self.data, "(No response — check claude CLI)",
+                ),
             }
         }
 
