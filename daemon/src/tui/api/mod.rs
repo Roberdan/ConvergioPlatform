@@ -180,15 +180,22 @@ pub async fn fetch_all_tasks(client: &Client, api_url: &str) -> Vec<TaskPipeline
 /// GET {api_url}/api/mesh -> Vec<MeshNode>
 pub async fn fetch_mesh(client: &Client, api_url: &str) -> Vec<MeshNode> {
     let url = format!("{api_url}/api/mesh");
-    let rows: Vec<MeshPeer> = fetch_json(client, &url).await;
-    rows.into_iter()
-        .map(|r| MeshNode {
-            name: r.peer_name.unwrap_or_default(),
-            online: r.is_online.unwrap_or(false),
-            role: r.role.unwrap_or_else(|| "worker".to_string()),
-            cpu_percent: r.cpu_percent.unwrap_or(0.0),
-        })
-        .collect()
+    match client.get(&url).send().await {
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(v) => v.get("peers").and_then(|p| p.as_array()).map(|arr| {
+                arr.iter().filter_map(|r| {
+                    Some(MeshNode {
+                        name: r.get("peer_name")?.as_str()?.to_string(),
+                        online: r.get("is_online").and_then(|v| v.as_bool()).unwrap_or(false),
+                        role: r.get("role").and_then(|v| v.as_str()).unwrap_or("worker").to_string(),
+                        cpu_percent: r.get("cpu").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    })
+                }).collect()
+            }).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        },
+        Err(_) => Vec::new(),
+    }
 }
 
 /// GET {api_url}/api/agents -> Vec<AgentOrgNode>
