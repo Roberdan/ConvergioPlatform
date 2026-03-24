@@ -5,26 +5,49 @@ struct MeshNodeBubble: View {
     let heartbeat: HeartbeatPeer?
     let isSelected: Bool
 
+    // Drives opacity pulse on online nodes
+    @State private var pulsing = false
+
     var body: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                content.glassEffect()
-            } else {
-                content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        content
+            .modifier(ConvergioCardModifier())
+            .overlay(
+                RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
+                    .stroke(strokeColor, lineWidth: 2)
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(peer.displayName), \(peer.role), Status: \(heartbeat?.status.capitalized ?? (peer.isOnline ? "Online" : "Offline")), CPU \(Int(peer.primaryCPU)) percent\(isSelected ? ", selected" : "")")
+            .onAppear {
+                // Start pulse only when node is online
+                if isOnline {
+                    withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) {
+                        pulsing = true
+                    }
+                }
             }
-        }
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(strokeColor, lineWidth: 2))
+    }
+
+    private var isOnline: Bool {
+        heartbeat?.status == "healthy" || (heartbeat == nil && peer.isOnline)
     }
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Circle().fill(tint).frame(width: 10, height: 10)
+                Circle()
+                    .fill(nodeTint)
+                    .frame(width: 10, height: 10)
+                    // Pulse opacity on online nodes
+                    .opacity(isOnline ? (pulsing ? 0.45 : 1.0) : 1.0)
+                    .accessibilityLabel("Status: \(heartbeat?.status.capitalized ?? (peer.isOnline ? "Online" : "Offline"))")
                 Image(systemName: peer.role == "coordinator" ? "server.rack" : "desktopcomputer")
                     .font(.caption)
+                    .accessibilityLabel(peer.role == "coordinator" ? "Coordinator node" : "Worker node")
                 Spacer()
                 if peer.isLocal {
-                    Image(systemName: "house.fill").font(.caption2)
+                    Image(systemName: "house.fill")
+                        .font(.caption2)
+                        .accessibilityLabel("Local node")
                 }
             }
 
@@ -38,33 +61,27 @@ struct MeshNodeBubble: View {
 
             ProgressView(value: min(max(peer.primaryCPU / 100, 0), 1))
                 .progressViewStyle(.linear)
+                .accessibilityLabel("CPU usage: \(Int(peer.primaryCPU)) percent")
         }
         .padding(10)
         .frame(width: 118, alignment: .leading)
     }
 
-    private var tint: Color {
+    /// Node status color using Maranello brand tokens.
+    private var nodeTint: Color {
         switch heartbeat?.status ?? (peer.isOnline ? "healthy" : "offline") {
-        case "healthy": return .green
-        case "stale": return .orange
-        default: return .secondary
+        case "healthy": return ConvergioTokens.Brand.verdeRacing
+        case "stale":   return ConvergioTokens.Brand.arancioWarm
+        default:        return ConvergioTokens.Text.textMuted
         }
     }
 
     private var strokeColor: Color {
-        isSelected ? tint : .clear
+        isSelected ? nodeTint : .clear
     }
 }
 
-struct MeshPanelMaterial: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect()
-        } else {
-            content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        }
-    }
-}
+// MARK: - Graph data structures
 
 struct MeshGraphNode: Identifiable {
     let peer: MeshPeer
@@ -98,11 +115,11 @@ struct MeshGraphLayout {
 
         var builtNodes = [MeshGraphNode(peer: anchor, point: center)]
         let coordinators = sorted.filter { $0.id != anchor.id && $0.role == "coordinator" && $0.isOnline }
-        let workers = sorted.filter { $0.id != anchor.id && $0.role != "coordinator" && $0.isOnline }
-        let offline = sorted.filter { $0.id != anchor.id && !$0.isOnline }
+        let workers     = sorted.filter { $0.id != anchor.id && $0.role != "coordinator" && $0.isOnline }
+        let offline     = sorted.filter { $0.id != anchor.id && !$0.isOnline }
 
         builtNodes += Self.place(coordinators, radius: dimension * 0.2, center: center, startAngle: -.pi / 2)
-        builtNodes += Self.place(workers, radius: dimension * 0.32, center: center, startAngle: -.pi / 2)
+        builtNodes += Self.place(workers,     radius: dimension * 0.32, center: center, startAngle: -.pi / 2)
         builtNodes += Self.place(
             offline,
             radius: dimension * 0.42,
@@ -117,10 +134,14 @@ struct MeshGraphLayout {
             .map { MeshGraphEdge(from: anchor.id, to: $0.peer.id, isActive: anchor.isOnline && $0.peer.isOnline) }
 
         for (lhs, rhs) in zip(coordinatorNodes, coordinatorNodes.dropFirst()) {
-            builtEdges.append(MeshGraphEdge(from: lhs.peer.id, to: rhs.peer.id, isActive: lhs.peer.isOnline && rhs.peer.isOnline))
+            builtEdges.append(
+                MeshGraphEdge(from: lhs.peer.id, to: rhs.peer.id, isActive: lhs.peer.isOnline && rhs.peer.isOnline)
+            )
         }
         if coordinatorNodes.count > 2, let first = coordinatorNodes.first, let last = coordinatorNodes.last {
-            builtEdges.append(MeshGraphEdge(from: first.peer.id, to: last.peer.id, isActive: first.peer.isOnline && last.peer.isOnline))
+            builtEdges.append(
+                MeshGraphEdge(from: first.peer.id, to: last.peer.id, isActive: first.peer.isOnline && last.peer.isOnline)
+            )
         }
 
         nodes = builtNodes

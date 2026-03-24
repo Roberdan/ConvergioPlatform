@@ -69,18 +69,21 @@ struct GhosttyTerminal: View {
                     }
                     .labelsHidden()
                     .frame(width: 190)
+                    .accessibilityLabel("Target node selector")
 
                     Button {
                         Task { await model.openShell() }
                     } label: {
                         Label("New Shell", systemImage: "plus.rectangle.on.rectangle")
                     }
+                    .accessibilityLabel("Open new shell on \(displayPeer(model.preferredPeer))")
 
                     Button {
                         Task { await model.presentTmuxPicker() }
                     } label: {
                         Label("Tmux Sessions", systemImage: "rectangle.stack.badge.person.crop")
                     }
+                    .accessibilityLabel("Browse and attach tmux sessions")
                 }
 
                 Text("\(model.tabs.count)/\(model.maxSessions) sessions open. The daemon enforces the 10-session PTY cap.")
@@ -94,24 +97,38 @@ struct GhosttyTerminal: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(model.tabs) { tab in
+                    let isActive = model.selectedTabID == tab.id
                     HStack(spacing: 8) {
                         Button(tab.title) {
                             model.select(tabID: tab.id)
                         }
                         .buttonStyle(.plain)
+                        .foregroundStyle(
+                            isActive
+                                ? ConvergioTokens.Surface.surface
+                                : ConvergioTokens.Text.textPrimary
+                        )
+                        .accessibilityLabel("Terminal tab: \(tab.title)\(isActive ? ", active" : "")")
 
                         Button {
                             model.close(tabID: tab.id)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(
+                                    isActive
+                                        ? ConvergioTokens.Surface.surface.opacity(0.7)
+                                        : ConvergioTokens.Text.textMuted
+                                )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Close tab \(tab.title)")
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        model.selectedTabID == tab.id ? Color.blue.opacity(0.18) : Color.secondary.opacity(0.08),
+                        isActive
+                            ? ConvergioTokens.Brand.gialloFerrari
+                            : ConvergioTokens.Surface.surfaceRaised,
                         in: Capsule()
                     )
                 }
@@ -137,18 +154,25 @@ struct GhosttyTerminal: View {
             .frame(minHeight: 520)
 
             HStack(spacing: 12) {
+                // Peer status indicator: green dot = connected, red = disconnected
+                Circle()
+                    .fill(tab.isConnected ? ConvergioTokens.Status.success : ConvergioTokens.Brand.rossoCorsa)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel("Status: \(tab.isConnected ? "Connected" : "Disconnected")")
                 Label(displayPeer(tab.peer), systemImage: tab.peer == "local" ? "desktopcomputer" : "point.3.connected.trianglepath.dotted")
                 if !tab.tmuxSession.isEmpty {
                     Label(tab.tmuxSession, systemImage: "rectangle.stack")
                 }
                 Spacer()
                 Text(tab.statusText)
-                    .foregroundStyle(tab.isConnected ? .green : .secondary)
+                    .foregroundStyle(
+                        tab.isConnected
+                            ? ConvergioTokens.Status.success
+                            : ConvergioTokens.Text.textMuted
+                    )
             }
             .font(.caption)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .modifier(ConvergioCardModifier())
 
             if let errorMessage = tab.errorMessage {
                 Text(errorMessage)

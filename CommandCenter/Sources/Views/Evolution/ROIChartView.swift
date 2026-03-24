@@ -6,26 +6,51 @@ struct ROIChartView: View {
     let proposals: [EvolutionProposal]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             HStack {
                 Text("ROI charts")
-                    .font(.title3.weight(.semibold))
+                    .font(.sectionTitle)
+                    .foregroundStyle(ConvergioTokens.Text.textPrimary)
                 Spacer()
                 if let roi {
-                    Label(String(format: "%.1f%% success", roi.successRate), systemImage: "chart.line.uptrend.xyaxis")
-                        .foregroundStyle(.secondary)
+                    Label(
+                        String(format: "%.1f%% success", roi.successRate),
+                        systemImage: "chart.line.uptrend.xyaxis"
+                    )
+                    .font(.label)
+                    .foregroundStyle(ConvergioTokens.Brand.verdeRacing)
                 }
             }
 
+            // Line chart: expected delta trend across proposals
             Chart(trendPoints) { point in
                 LineMark(
                     x: .value("Proposal", point.sequence),
                     y: .value("Expected delta", point.expectedDelta)
                 )
+                .foregroundStyle(ConvergioTokens.Brand.verdeRacing)
+                .interpolationMethod(.catmullRom)
+
+                AreaMark(
+                    x: .value("Proposal", point.sequence),
+                    y: .value("Expected delta", point.expectedDelta)
+                )
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            ConvergioTokens.Brand.verdeRacing.opacity(0.3),
+                            ConvergioTokens.Brand.verdeRacing.opacity(0.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
                 PointMark(
                     x: .value("Proposal", point.sequence),
                     y: .value("Expected delta", point.expectedDelta)
                 )
+                .foregroundStyle(ConvergioTokens.Brand.verdeRacing)
             }
             .chartXAxis {
                 AxisMarks(values: trendPoints.map(\.sequence)) { value in
@@ -38,28 +63,32 @@ struct ROIChartView: View {
             }
             .frame(height: 180)
 
+            // Bar chart: proposals grouped by status with semantic token colors
             if let roi {
                 Chart(roi.proposalsByStatus) { bucket in
                     BarMark(
                         x: .value("Status", bucket.statusLabel),
                         y: .value("Count", bucket.count)
                     )
-                    .foregroundStyle(by: .value("Status", bucket.statusLabel))
+                    .foregroundStyle(barColor(for: bucket.status))
+                    .cornerRadius(4)
                 }
                 .frame(height: 180)
 
-                HStack(spacing: 12) {
+                // Metric summary pills
+                HStack(spacing: Spacing.sm) {
                     metricPill("Experiments", value: "\(roi.experimentsRun)")
-                    metricPill("Successes", value: "\(roi.successes)")
-                    metricPill("Rollbacks", value: "\(roi.rollbacks)")
+                    metricPill("Successes",   value: "\(roi.successes)")
+                    metricPill("Rollbacks",   value: "\(roi.rollbacks)")
                 }
             } else {
                 ContentUnavailableView("No ROI data", systemImage: "chart.bar")
             }
         }
-        .padding(20)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .convergioCard()
     }
+
+    // MARK: - Private helpers
 
     private var trendPoints: [ProposalTrendPoint] {
         proposals
@@ -75,19 +104,33 @@ struct ROIChartView: View {
             }
     }
 
+    private func barColor(for status: String) -> Color {
+        switch status {
+        case "approved":  ConvergioTokens.Brand.verdeRacing
+        case "rejected":  ConvergioTokens.Brand.rossoCorsa
+        default:          ConvergioTokens.Brand.gialloFerrari
+        }
+    }
+
     private func metricPill(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ConvergioTokens.Text.textMuted)
             Text(value)
                 .font(.headline)
+                .foregroundStyle(ConvergioTokens.Text.textPrimary)
         }
-        .padding(12)
+        .padding(Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(
+            ConvergioTokens.Border.borderSubtle,
+            in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
+        )
     }
 }
+
+// MARK: - ProposalTrendPoint
 
 private struct ProposalTrendPoint: Identifiable {
     let id: Int

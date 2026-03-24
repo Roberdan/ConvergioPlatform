@@ -33,29 +33,25 @@ struct MeshNodeDetail: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(statusLabel(for: peer))
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(statusTint(for: peer).opacity(0.16), in: Capsule())
+                StatusBadge(label: statusLabel(for: peer), color: statusTint(for: peer))
             }
 
             HStack(spacing: 12) {
-                metricTile("CPU", value: percent(peer.primaryCPU))
-                metricTile("Memory", value: percent((peer.memoryRatio ?? 0) * 100))
-                metricTile("Tasks", value: "\(peer.activeTasks ?? 0)")
+                metricTile("CPU",    value: percent(peer.primaryCPU), iconColor: ConvergioTokens.Brand.azzurro)
+                metricTile("Memory", value: percent((peer.memoryRatio ?? 0) * 100), iconColor: ConvergioTokens.Brand.arancioWarm)
+                metricTile("Tasks",  value: "\(peer.activeTasks ?? 0)", iconColor: ConvergioTokens.Brand.verdeRacing)
             }
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Node details").font(.headline)
-                detailRow("Role", peer.role?.capitalized ?? "Worker")
+                detailRow("Role",    peer.role?.capitalized ?? "Worker")
                 detailRow("Platform", peer.os?.capitalized ?? "Unknown")
                 detailRow("Network", peer.tailscaleIp ?? peer.dnsName ?? "No address published")
                 detailRow("Aliases", peer.hostnameAliases?.joined(separator: ", ") ?? "—")
                 detailRow("Capabilities", peer.capabilityList.joined(separator: ", ").isEmpty ? "—" : peer.capabilityList.joined(separator: ", "))
                 detailRow("Last seen", relativeLastSeen(for: peer))
             }
-            .modifier(MeshDetailCard())
+            .modifier(ConvergioCardModifier())
 
             VStack(alignment: .leading, spacing: 14) {
                 Text("Actions").font(.headline)
@@ -95,21 +91,21 @@ struct MeshNodeDetail: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .modifier(MeshDetailCard())
+            .modifier(ConvergioCardModifier())
 
             if let provision = model.provision(for: peer) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Provision readiness").font(.headline)
-                    detailRow("SSH", provision.sshOk ? "Ready" : "Unavailable")
-                    detailRow("tmux", provision.tmuxOk ? "Ready" : "Missing")
+                    detailRow("SSH",              provision.sshOk     ? "Ready" : "Unavailable")
+                    detailRow("tmux",             provision.tmuxOk    ? "Ready" : "Missing")
                     detailRow("Convergio session", provision.sessionOk ? "Ready" : "Missing")
                     if let error = provision.error, !error.isEmpty {
                         Text(error)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(ConvergioTokens.Status.error)
                     }
                 }
-                .modifier(MeshDetailCard())
+                .modifier(ConvergioCardModifier())
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -133,7 +129,7 @@ struct MeshNodeDetail: View {
                     }
                 }
             }
-            .modifier(MeshDetailCard())
+            .modifier(ConvergioCardModifier())
         }
     }
 
@@ -141,11 +137,12 @@ struct MeshNodeDetail: View {
         model.heartbeat(for: peer)?.status.capitalized ?? (peer.isOnline ? "Healthy" : "Offline")
     }
 
+    /// Maps peer status to a ConvergioTokens status color.
     private func statusTint(for peer: MeshPeer) -> Color {
         switch model.heartbeat(for: peer)?.status ?? (peer.isOnline ? "healthy" : "offline") {
-        case "healthy": return .green
-        case "stale": return .orange
-        default: return .secondary
+        case "healthy": return ConvergioTokens.Status.success
+        case "stale":   return ConvergioTokens.Brand.arancioWarm
+        default:        return ConvergioTokens.Text.textMuted
         }
     }
 
@@ -159,14 +156,19 @@ struct MeshNodeDetail: View {
         String(format: "%.0f%%", value)
     }
 
-    private func metricTile(_ title: String, value: String) -> some View {
+    /// Metric tile with a colored icon accent dot on the top-right corner.
+    private func metricTile(_ title: String, value: String, iconColor: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Circle().fill(iconColor).frame(width: 8, height: 8)
+            }
             Text(value).font(.title3.weight(.semibold))
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(MeshDetailCard())
+        .modifier(ConvergioCardModifier())
     }
 
     private func detailRow(_ title: String, _ value: String) -> some View {
@@ -185,19 +187,5 @@ struct MeshNodeDetail: View {
                 .frame(maxWidth: .infinity)
         }
         .disabled(model.isRunningAction)
-    }
-}
-
-private struct MeshDetailCard: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content
-                .padding(16)
-                .glassEffect()
-        } else {
-            content
-                .padding(16)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        }
     }
 }

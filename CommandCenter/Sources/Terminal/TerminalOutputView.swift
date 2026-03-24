@@ -15,9 +15,18 @@ struct TerminalOutputView: NSViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = true
-        textView.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1)
-        textView.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
-        textView.insertionPointColor = .white
+        // surfaceSunken (#0a0a0a) — deepest nero profondo background for terminal readability
+        textView.backgroundColor = NSColor(
+            red: 0x0A / 255.0, green: 0x0A / 255.0, blue: 0x0A / 255.0, alpha: 1.0
+        )
+        // textPrimary (#fafafa) — near-white for maximum contrast on dark background
+        textView.textColor = NSColor(
+            red: 0xFA / 255.0, green: 0xFA / 255.0, blue: 0xFA / 255.0, alpha: 1.0
+        )
+        // gialloFerrari (#FFC72C) — brand cursor color
+        textView.insertionPointColor = NSColor(
+            red: 0xFF / 255.0, green: 0xC7 / 255.0, blue: 0x2C / 255.0, alpha: 1.0
+        )
         textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         textView.textContainerInset = NSSize(width: 12, height: 14)
 
@@ -50,6 +59,30 @@ struct TerminalOutputView: NSViewRepresentable {
         }
     }
 }
+
+// MARK: - Cursor blink overlay
+
+/// Blinking cursor indicator rendered in SwiftUI on top of the terminal.
+/// Uses gialloFerrari accent with easeInOut repeat for a natural blink cadence.
+struct TerminalCursorView: View {
+    @State private var cursorOpacity: Double = 1.0
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(red: 0xFF / 255.0, green: 0xC7 / 255.0, blue: 0x2C / 255.0))
+            .frame(width: 2, height: 16)
+            .opacity(cursorOpacity)
+            .onAppear {
+                withAnimation(
+                    .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+                ) {
+                    cursorOpacity = 0.0
+                }
+            }
+    }
+}
+
+// MARK: - NSTextView subclass
 
 private final class TerminalTextView: NSTextView {
     var onInput: (Data) -> Void = { _ in }

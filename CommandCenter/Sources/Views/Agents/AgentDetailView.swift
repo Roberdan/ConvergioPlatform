@@ -7,11 +7,16 @@ struct AgentDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(agent.name)
-                        .font(.title2.weight(.semibold))
-                    Text(agent.model ?? "Model not declared")
-                        .foregroundStyle(.secondary)
+                        .modifier(SectionHeaderModifier())
+
+                    if let modelName = agent.model {
+                        modelBadge(modelName)
+                    } else {
+                        Text("Model not declared")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button(agent.isEnabled ? "Disable" : "Enable") {
@@ -28,8 +33,7 @@ struct AgentDetailView: View {
             detailRow("Tools", (agent.tools ?? []).joined(separator: ", ").ifEmpty("—"))
             detailRow("Path", agent.path ?? "Not deployed")
         }
-        .padding(20)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .modifier(ConvergioCardModifier())
     }
 
     private func detailRow(_ title: String, _ value: String) -> some View {
@@ -41,6 +45,26 @@ struct AgentDetailView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
+    }
+
+    @ViewBuilder
+    private func modelBadge(_ modelName: String) -> some View {
+        let lower = modelName.lowercased()
+        let (bg, fg): (Color, Color) = {
+            if lower.contains("opus") {
+                return (ConvergioTokens.Brand.gialloFerrari, Color(red: 0.067, green: 0.067, blue: 0.067))
+            } else if lower.contains("haiku") {
+                return (ConvergioTokens.Brand.arancioWarm, .white)
+            } else {
+                return (ConvergioTokens.Roles.role10, .white)
+            }
+        }()
+        Text(modelName)
+            .font(.label)
+            .foregroundStyle(fg)
+            .padding(.horizontal, Spacing.xs)
+            .padding(.vertical, Spacing.xxs)
+            .background(Capsule().fill(bg))
     }
 }
 

@@ -7,18 +7,18 @@ struct RunHistoryView: View {
     let note: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             Text("Run History")
-                .font(.title2.weight(.semibold))
+                .font(.sectionTitle)
 
             Label(note, systemImage: "info.circle")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ConvergioTokens.Text.textMuted)
 
             Table(runs, selection: $selectedRunID) {
                 TableColumn("Run") { run in
                     Text("#\(run.id)")
-                        .font(.body.monospaced())
+                        .font(.mono)
                 }
                 .width(min: 70, ideal: 80)
 
@@ -28,9 +28,14 @@ struct RunHistoryView: View {
                 }
 
                 TableColumn("Status") { run in
-                    Text((run.status ?? "unknown").capitalized)
+                    // StatusBadge with semantic brand colors per status
+                    StatusBadge(
+                        label: (run.status ?? "unknown").capitalized,
+                        color: badgeColor(for: run.status)
+                    )
+                    .accessibilityLabel("Status: \((run.status ?? "unknown").capitalized)")
                 }
-                .width(min: 100, ideal: 110)
+                .width(min: 110, ideal: 120)
 
                 TableColumn("Duration") { run in
                     Text(durationLabel(run.durationMinutes))
@@ -48,24 +53,49 @@ struct RunHistoryView: View {
                 }
             }
             .frame(minHeight: 320)
+            .accessibilityLabel("Run history table")
 
             if !statusBuckets.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(statusBuckets) { bucket in
-                            Label("\(bucket.label) · \(bucket.count)", systemImage: "chart.bar.xaxis")
-                                .font(.caption.weight(.medium))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(.quaternary, in: Capsule())
-                        }
-                    }
+                statusBucketRow
+            }
+        }
+        .modifier(ConvergioCardModifier())
+    }
+
+    // MARK: — Status bucket chips
+
+    private var statusBucketRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Spacing.xs) {
+                ForEach(statusBuckets) { bucket in
+                    StatusBadge(
+                        label: "\(bucket.label) · \(bucket.count)",
+                        color: badgeColor(for: bucket.label.lowercased())
+                    )
                 }
             }
         }
-        .padding(20)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
+
+    // MARK: — Status → brand color mapping
+    // completed=verdeRacing, running=azzurro, failed=rossoCorsa, paused=arancioWarm
+
+    private func badgeColor(for status: String?) -> Color {
+        switch status?.lowercased() {
+        case "completed", "done", "success":
+            return ConvergioTokens.Brand.verdeRacing
+        case "running", "in_progress", "active":
+            return ConvergioTokens.Brand.azzurro
+        case "failed", "error":
+            return ConvergioTokens.Brand.rossoCorsa
+        case "paused", "pending", "waiting":
+            return ConvergioTokens.Brand.arancioWarm
+        default:
+            return ConvergioTokens.Text.textMuted
+        }
+    }
+
+    // MARK: — Formatters
 
     private func currency(_ value: Double?) -> String {
         let formatter = NumberFormatter()

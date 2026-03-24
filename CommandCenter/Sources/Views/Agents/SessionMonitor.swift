@@ -10,6 +10,11 @@ struct SessionMonitor: View {
 
             ForEach(runningAgents.prefix(6)) { agent in
                 HStack {
+                    // LED dot: verde racing when running, rosso corsa when stopped
+                    Circle()
+                        .fill(ledColor(for: agent))
+                        .frame(width: 8, height: 8)
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text(agent.agentId)
                             .font(.caption.monospaced())
@@ -29,7 +34,17 @@ struct SessionMonitor: View {
                 .padding(.vertical, 4)
             }
         }
-        .padding(20)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .modifier(ConvergioCardModifier())
+    }
+
+    // MARK: - Private
+
+    /// Green LED when the agent has an active duration (running), red when idle/stopped.
+    private func ledColor(for agent: AgentRuntime) -> Color {
+        // An agent in the runningAgents list is by definition active —
+        // use rossoCorsa only if durationS is nil (stale entry with no timing data).
+        agent.durationS != nil
+            ? ConvergioTokens.Status.success
+            : ConvergioTokens.Brand.rossoCorsa
     }
 }

@@ -20,6 +20,7 @@ struct PlanDashboard: View {
                             planCard(plan)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Plan \(plan.name), status \(plan.status)")
                     }
                 }
                 .padding(24)
@@ -49,50 +50,92 @@ struct PlanDashboard: View {
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ConvergioTokens.Status.error)
                     .padding(12)
             }
         }
     }
 
+    // MARK: - Plan card
+
     private func planCard(_ plan: PlanListItem) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let done = plan.tasksDone ?? 0
+        let total = plan.tasksTotal ?? 0
+        let pending = total - done
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(plan.name)
                         .font(.headline)
+                        .foregroundStyle(ConvergioTokens.Text.textPrimary)
                     Text(plan.status.capitalized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ConvergioTokens.Text.textMuted)
                 }
                 Spacer()
                 Text("#\(plan.id)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ConvergioTokens.Text.textMuted)
             }
 
             ProgressView(value: plan.mergeProgress)
+                .tint(ConvergioTokens.Brand.gialloFerrari)
+                .accessibilityLabel("Merge progress \(Int((plan.mergeProgress) * 100)) percent")
 
             HStack {
-                Label("\(plan.wavesMerged ?? 0)/\(plan.wavesTotal ?? 0) merged", systemImage: "arrow.merge")
+                Label("\(plan.wavesMerged ?? 0)/\(plan.wavesTotal ?? 0) merged",
+                      systemImage: "arrow.merge")
+                    .foregroundStyle(ConvergioTokens.Text.textMuted)
                 Spacer()
-                Label("\(plan.tasksDone ?? 0)/\(plan.tasksTotal ?? 0)", systemImage: "checkmark.circle")
+                HStack(spacing: 6) {
+                    if done > 0 {
+                        StatusBadge(
+                            label: "\(done) done",
+                            color: ConvergioTokens.Status.success
+                        )
+                        .accessibilityLabel("Status: \(done) tasks done")
+                    }
+                    if pending > 0 {
+                        StatusBadge(
+                            label: "\(pending) left",
+                            color: ConvergioTokens.Text.textMuted
+                        )
+                        .accessibilityLabel("Status: \(pending) tasks remaining")
+                    }
+                }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(PlanCardGlassModifier())
+        .modifier(ConvergioCardModifier())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Plan \(plan.name), status \(plan.status), " +
+            "\(plan.wavesMerged ?? 0) of \(plan.wavesTotal ?? 0) waves merged, " +
+            "\(done) tasks done, \(pending) remaining"
+        )
+        // 3 px left status border overlaid on top of the card shape
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: CornerRadius.lg, style: .continuous)
+                .fill(planStatusColor(plan.status))
+                .frame(width: 3)
+                .padding(.vertical, 1)
+                .accessibilityHidden(true)
+        }
     }
-}
 
-private struct PlanCardGlassModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect()
-        } else {
-            content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    // MARK: - Helpers
+
+    private func planStatusColor(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "doing", "in_progress", "active":
+            return ConvergioTokens.Brand.azzurro
+        case "done", "completed", "merged":
+            return ConvergioTokens.Brand.verdeRacing
+        default:
+            // draft, todo, pending, etc.
+            return ConvergioTokens.Text.textMuted
         }
     }
 }

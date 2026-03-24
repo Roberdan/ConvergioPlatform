@@ -10,11 +10,11 @@ struct EvolutionDashboardView: View {
 
     var body: some View {
         HSplitView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.md) {
                 header
 
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: Spacing.sm) {
                         ForEach(model.proposals) { proposal in
                             Button {
                                 Task { await model.selectProposal(proposal) }
@@ -22,11 +22,12 @@ struct EvolutionDashboardView: View {
                                 proposalCard(proposal)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Proposal \(proposal.id): \(proposal.hypothesis), Status: \(proposal.statusLabel)")
                         }
                     }
                 }
             }
-            .padding(24)
+            .padding(Spacing.lg)
             .frame(minWidth: 320, idealWidth: 360)
 
             if let proposal = model.selectedProposal {
@@ -44,7 +45,7 @@ struct EvolutionDashboardView: View {
                         ExperimentView(experiments: model.selectedExperiments)
                         AuditTrailView(entries: model.audit)
                     }
-                    .padding(24)
+                    .padding(Spacing.lg)
                 }
             } else {
                 ContentUnavailableView("No proposals", systemImage: "chart.line.uptrend.xyaxis")
@@ -55,30 +56,44 @@ struct EvolutionDashboardView: View {
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(12)
+                    .foregroundStyle(ConvergioTokens.Status.error)
+                    .padding(Spacing.sm)
             }
         }
     }
+
+    // MARK: - Header
 
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Evolution Metrics")
-                    .font(.largeTitle.weight(.bold))
+                    .font(.heroTitle)
                 Text("Native dashboard backed by /api/evolution/* endpoints.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ConvergioTokens.Text.textMuted)
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 10) {
-                HStack(spacing: 10) {
-                    chip("\(model.proposals.count) proposals", icon: "lightbulb.max")
-                    chip("\(model.experiments.count) experiments", icon: "flask")
+            VStack(alignment: .trailing, spacing: Spacing.xs) {
+                HStack(spacing: Spacing.xs) {
+                    StatusBadge(
+                        label: "\(model.proposals.count) proposals",
+                        color: ConvergioTokens.Brand.azzurro
+                    )
+                    .accessibilityLabel("Status: \(model.proposals.count) proposals")
+                    StatusBadge(
+                        label: "\(model.experiments.count) experiments",
+                        color: ConvergioTokens.Brand.petrolio
+                    )
+                    .accessibilityLabel("Status: \(model.experiments.count) experiments")
                     if let lastRefresh = model.lastRefresh {
-                        chip(RelativeDateTimeFormatter().localizedString(for: lastRefresh, relativeTo: .now), icon: "clock")
+                        StatusBadge(
+                            label: RelativeDateTimeFormatter().localizedString(for: lastRefresh, relativeTo: .now),
+                            color: ConvergioTokens.Brand.indaco
+                        )
+                        .accessibilityLabel("Status: Last refreshed \(RelativeDateTimeFormatter().localizedString(for: lastRefresh, relativeTo: .now))")
                     }
                 }
 
@@ -87,54 +102,74 @@ struct EvolutionDashboardView: View {
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
+                .accessibilityLabel("Refresh evolution data")
             }
         }
     }
 
-    private func chip(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary, in: Capsule())
-    }
+    // MARK: - Proposal card
 
     private func proposalCard(_ proposal: EvolutionProposal) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(proposal.hypothesis)
-                    .font(.headline)
-                    .lineLimit(2)
-                Spacer()
-                statusBadge(proposal.statusLabel)
-            }
+        HStack(spacing: 0) {
+            // Left border: color encodes status
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(proposalBorderColor(proposal.status))
+                .frame(width: 3)
+                .padding(.vertical, 4)
 
-            Text(proposal.targetMetric)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack {
+                    Text(proposal.hypothesis)
+                        .font(.cardTitle)
+                        .lineLimit(2)
+                        .foregroundStyle(ConvergioTokens.Text.textPrimary)
+                    Spacer()
+                    StatusBadge(
+                        label: proposal.statusLabel,
+                        color: proposalBorderColor(proposal.status)
+                    )
+                    .accessibilityLabel("Status: \(proposal.statusLabel)")
+                }
 
-            HStack {
-                Label(String(format: "%.1f%% Δ", proposal.expectedDeltaPercent), systemImage: "chart.line.uptrend.xyaxis")
-                Spacer()
-                Text("#\(proposal.id)")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                Text(proposal.targetMetric)
+                    .font(.subheadline)
+                    .foregroundStyle(ConvergioTokens.Text.textMuted)
+
+                HStack {
+                    Label(
+                        String(format: "%.1f%% Δ", proposal.expectedDeltaPercent),
+                        systemImage: "chart.line.uptrend.xyaxis"
+                    )
+                    .foregroundStyle(ConvergioTokens.Brand.verdeRacing)
+                    Spacer()
+                    Text("#\(proposal.id)")
+                        .font(.mono)
+                        .foregroundStyle(ConvergioTokens.Text.textMuted)
+                }
+                .font(.caption)
             }
-            .font(.caption)
+            .padding(Spacing.md)
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            model.selectedProposalID == proposal.id ? Color.blue.opacity(0.12) : Color.secondary.opacity(0.08),
-            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            model.selectedProposalID == proposal.id
+                ? ConvergioTokens.Brand.azzurro.opacity(0.12)
+                : ConvergioTokens.Border.borderSubtle,
+            in: RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.md, style: .continuous)
+                .strokeBorder(ConvergioTokens.Border.borderSubtle, lineWidth: 1)
         )
     }
 
-    private func statusBadge(_ text: String) -> some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary, in: Capsule())
+    // MARK: - Helpers
+
+    private func proposalBorderColor(_ status: String) -> Color {
+        switch status {
+        case "approved":  ConvergioTokens.Brand.verdeRacing
+        case "rejected":  ConvergioTokens.Brand.rossoCorsa
+        default:          ConvergioTokens.Brand.gialloFerrari
+        }
     }
 }

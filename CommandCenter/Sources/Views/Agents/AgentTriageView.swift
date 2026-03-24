@@ -24,22 +24,38 @@ struct AgentTriageView: View {
             }
 
             ForEach(suggestions.prefix(5)) { suggestion in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(suggestion.name)
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Text(String(format: "%.2f", suggestion.score ?? 0))
-                            .font(.caption.monospacedDigit())
-                    }
-                    Text(suggestion.reason ?? suggestion.description ?? "No rationale provided.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
+                suggestionCard(suggestion)
             }
         }
-        .padding(20)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .modifier(ConvergioCardModifier())
+    }
+
+    // MARK: - Private
+
+    private func suggestionCard(_ suggestion: AgentSuggestion) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(suggestion.name)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                // Score displayed as a StatusBadge: color reflects confidence level
+                StatusBadge(
+                    label: String(format: "%.2f", suggestion.score ?? 0),
+                    color: scoreColor(suggestion.score ?? 0)
+                )
+            }
+            Text(suggestion.reason ?? suggestion.description ?? "No rationale provided.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(Spacing.xs)
+        .modifier(ConvergioCardModifier())
+    }
+
+    /// Maps score (0–1) to a semantic color: success, warning, or error.
+    private func scoreColor(_ score: Double) -> Color {
+        if score >= 0.7 { return ConvergioTokens.Status.success }
+        if score >= 0.4 { return ConvergioTokens.Status.warning }
+        return ConvergioTokens.Status.error
     }
 }

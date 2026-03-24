@@ -1,34 +1,35 @@
 import SwiftUI
 
+// Branded empty-state for sections without a dedicated view yet.
+// Uses per-section accent color from SidebarItem.color (F-04) and
+// ConvergioCard treatment so the surface matches the rest of the DS.
 struct SectionPlaceholderView: View {
     let item: SidebarItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Label(item.title, systemImage: item.icon)
-                .font(.largeTitle.weight(.semibold))
+        VStack(spacing: Spacing.lg) {
+            // Large section icon with per-section accent
+            Image(systemName: item.icon)
+                .font(.system(size: 64, weight: .light))
+                .foregroundStyle(item.color)
+                .accessibilityHidden(true)
 
-            Text(item.summary)
-                .font(.title3)
-                .foregroundStyle(.secondary)
+            VStack(spacing: Spacing.xs) {
+                Text(item.title)
+                    .font(.title.weight(.semibold))
+                    .foregroundStyle(ConvergioTokens.Text.textPrimary)
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Phase 3 foundation")
-                    .font(.headline)
-                Text(
-                    "This native SwiftUI surface replaces the legacy embedded dashboard "
-                        + "with first-class macOS views tuned for Tahoe and Liquid Glass."
-                )
-                .foregroundStyle(.secondary)
+                Text(item.summary)
+                    .font(.body)
+                    .foregroundStyle(ConvergioTokens.Text.textMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 400)
             }
-            .padding(24)
-            .frame(maxWidth: 560, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-            Spacer()
         }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ConvergioTokens.Surface.surface)
+        .modifier(ConvergioCardModifier())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.title): \(item.summary)")
     }
 }

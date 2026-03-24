@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- CommandCenter: Design token system (`ConvergioTokens`, `ConvergioTokens+Roles`) mirroring Maranello Luce palette
+- CommandCenter: Typography scale with `Font` extensions, `Spacing`, and `CornerRadius` constants
+- CommandCenter: Component library — `ConvergioCard`, `StatusBadge`, `SectionHeader`, `AccentButton`
+- CommandCenter: Theme system with runtime switching across Editorial, Nero, and Avorio themes
+- CommandCenter: Menu bar daemon independence — app remains active after window close
+- CommandCenter: Rich menu bar popover with status summary and quick actions
+- CommandCenter: Notification test button for validating macOS notification delivery
+
+### Changed
+- CommandCenter: All views updated to use Maranello design tokens — no inline color literals
+- CommandCenter: Sidebar redesigned with brand colors and Maranello typography scale
+- CommandCenter: Kanban board updated with themed status section headers
+
+### Fixed
+- CommandCenter: Accessibility labels added to all interactive views for VoiceOver compliance
+
 ## [17.1.0] — 24 Marzo 2026
 
 ### Added

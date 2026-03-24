@@ -10,7 +10,7 @@ struct CostDashboardView: View {
     var body: some View {
         HSplitView {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
                     header
 
                     Picker("Window", selection: selectedRangeBinding) {
@@ -20,12 +20,9 @@ struct CostDashboardView: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 320)
+                    .accessibilityLabel("Cost time window selector")
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 16)], spacing: 16) {
-                        ForEach(model.usageWindows()) { window in
-                            UsageWindowCard(window: window)
-                        }
-                    }
+                    kpiGrid
 
                     ModelCostBreakdown(
                         models: model.modelCosts(for: model.selectedRange),
@@ -40,7 +37,7 @@ struct CostDashboardView: View {
                         note: model.dataGapMessage
                     )
                 }
-                .padding(24)
+                .padding(Spacing.lg)
             }
             .frame(minWidth: 760)
 
@@ -62,56 +59,55 @@ struct CostDashboardView: View {
                 }
             }
             .frame(minWidth: 340, idealWidth: 380)
-            .padding(24)
+            .padding(Spacing.lg)
         }
         .task { await model.load() }
         .overlay(alignment: .topTrailing) {
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(12)
+                    .foregroundStyle(ConvergioTokens.Status.error)
+                    .padding(Spacing.sm)
             }
         }
     }
 
-    private var selectedRunBinding: Binding<Int?> {
-        Binding(
-            get: { model.selectedRunID },
-            set: { value in Task { await model.selectRun(value) } }
-        )
+    // MARK: — KPI grid (one card per metric)
+
+    private var kpiGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: Spacing.md)], spacing: Spacing.md) {
+            ForEach(model.usageWindows()) { window in
+                UsageWindowCard(window: window)
+            }
+        }
     }
 
-    private var selectedRangeBinding: Binding<CostRange> {
-        Binding(
-            get: { model.selectedRange },
-            set: { model.selectedRange = $0 }
-        )
-    }
+    // MARK: — Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
                     Text("Cost Dashboard")
-                        .font(.largeTitle.weight(.bold))
+                        .font(.heroTitle)
                     Text("Native spend, model, and run observability backed by /api/metrics/* and /api/runs/*.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ConvergioTokens.Text.textMuted)
                 }
-
                 Spacer()
-
-                if model.isLoading {
-                    ProgressView()
-                }
+                if model.isLoading { ProgressView().accessibilityLabel("Loading cost data") }
             }
 
-            HStack(spacing: 10) {
-                summaryChip("\(model.summary?.runCount ?? 0) runs", icon: "clock.badge")
-                summaryChip(currency(model.summary?.totalCostUsd), icon: "dollarsign.circle")
-                summaryChip(avgDurationText, icon: "timer")
-                summaryChip(topAgentText, icon: "person.3.sequence")
+            HStack(spacing: Spacing.xs) {
+                // cost=gialloFerrari, runs=azzurro, duration=arancioWarm, agents=verdeRacing
+                summaryChip(currency(model.summary?.totalCostUsd), icon: "dollarsign.circle",
+                            iconColor: ConvergioTokens.Brand.gialloFerrari)
+                summaryChip("\(model.summary?.runCount ?? 0) runs", icon: "clock.badge",
+                            iconColor: ConvergioTokens.Brand.azzurro)
+                summaryChip(avgDurationText, icon: "timer",
+                            iconColor: ConvergioTokens.Brand.arancioWarm)
+                summaryChip(topAgentText, icon: "person.3.sequence",
+                            iconColor: ConvergioTokens.Brand.verdeRacing)
             }
         }
     }
@@ -126,12 +122,18 @@ struct CostDashboardView: View {
         return "\(topAgent.label) · \(topAgent.taskCount)"
     }
 
-    private func summaryChip(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary, in: Capsule())
+    private func summaryChip(_ text: String, icon: String, iconColor: Color) -> some View {
+        Label {
+            Text(text)
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(iconColor)
+        }
+        .font(.caption.weight(.medium))
+        .padding(.horizontal, Spacing.xs)
+        .padding(.vertical, Spacing.xxs)
+        .background(ConvergioTokens.Border.borderSubtle, in: Capsule())
+        .accessibilityLabel("Status: \(text)")
     }
 
     private func currency(_ value: Double?) -> String {
@@ -140,27 +142,51 @@ struct CostDashboardView: View {
         formatter.currencyCode = "USD"
         return formatter.string(from: NSNumber(value: value ?? 0)) ?? "$0.00"
     }
+
+    // MARK: — Bindings
+
+    private var selectedRunBinding: Binding<Int?> {
+        Binding(
+            get: { model.selectedRunID },
+            set: { value in Task { await model.selectRun(value) } }
+        )
+    }
+
+    private var selectedRangeBinding: Binding<CostRange> {
+        Binding(
+            get: { model.selectedRange },
+            set: { model.selectedRange = $0 }
+        )
+    }
 }
+
+// MARK: — Usage window KPI card
 
 private struct UsageWindowCard: View {
     let window: UsageWindowSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(window.range.title)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.xxs) {
+                // cost icon colored gialloFerrari per Maranello token spec
+                Image(systemName: "dollarsign.circle")
+                    .foregroundStyle(ConvergioTokens.Brand.gialloFerrari)
+                Text(window.range.title)
+                    .font(.cardTitle)
+            }
+
             Text(currency(window.costUsd))
-                .font(.title2.weight(.bold))
-            Text("\(window.runCount) runs")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(avgDuration)
+                .font(.heroTitle)
+                .foregroundStyle(ConvergioTokens.Text.textPrimary)
+
+            Text("\(window.runCount) runs · \(avgDuration)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ConvergioTokens.Text.textMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .modifier(ConvergioCardModifier())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(window.range.title) cost: \(currency(window.costUsd)), \(window.runCount) runs, \(avgDuration)")
     }
 
     private var avgDuration: String {

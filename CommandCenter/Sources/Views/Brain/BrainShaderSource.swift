@@ -1,3 +1,6 @@
+// BrainShaderSource.swift — Metal backdrop for BrainVisualizationView.
+// Clear color matches surfaceSunken (#0a0a0a → 0.039, 0.039, 0.039).
+// Grid accent blends gialloFerrari (#FFC72C) tint subtly into the base.
 enum BrainShaderSource {
     static let source = """
     #include <metal_stdlib>
@@ -25,8 +28,10 @@ enum BrainShaderSource {
         float gridX = smoothstep(0.0, 0.04, abs(fract(in.uv.x * 14.0) - 0.5));
         float gridY = smoothstep(0.0, 0.04, abs(fract(in.uv.y * 10.0) - 0.5));
         float grid = max(gridX, gridY);
-        half3 base = mix(half3(0.03, 0.06, 0.12), half3(0.10, 0.20, 0.32), half(wave));
-        half3 accent = half3(0.22, 0.72, 0.95) * half(grid * 0.25);
+        // surfaceSunken base: #0a0a0a (0.039) → #0a1010 (subtle petrolio wave)
+        half3 base = mix(half3(0.039, 0.039, 0.039), half3(0.039, 0.055, 0.070), half(wave));
+        // gialloFerrari (#FFC72C) tint on grid lines at low intensity
+        half3 accent = half3(1.0, 0.78, 0.17) * half(grid * 0.08);
         return half4(base + accent, 1.0);
     }
     """

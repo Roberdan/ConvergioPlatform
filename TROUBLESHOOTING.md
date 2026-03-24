@@ -448,6 +448,18 @@ cd CommandCenter
 ruby Scripts/generate_xcodeproj.rb
 ```
 
+## Problem: Theme not switching
+
+**Symptom**: Colors don't change when selecting theme in CommandCenter.
+**Cause**: `ThemeManager.shared` not injected in the SwiftUI environment; views read the default theme regardless of selection.
+**Fix**: Verify `CommandCenterApp.swift` passes the manager via `.environment(themeManager)` on the root view before any child view is rendered.
+
+## Problem: Menu bar icon missing after window close
+
+**Symptom**: No menu bar icon after closing the CommandCenter window; the app appears to quit.
+**Cause**: App activation policy not set to accessory mode, so closing the last window terminates the process.
+**Fix**: Verify `NSApp.setActivationPolicy(.accessory)` is called inside the window's `onDisappear` modifier (or at startup) in `CommandCenterApp.swift`.
+
 ## Problem: PTY terminal rejects tmux session names
 
 **Symptom:** The native terminal view connects, but a tmux-backed session refuses to start.

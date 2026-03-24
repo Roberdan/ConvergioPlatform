@@ -35,20 +35,29 @@ struct MeshTopologyView: View {
                             }
                             .buttonStyle(.plain)
                             .position(x: node.point.x, y: node.point.y)
+                            .accessibilityLabel(
+                                "Select node \(node.peer.displayName), " +
+                                "\(node.peer.isOnline ? "online" : "offline"), " +
+                                "role \(node.peer.role ?? "unknown")"
+                            )
                         }
                     }
                 }
                 .frame(minHeight: 520)
-                .modifier(MeshPanelMaterial())
+                .modifier(ConvergioCardModifier())
 
                 HStack(spacing: 16) {
-                    legendItem("Healthy", color: .green)
-                    legendItem("Stale", color: .orange)
-                    legendItem("Offline", color: .secondary)
+                    legendItem("Healthy", color: ConvergioTokens.Brand.verdeRacing)
+                        .accessibilityLabel("Legend: Healthy nodes shown in green")
+                    legendItem("Stale",   color: ConvergioTokens.Brand.arancioWarm)
+                        .accessibilityLabel("Legend: Stale nodes shown in orange")
+                    legendItem("Offline", color: ConvergioTokens.Text.textMuted)
+                        .accessibilityLabel("Legend: Offline nodes shown in grey")
                     Spacer()
                     if let daemonWs = model.topology?.daemonWs, !daemonWs.isEmpty {
                         Label("Brain WS available", systemImage: "dot.radiowaves.left.and.right")
                             .foregroundStyle(.secondary)
+                            .accessibilityLabel("Status: Brain WebSocket available")
                     }
                 }
                 .font(.caption)
@@ -64,7 +73,7 @@ struct MeshTopologyView: View {
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ConvergioTokens.Status.error)
                     .padding(12)
             }
         }
@@ -84,10 +93,22 @@ struct MeshTopologyView: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 10) {
-                    summaryChip("\(onlineCount)/\(model.peers.count) online", icon: "network")
-                    summaryChip("\(coordinatorCount) coordinators", icon: "server.rack")
+                    StatusBadge(
+                        label: "\(onlineCount)/\(model.peers.count) online",
+                        color: ConvergioTokens.Brand.azzurro
+                    )
+                    .accessibilityLabel("Status: \(onlineCount) of \(model.peers.count) peers online")
+                    StatusBadge(
+                        label: "\(coordinatorCount) coordinators",
+                        color: ConvergioTokens.Brand.petrolio
+                    )
+                    .accessibilityLabel("Status: \(coordinatorCount) coordinators")
                     if let lastRefresh = model.lastRefresh {
-                        summaryChip(relativeTime(for: lastRefresh), icon: "clock")
+                        StatusBadge(
+                            label: relativeTime(for: lastRefresh),
+                            color: ConvergioTokens.Text.textMuted
+                        )
+                        .accessibilityLabel("Last refreshed \(relativeTime(for: lastRefresh))")
                     }
                 }
 
@@ -96,6 +117,7 @@ struct MeshTopologyView: View {
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
+                .accessibilityLabel("Refresh mesh topology")
             }
         }
     }
@@ -106,14 +128,6 @@ struct MeshTopologyView: View {
 
     private var coordinatorCount: Int {
         model.peers.filter { $0.role == "coordinator" }.count
-    }
-
-    private func summaryChip(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary, in: Capsule())
     }
 
     private func legendItem(_ text: String, color: Color) -> some View {
@@ -133,7 +147,8 @@ struct MeshTopologyView: View {
             let diameter = min(size.width, size.height) * multiplier * 2
             let origin = CGPoint(x: (size.width - diameter) / 2, y: (size.height - diameter) / 2)
             let ring = Path(ellipseIn: CGRect(origin: origin, size: CGSize(width: diameter, height: diameter)))
-            context.stroke(ring, with: .color(.blue.opacity(0.12)), lineWidth: 1)
+            // Use azzurro for subtle orbital rings instead of plain .blue
+            context.stroke(ring, with: .color(ConvergioTokens.Brand.azzurro.opacity(0.12)), lineWidth: 1)
         }
     }
 
@@ -147,9 +162,12 @@ struct MeshTopologyView: View {
             var path = Path()
             path.move(to: from)
             path.addLine(to: to)
+            // Active edges: azzurro; inactive edges: borderSubtle
             context.stroke(
                 path,
-                with: .color(edge.isActive ? .blue.opacity(0.45) : .secondary.opacity(0.22)),
+                with: .color(edge.isActive
+                    ? ConvergioTokens.Brand.azzurro.opacity(0.55)
+                    : ConvergioTokens.Border.borderSubtle),
                 style: StrokeStyle(lineWidth: edge.isActive ? 2.4 : 1.2, dash: edge.isActive ? [] : [6, 4])
             )
         }

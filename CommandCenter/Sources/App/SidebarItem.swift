@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Hashable, Identifiable {
     case plans
@@ -22,6 +23,19 @@ enum SidebarItem: String, CaseIterable, Hashable, Identifiable {
         case .costs: return "dollarsign.gauge.chart.leftthird.topthird.rightthird"
         case .terminal: return "terminal"
         case .brain: return "brain"
+        }
+    }
+
+    // Maranello accent per section (F-04)
+    var color: Color {
+        switch self {
+        case .plans:     return ConvergioTokens.Brand.azzurro
+        case .agents:    return ConvergioTokens.Roles.role3
+        case .mesh:      return ConvergioTokens.Brand.verdeRacing
+        case .evolution: return ConvergioTokens.Brand.arancioWarm
+        case .costs:     return ConvergioTokens.Brand.rossoCorsa
+        case .terminal:  return ConvergioTokens.Text.textPrimary
+        case .brain:     return ConvergioTokens.Status.info
         }
     }
 

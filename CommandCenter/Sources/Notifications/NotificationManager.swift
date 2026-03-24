@@ -178,6 +178,26 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         center.setNotificationCategories(Set([thorCategory] + plainCategories))
     }
 
+    func sendTestNotification() async {
+        let content = UNMutableNotificationContent()
+        content.title = "Convergio Test"
+        content.body = "Notification system working correctly"
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "command-center-test-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        do {
+            try await center.add(request)
+            deliveredCount += 1
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func category(forType type: String?, text: String) -> CommandCenterNotificationCategory {
         let lowered = "\(type ?? "") \(text)".lowercased()
         if lowered.contains("thor") || lowered.contains("reject") || lowered.contains("approve") {

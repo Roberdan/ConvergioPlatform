@@ -14,6 +14,10 @@ let package = Package(
         .executableTarget(
             name: "CommandCenter",
             path: "Sources"
+        ),
+        .testTarget(
+            name: "CommandCenterTests",
+            path: "Tests"
         )
     ]
 )

@@ -63,14 +63,15 @@ struct BrainVisualizationView: View {
 
                 if model.isLoading {
                     ProgressView()
+                        .accessibilityLabel("Loading brain data")
                 }
             }
 
             HStack(spacing: 10) {
-                chip("\(model.planCount) plans", icon: "hexagon")
-                chip("\(model.taskCount) tasks", icon: "square.fill")
-                chip("\(model.agentCount) agents", icon: "circle.fill")
-                chip(model.shaderReady ? "Metal ready" : "Metal unavailable", icon: "cpu")
+                chip("\(model.planCount) plans")
+                chip("\(model.taskCount) tasks")
+                chip("\(model.agentCount) agents")
+                chip(model.shaderReady ? "Metal ready" : "Metal unavailable")
             }
         }
     }
@@ -79,12 +80,14 @@ struct BrainVisualizationView: View {
         ZStack {
             MetalBackdropView(isActive: model.shaderReady)
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .accessibilityHidden(true)
 
             GeometryReader { geometry in
                 ZStack {
                     Canvas { context, _ in
                         drawEdges(in: &context)
                     }
+                    .accessibilityHidden(true)
 
                     ForEach(model.nodes) { node in
                         if let position = model.position(for: node.id) {
@@ -95,6 +98,10 @@ struct BrainVisualizationView: View {
                             }
                             .buttonStyle(.plain)
                             .position(position)
+                            .accessibilityLabel(
+                                "Select \(node.kind.rawValue) \(node.title)" +
+                                (node.id == model.selectedNodeID ? ", selected" : "")
+                            )
                         }
                     }
                 }
@@ -105,44 +112,56 @@ struct BrainVisualizationView: View {
             }
         }
         .frame(minHeight: 560)
+        .accessibilityLabel(
+            "Brain visualization graph: \(model.planCount) plans, \(model.taskCount) tasks, \(model.agentCount) agents"
+        )
     }
 
     private func drawEdges(in context: inout GraphicsContext) {
         for edge in model.edges {
             guard let from = model.position(for: edge.from), let to = model.position(for: edge.to) else { continue }
+            let sourceNode = model.nodes.first(where: { $0.id == edge.from })
+            let targetNode = model.nodes.first(where: { $0.id == edge.to })
+            let sourceColor = sourceNode?.color ?? ConvergioTokens.Brand.azzurro
+            let targetColor = targetNode?.color ?? ConvergioTokens.Brand.verdeRacing
             var path = Path()
             path.move(to: from)
             path.addLine(to: to)
+            let gradient = Gradient(colors: [sourceColor.opacity(0.45), targetColor.opacity(0.25)])
+            let lineWidth: CGFloat = edge.kind == "plan-task" ? 2 : 1.2
+            let dash: [CGFloat] = edge.kind == "assignment" ? [5, 4] : []
             context.stroke(
                 path,
-                with: .color(edge.kind == "plan-task" ? .cyan.opacity(0.28) : .blue.opacity(0.18)),
-                style: StrokeStyle(lineWidth: edge.kind == "plan-task" ? 2 : 1.2, dash: edge.kind == "assignment" ? [5, 4] : [])
+                with: .linearGradient(gradient, startPoint: from, endPoint: to),
+                style: StrokeStyle(lineWidth: lineWidth, dash: dash)
             )
         }
     }
 
     private func nodeInspector(_ node: BrainGraphNode) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(node.title)
-                .font(.title2.weight(.semibold))
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(node.title)
+                    .font(.title2.weight(.semibold))
+                StatusBadge(label: node.kind.rawValue.capitalized, color: node.color)
+            }
             Text(node.subtitle)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ConvergioTokens.Text.textMuted)
             Text(node.detail)
                 .font(.body.monospaced())
+                .foregroundStyle(ConvergioTokens.Text.textPrimary)
                 .textSelection(.enabled)
         }
-        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .modifier(ConvergioCardModifier())
+        .background(ConvergioTokens.Surface.surfaceSunken,
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private func chip(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary, in: Capsule())
+    // Neutral capsule chip using StatusBadge — surfaceRaised gives readable dark background.
+    private func chip(_ text: String) -> some View {
+        StatusBadge(label: text, color: ConvergioTokens.Surface.surfaceRaised)
     }
 }
 
@@ -157,12 +176,12 @@ private struct BrainNodeGlyph: View {
                 .overlay(
                     Text(symbol)
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ConvergioTokens.Text.textPrimary)
                 )
 
             Text(node.title)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(ConvergioTokens.Text.textPrimary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(width: 110)
@@ -192,11 +211,7 @@ private struct BrainNodeGlyph: View {
     }
 
     private var fillColor: Color {
-        switch node.kind {
-        case .agent: return .blue
-        case .task: return .green
-        case .plan: return .purple
-        }
+        node.kind.color
     }
 
     private var symbol: String {
