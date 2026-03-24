@@ -5,7 +5,6 @@ pub mod chat_handler;
 pub mod data;
 pub mod input;
 pub mod refresh;
-pub mod render;
 pub mod views;
 pub mod widgets;
 pub mod ws_client;

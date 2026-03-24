@@ -52,7 +52,7 @@ pub(crate) fn render_to_text_with_refresh(
         .draw(|frame| {
             tui_views::render_view(
                 frame, frame.area(), view, data, 0, "http://localhost:8420",
-                false, auto_refresh, refresh_interval_secs, "", false, None,
+                false, auto_refresh, refresh_interval_secs, "", false, None, false,
             );
         })
         .expect("draw");
