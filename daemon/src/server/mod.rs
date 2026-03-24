@@ -184,12 +184,27 @@ pub async fn run(
     static_dir: impl Into<PathBuf>,
     crsqlite_path: Option<String>,
 ) -> Result<(), state::ApiError> {
+    let router = app(static_dir, crsqlite_path);
+    run_router(bind_addr, router).await
+}
+
+/// Run HTTP server with a pre-configured ServerState (shared IPC engine).
+pub async fn run_with_state(
+    bind_addr: &str,
+    static_dir: impl Into<PathBuf>,
+    server_state: state::ServerState,
+) -> Result<(), state::ApiError> {
+    let router = routes::build_router_with_state(static_dir.into(), server_state);
+    run_router(bind_addr, router).await
+}
+
+async fn run_router(bind_addr: &str, router: Router) -> Result<(), state::ApiError> {
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await
         .map_err(|e| {
             state::ApiError::internal(format!("server listen failed on {bind_addr}: {e}"))
         })?;
-    axum::serve(listener, app(static_dir, crsqlite_path).into_make_service())
+    axum::serve(listener, router.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(|e| state::ApiError::internal(format!("server runtime failed: {e}")))

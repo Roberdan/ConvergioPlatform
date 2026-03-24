@@ -24,41 +24,56 @@ pub async fn run_serve(
     info!("claude-core serve → {effective_bind} (static: {dir:?})");
     eprintln!("claude-core serve → {effective_bind} (static: {dir:?})");
 
-    // Unified daemon: mesh CRDT sync + background sync loop alongside HTTP server
+    // Unified daemon: ONE shared IPC engine for HTTP + mesh + Ali
+    let db_path = default_db_path();
+    let shared_ipc = std::sync::Arc::new(claude_core::ipc::IpcEngine::new(db_path.clone()));
+    if let Ok(conn) = shared_ipc.open_conn() {
+        let _ = claude_core::ipc::ensure_ipc_schema(&conn);
+    }
+
+    // ServerState uses the shared IPC engine
+    let server_state = claude_core::server::state::ServerState::with_ipc_engine(
+        db_path.clone(),
+        crsqlite_path.clone(),
+        shared_ipc.clone(),
+    );
+
     if mesh_enabled {
-        let sync_db = default_db_path();
-        if let Ok(sync_conn) = rusqlite::Connection::open(&sync_db) {
+        // Background CRDT sync
+        if let Ok(sync_conn) = rusqlite::Connection::open(&db_path) {
             let sync_conn = std::sync::Arc::new(std::sync::Mutex::new(sync_conn));
             let interval = claude_core::background_sync::resolve_interval_secs(None);
             claude_core::background_sync::spawn_sync_loop(sync_conn, interval);
         }
 
-        let db_path = default_db_path();
+        // Mesh daemon (shares same IPC engine via DB path — Ali spawns inside)
         let peers_conf = default_peers_conf();
         let crsqlite_clone = crsqlite_path.clone();
+        let mesh_db = db_path.clone();
         tokio::spawn(async move {
             let config = claude_core::mesh::daemon::DaemonConfig {
                 bind_ip: claude_core::mesh::daemon::detect_tailscale_ip()
                     .unwrap_or_else(|| "127.0.0.1".to_string()),
                 port: 9420,
                 peers_conf_path: peers_conf,
-                db_path,
+                db_path: mesh_db,
                 crsqlite_path: crsqlite_clone,
                 local_only: false,
             };
-            info!(
-                "mesh service starting on {}:{}",
-                config.bind_ip, config.port
-            );
+            info!("mesh service starting on {}:{}", config.bind_ip, config.port);
             eprintln!("mesh service → {}:{}", config.bind_ip, config.port);
             if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
                 warn!("mesh service failed: {err}");
                 eprintln!("mesh service failed (non-fatal): {err}");
             }
         });
+
+        // Spawn Ali on the SHARED IPC engine (same Notify as ServerState)
+        claude_core::orchestrator::spawn_ali(shared_ipc.clone(), db_path);
     }
 
-    if let Err(err) = claude_core::server::run(&effective_bind, dir, crsqlite_path).await {
+    if let Err(err) = claude_core::server::run_with_state(&effective_bind, dir, server_state).await
+    {
         warn!("server failed: {err}");
         return Err(IpcHandlerError::ServerFailed(format!(
             "server failed: {err}"

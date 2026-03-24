@@ -38,20 +38,28 @@ impl std::fmt::Debug for ServerState {
 
 impl ServerState {
     pub fn new(db_path: PathBuf, crsqlite_path: Option<String>) -> Self {
-        let pool = init_db_and_pool(&db_path, &crsqlite_path);
-        let (ws_tx, _) = broadcast::channel(256);
-        // Initialize IPC engine so API handlers can broadcast to #orchestration
         let ipc = Arc::new(crate::ipc::IpcEngine::new(db_path.clone()));
         if let Ok(conn) = ipc.open_conn() {
             let _ = crate::ipc::ensure_ipc_schema(&conn);
         }
+        Self::with_ipc_engine(db_path, crsqlite_path, ipc)
+    }
+
+    /// Create with a shared IPC engine (for unified daemon mode).
+    pub fn with_ipc_engine(
+        db_path: PathBuf,
+        crsqlite_path: Option<String>,
+        ipc_engine: Arc<crate::ipc::IpcEngine>,
+    ) -> Self {
+        let pool = init_db_and_pool(&db_path, &crsqlite_path);
+        let (ws_tx, _) = broadcast::channel(256);
         Self {
             db_path,
             crsqlite_path,
             pool,
             ws_tx,
             started_at: std::time::Instant::now(),
-            ipc_engine: Some(ipc),
+            ipc_engine: Some(ipc_engine),
         }
     }
 

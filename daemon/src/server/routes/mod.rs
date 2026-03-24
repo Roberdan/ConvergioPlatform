@@ -73,8 +73,13 @@ pub fn build_router_with_db(
     db_path: PathBuf,
     crsqlite_path: Option<String>,
 ) -> Router {
-    let static_files = ServeDir::new(static_dir).append_index_html_on_directories(true);
     let state = ServerState::new(db_path, crsqlite_path);
+    build_router_with_state(static_dir, state)
+}
+
+/// Build router with a pre-configured ServerState (for unified daemon with shared IPC engine).
+pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Router {
+    let static_files = ServeDir::new(static_dir).append_index_html_on_directories(true);
     let rate_limiter = RateLimiter::default();
 
     Router::new()

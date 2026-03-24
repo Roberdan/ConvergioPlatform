@@ -196,5 +196,10 @@ pub async fn api_ipc_send(
         "content": body.content,
     }));
 
+    // Wake Ali and any other agents waiting on receive_wait
+    if let Some(ref ipc) = state.ipc_engine {
+        ipc.notify.notify_waiters();
+    }
+
     Ok(Json(json!({ "ok": true })))
 }
