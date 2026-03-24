@@ -1,92 +1,34 @@
-// Chat API — send messages via daemon mesh delegate/exec, with /api/chat/* fallback.
-// Why delegate over /api/chat/message: no LLM backend there; mesh/exec runs claude CLI.
-
+// Chat API — run claude CLI locally for chat responses. No API keys.
 use reqwest::Client;
 use serde_json::Value;
 
 /// POST /api/chat/session — creates a new chat session, returns session_id.
-/// Returns None on any error.
 pub async fn create_session(client: &Client, api_url: &str) -> Option<String> {
     let url = format!("{api_url}/api/chat/session");
-    let resp = client
-        .post(&url)
-        .json(&serde_json::json!({}))
-        .send()
-        .await
-        .ok()?;
+    let resp = client.post(&url).json(&serde_json::json!({})).send().await.ok()?;
     let val: Value = resp.json().await.ok()?;
-    // Try: {session_id: "..."} or {session: {id: "..."}} or {ok: true, session: {id: "..."}}
     val.get("session_id").and_then(Value::as_str).map(String::from)
         .or_else(|| val.get("session").and_then(|s| s.get("id")).and_then(Value::as_str).map(String::from))
 }
 
-/// POST /api/mesh/delegate (primary) → /api/mesh/exec (fallback) → helpful error.
-///
-/// Why: /api/chat/message has no LLM backend. Running `claude --print` via mesh
-/// delegate executes the locally logged-in claude CLI session — no API key needed.
+/// Run `claude --print '<message>'` locally via tokio::process::Command.
+/// Uses the logged-in Claude session — no API key needed.
 pub async fn send_message(
-    client: &Client,
-    api_url: &str,
-    _session_id: &str,
-    content: &str,
+    _client: &Client, _api_url: &str, _session_id: &str, content: &str,
 ) -> Option<String> {
-    // Escape single quotes in user input to avoid shell injection in the command string.
-    let safe_content = content.replace('\'', "'\\''");
-    let command = format!("claude --print '{safe_content}'");
-
-    let body = serde_json::json!({
-        "command": command,
-        "node": "local",
-        "timeout_secs": 60
-    });
-
-    // Try primary: /api/mesh/delegate
-    if let Some(reply) = try_delegate(client, api_url, &body).await {
-        return Some(reply);
-    }
-
-    // Try fallback: /api/mesh/exec
-    if let Some(reply) = try_exec(client, api_url, &body).await {
-        return Some(reply);
-    }
-
-    // Both failed — return a helpful message rather than silent None.
-    Some("Chat unavailable — daemon mesh/delegate not responding".to_string())
-}
-
-/// Attempt POST /api/mesh/delegate and extract stdout from response.
-async fn try_delegate(client: &Client, api_url: &str, body: &Value) -> Option<String> {
-    let url = format!("{api_url}/api/mesh/delegate");
-    let resp = client
-        .post(&url)
-        .json(body)
-        .timeout(std::time::Duration::from_secs(65))
-        .send()
+    use tokio::process::Command;
+    let output = Command::new("claude")
+        .args(["--print", content])
+        .output()
         .await
         .ok()?;
-    // 404 or non-2xx means endpoint doesn't support this body format → try fallback
-    if !resp.status().is_success() {
-        return None;
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() { None } else { Some(stdout) }
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Some(format!("(claude error: {})", if stderr.is_empty() { "unknown" } else { &stderr }))
     }
-    let val: Value = resp.json().await.ok()?;
-    parse_delegate_response(&val)
-}
-
-/// Attempt POST /api/mesh/exec and extract stdout from response.
-async fn try_exec(client: &Client, api_url: &str, body: &Value) -> Option<String> {
-    let url = format!("{api_url}/api/mesh/exec");
-    let resp = client
-        .post(&url)
-        .json(body)
-        .timeout(std::time::Duration::from_secs(65))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let val: Value = resp.json().await.ok()?;
-    parse_delegate_response(&val)
 }
 
 /// Parse a delegate/exec JSON response — looks for stdout in:
