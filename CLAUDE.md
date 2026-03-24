@@ -4,6 +4,17 @@
 
 Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 
+## DB Access (NON-NEGOTIABLE)
+
+NEVER use `sqlite3` directly. Hook-blocked. Use `cvg` CLI or daemon API:
+
+| Instead of | Use |
+|---|---|
+| `sqlite3 dashboard.db "SELECT..."` | `cvg plan list` / `cvg plan show <id>` / `cvg project plans <id>` |
+| `sqlite3 ... "UPDATE plans..."` | `cvg plan start <id>` / `cvg task update <id> done` |
+| `sqlite3 ... "INSERT INTO..."` | `cvg plan create` / `cvg plan import` |
+| Raw DB queries | `curl http://localhost:8420/api/...` |
+
 ## Agent Identity (NON-NEGOTIABLE)
 
 ```bash

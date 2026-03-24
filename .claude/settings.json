@@ -105,6 +105,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '(^|[;&[:space:]])sqlite3[[:space:]]'; then echo 'BLOCKED: Never use sqlite3 directly — use cvg CLI commands (cvg plan, cvg task, cvg wave, cvg project) or daemon API (curl localhost:8420/api/...)' >&2; exit 2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '(^|[;&[:space:]])git[[:space:]]+commit'; then ROOT=$(git rev-parse --show-toplevel 2>/dev/null); if [ -n \"$ROOT\" ] && [ -x \"$ROOT/scripts/platform/secret-scanner.sh\" ]; then echo \"$INPUT\" | \"$ROOT/scripts/platform/secret-scanner.sh\"; fi; fi"
           }
         ]
