@@ -1,9 +1,8 @@
-<!-- v2.0.0 — Merged: docs-troubleshooting + problem-resolution -->
 # Documentation & Troubleshooting
 
 ## Code Docs
 
-JSDoc/docstrings public APIs, WHY not WHAT | Module: README.md/package | API: OpenAPI | ADRs: `/docs/adr/`, numbered
+JSDoc/docstrings public APIs, WHY not WHAT | Module README | OpenAPI for APIs | ADRs: `/docs/adr/`, numbered
 
 ## Per-Wave ADR (NON-NEGOTIABLE)
 
@@ -13,25 +12,16 @@ Every wave → ADR. Thor Gate 9. CHANGELOG: `## [vX.Y.Z] - date` → `### Added|
 
 Every repo root. Update every plan. Format: `## Problem:` → `**Symptom/Cause/Fix**:`.
 
-## Problem Resolution Protocol (NON-NEGOTIABLE)
+## Problem Resolution (NON-NEGOTIABLE)
 
-BEFORE fixing errors, agents MUST follow this search order:
+Search order — NEVER fix without completing steps 1-2:
 
-| Step | Source | Command/Action | Skip if |
-|---|---|---|---|
-| 1 | Repo `TROUBLESHOOTING.md` | `Read TROUBLESHOOTING.md` (root) | File doesn't exist |
-| 2 | Repo ADRs | `Glob("docs/adr/*.md")` + `Grep(pattern="keyword", path="docs/adr/")` | No `/docs/adr/` dir |
-| 3 | Global KB | `cvg plan --help` (KB search via API) | Empty results |
-| 4 | Global troubleshooting | `Read claude-config/` (if relevant docs exist) | Dir doesn't exist |
-| 5 | Web/Explore | `WebSearch` or `Task(subagent_type="Explore")` | Steps 1-4 resolved |
+| # | Source | Action |
+|---|---|---|
+| 1 | Repo TROUBLESHOOTING.md | `Read TROUBLESHOOTING.md` |
+| 2 | Repo ADRs | `Grep(pattern, path="docs/adr/")` |
+| 3 | Global KB | `cvg plan --help` |
+| 4 | Global docs | `Read claude-config/` |
+| 5 | Web/Explore | `WebSearch` or Explore agent |
 
-Rules: **NEVER attempt a fix without completing steps 1-2 first** | Cite source when applying fix | Update TROUBLESHOOTING.md after new resolution | KB write: API endpoint /api/plan-db/kb-write
-
-## Problem Resolution Anti-Patterns
-
-| WRONG | RIGHT |
-|---|---|
-| Immediately try Stack Overflow fix | Check repo TROUBLESHOOTING.md first |
-| Guess based on error message | Search ADRs for prior decisions on this area |
-| Retry same approach 3 times | Check `cvg plan show $PROJECT_ID` for prior failures |
-| Fix without documenting | Add to TROUBLESHOOTING.md after resolution |
+Cite source when applying fix. Update TROUBLESHOOTING.md after new resolution.

@@ -1,21 +1,17 @@
-<!-- v1.2.0 -->
+<!-- v1.3.0 -->
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # ConvergioPlatform
 
-Unified control plane: Rust daemon (107 modules) + dashboard + CommandCenter + evolution engine.
+Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
 
 ## Agent Identity (NON-NEGOTIABLE)
 
-Every agent session MUST register on start and complete on end:
 ```bash
-cvg agent start "<type>-$(hostname -s)-$$"    # type: claude, copilot, executor
+cvg agent start "<type>-$(hostname -s)-$$"    # on start (type: claude, copilot, executor)
 cvg agent complete "<type>-$(hostname -s)-$$"  # before /exit
 ```
-Unregistered agents are invisible. `cvg who agents` shows only registered sessions.
 
-## Governance
-
-Constitution articles are NON-NEGOTIABLE. All agents bound.
+## Governance (NON-NEGOTIABLE)
 
 @CONSTITUTION.md
 @AgenticManifesto.md
@@ -28,68 +24,38 @@ Constitution articles are NON-NEGOTIABLE. All agents bound.
 | `cd daemon && cargo build --release` | Build daemon |
 | `cd daemon && cargo check` | Type check (~5s) |
 | `cd daemon && cargo test` | Daemon tests |
-| `cd daemon && cargo run -- tui` | Launch TUI (plan/task/agent ops) |
-| `./daemon/start.sh` | Run daemon (auto release/debug/build) |
-| `cd dashboard && ./start.sh` | Run Control Room (reads DASHBOARD_DB) |
-| `cd CommandCenter && ruby Scripts/generate_xcodeproj.rb && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build` | Build native CommandCenter |
-| `cd CommandCenter && ruby Scripts/generate_xcodeproj.rb && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build` | Build native CommandCenter |
+| `cd daemon && cargo run -- tui` | Launch TUI |
+| `./daemon/start.sh` | Run daemon |
+| `cd dashboard && ./start.sh` | Run Control Room |
 | `cd evolution && npx tsc --noEmit` | Type check evolution |
 | `cd evolution && npx vitest run` | Evolution tests |
 | `cvg plan status convergio` | Plan status |
-| `cvg project create <name>` | Create new project |
-| `cvg project list` | List all projects |
-| `cvg project show <id>` | Show project details |
-| `cvg audit --project <id>` | Run project-scoped audit |
-| `scripts/mesh/mesh-heartbeat.sh` | Check mesh nodes |
-| `bash scripts/platform/convergio-openclaw-skills.sh` | Generate OpenClaw SKILL.md files |
+| `cvg project create\|list\|show <id>` | Project ops |
+| `cvg audit --project <id>` | Project audit |
+| `scripts/mesh/mesh-heartbeat.sh` | Mesh health |
+| `bash scripts/platform/convergio-openclaw-skills.sh` | Generate OpenClaw skills |
 
 ## Architecture
 
 | Layer | Path | Lang | Modules |
 |---|---|---|---|
 | Daemon | `daemon/` | Rust | mesh(40) server(32) ipc(15) db(7) hooks(3) tui(3) |
-| Dashboard | `dashboard/` | JS (Maranello DS) | app, KPI, mesh, chat, brain, IPC (served by daemon) |
-| CommandCenter | `CommandCenter/` | SwiftUI | Native macOS Command Center: onboarding, plans, agents, mesh, evolution, costs, terminal, brain, notifications |
-| CommandCenter | `CommandCenter/` | SwiftUI | Native macOS Command Center: onboarding, plans, agents, mesh, evolution, costs, terminal, brain, notifications |
-| Evolution | `evolution/` | TypeScript | core/types, adapters (claude, maranello, dashboard) |
+| Dashboard | `dashboard/` | JS (Maranello DS) | app, KPI, mesh, chat, brain, IPC |
+| Evolution | `evolution/` | TypeScript | core/types, adapters |
 | Scripts | `scripts/` | Bash | mesh(12), platform(5) |
 | Data | `data/dashboard.db` | SQLite WAL | plans, tasks, waves, KB, heartbeats |
-| Integrations | `integrations/` | TS | OpenClaw bridge plugin |
-| Workspace | `daemon/src/workspace/` | Rust | core, events, git_connector, wave_ops, merge_ops, quality_gate, validation, release_agent, deliverables |
+| Integrations | `integrations/` | TS | OpenClaw bridge |
+| Workspace | `daemon/src/workspace/` | Rust | core, events, git, waves, merge, quality, validation, release, deliverables |
 
 ## Key Paths
 
-| Path | What |
-|---|---|
-| `data/dashboard.db` | Platform DB (env: `DASHBOARD_DB`) |
-| `CommandCenter/` | Native macOS app source, Xcode generator, SwiftUI views, notifications, terminal, brain |
-| `CommandCenter/` | Native macOS app source, Xcode generator, SwiftUI views, notifications, terminal, brain |
-| `~/.claude/data/dashboard.db` | Symlink to above |
-| `~/.claude/scripts/*.sh` | Symlinks to `claude-config/scripts/*.sh` (via bootstrap) |
-| `~/.claude/scripts/lib/*.sh` | Symlinks to `claude-config/scripts/lib/*.sh` |
-| `~/.claude/config/peers.conf` | Mesh config (per-machine) |
-| `daemon/Cargo.toml` | Rust deps (axum, rusqlite, tokio, ssh2, ratatui) |
-| `config/openclaw.yaml` | OpenClaw bridge configuration |
-| `integrations/openclaw-bridge/` | OpenClaw TS plugin source |
+`data/dashboard.db` (env: `DASHBOARD_DB`) | `~/.claude/data/dashboard.db` (symlink) | `~/.claude/scripts/*.sh` → `claude-config/scripts/` | `~/.claude/config/peers.conf` (mesh) | `config/openclaw.yaml` | `integrations/openclaw-bridge/`
 
 ## Conventions
 
-- Max 250 lines/file — split if exceeds
-- English only
-- Rust: `cargo fmt` + `cargo clippy`
-- JS: vanilla, Maranello DS for UI
-- TS: strict, no `any`, named exports
-- Comments: WHY not WHAT, <5% density
-- Evolution: standalone core, thin adapters, PR-only governance
-- Mesh: Tailscale + HMAC-SHA256
-- Token economy: optimize instructions for agent consumption, minimize waste
+Max 250 lines/file | English only | Rust: fmt+clippy | JS: vanilla+Maranello DS | TS: strict, no `any` | Comments: WHY not WHAT, <5% | Evolution: standalone core, thin adapters | Mesh: Tailscale+HMAC-SHA256
 
 ## AI Agents
-
-| Agent | Role |
-|---|---|
-| Convergio | Platform control plane expert |
-| ConvergioLLM | Local LLM infrastructure manager |
 
 @.github/agents/Convergio.agent.md
 @.github/agents/ConvergioLLM.agent.md

@@ -1,51 +1,15 @@
-<!-- v2.0.0 -->
-
 # API Development Standards
 
-> Convergio Platform agent ecosystem rule.
+## REST
 
-## REST Conventions
-
-**Methods**: GET (retrieve, idempotent), POST (create), PUT (replace, idempotent), PATCH (partial update, idempotent), DELETE (remove, idempotent) | Never GET with side effects
-
-**Naming**: Plural nouns `/api/users`, identifiers `/api/users/{userId}`, nested `/api/users/{userId}/orders` | kebab-case multi-word `/api/payment-methods` | No verbs, max 3 levels deep
-
-**Status Codes**: 200 OK, 201 Created, 204 No Content | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found | 409 Conflict, 422 Validation Error, 429 Rate Limit, 500 Internal Error, 503 Unavailable
-
-## Error Format
-
-Consistent structure: `{error: {code, message, details?, requestId, timestamp}}` | Helpful messages | Never expose internals | Include request ID
-
-## Pagination
-
-**All list endpoints** | Page or cursor-based | Metadata: total, page info, links | Query: `?page=1&limit=20` | Default 20-50, max 100 | Include hasNext, hasPrev
-
-Response shape: `{data: [...], pagination: {page, limit, total, totalPages, hasNext, hasPrev}, links: {first, prev, self, next, last}}`
-
-## Filtering & Sorting
-
-Query params: `?status=active&category=books&sort=createdAt&order=desc` | Multi-field sort: `?sort=priority,createdAt` | Document available filters
-
-## Versioning
-
-URL versioning `/api/v1/` | Backwards compatible within major version | Support 2+ major versions | Document deprecation timeline
-
-## Rate Limiting
-
-All public endpoints | Return 429 with headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` | Different limits for authed vs anon | Document limits
-
-## Auth
-
-OAuth 2.0 or JWT | Header: `Authorization: Bearer {token}` | 401 for invalid auth, 403 for insufficient permissions | Validate every request
-
-## Documentation
-
-OpenAPI/Swagger spec | All endpoints, params, responses with examples | Interactive explorer (Swagger UI) | Keep in sync, version with API
-
-## CORS
-
-Whitelist origins (no `*` in prod) | Specify allowed methods/headers | Handle preflight properly
-
-## Anti-Patterns
-
-Verbs in URLs (`POST /api/createUser`) | Inconsistent error formats | No pagination | Generic 200 for errors | SQL injection via unparameterized queries
+Methods: GET (retrieve) POST (create) PUT (replace) PATCH (partial) DELETE (remove) | No GET side effects
+Naming: Plural nouns `/api/users` | kebab-case | Max 3 levels | `/api/v1/` prefix
+Status: 200/201/204 | 400/401/403/404/409/422/429/500/503
+Error: `{error: {code, message, details?, requestId, timestamp}}` | No internals exposed
+Pagination: `?page=1&limit=20` (max 100) | `{data, pagination: {page, limit, total, hasNext, hasPrev}, links}`
+Filter/Sort: `?status=active&sort=createdAt&order=desc` | Multi: `?sort=priority,createdAt`
+Versioning: URL `/api/v1/` | Backwards compatible within major | Support 2+ majors
+Rate limit: All public endpoints | 429 + `X-RateLimit-{Limit,Remaining,Reset}` headers
+Auth: OAuth 2.0/JWT | `Authorization: Bearer {token}` | 401 invalid, 403 insufficient
+Docs: OpenAPI spec | All endpoints+params+responses+examples | Interactive explorer
+CORS: Allowlist origins (no `*` prod) | Specify methods/headers | Handle preflight

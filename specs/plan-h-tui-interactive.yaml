@@ -1,0 +1,320 @@
+name: "Plan H — Convergio TUI Interactive"
+version: "17.1.0"
+project: convergio
+description: >
+  Polish and contextual interactivity for TUI. Fix table alignment, add Enter drill-down
+  for all 10 views with rich popups, mesh provision/heartbeat actions, agent stop,
+  working chat via Claude Code IPC delegation. No API keys — uses logged-in sessions only.
+
+requirements:
+  - id: F-01
+    title: Fix table alignment
+    description: "Columns aligned in Pipeline, Mesh, Events, Deliverables views using fixed-width formatting"
+  - id: F-02
+    title: Kanban drill-down
+    description: "Enter on plan → popup with waves, task breakdown, progress per wave"
+  - id: F-03
+    title: Pipeline drill-down
+    description: "Enter on task → popup with task_id, title, status, agent, test_criteria, notes"
+  - id: F-04
+    title: Mesh drill-down + actions
+    description: "Enter on node → popup with full detail + [p]rovision [h]eartbeat action keys"
+  - id: F-05
+    title: Mesh provision action
+    description: "Press p in mesh popup → POST /api/mesh/exec to run provision, show output"
+  - id: F-06
+    title: Agents drill-down + stop
+    description: "Enter on agent → popup with detail. Press [s] → POST /api/ipc/agents/unregister"
+  - id: F-07
+    title: Events drill-down
+    description: "Enter on event → popup with full event data including metadata"
+  - id: F-08
+    title: Workspace drill-down
+    description: "Enter on workspace → popup with quality gate results"
+  - id: F-09
+    title: Deliverables drill-down
+    description: "Enter on deliverable → popup with version history and metadata"
+  - id: F-10
+    title: Chat LLM via IPC
+    description: "Chat delegates to Claude Code agent via daemon IPC. No API keys. Agent has ConvergioPlatform context."
+  - id: F-11
+    title: No API keys
+    description: "Uses only logged-in Claude/Copilot sessions via IPC delegation"
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+  - "find daemon/src/tui/ -name '*.rs' -exec sh -c 'test $(wc -l < \"$1\") -le 250' _ {} \\;"
+
+waves:
+  - id: W1
+    name: "Table Alignment + Popup System"
+    tasks:
+      - id: T1-01
+        title: >
+          Fix column alignment in all table-based views. Pipeline: use fixed widths
+          (task_id 8, status 13, agent 12, title rest). Mesh: align columns (name 16,
+          status dot 3, role 12, cpu 8, spark 6). Events: timestamp 10, agent 14,
+          action 18, file 30, detail rest. Deliverables: name 30, type 10, status 10,
+          version 4, project 15. Use format!("{:<width}") consistently. Test each view
+          renders without overflow on 100-char terminal.
+        type: fix
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-01]
+        files: [daemon/src/tui/widgets/shared.rs, daemon/src/tui/widgets/kanban.rs, daemon/src/tui/views/events.rs, daemon/src/tui/views/deliverables.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+        test_criteria: "All table views render aligned on 100-char terminal width"
+
+      - id: T1-02
+        title: >
+          Upgrade popup system from plain text to rich structured popups. Create
+          daemon/src/tui/views/popup.rs with: (1) render_rich_popup(frame, area, title,
+          sections) where sections is Vec<PopupSection> with {label, lines}. Uses rounded
+          borders, ACCENT title, section headers in WARN, content in TEXT_PRIMARY.
+          (2) Popup responds to action keys displayed at bottom (e.g. "[p] Provision [h] Heartbeat [Esc] Close").
+          (3) Add PopupState to InteractiveState: popup_open bool, popup_content: Option<PopupContent>,
+          popup_actions: Vec<(char, String)>. Wire into views/mod.rs — render popup overlay
+          when popup_open is true. Handle action keys in input.rs.
+          NOTE: data.rs is 225 lines, views/mod.rs is 227 lines. If adding PopupState pushes
+          either over 250, extract PopupState into a new popup_state.rs or add to input.rs
+          (which has InteractiveState). Prefer adding to InteractiveState in input.rs.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-02, F-03, F-04, F-06, F-07, F-08, F-09]
+        files: [daemon/src/tui/views/popup.rs, daemon/src/tui/input.rs, daemon/src/tui/data.rs, daemon/src/tui/views/mod.rs]
+        verify:
+          - "test -f daemon/src/tui/views/popup.rs"
+          - "grep -q 'PopupState\\|popup_open' daemon/src/tui/input.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+        test_criteria: "Rich popup renders with title, sections, action keys. Esc closes popup."
+
+      - id: T1-03
+        title: >
+          Add API fetch functions for drill-down data. Create daemon/src/tui/api/detail.rs:
+          (1) fetch_plan_detail(client, api_url, plan_id) → GET /api/plan-db/json/{plan_id},
+          return JSON with waves, tasks, status. Format as PopupContent with sections.
+          (2) fetch_task_detail(client, api_url, plan_id, task_id) → parse task from plan JSON.
+          (3) fetch_node_detail(client, api_url, node_name) → GET /api/mesh, find node,
+          return full detail (capabilities, memory, IP, last_seen).
+          (4) fetch_agent_detail(client, api_url, agent_id) → GET /api/agents, find agent.
+          (5) fetch_event_detail — format full event with metadata.
+          (6) fetch_workspace_detail(client, api_url, workspace_id) → GET /api/workspace/status/{id}.
+          (7) fetch_deliverable_detail(client, api_url, id) → GET /api/deliverables/{id}.
+          All return PopupContent struct. Inline tests for parse logic.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        depends_on: [T1-02]
+        f_xx: [F-02, F-03, F-04, F-06, F-07, F-08, F-09]
+        files: [daemon/src/tui/api/detail.rs, daemon/src/tui/api/mod.rs]
+        verify:
+          - "test -f daemon/src/tui/api/detail.rs"
+          - "grep -q 'fetch_plan_detail' daemon/src/tui/api/detail.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::api::detail"
+        test_criteria: "7 fetch functions return PopupContent. Parse tests for each."
+
+  - id: W2
+    name: "Drill-Down Wiring + Actions"
+    tasks:
+      - id: T2-01
+        title: >
+          Wire Enter key to drill-down for all views. Update refresh.rs handle_enter():
+          For each MainView variant, on Enter: (1) fetch detail async (using api/detail.rs),
+          (2) set istate popup_open=true with PopupContent. Views: PlanKanban→plan detail,
+          TaskPipeline→task detail, MeshStatus→node detail, AgentOrgChart→agent detail,
+          BrainCanvas→node detail, CostCenter→no action, EventStream→event detail,
+          WorkspaceView→workspace detail, Deliverables→deliverable detail, Chat→no action.
+          The async fetch happens in process_post_key (same pattern as chat send).
+          Add pending_popup: Option<PopupContent> to istate for async delivery.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-02, F-03, F-04, F-06, F-07, F-08, F-09]
+        files: [daemon/src/tui/refresh.rs, daemon/src/tui/input.rs, daemon/src/tui/app.rs]
+        verify:
+          - "grep -q 'fetch_plan_detail\\|fetch_node_detail' daemon/src/tui/refresh.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+        test_criteria: "Enter on any data view opens popup with relevant detail"
+
+      - id: T2-02
+        title: >
+          Add mesh actions: when mesh popup is open and user presses [p], trigger provision.
+          When user presses [h], trigger heartbeat. In input.rs, when popup_open and
+          active_view==MeshStatus: (1) 'p' → set action_pending="provision" with node_name.
+          (2) 'h' → set action_pending="heartbeat". In process_post_key: if action_pending
+          is "provision" → POST {api_url}/api/mesh/exec with body {"node": node_name,
+          "command": "provision"}. If "heartbeat" → POST with {"command": "heartbeat"}.
+          Show result in popup (replace popup content with action output).
+          Create daemon/src/tui/api/actions.rs for action API calls.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        depends_on: [T2-01]
+        f_xx: [F-04, F-05]
+        files: [daemon/src/tui/api/actions.rs, daemon/src/tui/input.rs, daemon/src/tui/refresh.rs, daemon/src/tui/api/mod.rs]
+        verify:
+          - "test -f daemon/src/tui/api/actions.rs"
+          - "grep -q 'provision\\|heartbeat' daemon/src/tui/api/actions.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+        test_criteria: "Mesh popup shows [p] and [h] keys, actions call correct API"
+
+      - id: T2-03
+        title: >
+          Add agent stop action: when agent popup is open and user presses [s], trigger
+          agent stop via POST {api_url}/api/ipc/agents/unregister with body {"name": agent_name}.
+          Show confirmation in popup. After stop, force refresh data to update agent list.
+          In api/actions.rs: add stop_agent(client, api_url, agent_name) function.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        depends_on: [T2-02]
+        f_xx: [F-06]
+        files: [daemon/src/tui/api/actions.rs, daemon/src/tui/input.rs, daemon/src/tui/refresh.rs]
+        verify:
+          - "grep -q 'stop_agent\\|unregister' daemon/src/tui/api/actions.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+        test_criteria: "Agent popup shows [s]top key, action calls unregister API"
+
+  - id: W3
+    name: "Chat LLM Delegation"
+    tasks:
+      - id: T3-01
+        title: >
+          Make chat work via daemon IPC delegation to Claude Code agent. Update
+          daemon/src/tui/api/chat.rs send_message(): instead of POST /api/chat/message,
+          use POST {api_url}/api/mesh/delegate with body:
+          {"command": "claude --print '<user_message>'", "node": "local", "timeout_secs": 30}.
+          The daemon executes claude CLI locally with the message, returns stdout as response.
+          Parse response: {ok, stdout, stderr, exit_code}. Return stdout as assistant reply.
+          If delegation fails or times out, return error message.
+          If mesh/delegate fails, try POST /api/mesh/exec as fallback.
+          Update chat_handler.rs send_message to use new API.
+          Test: mock delegate response parsing.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        f_xx: [F-10, F-11]
+        files: [daemon/src/tui/api/chat.rs, daemon/src/tui/chat_handler.rs]
+        verify:
+          - "grep -q 'mesh/delegate\\|ipc/exec' daemon/src/tui/api/chat.rs"
+          - "! grep -q 'ANTHROPIC_API_KEY' daemon/src/tui/api/chat.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui::api::chat"
+        test_criteria: "Chat delegates to local Claude agent via IPC. No API keys in code."
+
+      - id: T3-02
+        title: >
+          Integration test: verify all drill-downs work, all actions wire correctly,
+          chat sends via delegation. Run full test suite. Fix any compilation or test
+          failures. Verify all files under 250 lines. Verify clippy clean.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        depends_on: [T3-01]
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11]
+        files: [daemon/src/tui/tests/integration.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+          - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+          - "find daemon/src/tui/ -name '*.rs' -exec sh -c 'test $(wc -l < \"$1\") -le 250' _ {} \\;"
+        test_criteria: "Full suite green, clippy clean, all files under 250"
+
+  - id: W4
+    name: "Final — Tests + Docs + PR"
+    tasks:
+      - id: TF-tests
+        title: >
+          Test coverage audit. Verify each new feature has tests: popup rendering,
+          action key handling, drill-down data parsing, chat delegation parsing.
+          Add missing tests. Full suite must pass.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11]
+        files: [daemon/src/tui/tests/integration.rs, daemon/src/tui/views/popup.rs]
+        verify:
+          - "cargo test --manifest-path daemon/Cargo.toml -- tui"
+        test_criteria: "All features tested. Zero failures."
+
+      - id: TF-doc
+        title: >
+          Update docs: CHANGELOG [17.1.0] with interactive features.
+          Update TROUBLESHOOTING.md with chat delegation section.
+          Update VERSION.md to 17.1.0.
+        type: doc
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 1
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11]
+        files: [CHANGELOG.md, TROUBLESHOOTING.md, VERSION.md]
+        verify:
+          - "grep -q '17.1.0' CHANGELOG.md"
+          - "grep -q '17.1.0' VERSION.md"
+        test_criteria: "CHANGELOG, TROUBLESHOOTING, VERSION updated"
+
+      - id: TF-pr
+        title: >
+          Create PR. Rebase on main, push, create PR with summary of all F-xx.
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        depends_on: [TF-tests, TF-doc]
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11]
+        files: []
+        verify:
+          - "git status --short | wc -l | awk '{if($1>0) exit 1}'"
+        test_criteria: "PR created, CI green"
+
+      - id: TF-deploy-verify
+        title: >
+          Deploy verification. cargo build --release, cargo test (full suite),
+          verify binary launches TUI mode.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        depends_on: [TF-pr]
+        f_xx: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11]
+        files: []
+        verify:
+          - "cargo build --release --manifest-path daemon/Cargo.toml"
+          - "cargo test --manifest-path daemon/Cargo.toml"
+        test_criteria: "Release build, full test suite passes"

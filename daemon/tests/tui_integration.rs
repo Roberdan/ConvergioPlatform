@@ -203,7 +203,19 @@ fn render_to_text(data: &TuiData, view: MainView) -> String {
     let mut terminal = Terminal::new(backend).expect("terminal");
     terminal
         .draw(|frame| {
-            views::render_view(frame, frame.area(), view, data, 0, "http://localhost:8420", false, true, 5, "", false);
+            views::render_view(
+                frame,
+                frame.area(),
+                view,
+                data,
+                0,
+                "http://localhost:8420",
+                false,
+                true,
+                5,
+                "",
+                false,
+            );
         })
         .expect("draw");
     let mut all = String::new();

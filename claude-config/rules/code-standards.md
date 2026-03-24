@@ -1,11 +1,10 @@
-<!-- v2.0.0 — Merged: code-standards + token-budget -->
 # Code Standards
 
 ## Style
 
 | Lang | Standard |
 |---|---|
-| TS/JS | ESLint+Prettier, semicolons, single quotes, 100 chars, const>let, async/await, `interface`>`type`, colocated `.test.ts` AAA |
+| TS/JS | ESLint+Prettier, semicolons, single quotes, 100 chars, const>let, async/await, `interface`>`type`, `.test.ts` AAA |
 | Python | Black 88, Google docstrings, type hints, pytest+fixtures |
 | Bash | `set -euo pipefail`, quote vars, `local`, `trap cleanup EXIT` |
 | CSS | Modules/BEM, `rem`/`px` borders, mobile-first, <=3 nesting |
@@ -13,51 +12,20 @@
 
 ## Writing
 
-- Tables>prose. Commands>descriptions. No preambles (README excepted)
-- Comments: WHY not WHAT, <5% lines
-- Commits: conventional, 1 subject line. PRs: Summary+Test plan
-- CHANGELOG: 1-line entries. ADR: 1-3 sentences
-
-## REST API
-
-- Plural nouns, kebab-case, max 3 levels, `/api/v1/`
-- Status: 200/201/204 | 400/401/403/404/409/422/429/500/503
-- Error: `{error:{code,message,details?,requestId,timestamp}}`
-- Pagination: `?page=1&limit=20` (max 100). OAuth 2.0/JWT. OpenAPI
+Tables>prose | Commands>descriptions | No preambles | Comments: WHY, <5% | Commits: conventional | PRs: Summary+Test plan | CHANGELOG: 1-line | ADR: 1-3 sentences
 
 ## Quality Gates
 
-- 80% business / 100% critical coverage
-- Parameterized SQL | CSP | TLS 1.2+ | RBAC
-- A11y: 4.5:1 contrast, keyboard, screen readers, 200% resize
+80% business / 100% critical coverage | Parameterized SQL | CSP | TLS 1.2+ | RBAC
 
 ## Fail-Loud (NON-NEGOTIABLE)
 
-- Empty unexpected data → `console.warn` + visible UI
-- Silent `return null` = BUG
+Empty unexpected data → `console.warn` + visible UI. Silent `return null` = BUG.
 
 ## Zero Debt (NON-NEGOTIABLE)
 
-- Done = ALL requirements + ALL verify + ALL touched files clean
-- Touch ANY line → own ALL issues
-- REJECTED: "Out of scope" | Deferred | TODO/FIXME/stubs | Suppress lint | "Pre-existing" on touched file
+Done = ALL requirements + ALL verify + ALL touched files clean. REJECTED: "Out of scope" | Deferred | TODO/FIXME/stubs | Suppress lint | "Pre-existing"
 
 ## Limits
 
-- Max 250 lines/file. Split if exceeds
-- CLAUDE.md/AGENTS.md: max 4000 tokens | rules/*.md: max 2000 | skills/agents: max 1500
-
-## Token Budget
-
-| Instruction Type | Max Tokens | Max Bytes |
-|---|---|---|
-| CLAUDE.md | 4000 | 16KB |
-| AGENTS.md | 4000 | 16KB |
-| rules/*.md | 2000 | 8KB |
-| skills/*/SKILL.md | 1500 | 6KB |
-| agents/*/*.md | 1500 | 6KB |
-| copilot-agents/*.md | 1500 | 6KB |
-
-Enforcement: Pre-commit hook `token-audit.sh` checks byte sizes. Over-budget = WARN (soft gate).
-
-Reduction strategies: (1) Tables over prose (2) One-line rules, pipe-separated (3) `@reference/` includes over inline (4) No preambles/filler (5) Code examples: max 5 lines
+Max 250 lines/file | CLAUDE.md: 4000 tok | rules: 2000 tok | skills/agents: 1500 tok

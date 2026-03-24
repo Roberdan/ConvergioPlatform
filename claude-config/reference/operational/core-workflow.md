@@ -1,21 +1,18 @@
-<!-- v1.0.0 — Merged: plan-scripts + digest-scripts + worktree-discipline + execution-optimization -->
-
 # Core Workflow
 
 ## Plan & DB
 
-- `cvg plan` wraps SQLite. Schema: `reference/operational/plan-db-schema.md`
-- NEVER create plans without `/planner` skill. _Why: Plan 225 — bypassing planner skips DB registration, breaking Thor tracking._
-- Task: `pending|in_progress|submitted|done|blocked|skipped|cancelled`
-- Plan: `todo|doing|done|cancelled` | Wave: `pending|in_progress|done|blocked|merging|cancelled`
-- Lifecycle: `in_progress` → `submitted` (cvg task update) → `done` (wave Thor or cvg task update)
-- Thor validates at wave level (Opus), not per-task
+`cvg plan` wraps SQLite. Schema: `reference/operational/plan-db-schema.md`
+NEVER create plans without `/planner`. _Why: Plan 225._
+
+States — Task: `pending|in_progress|submitted|done|blocked|skipped|cancelled` | Plan: `todo|doing|done|cancelled` | Wave: `pending|in_progress|done|blocked|merging|cancelled`
+Lifecycle: `in_progress` → `submitted` → `done` (wave Thor). Thor validates at wave level (Opus).
 
 | Action | Command |
 |---|---|
-| Create plan | `cvg plan create {proj} "Name" --source-file {f} --auto-worktree` |
-| Import spec | `cvg plan import {plan_id} spec.yaml` |
-| Mark done | `cvg task update {id} done "Summary"` |
+| Create | `cvg plan create {proj} "Name" --source-file {f} --auto-worktree` |
+| Import | `cvg plan import {plan_id} spec.yaml` |
+| Done | `cvg task update {id} done "Summary"` |
 | Validate | `cvg task validate {tid} {plan}` |
 | Cancel | `cvg plan cancel {plan_id} "reason"` |
 | Debug | `cvg plan execution-tree {plan_id}` |
@@ -48,23 +45,12 @@ NEVER `git branch` | `git checkout -b` | `git switch -c`
 | Task isolation | `Task(..., isolation="worktree")` |
 | Quick fix | Direct edit (no branch) |
 
-- Wave: create → execute → Thor → rebase (update FROM main) → PR → squash merge (INTO main) → cleanup
-- NEVER `git merge main` into wave branch → use `git rebase origin/main` to update FROM main
-- PR merge back to main uses **squash merge** via `cvg wave merge`
+Wave: create → execute → Thor → `git rebase origin/main` → PR → squash merge → cleanup. NEVER `git merge main`.
 
 ## Execution
 
-- ALWAYS `task-executor` for plan tasks (TDD, no WebSearch)
-- `thor` for validation (skeptical, unbiased)
-- Default model: Sonnet | Parallelization: max 3
-- Lean Coordinator: dispatch + DB + checkpoint ONLY. Max 4 tasks/wave
-- Checkpoint after EVERY task
+`task-executor` for plan tasks (TDD) | `thor` for validation | Sonnet default | Max 3 parallel | Max 4 tasks/wave | Checkpoint after EVERY task
 
-### Post-Task (MANDATORY)
+Post-task: checkpoint → verify DB. Per wave: Thor → `cvg wave merge` → PR comments → cleanup → next wave.
 
-1. Checkpoint → verify DB (no per-task Thor — mechanical gates suffice)
-2. Per wave: Thor `cvg plan validate` (Opus) → `cvg wave merge` → PR comments → cleanup → next wave
-
-### Closure (NON-NEGOTIABLE)
-
-`session-reaper.sh --max-age 0` | `git worktree list` (only main) | all PRs merged
+Closure: `session-reaper.sh --max-age 0` | `git worktree list` (only main) | all PRs merged

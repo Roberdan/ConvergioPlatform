@@ -16,10 +16,15 @@ _buongiorno_mesh_sync() {
 
 	if [[ ! -x "$sync_script" ]]; then
 		echo "    ⚠ mesh-sync.sh non trovato, skip"
-		return 1
+		return 0
 	fi
 
-	"$sync_script" 2>&1 | tail -5
+	if ! (cd "$HOME/.claude" && git rev-parse --git-dir >/dev/null 2>&1); then
+		echo "    ⚠ ~/.claude non è un git repo, mesh sync skip"
+		return 0
+	fi
+
+	"$sync_script" 2>&1 | tail -5 || true
 }
 
 _buongiorno_redirect_to_master() {
@@ -105,15 +110,22 @@ _buongiorno_update_peers() {
 			fi
 		fi
 
-		r_copilot_ver=$(ssh -n "$p_dest" "${RPATH} gh extension list 2>/dev/null | awk '/copilot/ {print \\\$3; exit}'" 2>/dev/null)
+		r_copilot_ver=$(ssh -n "$p_dest" "${RPATH} gh copilot --version 2>/dev/null | head -1" 2>/dev/null)
 		if [[ -n "$r_copilot_ver" ]]; then
-			echo -e "    Copilot: ${r_copilot_ver}"
-			ssh -n "$p_dest" "${RPATH} gh extension upgrade gh-copilot 2>&1" 2>/dev/null | tail -2
-			r_copilot_after=$(ssh -n "$p_dest" "${RPATH} gh extension list 2>/dev/null | awk '/copilot/ {print \\\$3; exit}'" 2>/dev/null)
-			if [[ "$r_copilot_ver" != "$r_copilot_after" ]]; then
-				news+=("${p_icon} Copilot ${_p}: ${r_copilot_ver} → ${r_copilot_after}")
+			echo -e "    ${G}✓${N} Copilot built-in (${r_copilot_ver})"
+		else
+			r_copilot_ver=$(ssh -n "$p_dest" "${RPATH} gh extension list 2>/dev/null | awk '/copilot/ {print \\\$3; exit}'" 2>/dev/null)
+			if [[ -n "$r_copilot_ver" ]]; then
+				echo -e "    Copilot ext: ${r_copilot_ver}"
+				ssh -n "$p_dest" "${RPATH} gh extension upgrade gh-copilot 2>&1" 2>/dev/null | tail -2
+				r_copilot_after=$(ssh -n "$p_dest" "${RPATH} gh extension list 2>/dev/null | awk '/copilot/ {print \\\$3; exit}'" 2>/dev/null)
+				if [[ "$r_copilot_ver" != "$r_copilot_after" ]]; then
+					news+=("${p_icon} Copilot ${_p}: ${r_copilot_ver} → ${r_copilot_after}")
+				else
+					echo -e "    ${G}✓${N} Copilot già aggiornato (${r_copilot_after})"
+				fi
 			else
-				echo -e "    ${G}✓${N} Copilot già aggiornato (${r_copilot_after})"
+				echo -e "    ${Y}⚠${N} Copilot non disponibile"
 			fi
 		fi
 
@@ -178,16 +190,23 @@ main() {
 	echo -e "${C}[2/6]${N} 🐙 GitHub Copilot CLI..."
 	if command -v gh >/dev/null 2>&1; then
 		local copilot_before copilot_after
-		copilot_before=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
-		if gh extension upgrade gh-copilot 2>&1 | tail -2; then
-			copilot_after=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
-			if [[ "$copilot_before" != "$copilot_after" ]]; then
-				news+=("🐙 GH Copilot: ${copilot_before} → ${copilot_after}")
+		if gh copilot --version >/dev/null 2>&1; then
+			copilot_before=$(gh copilot --version 2>/dev/null | head -1)
+			echo -e "  ${G}✓${N} built-in (${copilot_before})"
+		elif gh extension list 2>/dev/null | grep -q copilot; then
+			copilot_before=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
+			if gh extension upgrade gh-copilot 2>&1 | tail -2; then
+				copilot_after=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
+				if [[ "$copilot_before" != "$copilot_after" ]]; then
+					news+=("🐙 GH Copilot: ${copilot_before} → ${copilot_after}")
+				else
+					echo -e "  ${G}✓${N} già aggiornato (${copilot_after})"
+				fi
 			else
-				echo -e "  ${G}✓${N} già aggiornato (${copilot_after})"
+				echo -e "  ${R}✗${N} aggiornamento fallito"
 			fi
 		else
-			echo -e "  ${R}✗${N} aggiornamento fallito"
+			echo -e "  ${Y}⚠${N} copilot non disponibile (né built-in né extension)"
 		fi
 	else
 		echo -e "  ${Y}⚠${N} gh non trovato"
@@ -214,7 +233,11 @@ main() {
 
 	echo -e "${C}[4/6]${N} 🔧 GitHub CLI & estensioni..."
 	if command -v gh >/dev/null 2>&1; then
-		gh extension upgrade --all 2>&1 | grep -v "already up to date" | tail -5
+		local gh_ext_output
+		gh_ext_output=$(gh extension upgrade --all 2>&1) || true
+		if [[ -n "$gh_ext_output" ]]; then
+			echo "$gh_ext_output" | command grep -v "already up to date" | tail -5
+		fi
 		echo -e "  ${G}✓${N} fatto"
 	else
 		echo -e "  ${Y}⚠${N} gh non trovato"
@@ -225,10 +248,12 @@ main() {
 	_buongiorno_update_peers
 
 	echo -e "${C}[6/6]${N} 🩺 Mesh Preflight (tools + auth + versioni)..."
-	if [[ -x "$HOME/.claude/scripts/mesh-preflight.sh" ]]; then
-		"$HOME/.claude/scripts/mesh-preflight.sh" 2>&1 || news+=("🩺 Mesh preflight: ISSUES FOUND — check dashboard")
-	else
+	if [[ ! -x "$HOME/.claude/scripts/mesh-preflight.sh" ]]; then
 		echo -e "  ${Y}⚠${N} mesh-preflight.sh non trovato"
+	elif ! (cd "$HOME/.claude" && git rev-parse --git-dir >/dev/null 2>&1); then
+		echo -e "  ${Y}⚠${N} ~/.claude non è un git repo, preflight skip"
+	else
+		"$HOME/.claude/scripts/mesh-preflight.sh" 2>&1 || news+=("🩺 Mesh preflight: ISSUES FOUND — check dashboard")
 	fi
 
 	local elapsed
