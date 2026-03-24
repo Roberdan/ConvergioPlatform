@@ -40,13 +40,18 @@ impl ServerState {
     pub fn new(db_path: PathBuf, crsqlite_path: Option<String>) -> Self {
         let pool = init_db_and_pool(&db_path, &crsqlite_path);
         let (ws_tx, _) = broadcast::channel(256);
+        // Initialize IPC engine so API handlers can broadcast to #orchestration
+        let ipc = Arc::new(crate::ipc::IpcEngine::new(db_path.clone()));
+        if let Ok(conn) = ipc.open_conn() {
+            let _ = crate::ipc::ensure_ipc_schema(&conn);
+        }
         Self {
             db_path,
             crsqlite_path,
             pool,
             ws_tx,
             started_at: std::time::Instant::now(),
-            ipc_engine: None,
+            ipc_engine: Some(ipc),
         }
     }
 
