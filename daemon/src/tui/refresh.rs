@@ -3,6 +3,7 @@
 use super::app::TuiApp;
 use super::chat_handler;
 use super::data::MainView;
+use super::views::popup::{PopupContent, PopupSection};
 
 impl TuiApp {
     /// Drill-down: Enter on Kanban -> filter tasks; on Pipeline -> show detail.
@@ -18,10 +19,27 @@ impl TuiApp {
             }
             MainView::TaskPipeline => {
                 if let Some(task) = self.data.pipeline.get(self.selected_index) {
-                    self.istate.detail_text = Some(format!(
-                        "task_id: {}\ntitle: {}\nstatus: {}\nagent: {}",
-                        task.task_id, task.title, task.status, task.agent
-                    ));
+                    self.istate.popup_content = Some(PopupContent {
+                        title: "Task Detail".to_string(),
+                        sections: vec![
+                            PopupSection {
+                                label: "Identity".to_string(),
+                                lines: vec![
+                                    format!("task_id: {}", task.task_id),
+                                    format!("title:   {}", task.title),
+                                ],
+                            },
+                            PopupSection {
+                                label: "Status".to_string(),
+                                lines: vec![
+                                    format!("status: {}", task.status),
+                                    format!("agent:  {}", task.agent),
+                                ],
+                            },
+                        ],
+                        actions: vec![],
+                    });
+                    self.istate.popup_open = true;
                 }
             }
             MainView::Chat => {

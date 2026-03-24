@@ -15,7 +15,10 @@ pub mod cost;
 pub mod deliverables;
 pub mod events;
 pub mod help;
+pub mod popup;
 pub mod workspace;
+
+pub use popup::{render_rich_popup, PopupContent};
 
 const ALL_VIEWS: &[(MainView, &str)] = &[
     (MainView::PlanKanban, "Kanban"),
@@ -30,7 +33,10 @@ const ALL_VIEWS: &[(MainView, &str)] = &[
     (MainView::Chat, "◆ Chat"),
 ];
 
-/// Renders tab bar, KPI strip, active view, status bar, and optional help overlay.
+/// Renders tab bar, KPI strip, active view, status bar, and optional overlays.
+///
+/// If `popup_content` is Some, a rich popup is rendered as the topmost overlay.
+/// If `show_help` is true, the help overlay is rendered (below popup in z-order).
 #[allow(clippy::too_many_arguments)]
 pub fn render_view(
     frame: &mut Frame<'_>,
@@ -44,6 +50,7 @@ pub fn render_view(
     refresh_interval_secs: u64,
     chat_input: &str,
     chat_sending: bool,
+    popup_content: Option<&PopupContent>,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -62,6 +69,11 @@ pub fn render_view(
 
     if show_help {
         help::render_help_overlay(frame, area);
+    }
+
+    // Rich popup renders last (topmost overlay).
+    if let Some(content) = popup_content {
+        render_rich_popup(frame, area, content);
     }
 }
 
@@ -183,29 +195,6 @@ fn render_status_bar(
             .border_type(BorderType::Rounded),
     );
     frame.render_widget(paragraph, area);
-}
-
-// --- Detail popup ---
-
-/// Renders a centered detail popup with arbitrary text content.
-pub fn render_detail_popup(frame: &mut Frame<'_>, area: Rect, detail: &str) {
-    use ratatui::widgets::Clear;
-    let width = (area.width * 3 / 4).max(40);
-    let height = (detail.lines().count() as u16 + 4).min(area.height.saturating_sub(4));
-    let x = area.x + area.width.saturating_sub(width) / 2;
-    let y = area.y + area.height.saturating_sub(height) / 2;
-    let popup = Rect { x, y, width, height };
-
-    frame.render_widget(Clear, popup);
-    let paragraph = Paragraph::new(detail.to_string())
-        .block(
-            Block::default()
-                .title(" Detail ")
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        )
-        .wrap(ratatui::widgets::Wrap { trim: true });
-    frame.render_widget(paragraph, popup);
 }
 
 // --- Command footer ---

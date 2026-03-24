@@ -51,7 +51,7 @@ fn format_event_row(ev: &WorkspaceEvent) -> String {
         .map(|p| truncate(p, 30))
         .unwrap_or_else(|| "-".to_string());
     let detail = ev.detail.as_deref().unwrap_or("-");
-    format!("{ts}  {:<20} {:<18} {:<31} {}", ev.agent, ev.action, fp, detail)
+    format!("{ts:<10} {:<14} {:<18} {:<30} {}", ev.agent, ev.action, fp, detail)
 }
 
 /// Render the Event Stream view. Returns a `Paragraph` ready for frame rendering.
@@ -80,7 +80,7 @@ pub fn event_stream(data: &TuiData, selected: usize) -> Paragraph<'static> {
     // Column headers
     lines.push(
         Line::from(format!(
-            "{:<8}  {:<20} {:<18} {:<31} {}",
+            "{:<10} {:<14} {:<18} {:<30} {}",
             "Time", "Agent", "Action", "File", "Detail"
         ))
         .style(Style::default().fg(TEXT_SECONDARY)),

@@ -89,13 +89,13 @@ fn expanded_card(
     let pct = if plan.tasks_total > 0 {
         ((plan.tasks_done * 100) / plan.tasks_total) as u16
     } else { 0 };
-    let id_str = format!("#{}", plan.id);
+    let id_str = format!("{:>6}", format!("#{}", plan.id));
     let name = truncate(&plan.name, 48);
-    // Row 1: "  │  #708   Plan Name                              │"
-    let content_used = 2 + id_str.len() + 3 + name.chars().count();
+    // Row 1: "  │    #708 Plan Name                              │"
+    let content_used = 2 + 6 + 1 + name.chars().count();
     let pad1 = CARD_W.saturating_sub(content_used);
     if is_selected {
-        let inner = format!("  {}   {}{}", id_str, name, " ".repeat(pad1));
+        let inner = format!("  {} {}{}", id_str, name, " ".repeat(pad1));
         lines.push(Line::from(vec![
             Span::styled("  \u{2502}", Style::default().fg(MUTED)),
             Span::styled(inner, selected_style()),
@@ -105,7 +105,7 @@ fn expanded_card(
         lines.push(Line::from(vec![
             Span::styled("  \u{2502}  ", Style::default().fg(MUTED)),
             Span::styled(id_str, Style::default().fg(ACCENT).bold()),
-            Span::raw("   "),
+            Span::raw(" "),
             Span::styled(name, Style::default().fg(TEXT_PRIMARY)),
             Span::raw(" ".repeat(pad1)),
             Span::styled("\u{2502}", Style::default().fg(MUTED)),
@@ -156,17 +156,17 @@ fn compact_card(
     let pct = if plan.tasks_total > 0 {
         ((plan.tasks_done * 100) / plan.tasks_total) as u16
     } else { 0 };
-    let id_str = format!("#{}", plan.id);
+    let id_str = format!("{:>6}", format!("#{}", plan.id));
     let name = truncate(&plan.name, 40);
     let frac = format!("{}/{}", plan.tasks_done, plan.tasks_total);
     let icon = progress_icon(pct);
-    // "  │  #705   name                        0/8   ○  │"
-    let left_len = 2 + id_str.len() + 3 + name.chars().count();
+    // "  │    #705 name                        0/8   ○  │"
+    let left_len = 2 + 6 + 1 + name.chars().count();
     let right_len = frac.len() + 3 + 1 + 2;
     let pad = CARD_W.saturating_sub(left_len + right_len);
     if is_selected {
         let inner = format!(
-            "  {}   {}{}{}   {}  ",
+            "  {} {}{}{}   {}  ",
             id_str, name, " ".repeat(pad), frac, icon,
         );
         lines.push(Line::from(vec![
@@ -178,7 +178,7 @@ fn compact_card(
         lines.push(Line::from(vec![
             Span::styled("  \u{2502}  ", Style::default().fg(MUTED)),
             Span::styled(id_str, Style::default().fg(ACCENT).bold()),
-            Span::raw("   "),
+            Span::raw(" "),
             Span::styled(name, Style::default().fg(TEXT_PRIMARY)),
             Span::raw(" ".repeat(pad)),
             Span::raw(format!("{}   ", frac)),

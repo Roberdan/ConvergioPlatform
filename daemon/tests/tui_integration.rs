@@ -204,17 +204,8 @@ fn render_to_text(data: &TuiData, view: MainView) -> String {
     terminal
         .draw(|frame| {
             views::render_view(
-                frame,
-                frame.area(),
-                view,
-                data,
-                0,
-                "http://localhost:8420",
-                false,
-                true,
-                5,
-                "",
-                false,
+                frame, frame.area(), view, data, 0,
+                "http://localhost:8420", false, true, 5, "", false, None, false,
             );
         })
         .expect("draw");

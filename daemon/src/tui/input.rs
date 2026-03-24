@@ -4,14 +4,13 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use super::data::MainView;
+use super::views::PopupContent;
 
 /// All mutable interactive state owned by TuiApp.
 #[derive(Default)]
 pub struct InteractiveState {
     /// Which plan to filter tasks by (drill-down from Kanban).
     pub selected_plan_id: Option<i64>,
-    /// Detail text for the popup overlay (task or agent detail).
-    pub detail_text: Option<String>,
     /// Current command being typed (activated by `/`).
     pub command_input: String,
     /// Whether the command input bar is active.
@@ -28,14 +27,26 @@ pub struct InteractiveState {
     pub increase_interval: bool,
     /// Request to decrease refresh interval (consumed by run loop).
     pub decrease_interval: bool,
+    /// Whether the rich popup overlay is open.
+    pub popup_open: bool,
+    /// Content for the rich popup overlay (set before opening).
+    pub popup_content: Option<PopupContent>,
+    /// Pending action triggered by a popup action key: (action_name, target_id).
+    pub action_pending: Option<(String, String)>,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.
-/// Priority order: command_mode → help overlay → normal keys.
+/// Priority order: command_mode → popup_open → help overlay → normal keys.
 pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut InteractiveState) -> bool {
     if state.command_mode {
         handle_command_key(code, state);
         return state.quit;
+    }
+
+    // Popup captures all focus; only Esc and action keys are handled.
+    if state.popup_open {
+        handle_popup_key(code, state);
+        return false;
     }
 
     if state.show_help {
@@ -90,10 +101,41 @@ fn handle_command_key(code: KeyCode, state: &mut InteractiveState) {
     }
 }
 
-/// Handle Esc outside command mode: close popups/filters in priority order.
+/// Handle keys when the rich popup is open.
+/// Esc closes the popup; action keys set action_pending; all other keys are swallowed.
+fn handle_popup_key(code: KeyCode, state: &mut InteractiveState) {
+    match code {
+        KeyCode::Esc => {
+            state.popup_open = false;
+            state.popup_content = None;
+        }
+        KeyCode::Char(c) => {
+            // Check if this char matches an action key in the current popup.
+            let action = state
+                .popup_content
+                .as_ref()
+                .and_then(|p| p.action_for_key(c))
+                .map(str::to_string);
+            if let Some(label) = action {
+                // Store action for the run loop to consume; target_id is empty by default.
+                // Callers that open the popup can pre-populate action_pending target_id
+                // after the fact, or the popup can be extended with a target field.
+                state.action_pending = Some((label, String::new()));
+                // Close popup after action is selected.
+                state.popup_open = false;
+                state.popup_content = None;
+            }
+            // Unknown keys are ignored (popup captures focus).
+        }
+        _ => {}
+    }
+}
+
+/// Handle Esc outside command/popup mode: close overlays/filters in priority order.
 fn handle_esc(state: &mut InteractiveState) {
-    if state.detail_text.is_some() {
-        state.detail_text = None;
+    if state.popup_open {
+        state.popup_open = false;
+        state.popup_content = None;
     } else if state.selected_plan_id.is_some() {
         state.selected_plan_id = None;
     }
@@ -127,18 +169,68 @@ pub fn parse_and_apply_command(
 mod unit {
     use super::*;
 
+    fn make_popup() -> PopupContent {
+        PopupContent {
+            title: "Test".to_string(),
+            sections: vec![],
+            actions: vec![('p', "Provision".to_string()), ('s', "Stop".to_string())],
+        }
+    }
+
     #[test]
     fn esc_in_command_mode_takes_priority() {
+        // command_mode has highest priority; popup_open is not touched.
         let mut s = InteractiveState {
             command_mode: true,
             command_input: "abc".into(),
-            detail_text: Some("x".into()),
+            popup_open: true,
+            popup_content: Some(make_popup()),
             ..Default::default()
         };
         handle_key(KeyCode::Esc, KeyModifiers::NONE, &mut s);
-        // command mode exited; detail_text not touched (command mode had priority)
+        // command mode exited; popup not touched (command mode had priority)
         assert!(!s.command_mode);
-        assert!(s.detail_text.is_some(), "detail popup should survive if command mode exits first");
+        assert!(s.popup_open, "popup should survive if command mode exits first");
+    }
+
+    #[test]
+    fn esc_closes_popup() {
+        let mut s = InteractiveState {
+            popup_open: true,
+            popup_content: Some(make_popup()),
+            ..Default::default()
+        };
+        handle_key(KeyCode::Esc, KeyModifiers::NONE, &mut s);
+        assert!(!s.popup_open);
+        assert!(s.popup_content.is_none());
+    }
+
+    #[test]
+    fn popup_action_key_sets_pending_and_closes() {
+        let mut s = InteractiveState {
+            popup_open: true,
+            popup_content: Some(make_popup()),
+            ..Default::default()
+        };
+        handle_key(KeyCode::Char('p'), KeyModifiers::NONE, &mut s);
+        assert!(!s.popup_open);
+        assert!(s.popup_content.is_none());
+        let (action, _) = s.action_pending.expect("action_pending should be set");
+        assert_eq!(action, "Provision");
+    }
+
+    #[test]
+    fn popup_unknown_key_is_swallowed() {
+        let mut s = InteractiveState {
+            popup_open: true,
+            popup_content: Some(make_popup()),
+            ..Default::default()
+        };
+        // 'q' would normally quit, but popup captures focus.
+        let quit = handle_key(KeyCode::Char('q'), KeyModifiers::NONE, &mut s);
+        assert!(!quit, "popup should swallow quit key");
+        assert!(s.popup_open, "popup should remain open");
+        assert!(s.action_pending.is_none());
     }
 
     #[test]

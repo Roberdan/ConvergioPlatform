@@ -62,9 +62,15 @@ fn handle_command_esc_exits_command_mode() {
 }
 
 #[test]
-fn handle_esc_closes_detail_popup() {
+fn handle_esc_closes_rich_popup() {
+    use super::super::views::PopupContent;
     let mut state = InteractiveState {
-        detail_text: Some("task detail".into()),
+        popup_open: true,
+        popup_content: Some(PopupContent {
+            title: "Detail".to_string(),
+            sections: vec![],
+            actions: vec![],
+        }),
         ..Default::default()
     };
     handle_key(
@@ -72,7 +78,8 @@ fn handle_esc_closes_detail_popup() {
         crossterm::event::KeyModifiers::NONE,
         &mut state,
     );
-    assert!(state.detail_text.is_none(), "Esc must close detail popup");
+    assert!(!state.popup_open, "Esc must close rich popup");
+    assert!(state.popup_content.is_none(), "Esc must clear popup content");
 }
 
 #[test]
