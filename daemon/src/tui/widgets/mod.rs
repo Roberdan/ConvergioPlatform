@@ -27,11 +27,12 @@ pub fn selected_style() -> Style {
     Style::default().reversed()
 }
 
+pub mod kanban;
 pub mod kpi;
 pub mod shared;
 
+pub use kanban::plan_kanban;
 pub use kpi::kpi_strip;
 pub use shared::{
-    agent_org_chart, mesh_status, plan_kanban, progress_bar, progress_bar_line, spark,
-    task_pipeline,
+    agent_org_chart, mesh_status, progress_bar, progress_bar_line, spark, task_pipeline,
 };

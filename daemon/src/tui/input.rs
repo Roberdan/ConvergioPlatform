@@ -22,6 +22,12 @@ pub struct InteractiveState {
     pub quit: bool,
     /// Whether to show the help overlay.
     pub show_help: bool,
+    /// Request to toggle auto-refresh on/off (consumed by run loop).
+    pub toggle_auto_refresh: bool,
+    /// Request to increase refresh interval (consumed by run loop).
+    pub increase_interval: bool,
+    /// Request to decrease refresh interval (consumed by run loop).
+    pub decrease_interval: bool,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.
@@ -48,6 +54,11 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
             state.command_input.clear();
         }
         KeyCode::Char('r') => state.force_refresh = true,
+        // Shift+R toggles auto-refresh on/off.
+        KeyCode::Char('R') => state.toggle_auto_refresh = true,
+        // +/- adjust refresh interval.
+        KeyCode::Char('+') | KeyCode::Char('=') => state.increase_interval = true,
+        KeyCode::Char('-') => state.decrease_interval = true,
         KeyCode::Char('?') => state.show_help = true,
         KeyCode::Esc => handle_esc(state),
         _ => {}

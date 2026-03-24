@@ -16,6 +16,9 @@ const HELP_ROWS: &[(&str, &str)] = &[
     ("Tab", "Next view"),
     ("Enter", "Drill down"),
     ("/", "Command"),
+    ("r", "Manual refresh"),
+    ("R", "Toggle auto-refresh"),
+    ("+/-", "Adjust interval"),
     ("?", "Toggle help"),
     ("q", "Quit"),
 ];

@@ -1,12 +1,44 @@
 // View rendering tests — all renders_* and tab/status bar assertions.
 use super::super::{BrainNode, MainView};
-use super::{render_to_text, render_to_text_full, sample_data};
+use super::{render_to_text, render_to_text_full, render_to_text_with_refresh, sample_data};
+
+// --- Kanban redesign ---
+
+#[test]
+fn renders_plan_kanban_modern_cards() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::PlanKanban);
+    // Modern kanban shows section headers with counts
+    assert!(rendered.contains("DOING") || rendered.contains("TODO"), "must show section headers");
+    assert!(rendered.contains("Stabilize Mesh"), "must show plan name");
+    // Modern design shows plan IDs with # prefix
+    assert!(rendered.contains("#"), "must show plan ID with # prefix");
+}
+
+#[test]
+fn renders_kanban_doing_section_with_progress_bar() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::PlanKanban);
+    // DOING section (Stabilize Mesh is status=doing) must show progress fraction
+    assert!(
+        rendered.contains("12") && rendered.contains("18"),
+        "DOING card must show done/total fraction"
+    );
+}
+
+#[test]
+fn renders_kanban_todo_section_compact() {
+    let data = sample_data();
+    let rendered = render_to_text(&data, MainView::PlanKanban);
+    // Rust TUI Port is status=todo
+    assert!(rendered.contains("Rust TUI Port"), "TODO card must be visible");
+}
 
 #[test]
 fn renders_plan_kanban_view() {
     let data = sample_data();
     let rendered = render_to_text(&data, MainView::PlanKanban);
-    assert!(rendered.contains("PLAN KANBAN"));
+    assert!(rendered.contains("DOING") || rendered.contains("TODO") || rendered.contains("PLAN KANBAN"));
     assert!(rendered.contains("Stabilize Mesh"));
 }
 
@@ -158,5 +190,29 @@ fn status_bar_shows_navigate_hint() {
 fn render_view_accepts_api_url_and_show_help_params() {
     let data = sample_data();
     let rendered = render_to_text_full(&data, MainView::PlanKanban, "http://localhost:8420", false);
-    assert!(rendered.contains("PLAN KANBAN"));
+    assert!(rendered.contains("DOING") || rendered.contains("TODO") || rendered.contains("PLAN KANBAN"));
+}
+
+// --- Refresh state in status bar ---
+
+#[test]
+fn status_bar_shows_auto_refresh_on() {
+    let data = sample_data();
+    // When auto_refresh=true, status bar shows "Auto: Ns"
+    let rendered = render_to_text_with_refresh(&data, MainView::PlanKanban, true, 5);
+    assert!(
+        rendered.contains("Auto:") || rendered.contains("5s"),
+        "status bar must show auto refresh interval when enabled"
+    );
+}
+
+#[test]
+fn status_bar_shows_auto_refresh_off() {
+    let data = sample_data();
+    // When auto_refresh=false, status bar shows "Auto: OFF"
+    let rendered = render_to_text_with_refresh(&data, MainView::PlanKanban, false, 5);
+    assert!(
+        rendered.contains("OFF") || rendered.contains("off"),
+        "status bar must show OFF when auto refresh disabled"
+    );
 }

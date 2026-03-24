@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use ratatui::{
     style::{Style, Stylize},
     text::{Line, Text},
@@ -9,62 +7,6 @@ use ratatui::{
 use crate::tui::TuiData;
 
 use super::{selected_style, ACCENT, FAIL, MUTED, OK, WARN};
-
-pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
-    let mut cols: BTreeMap<&str, Vec<(usize, String)>> = BTreeMap::new();
-    for key in ["BLOCKED", "DOING", "DONE", "TODO"] {
-        cols.insert(key, Vec::new());
-    }
-    for (i, plan) in data.plans.iter().enumerate() {
-        let key = match plan.status.as_str() {
-            "todo" => "TODO",
-            "doing" => "DOING",
-            "blocked" => "BLOCKED",
-            "done" => "DONE",
-            _ => "TODO",
-        };
-        let pct = if plan.tasks_total > 0 {
-            (plan.tasks_done * 100) / plan.tasks_total
-        } else {
-            0
-        };
-        let bar = progress_bar(pct as u16, 12);
-        cols.entry(key).or_default().push((
-            i,
-            format!("#{:<5} {} {:>3}% {}", plan.id, bar, pct, plan.name),
-        ));
-    }
-
-    let mut lines: Vec<Line<'static>> = vec!["PLAN KANBAN".bold().fg(ACCENT).into(), "".into()];
-    for col in ["TODO", "DOING", "BLOCKED", "DONE"] {
-        let col_color = match col {
-            "DONE" => OK,
-            "DOING" => WARN,
-            "BLOCKED" => FAIL,
-            _ => MUTED,
-        };
-        lines.push(Line::from(format!("{}:", col)).style(Style::default().fg(col_color)));
-        if let Some(items) = cols.get(col) {
-            if items.is_empty() {
-                lines.push("  -".fg(MUTED).into());
-            } else {
-                for (idx, text) in items {
-                    let style = if *idx == selected {
-                        selected_style()
-                    } else {
-                        Style::default()
-                    };
-                    lines.push(Line::from(format!("  {}", text)).style(style));
-                }
-            }
-        }
-        lines.push("".into());
-    }
-
-    Paragraph::new(Text::from(lines))
-        .block(Block::default().title(" Plans ").borders(Borders::ALL))
-        .wrap(Wrap { trim: true })
-}
 
 pub fn task_pipeline(data: &TuiData, selected: usize) -> Paragraph<'static> {
     let mut lines: Vec<Line<'static>> = vec![

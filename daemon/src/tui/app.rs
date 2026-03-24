@@ -22,6 +22,10 @@ pub struct TuiApp {
     pub api_url: String,
     pub ws_client: WsClient,
     pub istate: InteractiveState,
+    /// Whether automatic polling refresh is enabled.
+    pub auto_refresh: bool,
+    /// Polling interval in seconds (one of: 3, 5, 10, 30, 60).
+    pub refresh_interval_secs: u64,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     client: Client,
 }
@@ -55,6 +59,8 @@ impl TuiApp {
             api_url,
             ws_client,
             istate: InteractiveState::default(),
+            auto_refresh: Self::default_auto_refresh(),
+            refresh_interval_secs: Self::default_refresh_interval_secs(),
             terminal,
             client: Client::new(),
         })
@@ -63,7 +69,8 @@ impl TuiApp {
     /// Main async event loop using tokio::select! on three channels.
     pub async fn run(&mut self) -> io::Result<()> {
         let mut events = EventStream::new();
-        let mut poll_tick = interval(Duration::from_secs(5));
+        // poll_tick is re-created whenever the interval changes.
+        let mut poll_tick = interval(Duration::from_secs(self.refresh_interval_secs));
         let mut render_tick = interval(Duration::from_millis(100));
 
         // Initial data fetch before first render
@@ -73,7 +80,8 @@ impl TuiApp {
             tokio::select! {
                 _ = poll_tick.tick() => {
                     // HTTP polling fallback when WS has exceeded max retries.
-                    if self.ws_client.should_fallback() {
+                    // Only poll when auto_refresh is enabled.
+                    if self.auto_refresh && self.ws_client.should_fallback() {
                         self.refresh_data().await;
                     }
                 }
@@ -86,8 +94,12 @@ impl TuiApp {
                             if self.handle_key(key.code, key.modifiers) {
                                 return Ok(());
                             }
-                            // Handle force-refresh and command-enter outside input module.
-                            self.process_post_key().await;
+                            // Handle force-refresh, interval changes, and command-enter.
+                            let interval_changed = self.process_post_key().await;
+                            if interval_changed {
+                                // Re-create poll_tick with the new interval.
+                                poll_tick = interval(Duration::from_secs(self.refresh_interval_secs));
+                            }
                         }
                         Some(Err(_)) => return Ok(()),
                         None => return Ok(()),
@@ -144,36 +156,6 @@ impl TuiApp {
         ][(n as usize).saturating_sub(1).min(8)];
     }
 
-    /// Drill-down: Enter on Kanban → filter tasks; on Pipeline → show detail.
-    fn handle_enter(&mut self) {
-        match self.active_view {
-            MainView::PlanKanban => {
-                if let Some(plan) = self.data.plans.get(self.selected_index) {
-                    self.istate.selected_plan_id = Some(plan.id);
-                    self.active_view = MainView::TaskPipeline;
-                    self.selected_index = 0;
-                }
-            }
-            MainView::TaskPipeline => {
-                if let Some(task) = self.data.pipeline.get(self.selected_index) {
-                    self.istate.detail_text = Some(format!(
-                        "task_id: {}\ntitle: {}\nstatus: {}\nagent: {}",
-                        task.task_id, task.title, task.status, task.agent
-                    ));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// Post-key: consume force_refresh; nothing else needed here.
-    async fn process_post_key(&mut self) {
-        if self.istate.force_refresh {
-            self.istate.force_refresh = false;
-            self.refresh_data().await;
-        }
-    }
-
     pub fn list_len(&self) -> usize {
         match self.active_view {
             MainView::PlanKanban => self.data.plans.len(),
@@ -194,10 +176,15 @@ impl TuiApp {
         let selected = self.selected_index;
         let api_url = self.api_url.clone();
         let show_help = self.istate.show_help;
+        let auto_refresh = self.auto_refresh;
+        let refresh_interval_secs = self.refresh_interval_secs;
         let cmd_input = self.istate.command_mode.then(|| self.istate.command_input.clone());
         let detail = self.istate.detail_text.clone();
         self.terminal.draw(|frame| {
-            views::render_view(frame, frame.area(), view, data, selected, &api_url, show_help);
+            views::render_view(
+                frame, frame.area(), view, data, selected, &api_url,
+                show_help, auto_refresh, refresh_interval_secs,
+            );
             if let Some(d) = &detail {
                 views::render_detail_popup(frame, frame.area(), d);
             }
@@ -215,7 +202,7 @@ impl TuiApp {
         Ok(())
     }
 
-    async fn refresh_data(&mut self) {
+    pub async fn refresh_data(&mut self) {
         api::refresh_all(&self.client, &self.api_url, &mut self.data).await;
         self.last_fetch = Instant::now();
     }

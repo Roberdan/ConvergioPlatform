@@ -37,6 +37,8 @@ pub fn render_view(
     selected: usize,
     api_url: &str,
     show_help: bool,
+    auto_refresh: bool,
+    refresh_interval_secs: u64,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -51,7 +53,7 @@ pub fn render_view(
     render_tab_bar(frame, chunks[0], view);
     frame.render_widget(widgets::kpi_strip(data), chunks[1]);
     render_content(frame, chunks[2], view, data, selected);
-    render_status_bar(frame, chunks[3], api_url);
+    render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs);
 
     if show_help {
         help::render_help_overlay(frame, area);
@@ -132,14 +134,33 @@ fn render_content(
 
 // --- Status bar ---
 
-fn render_status_bar(frame: &mut Frame<'_>, area: Rect, api_url: &str) {
+fn render_status_bar(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    api_url: &str,
+    auto_refresh: bool,
+    refresh_interval_secs: u64,
+) {
     // Strip scheme for compact display: "http://localhost:8420" → "localhost:8420"
     let host = api_url
         .trim_start_matches("https://")
         .trim_start_matches("http://");
+
+    // Refresh state indicator: "Auto: 5s" or "Auto: OFF"
+    let refresh_str = if auto_refresh {
+        format!("Auto: {}s", refresh_interval_secs)
+    } else {
+        "Auto: OFF".to_string()
+    };
+
+    // Right side hints differ based on refresh state.
+    let right = if auto_refresh {
+        format!(" {} │ R Toggle  +/- Interval  ↑↓ Navigate  ? Help  q Quit ", refresh_str)
+    } else {
+        format!(" {} │ R Toggle  r Refresh  ↑↓ Navigate  ? Help  q Quit ", refresh_str)
+    };
+
     let left = format!(" ◆ Connected {}  │  WS: active ", host);
-    let right = " ↑↓ Navigate  Tab Switch  ? Help  q Quit ";
-    let content = format!("{}│{}", left, right);
 
     let paragraph = Paragraph::new(Line::from(vec![
         Span::styled(left, Style::default().fg(OK)),
@@ -151,7 +172,6 @@ fn render_status_bar(frame: &mut Frame<'_>, area: Rect, api_url: &str) {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded),
     );
-    let _ = content; // used only for fallback string; structured spans used above
     frame.render_widget(paragraph, area);
 }
 

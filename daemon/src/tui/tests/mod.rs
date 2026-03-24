@@ -26,7 +26,34 @@ pub(crate) fn render_to_text_full(
     let mut terminal = Terminal::new(backend).expect("terminal");
     terminal
         .draw(|frame| {
-            tui_views::render_view(frame, frame.area(), view, data, 0, api_url, show_help);
+            tui_views::render_view(
+                frame, frame.area(), view, data, 0, api_url, show_help, true, 5,
+            );
+        })
+        .expect("draw");
+    let mut all = String::new();
+    for row in terminal.backend().buffer().content.chunks(120) {
+        let line = row.iter().map(|cell| cell.symbol()).collect::<String>();
+        all.push_str(&line);
+        all.push('\n');
+    }
+    all
+}
+
+pub(crate) fn render_to_text_with_refresh(
+    data: &TuiData,
+    view: MainView,
+    auto_refresh: bool,
+    refresh_interval_secs: u64,
+) -> String {
+    let backend = TestBackend::new(120, 40);
+    let mut terminal = Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|frame| {
+            tui_views::render_view(
+                frame, frame.area(), view, data, 0, "http://localhost:8420",
+                false, auto_refresh, refresh_interval_secs,
+            );
         })
         .expect("draw");
     let mut all = String::new();
