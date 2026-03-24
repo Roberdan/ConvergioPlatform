@@ -91,6 +91,12 @@ pub(super) async fn handle_start(
         )));
     }
 
+    // Broadcast plan_started to Ali orchestrator
+    if let Some(ref ipc) = state.ipc_engine {
+        let content = serde_json::json!({"type": "plan_started", "plan_id": plan_id}).to_string();
+        let _ = ipc.broadcast("api", &content, "event", Some("#orchestration"));
+    }
+
     Ok(Json(json!({
         "ok": true,
         "plan_id": plan_id,

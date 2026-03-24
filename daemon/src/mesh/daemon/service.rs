@@ -52,6 +52,11 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
         }
     });
 
+    // Spawn Ali orchestrator
+    let ali_engine = ipc_engine.clone();
+    let ali_db = config.db_path.clone();
+    crate::orchestrator::spawn_ali(ali_engine, ali_db);
+
     if config.local_only {
         tracing::info!("daemon running in local-only mode (IPC socket only)");
         let hb_engine = ipc_engine.clone();

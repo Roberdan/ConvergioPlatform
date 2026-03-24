@@ -169,6 +169,28 @@ async fn handle_task_update(
     // Push task status change to brain viz via WS
     broadcast_brain_task_update(&state, task_id, status);
 
+    // Broadcast task_done to Ali orchestrator
+    if status == "done" {
+        if let Some(ref ipc) = state.ipc_engine {
+            let plan_id: Option<i64> = conn
+                .query_row(
+                    "SELECT plan_id FROM tasks WHERE id = ?1",
+                    rusqlite::params![task_id],
+                    |row| row.get(0),
+                )
+                .ok();
+            if let Some(pid) = plan_id {
+                let content = serde_json::json!({
+                    "type": "task_done",
+                    "task_id": task_id.to_string(),
+                    "plan_id": pid,
+                })
+                .to_string();
+                let _ = ipc.broadcast("api", &content, "event", Some("#orchestration"));
+            }
+        }
+    }
+
     Ok(Json(json!({
         "ok": true,
         "task_id": task_id,

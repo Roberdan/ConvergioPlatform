@@ -9,16 +9,31 @@ use rusqlite::types::ValueRef;
 use rusqlite::{Connection, Params, Row};
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-#[derive(Clone, Debug)]
+use crate::ipc::IpcEngine;
+
+#[derive(Clone)]
 pub struct ServerState {
     pub db_path: PathBuf,
     pub crsqlite_path: Option<String>,
     pool: r2d2::Pool<SqliteConnectionManager>,
     pub ws_tx: broadcast::Sender<Value>,
     pub started_at: std::time::Instant,
+    pub ipc_engine: Option<Arc<IpcEngine>>,
+}
+
+impl std::fmt::Debug for ServerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ServerState")
+            .field("db_path", &self.db_path)
+            .field("crsqlite_path", &self.crsqlite_path)
+            .field("started_at", &self.started_at)
+            .field("ipc_engine", &self.ipc_engine.as_ref().map(|_| "IpcEngine"))
+            .finish()
+    }
 }
 
 impl ServerState {
@@ -31,6 +46,7 @@ impl ServerState {
             pool,
             ws_tx,
             started_at: std::time::Instant::now(),
+            ipc_engine: None,
         }
     }
 
