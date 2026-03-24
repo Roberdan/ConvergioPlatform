@@ -6,6 +6,8 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use super::data::MainView;
 use super::views::PopupContent;
 
+pub use super::drill_down::DrillDownRequest;
+
 /// All mutable interactive state owned by TuiApp.
 #[derive(Default)]
 pub struct InteractiveState {
@@ -35,6 +37,9 @@ pub struct InteractiveState {
     pub action_pending: Option<(String, String)>,
     /// Show all plans in kanban (including done). Toggle with 'a'.
     pub show_all_plans: bool,
+    /// Pending drill-down request set synchronously by handle_enter.
+    /// Resolved asynchronously in process_post_key by calling the appropriate api/detail fetch.
+    pub pending_drill_down: Option<DrillDownRequest>,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.

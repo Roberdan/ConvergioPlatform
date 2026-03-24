@@ -70,6 +70,26 @@ impl TuiApp {
         })
     }
 
+    /// Test constructor — no raw mode, fixed localhost URL.
+    #[cfg(test)]
+    pub fn new_for_test(view: MainView) -> io::Result<Self> {
+        let api_url = "http://localhost:8420".to_string();
+        Ok(Self {
+            data: TuiData::default(),
+            active_view: view,
+            selected_index: 0,
+            last_fetch: Instant::now() - Duration::from_secs(10),
+            ws_client: WsClient::new(&api_url),
+            istate: InteractiveState::default(),
+            auto_refresh: false,
+            refresh_interval_secs: Self::default_refresh_interval_secs(),
+            chat: ChatState::default(),
+            terminal: Terminal::new(CrosstermBackend::new(io::stdout()))?,
+            client: Client::new(),
+            api_url,
+        })
+    }
+
     /// Main async event loop using tokio::select! on three channels.
     pub async fn run(&mut self) -> io::Result<()> {
         let mut events = EventStream::new();
@@ -184,18 +204,11 @@ impl TuiApp {
     }
 
     fn switch_view(&mut self, n: u8) {
+        use MainView::*;
         self.selected_index = 0;
-        self.active_view = [
-            MainView::PlanKanban,
-            MainView::TaskPipeline,
-            MainView::MeshStatus,
-            MainView::AgentOrgChart,
-            MainView::BrainCanvas,
-            MainView::CostCenter,
-            MainView::EventStream,
-            MainView::WorkspaceView,
-            MainView::Deliverables,
-        ][(n as usize).saturating_sub(1).min(8)];
+        let views = [PlanKanban, TaskPipeline, MeshStatus, AgentOrgChart,
+                     BrainCanvas, CostCenter, EventStream, WorkspaceView, Deliverables];
+        self.active_view = views[(n as usize).saturating_sub(1).min(8)];
     }
 
     pub fn list_len(&self) -> usize {
@@ -218,10 +231,7 @@ impl TuiApp {
         self.last_fetch = Instant::now();
     }
 
-    /// Exposes the HTTP client for modules that impl on TuiApp (e.g. refresh.rs).
-    pub fn http_client(&self) -> &Client {
-        &self.client
-    }
+    pub fn http_client(&self) -> &Client { &self.client }
 }
 
 impl Drop for TuiApp {

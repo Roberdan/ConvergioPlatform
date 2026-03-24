@@ -1,16 +1,22 @@
 // Refresh control: auto/manual toggle, interval stepping, post-key processing.
 
+use super::api::detail::{
+    fetch_agent_detail, fetch_deliverable_detail, fetch_node_detail, fetch_plan_detail,
+    fetch_task_detail, fetch_workspace_detail, format_event_detail,
+};
 use super::app::TuiApp;
 use super::chat_handler;
 use super::data::MainView;
-use super::views::popup::{PopupContent, PopupSection};
+use super::drill_down::DrillDownRequest;
 
 impl TuiApp {
-    /// Drill-down: Enter on Kanban -> filter tasks; on Pipeline -> show detail.
-    /// In Chat view, Enter triggers a send (async portion handled in process_post_key).
+    /// Drill-down: Enter on Kanban -> filter tasks (navigation, no popup).
+    /// On all other views, sets pending_drill_down for async resolution in process_post_key.
+    /// Chat view triggers a send; BrainCanvas/CostCenter are no-ops.
     pub fn handle_enter(&mut self) {
         match self.active_view {
             MainView::PlanKanban => {
+                // Navigate to TaskPipeline filtered by selected plan.
                 if let Some(plan) = self.data.plans.get(self.selected_index) {
                     self.istate.selected_plan_id = Some(plan.id);
                     self.active_view = MainView::TaskPipeline;
@@ -18,28 +24,40 @@ impl TuiApp {
                 }
             }
             MainView::TaskPipeline => {
-                if let Some(task) = self.data.pipeline.get(self.selected_index) {
-                    self.istate.popup_content = Some(PopupContent {
-                        title: "Task Detail".to_string(),
-                        sections: vec![
-                            PopupSection {
-                                label: "Identity".to_string(),
-                                lines: vec![
-                                    format!("task_id: {}", task.task_id),
-                                    format!("title:   {}", task.title),
-                                ],
-                            },
-                            PopupSection {
-                                label: "Status".to_string(),
-                                lines: vec![
-                                    format!("status: {}", task.status),
-                                    format!("agent:  {}", task.agent),
-                                ],
-                            },
-                        ],
-                        actions: vec![],
-                    });
-                    self.istate.popup_open = true;
+                if self.data.pipeline.get(self.selected_index).is_some() {
+                    let plan_id = self.istate.selected_plan_id.unwrap_or(0);
+                    self.istate.pending_drill_down =
+                        Some(DrillDownRequest::Task(plan_id, self.selected_index));
+                }
+            }
+            MainView::MeshStatus => {
+                if let Some(node) = self.data.mesh_nodes.get(self.selected_index) {
+                    self.istate.pending_drill_down =
+                        Some(DrillDownRequest::MeshNode(node.name.clone()));
+                }
+            }
+            MainView::AgentOrgChart => {
+                if let Some(agent) = self.data.agents.get(self.selected_index) {
+                    self.istate.pending_drill_down =
+                        Some(DrillDownRequest::Agent(agent.name.clone()));
+                }
+            }
+            MainView::EventStream => {
+                if self.data.events.get(self.selected_index).is_some() {
+                    self.istate.pending_drill_down =
+                        Some(DrillDownRequest::Event(self.selected_index));
+                }
+            }
+            MainView::WorkspaceView => {
+                if let Some(ws) = self.data.workspaces.get(self.selected_index) {
+                    self.istate.pending_drill_down =
+                        Some(DrillDownRequest::Workspace(ws.workspace_id.clone()));
+                }
+            }
+            MainView::Deliverables => {
+                if let Some(d) = self.data.deliverables.get(self.selected_index) {
+                    self.istate.pending_drill_down =
+                        Some(DrillDownRequest::Deliverable(d.id));
                 }
             }
             MainView::Chat => {
@@ -48,12 +66,57 @@ impl TuiApp {
                     self.chat.sending = true;
                 }
             }
-            _ => {}
+            // BrainCanvas and CostCenter: no drill-down defined.
+            MainView::BrainCanvas | MainView::CostCenter => {}
         }
     }
 
     /// Post-key: consume pending flags. Returns true if interval changed.
     pub async fn process_post_key(&mut self) -> bool {
+        // Drill-down: resolve pending_drill_down set by handle_enter.
+        if let Some(req) = self.istate.pending_drill_down.take() {
+            let client = self.http_client().clone();
+            let api_url = self.api_url.clone();
+            let content = match req {
+                DrillDownRequest::Plan(plan_id) => {
+                    fetch_plan_detail(&client, &api_url, plan_id).await
+                }
+                DrillDownRequest::Task(plan_id, task_idx) => {
+                    fetch_task_detail(&client, &api_url, plan_id, task_idx).await
+                }
+                DrillDownRequest::MeshNode(ref name) => {
+                    fetch_node_detail(&client, &api_url, name).await
+                }
+                DrillDownRequest::Agent(ref name) => {
+                    fetch_agent_detail(&client, &api_url, name).await
+                }
+                DrillDownRequest::Event(idx) => {
+                    // Sync — no API call needed; clone the event before borrow ends.
+                    if let Some(event) = self.data.events.get(idx).cloned() {
+                        format_event_detail(&event)
+                    } else {
+                        use super::views::popup::{PopupContent, PopupSection};
+                        PopupContent {
+                            title: "Error".to_string(),
+                            sections: vec![PopupSection {
+                                label: "Error".to_string(),
+                                lines: vec![format!("event index {idx} not found")],
+                            }],
+                            actions: vec![],
+                        }
+                    }
+                }
+                DrillDownRequest::Workspace(ref ws_id) => {
+                    fetch_workspace_detail(&client, &api_url, ws_id).await
+                }
+                DrillDownRequest::Deliverable(id) => {
+                    fetch_deliverable_detail(&client, &api_url, id).await
+                }
+            };
+            self.istate.popup_content = Some(content);
+            self.istate.popup_open = true;
+        }
+
         // Chat send: triggered when chat.sending=true and input is non-empty.
         if self.chat.sending && !self.chat.input.is_empty() {
             let content = std::mem::take(&mut self.chat.input);
