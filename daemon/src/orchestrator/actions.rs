@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 type AliResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-const DAEMON_BASE: &str = "http://localhost:8420";
+pub const DAEMON_BASE: &str = "http://localhost:8420";
 
 /// Find an available online peer from mesh status.
 /// Optionally exclude a specific peer (for retry after failure).

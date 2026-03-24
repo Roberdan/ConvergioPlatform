@@ -142,6 +142,34 @@ pub fn on_plan_done(engine: &Arc<IpcEngine>, db_path: &Path, plan_id: i64) -> Al
     Ok(())
 }
 
+/// wave_ready — start executing tasks in this wave by delegating the plan.
+pub async fn on_wave_ready(
+    engine: &Arc<IpcEngine>,
+    db_path: &PathBuf,
+    wave_id: i64,
+    plan_id: i64,
+) -> AliResult {
+    let conn = rusqlite::Connection::open(db_path)?;
+
+    // Update wave status to in_progress
+    conn.execute(
+        "UPDATE waves SET status='in_progress', started_at=datetime('now') WHERE id=?1",
+        rusqlite::params![wave_id],
+    )?;
+
+    // Count tasks in this wave
+    let task_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tasks WHERE plan_id=?1 AND wave_id=?2 AND status='pending'",
+        rusqlite::params![plan_id, wave_id],
+        |r| r.get(0),
+    )?;
+
+    tracing::info!("ali: wave {wave_id} starting with {task_count} pending tasks for plan {plan_id}");
+
+    // Delegate the plan to a peer — the executor will pick up pending tasks
+    actions::delegate_plan(engine, db_path, plan_id).await
+}
+
 /// delegation_failed — retry on different peer, or escalate to human.
 pub async fn on_delegation_failed(
     engine: &Arc<IpcEngine>,

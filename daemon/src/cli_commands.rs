@@ -39,6 +39,8 @@ pub enum Commands {
         /// pre or post
         mode: String,
     },
+    /// Start the unified daemon (HTTP + mesh + Ali orchestrator + reaper)
+    #[command(alias = "start")]
     Serve {
         #[arg(long, default_value = "0.0.0.0:8420")]
         bind: String,

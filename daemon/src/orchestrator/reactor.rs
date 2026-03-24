@@ -80,6 +80,11 @@ async fn handle_message(
             let plan_id = require_i64(&payload, "plan_id")?;
             handlers::on_plan_done(engine, db_path, plan_id)?;
         }
+        "wave_ready" => {
+            let wave_id = require_i64(&payload, "wave_id")?;
+            let plan_id = require_i64(&payload, "plan_id")?;
+            handlers::on_wave_ready(engine, db_path, wave_id, plan_id).await?;
+        }
         "delegation_failed" => {
             let plan_id = require_i64(&payload, "plan_id")?;
             let peer = payload
@@ -93,6 +98,25 @@ async fn handle_message(
                 .unwrap_or("unknown")
                 .to_string();
             handlers::on_delegation_failed(engine, db_path, plan_id, &peer, &reason).await?;
+        }
+        "need_human" => {
+            let reason = payload
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown reason");
+            tracing::warn!("ALI NEEDS HUMAN: {reason}");
+            // Surface via notification API
+            let plan_id = payload.get("plan_id").and_then(|v| v.as_i64()).unwrap_or(0);
+            let _ = reqwest::Client::new()
+                .post(format!("{}/api/notify/send", super::actions::DAEMON_BASE))
+                .json(&serde_json::json!({
+                    "title": "Ali needs help",
+                    "message": reason,
+                    "severity": "warning",
+                    "plan_id": plan_id,
+                }))
+                .send()
+                .await;
         }
         other => {
             tracing::debug!("ali: ignoring unknown event type: {other}");
