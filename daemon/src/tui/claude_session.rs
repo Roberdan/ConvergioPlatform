@@ -36,10 +36,7 @@ impl ClaudeSession {
                 "--verbose",
                 "--agent", "ali-chief-of-staff",
                 "--model", "sonnet",
-                "--bare",
                 "--dangerously-skip-permissions",
-                "--no-session-persistence",
-                "--tools", "Bash,Read,Grep,Glob",
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
