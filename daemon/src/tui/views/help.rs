@@ -12,9 +12,10 @@ use crate::tui::widgets::{ACCENT, MUTED, TEXT_PRIMARY};
 
 const HELP_ROWS: &[(&str, &str)] = &[
     ("1-9", "Switch view"),
+    ("0", "Chat with Convergio"),
     ("↑ ↓", "Navigate"),
     ("Tab", "Next view"),
-    ("Enter", "Drill down"),
+    ("Enter", "Drill down / Send chat"),
     ("/", "Command"),
     ("r", "Manual refresh"),
     ("R", "Toggle auto-refresh"),

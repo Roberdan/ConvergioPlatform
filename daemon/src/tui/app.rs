@@ -9,7 +9,8 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use reqwest::Client;
 use tokio::time::interval;
 
-use super::data::{KpiData, MainView, TuiData};
+use super::chat_handler::{self, ChatState};
+use super::data::{MainView, TuiData};
 use super::input::{self, InteractiveState};
 use super::ws_client::WsClient;
 use super::{api, views};
@@ -26,6 +27,8 @@ pub struct TuiApp {
     pub auto_refresh: bool,
     /// Polling interval in seconds (one of: 3, 5, 10, 30, 60).
     pub refresh_interval_secs: u64,
+    /// Chat view mutable state.
+    pub chat: ChatState,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     client: Client,
 }
@@ -61,6 +64,7 @@ impl TuiApp {
             istate: InteractiveState::default(),
             auto_refresh: Self::default_auto_refresh(),
             refresh_interval_secs: Self::default_refresh_interval_secs(),
+            chat: ChatState::default(),
             terminal,
             client: Client::new(),
         })
@@ -115,10 +119,8 @@ impl TuiApp {
     pub fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
         // Command mode and help overlay handled by input::handle_key.
         if self.istate.command_mode || self.istate.show_help {
-            // In command mode, Enter commits the command.
             let was_mode = self.istate.command_mode;
             let quit = input::handle_key(code, modifiers, &mut self.istate);
-            // After Enter in command mode, apply the pending command.
             if was_mode && !self.istate.command_mode && !self.istate.command_input.is_empty() {
                 let cmd = std::mem::take(&mut self.istate.command_input);
                 input::parse_and_apply_command(&cmd, &mut self.istate, &mut self.active_view);
@@ -126,21 +128,47 @@ impl TuiApp {
             return quit || self.istate.quit;
         }
 
+        // Chat view captures most keys for input composition.
+        if self.active_view == MainView::Chat && !self.chat.sending {
+            // Allow Ctrl-C and view-switch keys to pass through.
+            if modifiers.contains(KeyModifiers::CONTROL) {
+                if code == KeyCode::Char('c') { return true; }
+            }
+            // View-switch keys (0-9, Tab) pass through.
+            let is_view_switch = matches!(code,
+                KeyCode::Char('0'..='9') | KeyCode::Tab | KeyCode::BackTab);
+            if !is_view_switch {
+                // Enter triggers send (handled async in process_post_key).
+                if code == KeyCode::Enter {
+                    self.istate.force_refresh = false; // sentinel: chat send pending
+                    return false;
+                }
+                if chat_handler::handle_chat_key(code, &mut self.chat) {
+                    return false;
+                }
+            }
+        }
+
         // Normal key handling.
         match code {
             KeyCode::Char('q') => return true,
             KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+            KeyCode::Char('0') => {
+                self.selected_index = 0;
+                self.active_view = MainView::Chat;
+            }
             KeyCode::Char(n @ '1'..='9') => self.switch_view(n as u8 - b'0'),
             KeyCode::Tab => self.next_view(),
             KeyCode::BackTab => self.prev_view(),
-            KeyCode::Up => { self.selected_index = self.selected_index.saturating_sub(1); }
+            KeyCode::Up => {
+                self.selected_index = self.selected_index.saturating_sub(1);
+            }
             KeyCode::Down => {
                 let max = self.list_len().saturating_sub(1);
                 if self.selected_index < max { self.selected_index += 1; }
             }
             KeyCode::Enter => self.handle_enter(),
             _ => {
-                // Delegate /, r, ?, Esc to input module.
                 if input::handle_key(code, modifiers, &mut self.istate) { return true; }
             }
         }
@@ -167,6 +195,7 @@ impl TuiApp {
             MainView::EventStream => self.data.events.len(),
             MainView::WorkspaceView => self.data.workspaces.len(),
             MainView::Deliverables => self.data.deliverables.len(),
+            MainView::Chat => self.data.chat_messages.len(),
         }
     }
 
@@ -180,10 +209,13 @@ impl TuiApp {
         let refresh_interval_secs = self.refresh_interval_secs;
         let cmd_input = self.istate.command_mode.then(|| self.istate.command_input.clone());
         let detail = self.istate.detail_text.clone();
+        let chat_input = self.chat.input.clone();
+        let chat_sending = self.chat.sending;
         self.terminal.draw(|frame| {
             views::render_view(
                 frame, frame.area(), view, data, selected, &api_url,
                 show_help, auto_refresh, refresh_interval_secs,
+                &chat_input, chat_sending,
             );
             if let Some(d) = &detail {
                 views::render_detail_popup(frame, frame.area(), d);
@@ -207,21 +239,36 @@ impl TuiApp {
         self.last_fetch = Instant::now();
     }
 
+    /// Exposes the HTTP client for modules that impl on TuiApp (e.g. refresh.rs).
+    pub fn http_client(&self) -> &Client {
+        &self.client
+    }
+
     pub fn next_view(&mut self) {
         self.selected_index = 0;
-        self.switch_view((Self::view_index(self.active_view) % 9 + 2) as u8);
+        // 10 views total (0-indexed 0..9); Tab cycles through all.
+        let idx = Self::view_index(self.active_view);
+        self.active_view = Self::view_at((idx + 1) % 10);
     }
 
     pub fn prev_view(&mut self) {
         self.selected_index = 0;
-        self.switch_view(((Self::view_index(self.active_view) + 8) % 9 + 1) as u8);
+        let idx = Self::view_index(self.active_view);
+        self.active_view = Self::view_at((idx + 9) % 10);
     }
 
     fn view_index(v: MainView) -> usize {
         use MainView::*;
         [PlanKanban, TaskPipeline, MeshStatus, AgentOrgChart, BrainCanvas,
-         CostCenter, EventStream, WorkspaceView, Deliverables]
+         CostCenter, EventStream, WorkspaceView, Deliverables, Chat]
             .iter().position(|x| *x == v).unwrap_or(0)
+    }
+
+    fn view_at(idx: usize) -> MainView {
+        use MainView::*;
+        [PlanKanban, TaskPipeline, MeshStatus, AgentOrgChart, BrainCanvas,
+         CostCenter, EventStream, WorkspaceView, Deliverables, Chat]
+            .get(idx).copied().unwrap_or(PlanKanban)
     }
 }
 

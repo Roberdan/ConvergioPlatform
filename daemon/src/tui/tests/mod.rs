@@ -4,8 +4,8 @@ mod input;
 mod views;
 
 use super::{
-    AgentOrgNode, BrainNode, CostData, CostSummary, DeliverableInfo, KpiData, MainView,
-    MeshNode, PlanCard, TaskPipelineItem, TuiData, WorkspaceEvent, WorkspaceInfo,
+    AgentOrgNode, BrainNode, ChatMessage, CostData, CostSummary, DeliverableInfo, KpiData,
+    MainView, MeshNode, PlanCard, TaskPipelineItem, TuiData, WorkspaceEvent, WorkspaceInfo,
 };
 use super::views as tui_views;
 use ratatui::{backend::TestBackend, Terminal};
@@ -27,7 +27,7 @@ pub(crate) fn render_to_text_full(
     terminal
         .draw(|frame| {
             tui_views::render_view(
-                frame, frame.area(), view, data, 0, api_url, show_help, true, 5,
+                frame, frame.area(), view, data, 0, api_url, show_help, true, 5, "", false,
             );
         })
         .expect("draw");
@@ -52,7 +52,7 @@ pub(crate) fn render_to_text_with_refresh(
         .draw(|frame| {
             tui_views::render_view(
                 frame, frame.area(), view, data, 0, "http://localhost:8420",
-                false, auto_refresh, refresh_interval_secs,
+                false, auto_refresh, refresh_interval_secs, "", false,
             );
         })
         .expect("draw");
@@ -141,13 +141,26 @@ pub(crate) fn sample_data() -> TuiData {
             project_id: "convergio".into(),
             created_at: "2026-03-23T00:00:00Z".into(),
         }],
+        chat_messages: vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: "What is Plan 708?".to_string(),
+                timestamp: "2026-03-24T10:00:00Z".to_string(),
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: "Plan 708 is the TUI refactor.".to_string(),
+                timestamp: "2026-03-24T10:00:01Z".to_string(),
+            },
+        ],
+        chat_session_id: Some("sess-test-123".to_string()),
     }
 }
 
 // --- core tests ---
 
 #[test]
-fn cycles_all_nine_views() {
+fn cycles_all_ten_views() {
     let views = [
         MainView::PlanKanban,
         MainView::TaskPipeline,
@@ -158,8 +171,9 @@ fn cycles_all_nine_views() {
         MainView::EventStream,
         MainView::WorkspaceView,
         MainView::Deliverables,
+        MainView::Chat,
     ];
-    assert_eq!(views.len(), 9);
+    assert_eq!(views.len(), 10);
     for i in 0..views.len() {
         for j in 0..views.len() {
             if i != j {

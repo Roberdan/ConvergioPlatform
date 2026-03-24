@@ -1,11 +1,12 @@
 // Refresh control: auto/manual toggle, interval stepping, post-key processing.
 
 use super::app::TuiApp;
+use super::chat_handler;
 use super::data::MainView;
-use super::input;
 
 impl TuiApp {
     /// Drill-down: Enter on Kanban -> filter tasks; on Pipeline -> show detail.
+    /// In Chat view, Enter triggers a send (async portion handled in process_post_key).
     pub fn handle_enter(&mut self) {
         match self.active_view {
             MainView::PlanKanban => {
@@ -23,12 +24,44 @@ impl TuiApp {
                     ));
                 }
             }
+            MainView::Chat => {
+                // Signal that a chat send is pending; async work done in process_post_key.
+                if !self.chat.input.is_empty() && !self.chat.sending {
+                    self.chat.sending = true;
+                }
+            }
             _ => {}
         }
     }
 
     /// Post-key: consume pending flags. Returns true if interval changed.
     pub async fn process_post_key(&mut self) -> bool {
+        // Chat send: triggered when chat.sending=true and input is non-empty.
+        if self.chat.sending && !self.chat.input.is_empty() {
+            let content = std::mem::take(&mut self.chat.input);
+            chat_handler::push_user_message(&mut self.data, &content);
+            // Temporarily move content back so send_message can read it.
+            self.chat.input = content;
+            let client = self.http_client().clone();
+            chat_handler::send_message(
+                &client,
+                &self.api_url,
+                &mut self.data,
+                &mut self.chat,
+            ).await;
+            self.chat.input.clear();
+            // Apply the pending reply if present.
+            if let Some(result) = self.chat.pending_reply.take() {
+                match result {
+                    Ok(reply) => chat_handler::push_assistant_message(&mut self.data, &reply),
+                    Err(()) => chat_handler::push_assistant_message(
+                        &mut self.data,
+                        "(No response — check daemon connection)",
+                    ),
+                }
+            }
+        }
+
         if self.istate.force_refresh {
             self.istate.force_refresh = false;
             self.refresh_data().await;

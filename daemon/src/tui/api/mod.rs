@@ -1,5 +1,6 @@
 // TUI HTTP API — fetch functions for all dashboard views.
 mod brain;
+pub mod chat;
 pub mod cost;
 pub mod deliverables;
 pub mod events;

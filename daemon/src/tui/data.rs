@@ -122,6 +122,15 @@ pub struct DeliverableInfo {
     pub created_at: String,
 }
 
+// --- Chat data ---
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChatMessage {
+    pub role: String,    // "user" or "assistant"
+    pub content: String,
+    pub timestamp: String,
+}
+
 // --- Aggregate view model ---
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -136,6 +145,8 @@ pub struct TuiData {
     pub events: Vec<WorkspaceEvent>,
     pub workspaces: Vec<WorkspaceInfo>,
     pub deliverables: Vec<DeliverableInfo>,
+    pub chat_messages: Vec<ChatMessage>,
+    pub chat_session_id: Option<String>,
 }
 
 #[cfg(test)]
@@ -153,6 +164,27 @@ mod tests {
         assert!(data.events.is_empty());
         assert!(data.workspaces.is_empty());
         assert!(data.deliverables.is_empty());
+        assert!(data.chat_messages.is_empty());
+        assert!(data.chat_session_id.is_none());
+    }
+
+    #[test]
+    fn chat_message_default_has_empty_fields() {
+        let msg = ChatMessage::default();
+        assert!(msg.role.is_empty());
+        assert!(msg.content.is_empty());
+        assert!(msg.timestamp.is_empty());
+    }
+
+    #[test]
+    fn chat_message_role_and_content_roundtrip() {
+        let msg = ChatMessage {
+            role: "user".to_string(),
+            content: "hello".to_string(),
+            timestamp: "2026-03-24T10:00:00Z".to_string(),
+        };
+        assert_eq!(msg.role, "user");
+        assert_eq!(msg.content, "hello");
     }
 
     #[test]
@@ -189,4 +221,5 @@ pub enum MainView {
     EventStream,
     WorkspaceView,
     Deliverables,
+    Chat,
 }

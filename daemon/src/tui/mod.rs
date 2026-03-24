@@ -1,5 +1,6 @@
 pub mod api;
 pub mod app;
+pub mod chat_handler;
 pub mod data;
 pub mod input;
 pub mod views;
