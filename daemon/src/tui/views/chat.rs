@@ -115,7 +115,7 @@ fn render_md_line(line: &str, base_color: ratatui::style::Color) -> Vec<Span<'st
 }
 
 /// Build display lines for a single chat message with markdown rendering.
-fn message_lines(msg: &ChatMessage) -> Vec<Line<'static>> {
+fn message_lines(msg: &ChatMessage, is_last: bool) -> Vec<Line<'static>> {
     let label = if is_user(&msg.role) {
         Span::styled("  you  ", Style::default().fg(ACCENT).bold())
     } else {
@@ -128,6 +128,19 @@ fn message_lines(msg: &ChatMessage) -> Vec<Line<'static>> {
     } else {
         TEXT_SECONDARY
     };
+
+    // Show dino animation when assistant message is empty (still streaming).
+    if !is_user(&msg.role) && msg.content.is_empty() && is_last {
+        lines.push(Line::from(vec![
+            label,
+            Span::styled(
+                dino_frame().to_string(),
+                Style::default().fg(MUTED),
+            ),
+        ]));
+        lines.push(Line::raw(""));
+        return lines;
+    }
 
     let mut content_lines = msg.content.lines();
     let first = content_lines.next().unwrap_or("");
@@ -188,8 +201,9 @@ fn render_messages(frame: &mut Frame<'_>, area: Rect, data: &TuiData, scroll_off
         ])
     } else {
         let mut lines: Vec<Line<'static>> = vec![Line::raw("")];
-        for msg in messages {
-            lines.extend(message_lines(msg));
+        let count = messages.len();
+        for (i, msg) in messages.iter().enumerate() {
+            lines.extend(message_lines(msg, i == count - 1));
         }
         Text::from(lines)
     };
@@ -241,14 +255,9 @@ fn dino_frame() -> &'static str {
     DINO_FRAMES[idx]
 }
 
-fn render_input_bar(frame: &mut Frame<'_>, area: Rect, chat_input: &str, sending: bool) {
-    let display = if sending {
-        format!("{}Ali is thinking...", dino_frame())
-    } else {
-        format!(" > {chat_input}")
-    };
-
-    let bar_color = if sending { MUTED } else { TEXT_PRIMARY };
+fn render_input_bar(frame: &mut Frame<'_>, area: Rect, chat_input: &str, _sending: bool) {
+    let display = format!(" > {chat_input}");
+    let bar_color = TEXT_PRIMARY;
 
     let paragraph =
         Paragraph::new(Line::from(Span::styled(display, Style::default().fg(bar_color)))).block(
@@ -285,7 +294,7 @@ mod tests {
     #[test]
     fn message_lines_user_contains_you_label() {
         let msg = user_msg("What is Plan 708?");
-        let lines = message_lines(&msg);
+        let lines = message_lines(&msg, false);
         let rendered = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.as_ref()))
@@ -297,7 +306,7 @@ mod tests {
     #[test]
     fn message_lines_assistant_contains_diamond_label() {
         let msg = assistant_msg("Plan 708 is done.");
-        let lines = message_lines(&msg);
+        let lines = message_lines(&msg, false);
         let rendered = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.as_ref()))
@@ -312,7 +321,7 @@ mod tests {
     #[test]
     fn message_lines_multiline_content_indented() {
         let msg = assistant_msg("Line one\nLine two");
-        let lines = message_lines(&msg);
+        let lines = message_lines(&msg, false);
         let line_two = lines.iter().find(|l| {
             l.spans
                 .iter()

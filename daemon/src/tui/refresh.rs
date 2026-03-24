@@ -152,6 +152,7 @@ impl TuiApp {
             chat_handler::push_user_message(&mut self.data, &content);
             if self.chat.send_to_session(&content).await {
                 self.chat.streaming = true;
+                self.chat.scroll_offset = 0; // follow new content
                 // Add empty assistant message that will be filled by streaming.
                 chat_handler::push_assistant_message(&mut self.data, "");
             } else {
