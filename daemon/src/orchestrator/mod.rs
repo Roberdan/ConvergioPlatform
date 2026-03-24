@@ -1,9 +1,9 @@
 // Ali Orchestrator — event-driven plan execution coordinator.
 // Listens on #orchestration IPC channel and delegates work to mesh peers.
 
-mod actions;
+pub mod actions;
 mod executor;
-mod handlers;
+pub mod handlers;
 mod reactor;
 pub mod reaper;
 
