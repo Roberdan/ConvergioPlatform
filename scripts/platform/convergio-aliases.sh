@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # convergio-aliases.sh — Shell aliases for Convergio CLI
 # Source from ~/.zshrc: source ~/GitHub/ConvergioPlatform/scripts/platform/convergio-aliases.sh
-set -euo pipefail
+# NOTE: No `set -euo pipefail` here — this file is sourced into interactive shells.
+# set -e would kill the shell on any non-zero return (tab completion, precmd hooks, etc.).
 
 export CONVERGIO_PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 export PATH="$CONVERGIO_PLATFORM_DIR/scripts/platform:$PATH"
