@@ -3,6 +3,7 @@ mod brain;
 pub mod chat;
 pub mod cost;
 pub mod deliverables;
+pub mod detail;
 pub mod events;
 pub mod workspace;
 
