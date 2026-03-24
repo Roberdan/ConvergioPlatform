@@ -1,6 +1,4 @@
-// Modern card-based kanban for the Plan Kanban view.
-// Redesigned with rounded borders, color-gradient progress bars, and compact/expanded modes.
-
+// Modern card-based kanban with rounded borders and color-gradient progress bars.
 use std::collections::BTreeMap;
 
 use ratatui::{
@@ -202,13 +200,10 @@ pub fn plan_kanban(data: &TuiData, selected: usize, show_all: bool) -> Paragraph
         cols.entry(key).or_default().push((i, plan));
     }
 
-    let mut lines: Vec<Line<'static>> = vec!["".into()];
-
-    // Show/hide toggle hint
-    let hint = if show_all { "[a] Show active only" } else { "[a] Show all plans" };
-    lines.push(Line::from(Span::styled(format!("  {hint}"), Style::default().fg(MUTED))));
-    lines.push("".into());
-
+    let hint = if show_all { "[a] Active only" } else { "[a] Show all" };
+    let mut lines: Vec<Line<'static>> = vec![
+        Line::from(Span::styled(format!("  {hint}"), Style::default().fg(MUTED))), "".into(),
+    ];
     for (key, icon) in SECTIONS {
         let all_items = cols.get(key).map(|v| v.as_slice()).unwrap_or(&[]);
         // Limit DONE/TODO to 10 unless show_all
@@ -225,7 +220,6 @@ pub fn plan_kanban(data: &TuiData, selected: usize, show_all: bool) -> Paragraph
 
         let is_expanded = *key == "DOING" || *key == "BLOCKED";
         if is_expanded {
-            // Each card gets its own rounded border box.
             for (_li, (gi, plan)) in items.iter().enumerate() {
                 let is_sel = *gi == selected;
                 lines.push(border_top());
@@ -233,7 +227,6 @@ pub fn plan_kanban(data: &TuiData, selected: usize, show_all: bool) -> Paragraph
                 lines.push(border_bottom());
             }
         } else {
-            // All compact cards share one border box.
             lines.push(border_top());
             for (li, (gi, plan)) in items.iter().enumerate() {
                 let is_sel = *gi == selected;
@@ -246,13 +239,10 @@ pub fn plan_kanban(data: &TuiData, selected: usize, show_all: bool) -> Paragraph
         }
         if hidden > 0 {
             lines.push(Line::from(Span::styled(
-                format!("  ... and {hidden} more (press [a] to show all)"),
-                Style::default().fg(MUTED),
-            )));
+                format!("  ... +{hidden} more [a]"), Style::default().fg(MUTED))));
         }
         lines.push("".into());
     }
-
     Paragraph::new(Text::from(lines))
         .block(Block::default().title(" Plans ").borders(Borders::ALL))
         .wrap(Wrap { trim: false })

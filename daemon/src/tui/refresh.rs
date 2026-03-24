@@ -4,10 +4,12 @@ use super::api::detail::{
     fetch_agent_detail, fetch_deliverable_detail, fetch_node_detail, fetch_plan_detail,
     fetch_task_detail, fetch_workspace_detail, format_event_detail,
 };
+use super::api::{mesh_heartbeat, mesh_provision, stop_agent};
 use super::app::TuiApp;
 use super::chat_handler;
 use super::data::MainView;
 use super::drill_down::DrillDownRequest;
+use super::views::popup::{PopupContent, PopupSection};
 
 impl TuiApp {
     /// Drill-down: Enter on Kanban -> filter tasks (navigation, no popup).
@@ -114,6 +116,33 @@ impl TuiApp {
                 }
             };
             self.istate.popup_content = Some(content);
+            self.istate.popup_open = true;
+        }
+
+        // Action: consume action_pending set by popup key handler.
+        if let Some((action, target)) = self.istate.action_pending.take() {
+            let client = self.http_client().clone();
+            let api_url = self.api_url.clone();
+            let result = match action.as_str() {
+                "Provision" => mesh_provision(&client, &api_url, &target).await,
+                "Heartbeat" => mesh_heartbeat(&client, &api_url).await,
+                "Stop Agent" => {
+                    let output = stop_agent(&client, &api_url, &target).await;
+                    // Force data refresh so agent list reflects the stop.
+                    self.istate.force_refresh = true;
+                    output
+                }
+                other => format!("Unknown action: {other}"),
+            };
+            // Show result in a new popup.
+            self.istate.popup_content = Some(PopupContent {
+                title: format!("{action} Result"),
+                sections: vec![PopupSection {
+                    label: "Output".to_string(),
+                    lines: vec![result],
+                }],
+                actions: vec![],
+            });
             self.istate.popup_open = true;
         }
 

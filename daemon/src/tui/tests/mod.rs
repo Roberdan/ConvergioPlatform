@@ -1,6 +1,8 @@
 // Shared helpers and core tests. Sub-modules hold view/input/integration tests.
 mod integration;
 mod input;
+mod input_actions;
+mod input_drilldown;
 mod views;
 
 use super::{

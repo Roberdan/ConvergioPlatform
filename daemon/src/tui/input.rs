@@ -1,6 +1,4 @@
 // TUI input handling — key dispatch, command parsing, interactive state.
-// Extracted from app.rs to keep app.rs under 250 lines.
-
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use super::data::MainView;
@@ -8,37 +6,21 @@ use super::views::PopupContent;
 
 pub use super::drill_down::DrillDownRequest;
 
-/// All mutable interactive state owned by TuiApp.
 #[derive(Default)]
 pub struct InteractiveState {
-    /// Which plan to filter tasks by (drill-down from Kanban).
     pub selected_plan_id: Option<i64>,
-    /// Current command being typed (activated by `/`).
     pub command_input: String,
-    /// Whether the command input bar is active.
     pub command_mode: bool,
-    /// Whether a force-refresh was requested (consumed by run loop).
     pub force_refresh: bool,
-    /// Whether the app should quit.
     pub quit: bool,
-    /// Whether to show the help overlay.
     pub show_help: bool,
-    /// Request to toggle auto-refresh on/off (consumed by run loop).
     pub toggle_auto_refresh: bool,
-    /// Request to increase refresh interval (consumed by run loop).
     pub increase_interval: bool,
-    /// Request to decrease refresh interval (consumed by run loop).
     pub decrease_interval: bool,
-    /// Whether the rich popup overlay is open.
     pub popup_open: bool,
-    /// Content for the rich popup overlay (set before opening).
     pub popup_content: Option<PopupContent>,
-    /// Pending action triggered by a popup action key: (action_name, target_id).
     pub action_pending: Option<(String, String)>,
-    /// Show all plans in kanban (including done). Toggle with 'a'.
     pub show_all_plans: bool,
-    /// Pending drill-down request set synchronously by handle_enter.
-    /// Resolved asynchronously in process_post_key by calling the appropriate api/detail fetch.
     pub pending_drill_down: Option<DrillDownRequest>,
 }
 
@@ -125,10 +107,15 @@ fn handle_popup_key(code: KeyCode, state: &mut InteractiveState) {
                 .and_then(|p| p.action_for_key(c))
                 .map(str::to_string);
             if let Some(label) = action {
-                // Store action for the run loop to consume; target_id is empty by default.
-                // Callers that open the popup can pre-populate action_pending target_id
-                // after the fact, or the popup can be extended with a target field.
-                state.action_pending = Some((label, String::new()));
+                // Extract target from popup title (format "Prefix: target_name").
+                // e.g. "Node: macProM1" → "macProM1", "Agent: Thor" → "Thor".
+                let target = state
+                    .popup_content
+                    .as_ref()
+                    .and_then(|p| p.title.split_once(": "))
+                    .map(|(_, t)| t.to_string())
+                    .unwrap_or_default();
+                state.action_pending = Some((label, target));
                 // Close popup after action is selected.
                 state.popup_open = false;
                 state.popup_content = None;

@@ -1,3 +1,4 @@
+pub mod actions;
 mod brain;
 pub mod chat;
 pub mod cost;
@@ -5,13 +6,12 @@ pub mod deliverables;
 pub mod detail;
 pub mod events;
 pub mod workspace;
-
+pub use actions::{mesh_heartbeat, mesh_provision, stop_agent};
 pub use brain::{fetch_brain, parse_brain_response};
 pub use cost::{fetch_cost, fetch_metrics_summary};
 pub use deliverables::{fetch_deliverables, parse_deliverables_response};
 pub use events::{fetch_events, parse_events_response};
 pub use workspace::{fetch_workspaces, parse_workspaces_response};
-
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
