@@ -189,7 +189,7 @@ fn compact_card(
     }
 }
 
-pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
+pub fn plan_kanban(data: &TuiData, selected: usize, show_all: bool) -> Paragraph<'static> {
     let mut cols: BTreeMap<&str, Vec<(usize, &crate::tui::data::PlanCard)>> = BTreeMap::new();
     for key in ["BLOCKED", "DOING", "DONE", "TODO"] {
         cols.insert(key, Vec::new());
@@ -204,10 +204,19 @@ pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
 
     let mut lines: Vec<Line<'static>> = vec!["".into()];
 
+    // Show/hide toggle hint
+    let hint = if show_all { "[a] Show active only" } else { "[a] Show all plans" };
+    lines.push(Line::from(Span::styled(format!("  {hint}"), Style::default().fg(MUTED))));
+    lines.push("".into());
+
     for (key, icon) in SECTIONS {
-        let items = cols.get(key).map(|v| v.as_slice()).unwrap_or(&[]);
+        let all_items = cols.get(key).map(|v| v.as_slice()).unwrap_or(&[]);
+        // Limit DONE/TODO to 10 unless show_all
+        let max = if !show_all && (*key == "DONE" || *key == "TODO") { 10 } else { usize::MAX };
+        let items = &all_items[..all_items.len().min(max)];
+        let hidden = all_items.len().saturating_sub(max);
         let col_color = section_color(key);
-        lines.push(section_header(icon, key, items.len()));
+        lines.push(section_header(icon, key, all_items.len()));
 
         if items.is_empty() {
             lines.push("".into());
@@ -234,6 +243,12 @@ pub fn plan_kanban(data: &TuiData, selected: usize) -> Paragraph<'static> {
                 }
             }
             lines.push(border_bottom());
+        }
+        if hidden > 0 {
+            lines.push(Line::from(Span::styled(
+                format!("  ... and {hidden} more (press [a] to show all)"),
+                Style::default().fg(MUTED),
+            )));
         }
         lines.push("".into());
     }

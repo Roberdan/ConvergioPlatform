@@ -33,6 +33,8 @@ pub struct InteractiveState {
     pub popup_content: Option<PopupContent>,
     /// Pending action triggered by a popup action key: (action_name, target_id).
     pub action_pending: Option<(String, String)>,
+    /// Show all plans in kanban (including done). Toggle with 'a'.
+    pub show_all_plans: bool,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.
@@ -65,6 +67,7 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
             state.command_input.clear();
         }
         KeyCode::Char('r') => state.force_refresh = true,
+        KeyCode::Char('a') => state.show_all_plans = !state.show_all_plans,
         // Shift+R toggles auto-refresh on/off.
         KeyCode::Char('R') => state.toggle_auto_refresh = true,
         // +/- adjust refresh interval.

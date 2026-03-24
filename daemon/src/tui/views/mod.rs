@@ -51,6 +51,7 @@ pub fn render_view(
     chat_input: &str,
     chat_sending: bool,
     popup_content: Option<&PopupContent>,
+    show_all_plans: bool,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -64,7 +65,7 @@ pub fn render_view(
 
     render_tab_bar(frame, chunks[0], view);
     frame.render_widget(widgets::kpi_strip(data), chunks[1]);
-    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending);
+    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans);
     render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs);
 
     if show_help {
@@ -119,10 +120,11 @@ fn render_content(
     selected: usize,
     chat_input: &str,
     chat_sending: bool,
+    show_all_plans: bool,
 ) {
     match view {
         MainView::PlanKanban => {
-            frame.render_widget(widgets::plan_kanban(data, selected), area);
+            frame.render_widget(widgets::plan_kanban(data, selected, show_all_plans), area);
         }
         MainView::TaskPipeline => {
             frame.render_widget(widgets::task_pipeline(data, selected), area);

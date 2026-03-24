@@ -20,12 +20,13 @@ impl TuiApp {
         let popup_content = self.istate.popup_open.then(|| self.istate.popup_content.clone()).flatten();
         let chat_input = self.chat.input.clone();
         let chat_sending = self.chat.sending;
+        let show_all_plans = self.istate.show_all_plans;
         self.terminal.draw(|frame| {
             views::render_view(
                 frame, frame.area(), view, data, selected, &api_url,
                 show_help, auto_refresh, refresh_interval_secs,
                 &chat_input, chat_sending,
-                popup_content.as_ref(),
+                popup_content.as_ref(), show_all_plans,
             );
             // Overlay command footer at bottom whenever in command mode.
             if cmd_input.is_some() {

@@ -27,7 +27,7 @@ pub(crate) fn render_to_text_full(
     terminal
         .draw(|frame| {
             tui_views::render_view(
-                frame, frame.area(), view, data, 0, api_url, show_help, true, 5, "", false, None,
+                frame, frame.area(), view, data, 0, api_url, show_help, true, 5, "", false, None, false,
             );
         })
         .expect("draw");
