@@ -35,6 +35,9 @@ impl ClaudeSession {
                 "--output-format", "stream-json",
                 "--verbose",
                 "--agent", "ali-chief-of-staff",
+                // Ali calls localhost:8420 daemon APIs via curl/cvg —
+                // no permission prompts needed for internal operations.
+                "--dangerously-skip-permissions",
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
