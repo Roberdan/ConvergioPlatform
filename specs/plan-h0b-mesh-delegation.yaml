@@ -1,0 +1,85 @@
+name: "Plan H0b — Mesh Delegation Robusta"
+project_id: convergio
+version: "17.3.0"
+description: >
+  Make mesh delegation reliable end-to-end: auto sync-back, progress
+  tracking, offline recovery, proper tmux management, and unified CLI.
+  Fixes all issues found during 24 Mar delegation to M1 Pro.
+
+waves:
+  - id: W1
+    name: "Auto Sync-Back + Git Remote Setup"
+    tasks:
+      - id: T1-01
+        title: "cvg mesh delegate CLI command"
+        type: feature
+        description: >
+          Unified CLI: cvg mesh delegate --peer X --prompt "..." --plan-id N.
+          Wraps mesh-delegate-task.sh logic into daemon binary.
+          Creates tmux, writes prompt file, syncs repo, launches claude.
+        test_criteria: "cvg mesh delegate --peer macProM1 --prompt 'test' creates tmux session"
+
+      - id: T1-02
+        title: "Auto git sync-back via post-commit hook"
+        type: feature
+        description: >
+          When delegated task commits, post-commit hook pushes to coordinator
+          via SSH remote. If push fails, saves patch and retries on next
+          heartbeat. Coordinator auto-applies incoming patches.
+        test_criteria: "Commit on peer auto-appears on coordinator within 30s"
+
+      - id: T1-03
+        title: "SSH remote auto-setup on peers"
+        type: feature
+        description: >
+          cvg mesh delegate auto-configures git remote 'coordinator' on peer
+          pointing to coordinator repo via SSH. Verify SSH key access.
+          Skip if already configured.
+        test_criteria: "After delegate, peer has 'coordinator' remote that can push"
+
+      - id: T1-04
+        title: "Prompt delivery via file (not send-keys)"
+        type: fix
+        description: >
+          Always write prompt to file on peer, use claude --input-file.
+          Never use tmux send-keys for long prompts (breaks on special chars).
+        test_criteria: "Prompt with quotes and newlines delivered correctly"
+
+  - id: W2
+    name: "Progress Tracking + Offline Recovery"
+    depends_on: W1
+    tasks:
+      - id: T2-01
+        title: "Delegation progress tracking via daemon API"
+        type: feature
+        description: >
+          Peer reports progress to coordinator: POST /api/delegation/:id/progress
+          with status (running/blocked/done), current_task, output summary.
+          Coordinator stores in delegation_log table.
+        test_criteria: "cvg delegation status shows live progress from peer"
+
+      - id: T2-02
+        title: "cvg delegation status with live output"
+        type: feature
+        description: >
+          CLI command shows: peer, tmux session, current tool use,
+          last commit, sync status. Poll via mesh exec tmux capture-pane.
+        test_criteria: "cvg delegation status --plan 712 shows live peer output"
+
+      - id: T2-03
+        title: "Offline recovery: sync pending commits on reconnect"
+        type: feature
+        description: >
+          When peer comes back online (heartbeat resumes), check for
+          unsynced commits and push to coordinator. Use CRDT sync as
+          fallback for DB state.
+        test_criteria: "Peer goes offline, commits, comes back — coordinator gets commits"
+
+      - id: T2-04
+        title: "Completion callback + cleanup"
+        type: feature
+        description: >
+          When claude exits on peer, hook calls cvg delegation complete.
+          Coordinator marks delegation done, triggers final sync,
+          cleans up tmux session and prompt file on peer.
+        test_criteria: "After task completes, delegation marked done, tmux cleaned"

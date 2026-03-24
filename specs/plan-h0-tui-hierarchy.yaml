@@ -1,0 +1,82 @@
+name: "Plan H0 — TUI Project Hierarchy"
+project_id: convergio
+version: "17.2.0"
+description: >
+  Update TUI to support the new Project → Master Plan → Plans → Waves → Tasks
+  hierarchy. Add Project view, plan dependency visualization, master plan
+  rollup status, and delegation monitoring.
+
+waves:
+  - id: W1
+    name: "Project View + Hierarchy Navigation"
+    tasks:
+      - id: T1-01
+        title: "Add Project view as TUI tab (key 0 or dedicated)"
+        type: feature
+        description: >
+          New view showing projects list. Select project to drill into
+          master plans and their children. Use plan_hierarchy::project_plan_tree().
+        test_criteria: "Tab renders, shows project list from /api/dashboard/projects"
+
+      - id: T1-02
+        title: "Master plan tree rendering with dependency arrows"
+        type: feature
+        description: >
+          Render master plan children as indented tree with status indicators.
+          Show depends_on as arrows or labels. Color: done=green, doing=yellow,
+          blocked=red, todo=muted.
+        test_criteria: "Master plan with 3 children renders correctly with deps"
+
+      - id: T1-03
+        title: "Plan detail drill-down shows hierarchy context"
+        type: feature
+        description: >
+          When drilling into a sub-plan, show parent master plan name and
+          sibling plans status as context bar. Show depends_on status.
+        test_criteria: "Drill into sub-plan shows master context"
+
+      - id: T1-04
+        title: "Rollup progress bar for master plans"
+        type: feature
+        description: >
+          Master plan shows aggregate progress from children using
+          plan_hierarchy::master_rollup(). Show tasks_done/tasks_total
+          and percentage.
+        test_criteria: "Master plan progress matches sum of children"
+
+  - id: W2
+    name: "Execution Modes + Delegation Monitor"
+    depends_on: W1
+    tasks:
+      - id: T2-01
+        title: "Execution mode badges on plan cards"
+        type: feature
+        description: >
+          Show execution_mode (sequential/parallel/mixed/conditional) as
+          badge on master plan cards. Show depends_on blockers in red.
+        test_criteria: "Mode badge renders for each execution_mode value"
+
+      - id: T2-02
+        title: "Delegation status in Mesh view"
+        type: feature
+        description: >
+          Show active delegations in Mesh view: which peer is running what
+          plan, progress, last heartbeat. Use agent_activity + execution_host.
+        test_criteria: "Delegated plan shows peer name and progress"
+
+      - id: T2-03
+        title: "Dependency graph visualization"
+        type: feature
+        description: >
+          ASCII art dependency graph for master plan children.
+          H → I → J → L, H → M → N, I → K (parallel with J).
+          Similar to the dependency_graph in master spec YAML.
+        test_criteria: "Graph renders correctly for convergio-vision master"
+
+      - id: T2-04
+        title: "Project switcher in tab bar"
+        type: feature
+        description: >
+          Add project name to tab bar. Ctrl+P to switch projects.
+          Remember last selected project across sessions.
+        test_criteria: "Ctrl+P shows project list, selection persists"

@@ -1,0 +1,100 @@
+name: "Plan F2 — SwiftUI Command Center (Rebuild)"
+project_id: convergio
+version: "19.1.0"
+description: >
+  Rebuild the macOS SwiftUI Command Center from scratch. Previous version
+  (Plan F W13-W18) cancelled. New version uses TUI as UX reference,
+  project hierarchy as core navigation, and Maranello DS tokens.
+  Scheduled after Checklist Engine (Plan I) so governance is built-in.
+
+waves:
+  - id: W1
+    name: "Foundation — Project + API Client"
+    tasks:
+      - id: T1-01
+        title: "Xcode project scaffold with SPM"
+        type: feature
+        description: >
+          New CommandCenter/ with SwiftUI lifecycle, SPM dependencies,
+          entitlements for network + keychain. No xcodeproj — use Package.swift.
+        test_criteria: "xcodebuild builds, app launches showing empty window"
+
+      - id: T1-02
+        title: "DaemonClient with async/await + Codable"
+        type: feature
+        description: >
+          HTTP client for daemon :8420 API. Codable models for plans, tasks,
+          waves, agents, mesh. Auth token from Keychain. Auto-reconnect.
+        test_criteria: "DaemonClient.plans() returns plan list from daemon"
+
+      - id: T1-03
+        title: "Project hierarchy navigation (sidebar)"
+        type: feature
+        description: >
+          Sidebar: Projects → Master Plans → Sub-Plans. Uses /api/project/:id/tree.
+          Selection drives main content area. SwiftUI NavigationSplitView.
+        test_criteria: "Sidebar shows convergio-vision master with children"
+
+  - id: W2
+    name: "Core Views — Plans + Agents + Mesh"
+    depends_on: W1
+    tasks:
+      - id: T2-01
+        title: "Plan kanban with hierarchy context"
+        type: feature
+        description: >
+          Kanban board for plans within a master. Cards show status, progress,
+          depends_on, execution_mode badge. Drag not needed — status driven by daemon.
+        test_criteria: "Kanban shows plans H-N with correct dependency indicators"
+
+      - id: T2-02
+        title: "Agent catalog + live sessions"
+        type: feature
+        description: >
+          Grid of 89 agents. Live session indicator from cvg who agents.
+          Drill into agent shows current task, model, peer.
+        test_criteria: "Agent grid shows online agents with green indicator"
+
+      - id: T2-03
+        title: "Mesh topology with delegation status"
+        type: feature
+        description: >
+          Network graph of mesh peers. Show delegated plans, heartbeat status,
+          capabilities. Click peer to see running sessions.
+        test_criteria: "Mesh view shows 2+ peers with heartbeat indicators"
+
+  - id: W3
+    name: "Terminal + Chat + Polish"
+    depends_on: W2
+    tasks:
+      - id: T3-01
+        title: "Embedded terminal (PTY via WS)"
+        type: feature
+        description: >
+          Terminal view using /ws/pty endpoint. Tab per peer.
+          Keyboard passthrough. ANSI color rendering.
+        test_criteria: "Terminal connects to local daemon, runs commands"
+
+      - id: T3-02
+        title: "Chat with Ali (reuse TUI pattern)"
+        type: feature
+        description: >
+          Chat view connected to Ali via daemon chat API. Markdown rendering.
+          Session persistence. Same flow as TUI chat.
+        test_criteria: "Send message to Ali, receive response"
+
+      - id: T3-03
+        title: "Menu bar indicator + notifications"
+        type: feature
+        description: >
+          Menu bar icon with daemon status. macOS notifications for
+          plan completion, Thor validation, delegation status.
+        test_criteria: "Menu bar shows green when daemon healthy"
+
+      - id: T3-04
+        title: "Final: tests, accessibility, docs"
+        type: chore
+        description: >
+          Smoke tests. VoiceOver audit. Keyboard navigation.
+          ADR documenting rebuild decisions.
+        test_criteria: "All smoke tests pass, VoiceOver reads all views"
