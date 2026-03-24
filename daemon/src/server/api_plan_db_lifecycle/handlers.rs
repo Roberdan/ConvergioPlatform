@@ -1,5 +1,6 @@
 use super::super::plan_lifecycle_guards;
-use super::super::state::{query_one, ApiError, ServerState};
+use super::super::state::{ApiError, ServerState};
+use super::lifecycle_validation::{check_all_tasks_done, check_deliverables_approved};
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
@@ -116,41 +117,8 @@ pub(super) async fn handle_complete(
     let conn = state.get_conn()?;
     let conn = &conn;
 
-    // Check for incomplete tasks
-    let pending = query_one(
-        conn,
-        "SELECT COUNT(*) AS c FROM tasks \
-         WHERE plan_id = ?1 AND status NOT IN ('done', 'cancelled', 'skipped')",
-        rusqlite::params![plan_id],
-    )?
-    .and_then(|v| v.get("c").and_then(Value::as_i64))
-    .unwrap_or(0);
-
-    if pending > 0 {
-        return Err(ApiError::bad_request(format!(
-            "plan {plan_id} has {pending} incomplete tasks"
-        )));
-    }
-
-    // Check non-code deliverables: any deliverable linked to a non-pr task
-    // must be approved before plan can complete
-    let unapproved = query_one(
-        conn,
-        "SELECT COUNT(*) AS c FROM deliverables d \
-         JOIN tasks t ON d.task_id = t.id \
-         WHERE t.plan_id = ?1 AND t.status = 'done' \
-         AND COALESCE(d.output_type, '') != 'pr' \
-         AND d.status != 'approved'",
-        rusqlite::params![plan_id],
-    )?
-    .and_then(|v| v.get("c").and_then(Value::as_i64))
-    .unwrap_or(0);
-
-    if unapproved > 0 {
-        return Err(ApiError::bad_request(format!(
-            "plan {plan_id} has {unapproved} unapproved non-code deliverables"
-        )));
-    }
+    check_all_tasks_done(conn, plan_id)?;
+    check_deliverables_approved(conn, plan_id)?;
 
     let changed = conn
         .execute(

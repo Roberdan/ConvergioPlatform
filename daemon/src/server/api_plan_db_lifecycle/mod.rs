@@ -1,4 +1,5 @@
 pub mod handlers;
+mod lifecycle_validation;
 
 #[cfg(test)]
 mod tests;

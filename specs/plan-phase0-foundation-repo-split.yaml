@@ -1,0 +1,759 @@
+# Plan Phase 0 — Foundation & Repo Split (v2 — post-review)
+# Prerequisite for ALL 711 sub-plans. Must complete before 712-721 execution.
+# F-01 (repo split), F-02 (naming), F-03 (multi-repo), F-04 (OpenAPI), F-05 (audit cleanup)
+# Review fixes applied: 7 blocking + 9 suggestions from plan-reviewer 24 Marzo 2026
+
+name: "Phase 0 — Foundation & Repo Split"
+project: convergio
+version: "17.0.0"
+constitution-version: "2.3.0"
+parallel_mode: standard
+
+requirements:
+  - "F-01: Repo split — ConvergioPlatform splits into convergio-daemon, convergio-app, convergio-web, convergio (meta)"
+  - "F-02: Naming convention — MyConvergio→convergio-community, MaranelloLuceDesign→maranello-design"
+  - "F-03: Multi-repo orchestration — repositories table, cvg repo add/list/link, cross-project plan dependencies"
+  - "F-04: OpenAPI spec versioned in convergio (meta) repo as API contract boundary"
+  - "F-05: All 15 audit findings fixed (mapped below)"
+  - "F-10: Dogfooding — this plan validates Convergio's ability to manage itself"
+  - "F-11: Zero tech debt — every touched file fully clean, tested, documented"
+
+# Audit finding → task mapping (F-05 complete coverage):
+#  #1  (711 not started)         → out of scope (plan management, not code)
+#  #2  (dashboard path drift)    → T4-02
+#  #3  (macOS app web shell)     → T2-02 (remove webview, start native)
+#  #4  (macOS build broken)      → T2-02 (fix .frame() + onChange)
+#  #5  (no auth in Swift)        → T4-01
+#  #6  (bridge actions unhooked) → T4-05
+#  #7  (TUI test broken)         → T1-02
+#  #8  (TUI data model flat)     → deferred to plan 719 (TUI hierarchy)
+#  #9  (TUI UX generic)          → deferred to plan 719
+#  #10 (hardening mixed)         → T4-06 (sh -c, thread::spawn, direct SQLite)
+#  #11 (IPC drift)               → T4-03
+#  #12 (plan lifecycle txn)      → T4-04
+#  #13 (specs ahead of code)     → resolved by repo split + multi-repo capability
+#  #14 (validation asymmetric)   → resolved by per-repo CI (T2-05)
+#  #15 (over-claims completeness)→ resolved by updated docs (TF-doc)
+
+acceptance_invariants:
+  - description: "convergio-daemon repo exists on GitHub"
+    verify: "gh repo view Roberdan/convergio-daemon --json name -q .name"
+    defined_by: user
+  - description: "convergio-app repo exists on GitHub"
+    verify: "gh repo view Roberdan/convergio-app --json name -q .name"
+    defined_by: user
+  - description: "convergio-web repo exists on GitHub"
+    verify: "gh repo view Roberdan/convergio-web --json name -q .name"
+    defined_by: user
+  - description: "convergio meta repo exists on GitHub"
+    verify: "gh repo view Roberdan/convergio --json name -q .name"
+    defined_by: user
+  - description: "convergio-community repo exists (renamed from MyConvergio)"
+    verify: "gh repo view Roberdan/convergio-community --json name -q .name"
+    defined_by: user
+  - description: "maranello-design repo exists (renamed from MaranelloLuceDesign)"
+    verify: "gh repo view Roberdan/maranello-design --json name -q .name"
+    defined_by: user
+  - description: "Daemon builds in its own repo"
+    verify: "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+    defined_by: collaborative
+  - description: "Daemon tests pass in its own repo"
+    verify: "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+    defined_by: collaborative
+  - description: "OpenAPI spec exists in meta repo"
+    verify: "test -f /Users/Roberdan/GitHub/convergio/specs/openapi.yaml"
+    defined_by: collaborative
+  - description: "repositories table exists in DB"
+    verify: "cvg repo list --json 2>&1 | grep -q '\\['"
+    defined_by: collaborative
+  - description: "No files > 250 lines in daemon/src/"
+    verify: "cd /Users/Roberdan/GitHub/convergio-daemon && ! find src -name '*.rs' -exec awk 'END{if(NR>250){print FILENAME; exit 1}}' {} +"
+    defined_by: collaborative
+  - description: "Per-repo CI passes for daemon"
+    verify: "gh workflow view ci.yaml --repo Roberdan/convergio-daemon --json state -q .state"
+    defined_by: collaborative
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Wave 1: Pre-Split Preparation
+# Fix code issues and extract API contract BEFORE splitting.
+# Tasks are SEQUENTIAL within this wave (T1-01 → T1-02 → T1-03 → T1-04).
+# ─────────────────────────────────────────────────────────────────────────────
+waves:
+  - id: W1
+    name: "Pre-Split Preparation"
+    theme: "Tag backup, fix code issues, extract API contract"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        title: |
+          Pre-split backup tag and file splitting for >250-line files.
+          STEP 1: Create backup tag: git tag v16.x-pre-split on ConvergioPlatform.
+          STEP 2: Split ALL files exceeding 250 lines. Complete list:
+          - daemon/src/tui/views/chat.rs (478 lines) → extract chat rendering helpers
+          - daemon/src/tui/chat_handler.rs (306 lines) → extract message processing
+          - daemon/src/tui/tests/views.rs (274 lines) → split test modules
+          - daemon/src/tui/claude_session.rs (273 lines) → extract session lifecycle
+          - daemon/src/server/mod.rs (264 lines) → extract static file serving config
+          - daemon/src/server/api_plan_db_lifecycle/handlers.rs (254 lines) → extract validation
+          Each split must preserve all public interfaces. Update all callers.
+          Run cargo check + cargo test after EACH file split.
+          STEP 3: Verify zero files exceed 250 lines.
+        type: refactor
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && ! find src -name '*.rs' -exec awk 'END{if(NR>250){print FILENAME; exit 1}}' {} +"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "git tag -l 'v16*-pre-split' | grep -q 'pre-split'"
+
+      - id: T1-02
+        title: |
+          Fix TUI test signature mismatch (audit finding #7).
+          daemon/tests/tui_integration.rs:206 calls render_view() with 13 args
+          but function (daemon/src/tui/views/mod.rs:42) expects 15 params.
+          Missing params: chat_scroll: u16 (param 14) AND expanded_masters: &[i64] (param 15).
+          Add BOTH missing parameters (0_u16 and &[]) to ALL test call sites.
+          Verify: cargo test passes for ALL tests including tui_integration.
+        type: fix
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo test tui_integration"
+          - "cd daemon && cargo test"
+
+      - id: T1-03
+        title: |
+          Extract OpenAPI spec from daemon HTTP routes.
+          Read all route registrations in daemon/src/server/routes/api_routes.rs
+          and daemon/src/server/routes/mod.rs, plus all handler files
+          in daemon/src/server/api_*.rs.
+          Generate specs/openapi.yaml with ALL endpoints documented:
+          paths, methods, request/response schemas, auth requirements (Bearer token).
+          Use OpenAPI 3.1 format. Include daemon version in info.version.
+          Validate: grep for key endpoints to ensure completeness.
+        type: documentation
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: baccio-tech-architect
+        validator_agent: doc-validator
+        effort: 3
+        verify:
+          - "test -f specs/openapi.yaml"
+          - "grep -q 'openapi: \"3.1' specs/openapi.yaml"
+          - "grep -q '/api/health' specs/openapi.yaml"
+          - "grep -q '/api/plans' specs/openapi.yaml"
+          - "grep -q '/api/repositories' specs/openapi.yaml"
+          - "grep -q 'Bearer' specs/openapi.yaml"
+
+      - id: T1-04
+        title: |
+          Create convergio meta repo on GitHub (Roberdan/convergio).
+          DEPENDS ON T1-03 (needs openapi.yaml).
+          Initialize with:
+          - README.md (ecosystem overview: convergio-daemon, convergio-app, convergio-web,
+            convergio-community, maranello-design — with links and descriptions)
+          - specs/openapi.yaml (COPY from T1-03 output)
+          - docs/adr/0300-repo-split.md (decision record explaining why and how)
+          - .github/workflows/cross-repo-ci.yaml (skeleton for cross-repo validation)
+          - CLAUDE.md (meta-repo rules: no source code, specs + docs + CI only)
+          - LICENSE (MPL-2.0)
+          - .gitignore
+          Push to GitHub as public repo.
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: marco-devops-engineer
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "gh repo view Roberdan/convergio --json name -q .name"
+          - "test -f /Users/Roberdan/GitHub/convergio/specs/openapi.yaml"
+          - "test -f /Users/Roberdan/GitHub/convergio/docs/adr/0300-repo-split.md"
+          - "test -f /Users/Roberdan/GitHub/convergio/LICENSE"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 2: Repo Split Execution
+  # Split the monorepo into separate repos preserving git history.
+  # Includes per-repo CI and Cargo standalone conversion.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W2
+    name: "Repo Split Execution"
+    theme: "Split ConvergioPlatform into convergio-daemon, convergio-app, convergio-web + per-repo CI"
+    precondition: "W1 complete"
+    merge_mode: batch
+    tasks:
+      - id: T2-01
+        title: |
+          Split daemon/ into convergio-daemon repo.
+          STEP 1: Clone ConvergioPlatform to a temp directory for filter-repo.
+          STEP 2: Use git filter-repo to extract daemon/ with full history.
+          Include: daemon/src/, daemon/Cargo.toml, daemon/Cargo.lock,
+          daemon/tests/, daemon/start.sh, config/ (runtime config),
+          scripts/mesh/ (mesh ops tied to daemon).
+          EXCLUDE: data/dashboard.db (runtime artifact — add to .gitignore).
+          Include data/ migrations if they exist as source files.
+          STEP 3: Restructure directory layout:
+          - daemon/src/ → src/
+          - daemon/Cargo.toml → Cargo.toml
+          - daemon/tests/ → tests/
+          - daemon/start.sh → start.sh
+          STEP 4: Fix Cargo.toml for standalone build:
+          - Remove workspace references if any
+          - Update all path dependencies to be relative to new root
+          - Verify [package] name = "convergio-daemon"
+          - Ensure all feature flags and optional deps still resolve
+          STEP 5: Add CLAUDE.md, README.md, LICENSE (MPL-2.0), .gitignore
+          (include: target/, data/dashboard.db, *.swp, .DS_Store).
+          STEP 6: cargo check + cargo test MUST pass.
+          STEP 7: Create GitHub repo Roberdan/convergio-daemon (private initially).
+          Push with full history.
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: marco-devops-engineer
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "gh repo view Roberdan/convergio-daemon --json name -q .name"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && git log --oneline | wc -l | awk '{if($1<10) exit 1}'"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/Cargo.toml"
+          - "! test -f /Users/Roberdan/GitHub/convergio-daemon/daemon/Cargo.toml"
+
+      - id: T2-02
+        title: |
+          Split gui/ into convergio-app repo.
+          STEP 1: Clone ConvergioPlatform for filter-repo extraction.
+          STEP 2: Extract gui/ConvergioMissionControl/ with history.
+          STEP 3: Restructure to standard SwiftUI project layout:
+          - Sources/ConvergioApp/ (main app code)
+          - Sources/ConvergioApp/Views/
+          - Sources/ConvergioApp/Services/
+          - Sources/ConvergioApp/Models/
+          STEP 4: Remove ALL WKWebView/WebViewBridge code — native-only from day one.
+          Keep: App.swift, DaemonState.swift, MeshActionService.swift.
+          Fix: CommandPalette.swift .frame(width:maxHeight:) → use correct SwiftUI API.
+          Fix: All deprecated onChange usage.
+          STEP 5: Create proper Package.swift with SwiftUI dependencies.
+          Add .gitignore (include: .build/, *.xcuserdata, .swiftpm/).
+          Add CLAUDE.md, README.md, LICENSE (MPL-2.0).
+          STEP 6: swift build MUST succeed.
+          STEP 7: Create GitHub repo Roberdan/convergio-app (private initially). Push.
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: marco-devops-engineer
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "gh repo view Roberdan/convergio-app --json name -q .name"
+          - "cd /Users/Roberdan/GitHub/convergio-app && swift build"
+          - "! grep -rq 'WKWebView' /Users/Roberdan/GitHub/convergio-app/Sources/"
+          - "test -f /Users/Roberdan/GitHub/convergio-app/Package.swift"
+          - "test -f /Users/Roberdan/GitHub/convergio-app/.gitignore"
+
+      - id: T2-03
+        title: |
+          Split dashboard/ into convergio-web repo.
+          STEP 1: Resolve dashboard path confusion (audit finding #2):
+          identify REAL web UI source files among dashboard/, dashboard_web symlink,
+          scripts/dashboard_web.
+          STEP 2: Extract cleanly into convergio-web with history.
+          Include: index.html, app.js, all Maranello DS component files,
+          maranello-enhancer.js, mn-kpi.js, mesh-actions.js, chat-panel.js,
+          brain-canvas.js, idea-jar.js, ipc-panel.js.
+          STEP 3: Add CLAUDE.md, README.md, LICENSE (MPL-2.0),
+          .gitignore, package.json (dev server with live-reload for local dev).
+          STEP 4: Create GitHub repo Roberdan/convergio-web (private initially). Push.
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: marco-devops-engineer
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "gh repo view Roberdan/convergio-web --json name -q .name"
+          - "test -f /Users/Roberdan/GitHub/convergio-web/index.html"
+          - "test -f /Users/Roberdan/GitHub/convergio-web/app.js"
+          - "test -f /Users/Roberdan/GitHub/convergio-web/.gitignore"
+
+      - id: T2-04
+        title: |
+          Rename active repos to match naming convention.
+          1. gh repo rename convergio-community --repo Roberdan/MyConvergio --yes
+          2. gh repo rename maranello-design --repo Roberdan/MaranelloLuceDesign --yes
+          3. Update local clones: remote URLs and directory names for both.
+          4. Update all references in convergio meta repo README.
+          5. Update all references in convergio-daemon CLAUDE.md.
+          6. Update any Maranello DS references in convergio-web.
+          Verify: all repos accessible under new names, local remotes correct.
+        type: config
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "gh repo view Roberdan/convergio-community --json name -q .name"
+          - "gh repo view Roberdan/maranello-design --json name -q .name"
+          - "git -C /Users/Roberdan/GitHub/convergio-community remote get-url origin | grep -q convergio-community"
+          - "git -C /Users/Roberdan/GitHub/maranello-design remote get-url origin | grep -q maranello-design"
+
+      - id: T2-05
+        title: |
+          Create per-repo CI pipelines (GitHub Actions).
+          1. convergio-daemon/.github/workflows/ci.yaml:
+             - on push/PR to main
+             - cargo check, cargo test, cargo clippy, cargo fmt --check
+             - Upload test results
+          2. convergio-app/.github/workflows/ci.yaml:
+             - on push/PR to main
+             - swift build, swift test (when tests exist)
+          3. convergio-web/.github/workflows/ci.yaml:
+             - on push/PR to main
+             - lint check (if eslint configured), file existence check
+          Push CI configs to each repo.
+          Verify: at least daemon CI runs green.
+        type: config
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/.github/workflows/ci.yaml"
+          - "test -f /Users/Roberdan/GitHub/convergio-app/.github/workflows/ci.yaml"
+          - "test -f /Users/Roberdan/GitHub/convergio-web/.github/workflows/ci.yaml"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 3: Multi-Repo Orchestration in Daemon
+  # Make the daemon aware of multiple repositories.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W3
+    name: "Multi-Repo Orchestration"
+    theme: "repositories table, cvg repo CLI, cross-project plan dependencies"
+    precondition: "W2 complete"
+    merge_mode: batch
+    tasks:
+      - id: T3-01
+        title: |
+          Add repositories table to daemon DB schema.
+          In convergio-daemon repo (NOT monorepo — it has been split).
+          Migration in src/db/state_init.rs MIGRATIONS array:
+          CREATE TABLE repositories (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            path TEXT NOT NULL,
+            github_url TEXT,
+            description TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          ALTER TABLE projects ADD COLUMN repository_id INTEGER REFERENCES repositories(id);
+          CREATE INDEX idx_repositories_name ON repositories(name);
+          Test: migration runs cleanly on existing DB. Write integration test.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+
+      - id: T3-02
+        title: |
+          Implement cvg repo CLI subcommands + API endpoints.
+          In convergio-daemon repo.
+          New file: src/cli_repo.rs (max 250 lines).
+          Commands:
+          - cvg repo add <name> --path <path> [--github-url <url>] — register repo
+          - cvg repo list [--json] — table of all registered repos
+          - cvg repo show <name> — repo details + linked projects + plan counts
+          - cvg repo link <repo-name> <project-id> — link project to repo
+          - cvg repo sync — verify all registered repos exist on disk
+          Add RepoCommands to main.rs Commands enum.
+          Each command calls daemon REST API.
+          New file: src/server/api_repositories.rs (max 250 lines).
+          Endpoints: POST/GET /api/repositories, GET /api/repositories/:name,
+          PUT /api/repositories/:id/link.
+          Wire routes in src/server/routes/api_routes.rs.
+          Integration test: create repo, list, link to project, sync.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test cli_repo"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/src/cli_repo.rs"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/src/server/api_repositories.rs"
+
+      - id: T3-03
+        title: |
+          Implement cross-project plan dependencies.
+          In convergio-daemon repo.
+          Design note: single daemon instance manages ALL repos. Cross-repo deps
+          are cross-PROJECT deps within the same daemon DB, not inter-daemon.
+          (ADR: docs/adr/0301-cross-project-deps.md in convergio meta repo.)
+          Add column: plans.cross_project_depends TEXT (JSON array of {project_id, plan_id}).
+          Extend cvg plan create to accept --depends-on-project <project>:<plan_id>.
+          Extend check_unblocked_plans() in src/orchestrator/actions.rs to check
+          cross-project dependencies in the same DB.
+          Extend cvg plan execution-tree to show cross-project deps with [repo] prefix.
+          Test: create two plans in different projects with cross-dep, verify blocking works.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "test -f /Users/Roberdan/GitHub/convergio/docs/adr/0301-cross-project-deps.md"
+
+      - id: T3-04
+        title: |
+          Register all Convergio ecosystem repos and bootstrap dogfooding.
+          Using cvg repo add, register all 6 repos:
+          - convergio-daemon (path: ~/GitHub/convergio-daemon, github: Roberdan/convergio-daemon)
+          - convergio-app (path: ~/GitHub/convergio-app, github: Roberdan/convergio-app)
+          - convergio-web (path: ~/GitHub/convergio-web, github: Roberdan/convergio-web)
+          - convergio (path: ~/GitHub/convergio, github: Roberdan/convergio)
+          - convergio-community (path: ~/GitHub/convergio-community, github: Roberdan/convergio-community)
+          - maranello-design (path: ~/GitHub/maranello-design, github: Roberdan/maranello-design)
+          Link each to its project via cvg repo link.
+          Run cvg repo sync to verify all paths exist.
+          Validate: cvg plan execution-tree for an existing plan shows repo context.
+        type: config
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cvg repo list --json | python3 -c 'import sys,json; d=json.load(sys.stdin); assert len(d)>=6, f\"only {len(d)} repos\"'"
+          - "cvg repo sync 2>&1 | grep -qiE 'verified|ok|all'"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 4: Audit Cleanup — Remaining Findings
+  # Fix all remaining findings from the Copilot audit.
+  # All work in convergio-daemon repo.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W4
+    name: "Audit Cleanup"
+    theme: "Fix remaining audit findings: auth, dashboard path, orchestration, IPC, hardening"
+    precondition: "W2 complete"
+    merge_mode: batch
+    tasks:
+      - id: T4-01
+        title: |
+          Fix daemon auth path for native app consumption (audit finding #5).
+          In convergio-daemon repo.
+          The daemon requires Bearer auth on every route except /api/health
+          (src/server/middleware.rs:100-133).
+          Create a local token management system:
+          - On first daemon start, generate a random 256-bit token and store in
+            ~/.convergio/auth/daemon.token (chmod 600).
+          - Daemon reads token from this file on startup.
+          - Add shared token file path to CLAUDE.md so app/CLI know where to read.
+          - Add GET /api/auth/token-info endpoint (authenticated) to verify token validity.
+          - Document in convergio-app README how the app will read this token.
+          Remove: any hardcoded token patterns in server code.
+          Test: integration test verifying: (a) unauthenticated request rejected,
+          (b) valid token accepted, (c) invalid token rejected.
+        type: fix
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test auth"
+
+      - id: T4-02
+        title: |
+          Fix dashboard/static path reconciliation (audit finding #2).
+          In convergio-daemon repo.
+          Now that convergio-web is a separate repo, update daemon's static
+          file serving to use CONVERGIO_WEB_DIR env var.
+          In src/server/mod.rs (now <250 lines after W1 split), replace
+          hardcoded scripts/dashboard_web path with configurable path.
+          Resolution order: CONVERGIO_WEB_DIR env → ../convergio-web relative
+          to binary → skip static serving with console.warn (not crash).
+          Remove: ALL references to dashboard_web, scripts/dashboard in daemon src.
+          Test: daemon starts cleanly with and without web dir present.
+        type: fix
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "! grep -rq 'dashboard_web' /Users/Roberdan/GitHub/convergio-daemon/src/"
+          - "! grep -rq 'scripts/dashboard' /Users/Roberdan/GitHub/convergio-daemon/src/"
+
+      - id: T4-03
+        title: |
+          Fix IPC engine initialization in ServerState (audit finding #11).
+          In convergio-daemon repo.
+          src/server/state.rs: ServerState::new() initializes ipc_engine to None.
+          Router does not attach one. But lifecycle handlers check for it.
+          Fix: initialize IpcEngine in ServerState::new() when IPC is enabled.
+          Add ipc_enabled config flag (default true for daemon mode, false for test).
+          Wire IpcEngine into the HTTP router construction path.
+          Ensure src/server/api_plan_db_lifecycle/handlers.rs broadcasts events
+          when ipc_engine is Some.
+          Test: integration test verifying IPC events fire on plan lifecycle changes.
+        type: fix
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+
+      - id: T4-04
+        title: |
+          Fix plan lifecycle transaction safety (audit finding #12).
+          In convergio-daemon repo.
+          src/server/api_plan_db_lifecycle/handlers.rs: handle_create() promotes
+          parent plan to master before inserting child without a transaction.
+          Fix:
+          1. Wrap parent promotion + child insert in conn.execute_batch() or transaction.
+          2. New child plans start as 'todo' not 'draft' so check_unblocked_plans() sees them.
+          3. POST /api/plans/:plan_id/validate must emit orchestration events via IPC
+             after force-completing tasks/waves.
+          4. Ensure all plan state transitions are atomic (use transactions).
+          Test: verify concurrent plan creation does not cause inconsistent state.
+        type: fix
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 5: Stale Reference Sweep + Monorepo Deprecation
+  # Clean up ALL references to old paths after split.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W5
+    name: "Stale Reference Sweep"
+    theme: "Update all references to old monorepo paths, deprecate ConvergioPlatform"
+    precondition: "W3 and W4 complete"
+    merge_mode: batch
+    tasks:
+      - id: T5-01
+        title: |
+          Sweep all repos for stale path references.
+          In EVERY repo (convergio-daemon, convergio-app, convergio-web, convergio),
+          grep for these stale patterns and fix or remove:
+          - "daemon/src/" → should be "src/" in convergio-daemon
+          - "gui/ConvergioMissionControl/" → should be "Sources/" in convergio-app
+          - "dashboard/" → should reference convergio-web repo
+          - "scripts/dashboard_web" → removed
+          - "ConvergioPlatform" → update to reference specific repo
+          Also update specs 712-721 to reference convergio-daemon paths (not daemon/).
+          Check CLAUDE.md, README.md, .github/agents/, specs/ in each repo.
+          Test: grep confirms zero stale references remain.
+        type: refactor
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "! grep -rq 'daemon/src/' /Users/Roberdan/GitHub/convergio-daemon/CLAUDE.md"
+          - "! grep -rq 'gui/ConvergioMissionControl' /Users/Roberdan/GitHub/convergio-app/"
+          - "! grep -rq 'scripts/dashboard_web' /Users/Roberdan/GitHub/convergio-daemon/"
+
+      - id: T5-02
+        title: |
+          Deprecate ConvergioPlatform monorepo.
+          1. Update ConvergioPlatform README.md to say:
+             "This repository has been split. See: [convergio-daemon], [convergio-app],
+             [convergio-web], [convergio] for the active repositories."
+             Include links to all new repos.
+          2. Do NOT archive yet — keep as reference for git history.
+          3. Add DEPRECATED notice to CLAUDE.md.
+          4. Verify all new repos have complete, independent builds.
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q 'DEPRECATED\\|split\\|Split' /Users/Roberdan/GitHub/ConvergioPlatform/README.md"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 6: Closure — Tests, Docs, Verification
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W6
+    name: "Closure — Tests, Docs, Verification"
+    theme: "Integration tests, documentation, final verification"
+    precondition: "W5 complete"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        title: |
+          Cross-repo integration tests.
+          In convergio (meta) repo, create tests/ directory with:
+          1. test_daemon_builds.sh — cd convergio-daemon, cargo check, cargo test
+          2. test_app_builds.sh — cd convergio-app, swift build
+          3. test_web_exists.sh — verify convergio-web has index.html + app.js
+          4. test_repo_registry.sh — cvg repo list shows 6 repos, cvg repo sync passes
+          5. test_cross_project.sh — create plans in two projects, verify cross-dep
+          ALL scripts must be executable and pass.
+          Add to .github/workflows/cross-repo-ci.yaml.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_daemon_builds.sh"
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_app_builds.sh"
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_web_exists.sh"
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_repo_registry.sh"
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_cross_project.sh"
+          - "bash /Users/Roberdan/GitHub/convergio/tests/test_daemon_builds.sh"
+          - "bash /Users/Roberdan/GitHub/convergio/tests/test_app_builds.sh"
+
+      - id: TF-doc
+        title: |
+          Update documentation in convergio-daemon repo.
+          Focus on convergio-daemon (largest change surface):
+          1. README.md — build, run, test, API reference (link to openapi.yaml in meta)
+          2. CLAUDE.md — updated paths, conventions, architecture
+          3. TROUBLESHOOTING.md — new paths, new repo structure
+          4. docs/adr/ — any ADRs relevant to daemon
+          All docs must reference correct new repo names and paths.
+          No references to old ConvergioPlatform monorepo structure.
+        type: documentation
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/README.md"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/CLAUDE.md"
+          - "! grep -rq 'ConvergioPlatform' /Users/Roberdan/GitHub/convergio-daemon/README.md"
+          - "grep -q 'convergio-daemon' /Users/Roberdan/GitHub/convergio-daemon/README.md"
+
+      - id: TF-pr
+        title: |
+          Create and merge PRs for all repos with pending changes.
+          For each repo with uncommitted/unpushed changes:
+          1. Create PR with summary + test plan + link to plan 711
+          2. Verify CI passes
+          3. Squash merge
+          Repos to check: convergio-daemon, convergio-app, convergio-web, convergio.
+          All PRs must be merged before this task is marked done.
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "gh pr list --repo Roberdan/convergio-daemon --state merged --json number -q 'length' | awk '{if($1<1) exit 1}'"
+          - "gh pr list --repo Roberdan/convergio-app --state merged --json number -q 'length' | awk '{if($1<1) exit 1}'"
+          - "gh pr list --repo Roberdan/convergio-web --state merged --json number -q 'length' | awk '{if($1<1) exit 1}'"
+          - "gh pr list --repo Roberdan/convergio --state merged --json number -q 'length' | awk '{if($1<1) exit 1}'"
+
+      - id: TF-deploy-verify
+        title: |
+          Final verification: entire ecosystem is healthy.
+          Run ALL acceptance_invariants defined at plan level.
+          Additional checks:
+          1. All 6 repos exist and are accessible on GitHub
+          2. convergio-daemon: cargo check + cargo test pass
+          3. convergio-app: swift build passes
+          4. convergio-web: files exist and are correct
+          5. cvg repo list shows 6 repos, cvg repo sync passes
+          6. No files > 250 lines in convergio-daemon/src/
+          7. No stale ConvergioPlatform references in new repos
+          8. All per-repo CI pipelines exist
+          9. ConvergioPlatform README updated with deprecation notice
+          10. All local directories point to correct remotes
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "gh repo view Roberdan/convergio-daemon --json name -q .name"
+          - "gh repo view Roberdan/convergio-app --json name -q .name"
+          - "gh repo view Roberdan/convergio-web --json name -q .name"
+          - "gh repo view Roberdan/convergio --json name -q .name"
+          - "gh repo view Roberdan/convergio-community --json name -q .name"
+          - "gh repo view Roberdan/maranello-design --json name -q .name"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "cd /Users/Roberdan/GitHub/convergio-app && swift build"
+          - "cvg repo list --json | python3 -c 'import sys,json; d=json.load(sys.stdin); assert len(d)>=6'"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && ! find src -name '*.rs' -exec awk 'END{if(NR>250){print FILENAME; exit 1}}' {} +"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Updated Master Plan 711 Sequencing (post Phase 0)
+# ─────────────────────────────────────────────────────────────────────────────
+# After Phase 0 completes, existing sub-plans execute in this order.
+# All daemon work happens in convergio-daemon repo.
+# App work happens in convergio-app repo.
+#
+# Phase 1 (parallel, in convergio-daemon):
+#   - 712: Plan H — Hardening NASA
+#   - 719: Plan H0 — TUI Project Hierarchy
+#   - 720: Plan H0b — Swarm Delegation (renamed from Mesh Delegation Robusta)
+#     RENAME: mesh → swarm across module, CLI, docs (Parisi-inspired emergent intelligence)
+#     MUST include multi-transport swarm support:
+#     WiFi, LAN cablata, Tailscale, Thunderbolt diretto.
+#     Add tasks for: transport discovery, automatic fallback chain,
+#     bandwidth-aware routing, swarm topology visualization.
+#     Rename daemon/src/mesh/ → daemon/src/swarm/ (or alias).
+#     Rename cvg mesh → cvg swarm (keep mesh as alias for compat).
+#
+# Phase 2 (depends on 712, in convergio-daemon):
+#   - 713: Plan I — Checklist Engine
+#
+# Phase 3 (parallel, depends on 713, in convergio-daemon):
+#   - 714: Plan J — MCP Client
+#   - 715: Plan K — Agentic Memory
+#   - 717: Plan M — Inference Router
+#
+# Phase 4 (depends on 714, in convergio-daemon):
+#   - 716: Plan L — Security Perimeters
+#
+# Phase 5 (depends on 717, in convergio-daemon):
+#   - 718: Plan N — Voice
+#
+# Phase 6 (depends on Phase 1-4, in convergio-app, CRITICAL PATH WWDC June 2026):
+#   - 721: Plan F2 — SwiftUI Command Center (EXPANDED for full native)
+#
+# Target: WWDC June 2026 = all phases complete

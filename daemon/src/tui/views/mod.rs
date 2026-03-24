@@ -11,6 +11,9 @@ use crate::tui::widgets::{self, ACCENT, MUTED, OK, TEXT_PRIMARY};
 
 pub mod brain;
 pub mod chat;
+pub(super) mod chat_render;
+#[cfg(test)]
+mod chat_tests;
 pub mod cost;
 pub mod deliverables;
 pub mod events;

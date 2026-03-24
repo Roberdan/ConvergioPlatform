@@ -4,6 +4,7 @@ mod input;
 mod input_actions;
 mod input_drilldown;
 mod views;
+mod views_tree;
 
 use super::{
     AgentOrgNode, BrainNode, ChatMessage, CostData, CostSummary, DeliverableInfo, KpiData,

@@ -206,6 +206,7 @@ fn render_to_text(data: &TuiData, view: MainView) -> String {
             views::render_view(
                 frame, frame.area(), view, data, 0,
                 "http://localhost:8420", false, true, 5, "", false, None, false,
+                0_u16, &[],
             );
         })
         .expect("draw");
