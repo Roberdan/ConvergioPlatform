@@ -120,6 +120,14 @@ pub fn handle_chat_key(code: KeyCode, state: &mut ChatState) -> bool {
             state.scroll_offset = state.scroll_offset.saturating_sub(20);
             true
         }
+        KeyCode::Home => {
+            state.scroll_offset = u16::MAX; // scroll to top
+            true
+        }
+        KeyCode::End => {
+            state.scroll_offset = 0; // scroll to bottom
+            true
+        }
         // Enter handled separately in app.rs (needs async context).
         _ => false,
     }

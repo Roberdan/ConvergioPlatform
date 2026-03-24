@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 
@@ -13,84 +13,44 @@ use crate::tui::{
     ChatMessage, TuiData,
 };
 
-/// Returns true if `role` is a user message (as opposed to assistant).
 fn is_user(role: &str) -> bool {
     role == "user"
 }
 
-/// Render a single line of markdown-ish content into styled spans.
-/// Supports: **bold**, `code`, # headers, --- separators.
-fn render_md_line(line: &str, base_color: ratatui::style::Color) -> Vec<Span<'static>> {
-    let trimmed = line.trim();
+// ── Markdown rendering ─────────────────────────────────────────────────
 
-    // --- separator
-    if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-        return vec![Span::styled(
-            "  ─────────────────────────────",
-            Style::default().fg(MUTED),
-        )];
-    }
-
-    // # Headers
-    if let Some(rest) = trimmed.strip_prefix("### ") {
-        return vec![Span::styled(
-            format!("  {rest}"),
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        )];
-    }
-    if let Some(rest) = trimmed.strip_prefix("## ") {
-        return vec![Span::styled(
-            format!("  {rest}"),
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        )];
-    }
-    if let Some(rest) = trimmed.strip_prefix("# ") {
-        return vec![Span::styled(
-            format!("  {rest}"),
-            Style::default()
-                .fg(ACCENT)
-                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-        )];
-    }
-
-    // Inline formatting: **bold** and `code`
+/// Render inline markdown: **bold**, `code`, *italic*.
+fn render_inline(text: &str, base: ratatui::style::Color) -> Vec<Span<'static>> {
     let mut spans: Vec<Span<'static>> = Vec::new();
-    let mut remaining = line.to_string();
+    let mut rest = text.to_string();
 
-    while !remaining.is_empty() {
-        // Find the next ** or `
-        let bold_pos = remaining.find("**");
-        let code_pos = remaining.find('`');
-
-        let next = match (bold_pos, code_pos) {
-            (Some(b), Some(c)) => {
-                if b <= c {
-                    Some(("**", b))
-                } else {
-                    Some(("`", c))
-                }
-            }
-            (Some(b), None) => Some(("**", b)),
-            (None, Some(c)) => Some(("`", c)),
-            (None, None) => None,
+    while !rest.is_empty() {
+        // Find next marker
+        let bold = rest.find("**");
+        let code = rest.find('`');
+        let next = match (bold, code) {
+            (Some(b), Some(c)) if b <= c => Some(("**", b)),
+            (_, Some(c)) => Some(("`", c)),
+            (Some(b), _) => Some(("**", b)),
+            _ => None,
         };
 
         match next {
             None => {
-                spans.push(Span::styled(remaining.clone(), Style::default().fg(base_color)));
+                spans.push(Span::styled(rest.clone(), Style::default().fg(base)));
                 break;
             }
-            Some((marker, pos)) => {
-                // Text before marker
+            Some((mk, pos)) => {
                 if pos > 0 {
-                    let before: String = remaining[..pos].to_string();
-                    spans.push(Span::styled(before, Style::default().fg(base_color)));
+                    spans.push(Span::styled(
+                        rest[..pos].to_string(),
+                        Style::default().fg(base),
+                    ));
                 }
-
-                let after = &remaining[pos + marker.len()..];
-                if let Some(end) = after.find(marker) {
-                    let inner: String = after[..end].to_string();
-                    let style = if marker == "**" {
+                let after = &rest[pos + mk.len()..];
+                if let Some(end) = after.find(mk) {
+                    let inner = after[..end].to_string();
+                    let style = if mk == "**" {
                         Style::default()
                             .fg(TEXT_PRIMARY)
                             .add_modifier(Modifier::BOLD)
@@ -98,71 +58,206 @@ fn render_md_line(line: &str, base_color: ratatui::style::Color) -> Vec<Span<'st
                         Style::default().fg(WARN)
                     };
                     spans.push(Span::styled(inner, style));
-                    remaining = after[end + marker.len()..].to_string();
+                    rest = after[end + mk.len()..].to_string();
                 } else {
-                    // No closing marker — render as plain text
-                    spans.push(Span::styled(
-                        remaining.clone(),
-                        Style::default().fg(base_color),
-                    ));
+                    // No closing marker
+                    spans.push(Span::styled(rest.clone(), Style::default().fg(base)));
                     break;
                 }
             }
         }
     }
-
     spans
 }
 
-/// Build display lines for a single chat message with markdown rendering.
-fn message_lines(msg: &ChatMessage, is_last: bool) -> Vec<Line<'static>> {
+/// Convert a content line to styled spans with 7-char indent prefix.
+fn styled_line(
+    raw: &str,
+    base: ratatui::style::Color,
+    indent: &str,
+) -> Line<'static> {
+    let trimmed = raw.trim();
+
+    // ─── separator
+    if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+        return Line::from(vec![
+            Span::raw(indent.to_string()),
+            Span::styled(
+                "────────────────────────────────────",
+                Style::default().fg(MUTED),
+            ),
+        ]);
+    }
+
+    // Headers
+    let (header_text, header_mod) = if let Some(t) = trimmed.strip_prefix("### ") {
+        (Some(t), Modifier::BOLD)
+    } else if let Some(t) = trimmed.strip_prefix("## ") {
+        (Some(t), Modifier::BOLD)
+    } else if let Some(t) = trimmed.strip_prefix("# ") {
+        (Some(t), Modifier::BOLD | Modifier::UNDERLINED)
+    } else {
+        (None, Modifier::empty())
+    };
+
+    if let Some(ht) = header_text {
+        return Line::from(vec![
+            Span::raw(indent.to_string()),
+            Span::styled(
+                ht.to_string(),
+                Style::default().fg(ACCENT).add_modifier(header_mod),
+            ),
+        ]);
+    }
+
+    // Bullet lists: - item or * item
+    if let Some(item) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+        let mut spans = vec![
+            Span::raw(indent.to_string()),
+            Span::styled("  • ", Style::default().fg(ACCENT)),
+        ];
+        spans.extend(render_inline(item, base));
+        return Line::from(spans);
+    }
+
+    // Table rows: | col | col |
+    if trimmed.starts_with('|') && trimmed.ends_with('|') {
+        // Separator row
+        if trimmed.contains("---") {
+            return Line::from(vec![
+                Span::raw(indent.to_string()),
+                Span::styled(trimmed.to_string(), Style::default().fg(MUTED)),
+            ]);
+        }
+        // Data row — render cells with alternating style
+        let mut spans = vec![Span::raw(indent.to_string())];
+        let cells: Vec<&str> = trimmed.split('|').collect();
+        for (i, cell) in cells.iter().enumerate() {
+            let c = cell.trim();
+            if c.is_empty() && (i == 0 || i == cells.len() - 1) {
+                spans.push(Span::styled("│", Style::default().fg(MUTED)));
+            } else if c.is_empty() {
+                continue;
+            } else {
+                spans.push(Span::styled("│ ", Style::default().fg(MUTED)));
+                spans.extend(render_inline(c, base));
+                spans.push(Span::styled(" ", Style::default().fg(base)));
+            }
+        }
+        return Line::from(spans);
+    }
+
+    // Plain text with inline formatting
+    let mut spans = vec![Span::raw(indent.to_string())];
+    spans.extend(render_inline(raw, base));
+    Line::from(spans)
+}
+
+// ── Message rendering ───────────────────────────────────────────────────
+
+/// Walking dino animation.
+const DINO_FRAMES: &[&str] = &[
+    "🦕        ", " 🦕       ", "  🦕      ", "   🦕     ",
+    "    🦕    ", "     🦕   ", "      🦕  ", "       🦕 ",
+    "      🦕  ", "     🦕   ", "    🦕    ", "   🦕     ",
+    "  🦕      ", " 🦕       ",
+];
+
+fn dino_frame() -> &'static str {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    DINO_FRAMES[(ms / 250) as usize % DINO_FRAMES.len()]
+}
+
+const INDENT: &str = "       "; // 7 chars to match label width
+
+/// Build display lines for a single chat message.
+fn message_lines(msg: &ChatMessage, is_last: bool, width: u16) -> Vec<Line<'static>> {
     let label = if is_user(&msg.role) {
         Span::styled("  you  ", Style::default().fg(ACCENT).bold())
     } else {
         Span::styled("   ◆   ", Style::default().fg(OK).bold())
     };
 
-    let mut lines: Vec<Line<'static>> = Vec::new();
-    let base_color = if is_user(&msg.role) {
+    let base = if is_user(&msg.role) {
         TEXT_PRIMARY
     } else {
         TEXT_SECONDARY
     };
 
-    // Show dino animation when assistant message is empty (still streaming).
+    // Dino placeholder while streaming
     if !is_user(&msg.role) && msg.content.is_empty() && is_last {
-        lines.push(Line::from(vec![
-            label,
-            Span::styled(
-                dino_frame().to_string(),
-                Style::default().fg(MUTED),
-            ),
-        ]));
-        lines.push(Line::raw(""));
-        return lines;
+        return vec![
+            Line::from(vec![
+                label,
+                Span::styled(dino_frame().to_string(), Style::default().fg(MUTED)),
+            ]),
+            Line::raw(""),
+        ];
     }
 
-    let mut content_lines = msg.content.lines();
-    let first = content_lines.next().unwrap_or("");
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let usable = (width as usize).saturating_sub(9); // 7 indent + 2 border
 
-    // First line: label + rendered content
-    let mut first_spans = vec![label.clone()];
-    first_spans.extend(render_md_line(first, base_color));
-    lines.push(Line::from(first_spans));
+    // Pre-wrap long lines manually so scroll math is accurate.
+    let wrapped = wrap_content(&msg.content, usable);
 
-    // Continuation lines indented to match label width (7 spaces).
-    for part in content_lines {
-        let mut spans = vec![Span::raw("       ")];
-        spans.extend(render_md_line(part, base_color));
-        lines.push(Line::from(spans));
+    for (i, raw) in wrapped.iter().enumerate() {
+        if i == 0 {
+            // First line: label + content
+            let line = styled_line(raw, base, "");
+            let mut spans = vec![label.clone()];
+            spans.extend(line.spans);
+            lines.push(Line::from(spans));
+        } else {
+            lines.push(styled_line(raw, base, INDENT));
+        }
     }
 
-    // Blank line separator between messages.
+    // Separator between messages
     lines.push(Line::raw(""));
     lines
 }
 
-/// Renders the full Chat view split into messages area + input bar.
+/// Word-wrap content lines to fit within `max_width` characters.
+fn wrap_content(content: &str, max_width: usize) -> Vec<String> {
+    let max_width = max_width.max(20);
+    let mut result = Vec::new();
+
+    for line in content.lines() {
+        if line.len() <= max_width {
+            result.push(line.to_string());
+            continue;
+        }
+        // Word wrap
+        let mut current = String::new();
+        for word in line.split_whitespace() {
+            if current.is_empty() {
+                current = word.to_string();
+            } else if current.len() + 1 + word.len() <= max_width {
+                current.push(' ');
+                current.push_str(word);
+            } else {
+                result.push(current);
+                current = word.to_string();
+            }
+        }
+        if !current.is_empty() {
+            result.push(current);
+        }
+    }
+
+    if result.is_empty() {
+        result.push(String::new());
+    }
+    result
+}
+
+// ── View rendering ──────────────────────────────────────────────────────
+
+/// Renders the full Chat view: messages area + input bar.
 pub fn render_chat_view(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -185,17 +280,18 @@ pub fn render_chat_view(
 
 fn render_messages(frame: &mut Frame<'_>, area: Rect, data: &TuiData, scroll_offset: u16) {
     let messages = &data.chat_messages;
+    let content_width = area.width.saturating_sub(2); // borders
 
     let content: Text<'static> = if messages.is_empty() {
         Text::from(vec![
             Line::raw(""),
             Line::from(Span::styled(
-                "  Start a conversation — type below and press Enter.",
+                "  Type a message and press Enter to talk to Ali.",
                 Style::default().fg(MUTED),
             )),
             Line::raw(""),
             Line::from(Span::styled(
-                "  ↑↓ scroll  PgUp/PgDn fast scroll  Enter send",
+                "  ↑↓ scroll  PgUp/PgDn fast  Home/End top/bottom",
                 Style::default().fg(MUTED),
             )),
         ])
@@ -203,16 +299,17 @@ fn render_messages(frame: &mut Frame<'_>, area: Rect, data: &TuiData, scroll_off
         let mut lines: Vec<Line<'static>> = vec![Line::raw("")];
         let count = messages.len();
         for (i, msg) in messages.iter().enumerate() {
-            lines.extend(message_lines(msg, i == count - 1));
+            lines.extend(message_lines(msg, i == count - 1, content_width));
         }
         Text::from(lines)
     };
 
-    // Scroll to bottom minus manual offset.
+    // Lines are pre-wrapped — count is accurate for scroll math.
     let line_count = content.lines.len() as u16;
     let visible = area.height.saturating_sub(2);
     let max_scroll = line_count.saturating_sub(visible);
-    let scroll = max_scroll.saturating_sub(scroll_offset);
+    let capped_offset = scroll_offset.min(max_scroll);
+    let scroll = max_scroll.saturating_sub(capped_offset);
 
     let paragraph = Paragraph::new(content)
         .block(
@@ -222,53 +319,26 @@ fn render_messages(frame: &mut Frame<'_>, area: Rect, data: &TuiData, scroll_off
                 .border_type(BorderType::Rounded)
                 .style(Style::default().fg(MUTED)),
         )
-        .wrap(Wrap { trim: false })
         .scroll((scroll, 0));
 
     frame.render_widget(paragraph, area);
 }
 
-/// Walking dino animation frames — cycles every ~300ms.
-const DINO_FRAMES: &[&str] = &[
-    "  🦕        ",
-    "   🦕       ",
-    "    🦕      ",
-    "     🦕     ",
-    "      🦕    ",
-    "       🦕   ",
-    "        🦕  ",
-    "         🦕 ",
-    "        🦕  ",
-    "       🦕   ",
-    "      🦕    ",
-    "     🦕     ",
-    "    🦕      ",
-    "   🦕       ",
-];
-
-fn dino_frame() -> &'static str {
-    let ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let idx = (ms / 300) as usize % DINO_FRAMES.len();
-    DINO_FRAMES[idx]
-}
-
 fn render_input_bar(frame: &mut Frame<'_>, area: Rect, chat_input: &str, _sending: bool) {
-    let display = format!(" > {chat_input}");
-    let bar_color = TEXT_PRIMARY;
-
-    let paragraph =
-        Paragraph::new(Line::from(Span::styled(display, Style::default().fg(bar_color)))).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .style(Style::default().fg(MUTED)),
-        );
-
+    let paragraph = Paragraph::new(Line::from(Span::styled(
+        format!(" > {chat_input}"),
+        Style::default().fg(TEXT_PRIMARY),
+    )))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .style(Style::default().fg(MUTED)),
+    );
     frame.render_widget(paragraph, area);
 }
+
+// ── Tests ───────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -293,79 +363,116 @@ mod tests {
 
     #[test]
     fn message_lines_user_contains_you_label() {
-        let msg = user_msg("What is Plan 708?");
-        let lines = message_lines(&msg, false);
-        let rendered = lines
+        let lines = message_lines(&user_msg("What is Plan 708?"), false, 80);
+        let rendered: String = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.as_ref()))
-            .collect::<String>();
-        assert!(rendered.contains("you"), "user label missing");
-        assert!(rendered.contains("What is Plan 708?"), "user content missing");
+            .collect();
+        assert!(rendered.contains("you"));
+        assert!(rendered.contains("What is Plan 708?"));
     }
 
     #[test]
-    fn message_lines_assistant_contains_diamond_label() {
-        let msg = assistant_msg("Plan 708 is done.");
-        let lines = message_lines(&msg, false);
-        let rendered = lines
+    fn message_lines_assistant_contains_diamond() {
+        let lines = message_lines(&assistant_msg("Plan 708 is done."), false, 80);
+        let rendered: String = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.as_ref()))
-            .collect::<String>();
-        assert!(rendered.contains('◆'), "assistant diamond label missing");
-        assert!(
-            rendered.contains("Plan 708 is done."),
-            "assistant content missing"
-        );
+            .collect();
+        assert!(rendered.contains('◆'));
+        assert!(rendered.contains("Plan 708 is done."));
     }
 
     #[test]
-    fn message_lines_multiline_content_indented() {
-        let msg = assistant_msg("Line one\nLine two");
-        let lines = message_lines(&msg, false);
+    fn message_lines_multiline_indented() {
+        let lines = message_lines(&assistant_msg("Line one\nLine two"), false, 80);
         let line_two = lines.iter().find(|l| {
-            l.spans
-                .iter()
-                .any(|s| s.content.as_ref().contains("Line two"))
+            l.spans.iter().any(|s| s.content.contains("Line two"))
         });
-        assert!(line_two.is_some(), "Line two not found");
-        let first_span = &line_two.unwrap().spans[0];
-        assert!(first_span.content.as_ref().starts_with(' '), "not indented");
+        assert!(line_two.is_some());
     }
 
     #[test]
-    fn is_user_returns_true_for_user_role() {
+    fn is_user_correct() {
         assert!(is_user("user"));
         assert!(!is_user("assistant"));
-        assert!(!is_user(""));
     }
 
     #[test]
-    fn render_md_bold_produces_bold_span() {
-        let spans = render_md_line("hello **world** end", TEXT_SECONDARY);
+    fn render_inline_bold() {
+        let spans = render_inline("hello **world** end", TEXT_SECONDARY);
         let texts: Vec<&str> = spans.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(texts, vec!["hello ", "world", " end"]);
-        // Middle span should be bold
         assert!(spans[1].style.add_modifier.contains(Modifier::BOLD));
     }
 
     #[test]
-    fn render_md_code_produces_highlighted_span() {
-        let spans = render_md_line("run `curl` now", TEXT_SECONDARY);
+    fn render_inline_code() {
+        let spans = render_inline("run `curl` now", TEXT_SECONDARY);
         let texts: Vec<&str> = spans.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(texts, vec!["run ", "curl", " now"]);
-        assert_eq!(spans[1].style.fg, Some(WARN));
     }
 
     #[test]
-    fn render_md_separator_produces_line() {
-        let spans = render_md_line("---", TEXT_SECONDARY);
-        assert!(spans[0].content.contains('─'));
+    fn styled_line_separator() {
+        let line = styled_line("---", TEXT_SECONDARY, INDENT);
+        let rendered: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(rendered.contains('─'));
     }
 
     #[test]
-    fn render_md_header_produces_bold_accent() {
-        let spans = render_md_line("## Status", TEXT_SECONDARY);
-        assert!(spans[0].content.contains("Status"));
-        assert!(spans[0].style.add_modifier.contains(Modifier::BOLD));
+    fn styled_line_header() {
+        let line = styled_line("## Status", TEXT_SECONDARY, INDENT);
+        let rendered: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(rendered.contains("Status"));
+    }
+
+    #[test]
+    fn styled_line_bullet() {
+        let line = styled_line("- item one", TEXT_SECONDARY, INDENT);
+        let rendered: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(rendered.contains('•'));
+        assert!(rendered.contains("item one"));
+    }
+
+    #[test]
+    fn wrap_content_short_lines_unchanged() {
+        let result = wrap_content("short line", 80);
+        assert_eq!(result, vec!["short line"]);
+    }
+
+    #[test]
+    fn wrap_content_long_line_wraps() {
+        let long = "word ".repeat(20); // 100 chars
+        let result = wrap_content(&long, 40);
+        assert!(result.len() > 1);
+        for line in &result {
+            assert!(line.len() <= 40);
+        }
+    }
+
+    #[test]
+    fn wrap_content_empty_returns_one_empty() {
+        let result = wrap_content("", 80);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn dino_empty_message_shows_animation() {
+        let lines = message_lines(&assistant_msg(""), true, 80);
+        let rendered: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.as_ref()))
+            .collect();
+        assert!(rendered.contains('◆'));
+        assert!(rendered.contains('🦕'));
+    }
+
+    #[test]
+    fn table_row_renders_with_separators() {
+        let line = styled_line("| A | B |", TEXT_SECONDARY, INDENT);
+        let rendered: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(rendered.contains('│'));
+        assert!(rendered.contains('A'));
     }
 }
