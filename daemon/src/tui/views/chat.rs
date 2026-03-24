@@ -113,9 +113,36 @@ fn render_messages(frame: &mut Frame<'_>, area: Rect, data: &TuiData) {
     frame.render_widget(paragraph, area);
 }
 
+/// Walking dino animation frames — cycles every ~300ms.
+const DINO_FRAMES: &[&str] = &[
+    "  🦕        ",
+    "   🦕       ",
+    "    🦕      ",
+    "     🦕     ",
+    "      🦕    ",
+    "       🦕   ",
+    "        🦕  ",
+    "         🦕 ",
+    "        🦕  ",
+    "       🦕   ",
+    "      🦕    ",
+    "     🦕     ",
+    "    🦕      ",
+    "   🦕       ",
+];
+
+fn dino_frame() -> &'static str {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let idx = (ms / 300) as usize % DINO_FRAMES.len();
+    DINO_FRAMES[idx]
+}
+
 fn render_input_bar(frame: &mut Frame<'_>, area: Rect, chat_input: &str, sending: bool) {
     let display = if sending {
-        "  ◆ Ali is responding...".to_string()
+        format!("{}Ali is thinking...", dino_frame())
     } else {
         format!(" > {chat_input}")
     };
