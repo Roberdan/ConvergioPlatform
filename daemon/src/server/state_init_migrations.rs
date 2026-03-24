@@ -51,6 +51,11 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_github_events_plan_status ON github_events(plan_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_plan_commits_plan_id ON plan_commits(plan_id)",
+    // Plan hierarchy: master plans, dependencies, execution modes
+    "ALTER TABLE plans ADD COLUMN parent_plan_id INTEGER REFERENCES plans(id)",
+    "ALTER TABLE plans ADD COLUMN depends_on TEXT",
+    "ALTER TABLE plans ADD COLUMN execution_mode TEXT DEFAULT 'mixed'",
+    "CREATE INDEX IF NOT EXISTS idx_plans_parent ON plans(parent_plan_id)",
     "CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name COLLATE NOCASE)",
     "CREATE TABLE IF NOT EXISTS ideas (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT, tags TEXT, priority TEXT DEFAULT 'P2' CHECK(priority IN ('P0','P1','P2','P3')), status TEXT DEFAULT 'draft' CHECK(status IN ('draft','elaborating','ready','promoted','archived')), project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, links TEXT, plan_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS idea_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",

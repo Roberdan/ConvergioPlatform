@@ -2,6 +2,7 @@ mod cli;
 pub mod crdt;
 pub mod migrations;
 mod models;
+pub mod plan_hierarchy;
 mod queries;
 pub mod seed_agents;
 mod service;
