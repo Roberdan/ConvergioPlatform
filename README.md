@@ -1,6 +1,14 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # Convergio Platform
 
+> **Notice (25 Marzo 2026)**: The Convergio ecosystem has been split into dedicated repositories.
+> - Rust daemon: [convergio-daemon](../convergio-daemon/)
+> - macOS app: [convergio-app](../convergio-app/)
+> - Web frontend: [convergio-web](../convergio-web/)
+> - Meta/specs: [convergio](../convergio/)
+>
+> This repository remains the canonical platform monorepo for agent orchestration tooling, scripts, and configuration.
+
 Unified agentic AI control plane — Rust daemon, dashboard, native `CommandCenter`, and evolution engine for orchestrating AI agents across any model, tool, and machine.
 
 > Not affiliated with or endorsed by Microsoft Corporation.

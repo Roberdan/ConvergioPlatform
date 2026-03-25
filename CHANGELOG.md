@@ -1,5 +1,20 @@
 # Changelog
 
+## [18.0.0] - 25 Marzo 2026
+
+### Added
+- Ecosystem split: convergio-daemon, convergio-app, convergio-web, convergio (meta)
+- Resilience framework: circuit breakers, retry, health monitoring, zombie reaper
+- Multi-repo orchestration: repositories table, cvg repo CLI
+- Cross-project plan dependencies
+- Agent IPC optimization (MessagePack)
+- Constitution v3.0.0: resilience + swarm articles
+- Local LLM watchdog with phone notifications
+- Decision audit trail
+
+### Fixed
+- 4 VirtualBPM issues (CLI UX, import types, chicken-egg, SQLite locking)
+
 ## [17.1.0] — 24 Marzo 2026
 
 ### Added
