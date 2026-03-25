@@ -1,461 +1,176 @@
 # Troubleshooting
 
-## Problem: cvg command not found
+## Daemon / cvg CLI
 
-**Symptom:** `cvg plan list` or any `cvg` subcommand returns "command not found"
-**Cause:** `cvg` symlink not yet created by setup, or `scripts/platform/` not on `$PATH`
-**Fix:**
-```bash
-# Run setup to create symlink
-scripts/platform/setup-claude-symlinks.sh
-# Or source aliases (adds scripts/platform/ to PATH, creates symlink on-demand)
-source scripts/platform/convergio-aliases.sh
-# Or create manually
-ln -sf "$(pwd)/daemon/target/release/convergio-platform-daemon" scripts/platform/cvg
-# Verify
-cvg --help
+**cvg not found**
+- Cause: symlink missing. Fix: `scripts/platform/setup-claude-symlinks.sh` or
+  `ln -sf "$(pwd)/daemon/target/release/convergio-platform-daemon" ~/.local/bin/cvg`
+
+**"daemon not reachable on :8420"**
+- Cause: daemon not running.
+- Fix: `./daemon/start.sh` → `curl -s http://localhost:8420/api/health`
+- Note: read-only commands work offline; writes require the daemon.
+
+**sqlite3 WAL corruption / stale hooks**
+- Cause: pre-Plan-685 hooks calling `sqlite3` directly.
+- Fix: `./setup.sh` → verify `grep -c 'sqlite3' .claude/settings.json` = 0
+
+**"daemon returns 405 on review/checkpoint endpoints"**
+- Cause: running binary older than v12.1.0.
+- Fix: `cd daemon && cargo build --release && ./daemon/start.sh`
+
+**plan_reviews / checkpoints table missing**
+- Cause: migrations not applied (old daemon running).
+- Fix: restart daemon — migrations auto-apply on startup.
+
+**cvg review reset fails "required argument PLAN_ID"**
+- Fixed in v12.1.1. Rebuild daemon. `cvg review reset` now accepts no plan_id.
+
+## Build
+
+**cargo check fails**
+- Fix: `cd daemon && cargo check 2>&1 | head -30` — read first error only.
+
+**TUI crashes / garbled output**
+- Fix: `TERM=xterm-256color cargo run -- tui`; check `data/logs/daemon-crash.log`.
+  Run `reset` to restore terminal.
+
+**TUI shows "No brain data"**
+- Cause: no agents registered, or /ws/brain unreachable.
+- Fix: `./daemon/start.sh` → `curl http://localhost:8420/api/agents`
+
+## Setup
+
+**setup.sh "claude-config not found"**
+- Fix: run from repo root: `cd ~/GitHub/ConvergioPlatform && ./setup.sh`
+
+**EnterPlanMode not blocked by hook**
+- Fix: `test -f .claude/settings.json || ./setup.sh`
+  Verify: `jq '.hooks.PreToolUse | length' .claude/settings.json` >= 8
+
+**Skill sync shows 0 skills**
+- Fix: `scripts/platform/agent-skills-sync.sh --platform-dir "$(pwd)"`
+
+**Agent heartbeat stale**
+- Fix: `scripts/platform/agent-heartbeat.sh --name <name> --task idle`
+
+## Ingestion
+
+**pdftotext not found** → `brew install poppler`
+**pandoc not found** → `brew install pandoc`
+**trafilatura not found** → `pip install trafilatura`
+
+## Watchdog Alerts (W2 / Plan 724)
+
+Watchdog runs every 30 s. Alerts dispatched via `notifications.conf`.
+
+| Alert | Meaning | Action |
+|---|---|---|
+| `agent stalled >300s` | Task has no DB update in 5 min | Check task status: `cvg plan show <id>` |
+| `/api/health/deep` non-healthy | A component is degraded | `curl -s http://localhost:8420/api/health/deep \| jq .` |
+| `Ollama unavailable` | LLM summarisation off; rules-only mode | Install Ollama or ignore (fallback is automatic) |
+| `rate limit detected` | Agent hit API rate limit | Check task log; watchdog will alert and block task |
+| `wave complete` | Info notification on wave merge | No action needed |
+
+**Configure ntfy.sh notifications:**
+```toml
+# claude-config/config/notifications.conf
+[watchdog]
+check_interval_secs = 30
+ollama_url = "http://localhost:11434"
+stale_threshold_secs = 300
+
+[[notification_channels]]
+type = "ntfy"
+url = "https://ntfy.sh/your-topic"   # replace with your topic
 ```
 
-## Problem: cvg subcommand fails with "daemon not reachable"
+**Test notification:** `cvg notify send "test" "hello" --severity info`
 
-**Symptom:** `cvg plan list` or `cvg task update` exits with "daemon not reachable on :8420"
-**Cause:** The daemon is not running. Since Plan #685 (v5.0.0), all plan/task/wave operations route through the daemon API. Direct sqlite3 calls are no longer used.
-**Fix:**
+**Watchdog CLI:**
 ```bash
-# Start the daemon
-./daemon/start.sh
-# Verify
-curl -s http://localhost:8420/api/ipc/status | jq .status
-# Retry
-cvg plan list
-```
-Note: read-only commands (`cvg plan list`, `cvg task status`) work in offline mode via local DB cache. Write operations (`cvg task update`, `cvg checkpoint save`) require the daemon.
-
-## Problem: Hooks call sqlite3 directly (pre-Plan-685 hooks)
-
-**Symptom:** Hook output shows `sqlite3: command line tool` traces or WAL corruption warning after concurrent hook execution
-**Cause:** Old hook scripts (pre-Plan-685) called `sqlite3 "$DASHBOARD_DB"` directly. Plan #685 migrated all 21 hooks to `cvg` daemon API calls.
-**Fix:**
-```bash
-# Check which hooks still use sqlite3
-grep -rl 'sqlite3' .claude/settings.json .claude/hooks/ 2>/dev/null
-# If found, re-run bootstrap to install migrated hooks
-./setup.sh
-# Verify zero sqlite3 in active hooks
-grep -c 'sqlite3' .claude/settings.json && echo "STALE HOOKS — run setup.sh"
+cvg watchdog start    # start background watchdog
+cvg watchdog stop     # stop watchdog
+cvg watchdog status   # show last check results
 ```
 
-## Problem: CLI scripts warn "daemon not running" and fall back to sqlite3
+## Decision Log (F-27)
 
-**Symptom:** `convergio-run-ops.sh`, `convergio-metrics.sh`, or `convergio-ingest.sh` prints `WARNING: daemon not reachable on :8420 — falling back to sqlite3 (read-only)` to stderr.
-**Cause:** The daemon is not running. Since v3.4.0, CLI scripts are thin wrappers over daemon HTTP endpoints; they fall back to read-only `sqlite3` queries when the daemon is unreachable.
-**Fix:**
+Every watchdog restart, reap, and block action is stored in `decision_log`.
+
 ```bash
-# Check if daemon is running
-curl -s http://localhost:8420/api/ipc/status || echo "NOT RUNNING"
-# Start the daemon
-./daemon/start.sh
-# Verify it responds
-curl -s http://localhost:8420/api/ipc/status | jq .status
-# Re-run your command — write operations (ingest, pause) require the daemon
-convergio-ingest.sh document.pdf ./ingested/
-```
-Note: read-only queries (run history, metrics) work in fallback mode. Write operations (ingest trigger, pause/resume) fail silently in fallback — start the daemon first.
-
-## Problem: setup.sh fails with "claude-config not found"
-
-**Symptom:** Running `./setup.sh` exits with "ERROR: claude-config not found"
-**Cause:** ConvergioPlatform not cloned correctly or script run from wrong directory
-**Fix:**
-```bash
-cd ~/GitHub/ConvergioPlatform  # or wherever you cloned
-ls claude-config/              # must exist
-./setup.sh
+cvg decision log                          # list recent decisions
+cvg decision log --plan-id 724            # filter by plan
+curl -s http://localhost:8420/api/decisions?plan_id=724 | jq .
 ```
 
-## Problem: Agent not registering in IPC
-
-**Symptom:** `agent-bridge.sh --register` warns "daemon not reachable" to stderr
-**Cause:** Daemon not running on port 8420
-**Fix:**
+Log a decision manually:
 ```bash
-# Check daemon status
-curl -s http://localhost:8420/api/ipc/status
-# If not running, start it
-./daemon/start.sh
-# Retry registration
-scripts/platform/agent-bridge.sh --register --name test --type claude
-# Verify
-curl -s http://localhost:8420/api/ipc/agents | jq '.agents'
+cvg decision log "chose retry over escalate" --reasoning "transient SQLITE_BUSY" --plan-id 724
 ```
 
-## Problem: Hooks not firing (EnterPlanMode not blocked)
+## Zombie Reaper (F-25)
 
-**Symptom:** Can use EnterPlanMode without getting blocked by guard-plan-mode hook
-**Cause:** `.claude/settings.json` missing from project root or not loaded
-**Fix:**
+Reaper removes: stale worktrees (plan done > 24 h), merged branches, lock files > 1 h.
+Auto-runs every 30 min. Manual:
+
 ```bash
-# Check project-level settings
-test -f .claude/settings.json && echo "exists" || echo "MISSING"
-# If missing, run setup
-./setup.sh
-# Verify hooks
-jq '.hooks.PreToolUse | length' .claude/settings.json
-# Should be >= 8
+cvg reap --dry-run    # preview only — no changes
+cvg reap              # execute cleanup
 ```
 
-## Problem: Skill sync shows 0 skills
+What gets cleaned:
+- `git worktree list` entries with no matching active wave
+- `git branch --merged main` branches
+- `/tmp/*.lock` files older than 1 hour
 
-**Symptom:** `agent-skills-sync.sh` runs but reports "Synced 0 skills"
-**Cause:** claude-core binary not on PATH, or DB not accessible, or commands/ dir not found
-**Fix:**
+## Multi-Repo (W4 / Plan 724)
+
+**Register a repo:**
 ```bash
-# Check claude-core
-which claude-core || echo "NOT ON PATH"
-# Check commands dir
-ls claude-config/commands/*.md | wc -l  # should be >= 8
-# Check DB
-echo $DASHBOARD_DB
-sqlite3 "$DASHBOARD_DB" "SELECT count(*) FROM ipc_agent_skills;" 2>/dev/null
-# Re-run with explicit path
-scripts/platform/agent-skills-sync.sh --platform-dir "$(pwd)"
+cvg repo add convergio-daemon --path ~/GitHub/convergio-daemon \
+  --github-url https://github.com/Roberdan/convergio-daemon
 ```
 
-## TUI
-
-**TUI won't connect to daemon**
-- Symptom: Views show no data, "No brain data" message
-- Cause: Daemon not running or wrong --api-url
-- Fix: Start daemon (`./daemon/start.sh serve`), verify with `curl http://localhost:8420/api/health`
-
-**Brain view empty**
-- Symptom: "No brain data — waiting for WebSocket connection"
-- Cause: No agents registered, or /ws/brain endpoint unreachable
-- Fix: Check daemon is running, verify agents with `curl http://localhost:8420/api/agents`
-
-**TUI crashes on startup**
-- Symptom: Terminal not restored after crash
-- Cause: Panic in TUI code
-- Fix: Check data/logs/daemon-crash.log for panic details. Run `reset` to restore terminal.
-
-## Problem: Agent heartbeat missing / stale
-
-**Symptom:** Agent shows old `last_heartbeat` in GET /api/ipc/agents
-**Cause:** Heartbeat script not running, or daemon was down during heartbeat
-**Fix:**
+**List / inspect:**
 ```bash
-# Manual heartbeat
-scripts/platform/agent-heartbeat.sh --name <agent-name> --task idle
-# Check result
-curl -s http://localhost:8420/api/ipc/agents | jq '.agents[] | select(.agent_id=="<agent-name>") | .last_heartbeat'
-# For persistent heartbeat, set up cron:
-# */1 * * * * /path/to/scripts/platform/agent-heartbeat.sh --name myagent
+cvg repo list           # all registered repos
+cvg repo show convergio-daemon
 ```
 
-## Problem: pdftotext not found (PDF ingestion fails)
-
-**Symptom:** `convergio-ingest.sh report.pdf` warns "pdftotext not found — skipping PDF"
-**Cause:** `poppler` not installed; `pdftotext` is its CLI tool
-**Fix:**
+**Link repo to project:**
 ```bash
-brew install poppler     # macOS
-# or: apt install poppler-utils  # Ubuntu/Debian
-pdftotext --version      # verify
-convergio-ingest.sh report.pdf ./ingested/
+cvg repo link convergio-daemon <project-id>
 ```
 
-## Problem: pandoc not found (DOCX/PPTX ingestion fails)
-
-**Symptom:** `convergio-ingest.sh report.docx` warns "pandoc not found — skipping DOCX"
-**Cause:** `pandoc` not installed
-**Fix:**
+**Sync health for all repos:**
 ```bash
-brew install pandoc      # macOS
-# or: apt install pandoc  # Ubuntu/Debian
-pandoc --version         # verify
-convergio-ingest.sh report.docx ./ingested/
+cvg repo sync           # checks each repo path exists + health endpoint responds
 ```
 
-## Problem: trafilatura not found (URL ingestion fails)
+**Repo health unknown / not updating**
+- Cause: daemon not running, or repo path missing.
+- Fix: verify path exists, start daemon, re-run `cvg repo sync`.
 
-**Symptom:** `convergio-ingest.sh https://example.com/page` warns "trafilatura not found — skipping URL"
-**Cause:** Python package `trafilatura` not installed
-**Fix:**
-```bash
-pip install trafilatura  # or pip3
-trafilatura --version    # verify
-convergio-ingest.sh https://example.com/page ./ingested/
-# Fallback (no trafilatura): uses curl + basic strip, lower quality
-```
+## macOS / App
 
-## Problem: MyConvergio references after migration to ConvergioPlatform
+**Menu bar icon missing**
+- Fix: `./daemon/start.sh` → rebuild app: `cd CommandCenter && ruby Scripts/generate_xcodeproj.rb`
 
-**Symptom:** Scripts, configs, or docs still reference `MyConvergio`, `sync-to-myconvergio-ops.sh`, or old repo paths after the Plan #671 consolidation.
-**Cause:** MyConvergio was merged into ConvergioPlatform; stale references were not fully cleaned up.
-**Fix:**
-```bash
-# Search for remaining references
-grep -ri 'myconvergio' scripts/ daemon/ dashboard/ claude-config/ || echo "Clean"
-# Verify sync script is gone
-test -f claude-config/scripts/lib/sync-to-myconvergio-ops.sh && echo "DELETE IT" || echo "Already removed"
-# Verify provisioning uses ConvergioPlatform paths
-grep -q 'ConvergioPlatform' scripts/mesh/mesh-provision-node.sh && echo "OK" || echo "Update paths"
-# The canonical repo is ConvergioPlatform — update any bookmarks or CI configs
-```
+**CommandCenter build uses CommandLineTools (wrong SDK)**
+- Fix: `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
 
-## Problem: Menu Bar not showing in system tray
+**PTY terminal rejects session name**
+- Cause: name must match `[A-Za-z0-9_-]`, max 64 chars.
 
-**Symptom:** ConvergioMissionControl app runs but no menu bar icon appears
-**Cause:** App not built as LSUIElement (agent app) or daemon not running on :8420
-**Fix:**
-```bash
-# Verify daemon is running
-curl -s http://localhost:8420/api/ipc/status | jq .
-# Rebuild menu bar app
-cd gui/ConvergioMissionControl && xcodebuild -scheme ConvergioMissionControl build
-# Check Info.plist has LSUIElement = YES
-defaults read gui/ConvergioMissionControl/Info.plist LSUIElement
-```
+## Plan Workflow
 
-## Problem: TUI fails to start or renders incorrectly
+**"deliverable not found"** → `cvg deliverable list --project <id>`
 
-**Symptom:** `cargo run -- tui` exits immediately or shows garbled output
-**Cause:** Terminal does not support alternate screen, or daemon binary not built
-**Fix:**
-```bash
-# Ensure release build exists
-cd daemon && cargo build --release
-# Run TUI with explicit terminal
-TERM=xterm-256color cargo run -- tui
-# If still broken, check ratatui version
-grep ratatui Cargo.toml
-```
+**workspace create fails** → start daemon, check parent dir permissions.
 
-## Problem: Evolution proposals not loading in dashboard
+**Release pipeline stuck** → set `GITHUB_TOKEN`, run quality gate manually first.
 
-**Symptom:** Evolution section shows empty or spinner, console shows 500 error
-**Cause:** `evolution_proposals` table not yet created (auto-created on first API call) or DB path wrong
-**Fix:**
-```bash
-# Trigger table creation
-curl -s http://localhost:8420/api/evolution/proposals | jq .
-# Check DB has the table
-sqlite3 "$DASHBOARD_DB" ".tables" | grep evolution
-# If missing, the GET call above creates it; retry dashboard
-```
+**file_sizes gate fails** → split `.rs` files exceeding 250 lines into submodules.
 
-## Problem: /solve not recognized as a skill
-
-**Symptom:** Typing `/solve` returns "unknown skill" or no activation
-**Cause:** `claude-config/commands/solve.md` not present or not symlinked
-**Fix:**
-```bash
-test -f claude-config/commands/solve.md && echo "OK" || echo "MISSING"
-ls claude-config/commands/*.md | grep solve
-```
-
-## Problem: skill-lint.sh fails on valid skill
-
-**Symptom:** `skill-lint.sh` reports FAIL on a skill that looks correct
-**Cause:** YAML parsing uses grep/awk — sensitive to formatting. Fields must be `key: value` (space after colon).
-**Fix:**
-```bash
-grep 'constitution-version:' claude-config/skills/solve/skill.yaml  # must have space after colon
-bash scripts/platform/skill-lint.sh claude-config/skills/solve/
-```
-
-## Problem: Transpiler produces empty output
-
-**Symptom:** `skill-transpile-claude.sh` creates an empty .md file
-**Cause:** skill.yaml or SKILL.md not found in the given directory, or missing required fields
-**Fix:**
-```bash
-ls claude-config/skills/solve/skill.yaml claude-config/skills/solve/SKILL.md
-bash -x scripts/platform/skill-transpile-claude.sh claude-config/skills/solve/ /tmp/test
-```
-
-## Problem: solve_sessions table not found
-
-**Symptom:** /solve phase 9 fails with "no such table: solve_sessions"
-**Cause:** Migration not run yet
-**Fix:**
-```bash
-bash scripts/platform/convergio-db-migrate-solve.sh migrate
-sqlite3 "$DASHBOARD_DB" ".tables" | grep solve
-```
-
-## Problem: cvg review reset fails with "required argument PLAN_ID"
-
-**Symptom:** `cvg review reset` errors because plan_id is required, but reset is called before the plan exists in DB (planner workflow step 1)
-**Cause:** Fixed in v12.1.1 — plan_id is now optional. Omit it to reset pre-plan state (defaults to plan_id=0).
-**Fix:**
-```bash
-# Rebuild daemon if on older version
-cd daemon && cargo build --release
-# Now works without plan_id
-cvg review reset
-# Or with plan_id
-cvg review reset 688
-```
-
-## Problem: cvg plan readiness not found
-
-**Symptom:** `cvg plan readiness 688` returns "unrecognized subcommand" but the API endpoint works
-**Cause:** Fixed in v12.1.1 — CLI subcommand was missing, only API endpoint `/api/plan-db/readiness/:id` existed.
-**Fix:**
-```bash
-# Rebuild daemon
-cd daemon && cargo build --release
-# Now works
-cvg plan readiness 688
-```
-
-## Plan A — Convergio Core Intelligence
-
-### Problem: cvg command not found after source changes
-
-**Symptom:** `cvg` returns "command not found" after editing daemon source
-**Cause:** Binary not rebuilt after source changes
-**Fix:**
-```bash
-cd daemon && cargo build --release && ln -sf target/release/convergio-platform-daemon ~/.local/bin/cvg
-```
-
-### Problem: Daemon returns 405 on review/checkpoint endpoints
-
-**Symptom:** `cvg review register` or `cvg checkpoint save` returns HTTP 405 Method Not Allowed
-**Cause:** Running daemon is older version than source (endpoints added in v12.1.0)
-**Fix:**
-```bash
-# Rebuild and restart
-cd daemon && cargo build --release
-./daemon/start.sh
-# Verify new endpoints respond
-curl -s http://localhost:8420/api/review | jq .
-```
-
-### Problem: plan_reviews table not found
-
-**Symptom:** Review operations fail with "no such table: plan_reviews"
-**Cause:** Migration not applied (old daemon version running)
-**Fix:**
-```bash
-# Restart daemon — migrations auto-apply on startup
-./daemon/start.sh
-# Verify table exists
-sqlite3 "$DASHBOARD_DB" ".tables" | grep plan_reviews
-```
-
-## Problem: Deliverable not found
-
-**Symptom:** `cvg deliverable approve <id>` returns "deliverable not found" or 404
-**Cause:** Deliverable was created in a different project scope, or the ID is wrong
-**Fix:**
-```bash
-# List deliverables for the project
-cvg deliverable list --project <project_id>
-# Check if deliverable exists in DB
-cvg deliverable show <id>
-# If created in a worktree, ensure daemon is running (deliverables are DB-backed)
-./daemon/start.sh
-```
-
-## Problem: Permission denied writing deliverable to filesystem
-
-**Symptom:** `cvg deliverable create` fails with "permission denied" writing to `data/deliverables/`
-**Cause:** The `data/deliverables/` directory does not exist or has wrong permissions
-**Fix:**
-```bash
-# Create the deliverables directory
-mkdir -p data/deliverables
-# Check permissions
-ls -la data/
-# Ensure daemon user can write
-chmod 755 data/deliverables
-# Retry
-cvg deliverable create --plan <plan_id> --type report --path ./output.md
-```
-
-## Problem: Workspace creation fails
-**Symptom**: `cvg workspace create` returns error
-**Cause**: Daemon not running, or parent directory not writable
-**Fix**: Start daemon (`./daemon/start.sh`), check permissions on parent directory
-
-## Problem: Release pipeline stuck
-**Symptom**: POST /api/workspace/release hangs or fails
-**Cause**: GitHub token not set, or quality gates failing
-**Fix**: Set GITHUB_TOKEN env var, run quality gate manually first
-
-## Problem: Quality gate fails on file sizes
-**Symptom**: file_sizes gate reports violations
-**Cause**: .rs files exceeding 250-line limit
-**Fix**: Split oversized files into submodules
-
-## Problem: OpenClaw plugin cannot reach Convergio daemon
-
-**Symptom**: convergio-invoke tool returns connection error
-**Cause**: Daemon not running or wrong URL
-**Fix**: Start daemon (./daemon/start.sh), verify curl http://localhost:8420/api/health
-
-## Problem: No agents listed via OpenClaw
-
-**Symptom**: convergio-agents tool returns empty list
-**Cause**: Agent catalog empty in DB
-**Fix**: Run cvg agent sync to populate catalog from .agent.md files
-
-## Problem: Skill generator produces no output
-
-**Symptom**: convergio-openclaw-skills.sh exits without generating files
-**Cause**: No .agent.md files found in source directory
-**Fix**: Verify claude-config/agents/ contains .agent.md files with YAML frontmatter
-
-## Problem: Copilot agent not visible in /api/ipc/agents
-
-**Symptom:** `copilot-bridge.sh --register` succeeds but GET /api/ipc/agents shows empty
-**Cause:** Script may be using old /api/ipc/send path instead of /api/ipc/agents/register
-**Fix:**
-```bash
-# Verify which endpoint is being called
-bash -x scripts/platform/copilot-bridge.sh --register --name test-copilot 2>&1 | grep curl
-# Should show: /api/ipc/agents/register
-# Manual test
-curl -X POST http://localhost:8420/api/ipc/agents/register \
-  -H 'Content-Type: application/json' \
-  -d '{"agent_id":"test-copilot","host":"'$(hostname)'"}'
-curl -s http://localhost:8420/api/ipc/agents | jq '.agents'
-```
-
-## Problem: CommandCenter build uses CommandLineTools instead of full Xcode
-
-**Symptom:** `xcodebuild` for `CommandCenter` fails early or cannot resolve the correct macOS SDK.
-**Cause:** The machine is pointing at `/Library/Developer/CommandLineTools` instead of the full Xcode app bundle.
-**Fix:**
-```bash
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-cd CommandCenter
-ruby Scripts/generate_xcodeproj.rb
-xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build
-```
-
-## Problem: CommandCenter.xcodeproj is missing or stale
-
-**Symptom:** `xcodebuild` reports missing files or the project does not contain newly added SwiftUI views.
-**Cause:** `CommandCenter.xcodeproj` is generated from `Scripts/generate_xcodeproj.rb` and needs to be regenerated after adding files.
-**Fix:**
-```bash
-gem install xcodeproj --user-install --no-document
-cd CommandCenter
-ruby Scripts/generate_xcodeproj.rb
-```
-
-## Problem: PTY terminal rejects tmux session names
-
-**Symptom:** The native terminal view connects, but a tmux-backed session refuses to start.
-**Cause:** `/ws/pty` only accepts tmux session names using `[A-Za-z0-9_-]` and a maximum length of 64.
-**Fix:**
-```bash
-# valid examples
-main
-session_1
-mesh-debug
-```
+**OpenClaw cannot reach daemon** → `./daemon/start.sh`; `curl http://localhost:8420/api/health`
