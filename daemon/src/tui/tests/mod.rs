@@ -3,6 +3,7 @@ mod integration;
 mod input;
 mod input_actions;
 mod input_drilldown;
+mod notifications;
 mod views;
 mod views_tree;
 
@@ -156,6 +157,7 @@ pub(crate) fn sample_data() -> TuiData {
                 timestamp: "2026-03-24T10:00:01Z".to_string(),
             },
         ],
+        notifications: vec![],
         project_tree: Default::default(), chat_session_id: Some("sess-test-123".to_string()),
     }
 }

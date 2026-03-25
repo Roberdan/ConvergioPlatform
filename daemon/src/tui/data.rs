@@ -42,8 +42,6 @@ pub struct KpiData {
     pub mesh_online: i64,
 }
 
-// --- Brain Canvas data ---
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BrainNode {
     pub id: String,
@@ -52,8 +50,6 @@ pub struct BrainNode {
     pub parent_id: Option<String>,
     pub status: String,
 }
-
-// --- Cost Center data ---
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CostEntry {
@@ -84,8 +80,6 @@ pub struct CostData {
     pub summary: CostSummary,
 }
 
-// --- Event Stream data ---
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkspaceEvent {
     pub id: i64,
@@ -97,8 +91,6 @@ pub struct WorkspaceEvent {
     pub created_at: String,
 }
 
-// --- Workspace View data ---
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkspaceInfo {
     pub workspace_id: String,
@@ -109,8 +101,6 @@ pub struct WorkspaceInfo {
     pub created_at: String,
 }
 
-// --- Deliverables data ---
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeliverableInfo {
     pub id: i64,
@@ -119,6 +109,16 @@ pub struct DeliverableInfo {
     pub status: String,
     pub version: i64,
     pub project_id: String,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notification {
+    pub id: i64,
+    pub title: String,
+    pub message: String,
+    pub severity: String,
+    pub read: bool,
     pub created_at: String,
 }
 
@@ -170,6 +170,7 @@ pub struct TuiData {
     pub deliverables: Vec<DeliverableInfo>,
     pub chat_messages: Vec<ChatMessage>,
     pub chat_session_id: Option<String>,
+    pub notifications: Vec<Notification>,
     pub project_tree: ProjectTreeData,
 }
 
@@ -190,6 +191,7 @@ mod tests {
         assert!(data.deliverables.is_empty());
         assert!(data.chat_messages.is_empty());
         assert!(data.chat_session_id.is_none());
+        assert!(data.notifications.is_empty());
         assert!(data.project_tree.plans.is_empty());
     }
 

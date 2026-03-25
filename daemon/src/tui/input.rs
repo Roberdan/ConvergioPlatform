@@ -22,6 +22,10 @@ pub struct InteractiveState {
     pub action_pending: Option<(String, String)>,
     pub show_all_plans: bool,
     pub pending_drill_down: Option<DrillDownRequest>,
+    /// Whether the notification inbox overlay is visible.
+    pub show_notifications: bool,
+    /// Index of selected notification in the inbox overlay.
+    pub notification_selected: usize,
     /// IDs of expanded master plans in the project tree view.
     pub expanded_masters: Vec<i64>,
 }
@@ -37,6 +41,12 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
     // Popup captures all focus; only Esc and action keys are handled.
     if state.popup_open {
         handle_popup_key(code, state);
+        return false;
+    }
+
+    // Notification inbox captures focus when open.
+    if state.show_notifications {
+        handle_notification_key(code, state);
         return false;
     }
 
@@ -62,6 +72,7 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
         // +/- adjust refresh interval.
         KeyCode::Char('+') | KeyCode::Char('=') => state.increase_interval = true,
         KeyCode::Char('-') => state.decrease_interval = true,
+        KeyCode::Char('n') => state.show_notifications = !state.show_notifications,
         KeyCode::Char('?') => state.show_help = true,
         KeyCode::Esc => handle_esc(state),
         _ => {}
@@ -128,11 +139,34 @@ fn handle_popup_key(code: KeyCode, state: &mut InteractiveState) {
     }
 }
 
+/// Handle keys when the notification inbox overlay is open.
+/// Esc or 'n' closes it; Up/Down navigate; Enter marks as read (signalled via flag).
+fn handle_notification_key(code: KeyCode, state: &mut InteractiveState) {
+    match code {
+        KeyCode::Esc | KeyCode::Char('n') => {
+            state.show_notifications = false;
+        }
+        KeyCode::Up => {
+            state.notification_selected = state.notification_selected.saturating_sub(1);
+        }
+        KeyCode::Down => {
+            state.notification_selected += 1; // clamped at render time
+        }
+        KeyCode::Enter => {
+            // Mark-as-read handled by the caller (process_post_key).
+            // We signal via the selected index remaining set.
+        }
+        _ => {} // swallow all other keys
+    }
+}
+
 /// Handle Esc outside command/popup mode: close overlays/filters in priority order.
 fn handle_esc(state: &mut InteractiveState) {
     if state.popup_open {
         state.popup_open = false;
         state.popup_content = None;
+    } else if state.show_notifications {
+        state.show_notifications = false;
     } else if state.selected_plan_id.is_some() {
         state.selected_plan_id = None;
     }

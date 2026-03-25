@@ -72,7 +72,8 @@ pub fn render_view(
     render_tab_bar(frame, chunks[0], view);
     frame.render_widget(widgets::kpi_strip(data), chunks[1]);
     render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans, chat_scroll, expanded_masters);
-    render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs);
+    let unread = data.notifications.iter().filter(|n| !n.read).count();
+    render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs, unread);
 
     if show_help {
         help::render_help_overlay(frame, area);
@@ -179,6 +180,7 @@ fn render_status_bar(
     api_url: &str,
     auto_refresh: bool,
     refresh_interval_secs: u64,
+    unread_notifications: usize,
 ) {
     // Strip scheme for compact display: "http://localhost:8420" → "localhost:8420"
     let host = api_url
@@ -201,11 +203,20 @@ fn render_status_bar(
 
     let left = format!(" ◆ Connected {}  │  WS: active ", host);
 
-    let paragraph = Paragraph::new(Line::from(vec![
+    let mut spans = vec![
         Span::styled(left, Style::default().fg(OK)),
-        Span::styled("│", Style::default().fg(MUTED)),
-        Span::styled(right, Style::default().fg(TEXT_PRIMARY)),
-    ]))
+    ];
+    // Unread notification badge (only when count > 0)
+    if unread_notifications > 0 {
+        spans.push(Span::styled(
+            format!("[{} unread]", unread_notifications),
+            Style::default().fg(ACCENT).bold(),
+        ));
+    }
+    spans.push(Span::styled("│", Style::default().fg(MUTED)));
+    spans.push(Span::styled(right, Style::default().fg(TEXT_PRIMARY)));
+
+    let paragraph = Paragraph::new(Line::from(spans))
     .block(
         Block::default()
             .borders(Borders::ALL)
