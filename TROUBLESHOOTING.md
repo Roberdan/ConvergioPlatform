@@ -163,6 +163,24 @@ cvg repo sync           # checks each repo path exists + health endpoint respond
 **PTY terminal rejects session name**
 - Cause: name must match `[A-Za-z0-9_-]`, max 64 chars.
 
+## Session Stability
+
+**Session crashes / context limit reached**
+- Symptom: "Context limit reached" or "cache_control.ttl ordering" error.
+- Cause: Hook overhead (13 hooks per tool call) + inline merge conflict resolution.
+- Fix: Use consolidated hooks (`scripts/platform/pre-tool-guard.sh`), delegate cherry-picks to agents, checkpoint after every task. See ADR-0113.
+
+**Thor verify commands fail with "cd daemon: No such file or directory"**
+- Symptom: `cvg task validate` returns REJECTED with "cd daemon" path error.
+- Cause: Daemon process cwd is already `daemon/`, so `cd daemon &&` tries `daemon/daemon/`.
+- Fix: Remove `cd daemon &&` prefix from verify commands in plan specs. Update task notes via API:
+  `curl -s -X POST http://localhost:8420/api/plan-db/task/update -H "Content-Type: application/json" -d '{"task_id": ID, "status": "submitted", "notes": "cargo test FILTER"}'`
+
+**plan-checkpoint.sh fails with "Cannot reach daemon"**
+- Symptom: `plan-checkpoint.sh save` errors.
+- Cause: v1 used wrong API path or `sqlite3` directly.
+- Fix: Updated to v2.0 using `cvg plan show`. Rebuild: `cd daemon && cargo build --release`.
+
 ## Plan Workflow
 
 **"deliverable not found"** → `cvg deliverable list --project <id>`

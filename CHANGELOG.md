@@ -1,5 +1,19 @@
 # Changelog
 
+## [18.1.0] - 25 Marzo 2026
+
+### Added
+- Channel adapters architecture: Slack (Web API + command routing), Email (SMTP relay + subject routing), channel dashboard view with health indicators
+- Escalation metric collector for evolution feedback loop
+- ADR-0112: Channel Adapters Architecture (Plan 725)
+- ADR-0113: Hook Consolidation for Context Window Stability
+- ADR-0114: Lean Plan Checkpoints
+
+### Fixed
+- Hook consolidation: 13 PreToolUse hooks reduced to 3 via single dispatcher (~77% context event reduction)
+- Plan checkpoint v2: lean 4-line format, no sqlite3 direct access, no MEMORY.md mutation
+- Route count contract updated for channel API endpoints
+
 ## [18.0.0] - 25 Marzo 2026
 
 ### Added
