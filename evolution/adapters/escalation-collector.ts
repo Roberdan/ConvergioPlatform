@@ -57,6 +57,15 @@ export class EscalationMetricCollector implements MetricCollector, PlatformAdapt
     this.events.push(event);
   }
 
+  /**
+   * PlatformAdapter contract — delegates to collect().
+   * Why: PlatformAdapter.collectMetrics and MetricCollector.collect are the same
+   * operation with different method names; bridging here keeps both interfaces satisfied.
+   */
+  async collectMetrics(): Promise<Metric[]> {
+    return this.collect();
+  }
+
   /** Collect per-agent escalation metrics for the evolution engine. */
   async collect(): Promise<Metric[]> {
     if (this.events.length === 0) return [];

@@ -65,7 +65,8 @@ export class EvolutionEngine {
     const metrics = await this.collectMetrics(healthyAdapters);
     const evaluations = await this.evaluate(metrics);
     const proposals = this.generateProposals(evaluations, cycleId);
-    const experiments = await this.runExperiments(healthyAdapters, proposals);
+    const reviewed = this.reviewProposals(proposals);
+    const experiments = await this.runExperiments(healthyAdapters, reviewed);
 
     const summary: CycleSummary = {
       cycleId,
@@ -178,6 +179,35 @@ export class EvolutionEngine {
     }
     this.audit('proposals.generated', { cycleId, count: proposals.length });
     return proposals;
+  }
+
+  /**
+   * Auto-approve Draft proposals whose confidence exceeds the threshold.
+   *
+   * Why: generateProposals always creates Drafts, but runExperiments only
+   * processes Approved ones. Without this step the pipeline never executes
+   * any experiment. Manual approval (PendingApproval) is used for high-blast
+   * proposals that require human review before canary deployment.
+   *
+   * Approval rules:
+   *   - confidence >= AUTO_APPROVE_THRESHOLD AND blastRadius != MultiRepo/Ecosystem
+   *     → Approved (safe to run canary automatically)
+   *   - otherwise → PendingApproval (human must approve via API or CLI)
+   */
+  private reviewProposals(proposals: Proposal[]): Proposal[] {
+    const AUTO_APPROVE_THRESHOLD = 0.8;
+    const HIGH_BLAST: ReadonlyArray<string> = ['MultiRepo', 'Ecosystem'];
+
+    return proposals.map((p) => {
+      if (p.status !== 'Draft') return p;
+
+      const autoApprovable =
+        p.confidence >= AUTO_APPROVE_THRESHOLD && !HIGH_BLAST.includes(p.blastRadius);
+
+      const nextStatus: ProposalStatus = autoApprovable ? 'Approved' : 'PendingApproval';
+      this.audit('proposal.reviewed', { id: p.id, confidence: p.confidence, status: nextStatus });
+      return { ...p, status: nextStatus };
+    });
   }
 
   private async runExperiments(adapters: PlatformAdapter[], proposals: Proposal[]): Promise<Experiment[]> {
