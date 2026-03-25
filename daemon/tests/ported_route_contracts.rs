@@ -6,8 +6,8 @@ use claude_core::server::routes::{
 
 #[test]
 fn get_route_count_matches_python_port_contract() {
-    // +1 for GET /api/health/deep added in Plan 724 T2-02
-    assert_eq!(GET_ROUTES.len(), 89);
+    // +2 for channel GET routes added in Plan 725 T2-03
+    assert_eq!(GET_ROUTES.len(), 91);
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn non_get_route_count_matches_python_port_contract() {
             + DELETE_ROUTES.len()
             + SSE_ROUTES.len()
             + WS_ROUTES.len(),
-        85 // +1 for POST /api/plan-db/wave/create (daemon reliability fix)
+        86 // +1 for POST /api/channels/:id/send added in Plan 725 T2-03
     );
 }
 
