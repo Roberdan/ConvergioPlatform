@@ -194,6 +194,12 @@ impl TuiApp {
                 if input::handle_key(code, modifiers, &mut self.istate) {
                     return true;
                 }
+                // Consume view-switch flags set by input::handle_key.
+                if self.istate.switch_to_project_view {
+                    self.istate.switch_to_project_view = false;
+                    self.selected_index = 0;
+                    self.active_view = MainView::ProjectView;
+                }
             }
         }
         false
@@ -226,6 +232,7 @@ impl TuiApp {
             MainView::WorkspaceView => self.data.workspaces.len(),
             MainView::Deliverables => self.data.deliverables.len(),
             MainView::Chat => self.data.chat_messages.len(),
+            MainView::ProjectView => self.data.projects.len(),
         }
     }
 

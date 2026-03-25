@@ -53,13 +53,13 @@ impl TuiApp {
     pub fn next_view(&mut self) {
         self.selected_index = 0;
         let idx = Self::view_index(self.active_view);
-        self.active_view = Self::view_at((idx + 1) % 10);
+        self.active_view = Self::view_at((idx + 1) % 11);
     }
 
     pub fn prev_view(&mut self) {
         self.selected_index = 0;
         let idx = Self::view_index(self.active_view);
-        self.active_view = Self::view_at((idx + 9) % 10);
+        self.active_view = Self::view_at((idx + 10) % 11);
     }
 
     fn view_index(v: MainView) -> usize {
@@ -67,6 +67,7 @@ impl TuiApp {
         [
             PlanKanban, Chat, TaskPipeline, MeshStatus, AgentOrgChart,
             BrainCanvas, CostCenter, EventStream, WorkspaceView, Deliverables,
+            ProjectView,
         ]
         .iter()
         .position(|x| *x == v)
@@ -78,6 +79,7 @@ impl TuiApp {
         [
             PlanKanban, Chat, TaskPipeline, MeshStatus, AgentOrgChart,
             BrainCanvas, CostCenter, EventStream, WorkspaceView, Deliverables,
+            ProjectView,
         ]
         .get(idx)
         .copied()

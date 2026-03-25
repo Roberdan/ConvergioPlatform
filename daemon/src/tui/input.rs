@@ -28,6 +28,8 @@ pub struct InteractiveState {
     pub notification_selected: usize,
     /// IDs of expanded master plans in the project tree view.
     pub expanded_masters: Vec<i64>,
+    /// Set to true when 'p' is pressed to switch to the Project view.
+    pub switch_to_project_view: bool,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.
@@ -67,6 +69,7 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
         }
         KeyCode::Char('r') => state.force_refresh = true,
         KeyCode::Char('a') => state.show_all_plans = !state.show_all_plans,
+        KeyCode::Char('p') => state.switch_to_project_view = true,
         // Shift+R toggles auto-refresh on/off.
         KeyCode::Char('R') => state.toggle_auto_refresh = true,
         // +/- adjust refresh interval.
@@ -190,6 +193,7 @@ pub fn parse_and_apply_command(
         }
         ["mesh"] => *view = MainView::MeshStatus,
         ["agent", "list"] | ["agent"] => *view = MainView::AgentOrgChart,
+        ["projects"] | ["project"] => *view = MainView::ProjectView,
         ["refresh"] => state.force_refresh = true,
         ["quit"] | ["q"] => state.quit = true,
         _ => {}

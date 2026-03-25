@@ -131,6 +131,15 @@ pub struct ChatMessage {
     pub timestamp: String,
 }
 
+// --- Project list data ---
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProjectInfo {
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+}
+
 // --- Project Tree data ---
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -172,6 +181,7 @@ pub struct TuiData {
     pub chat_session_id: Option<String>,
     pub notifications: Vec<Notification>,
     pub project_tree: ProjectTreeData,
+    pub projects: Vec<ProjectInfo>,
 }
 
 #[cfg(test)]
@@ -193,6 +203,7 @@ mod tests {
         assert!(data.chat_session_id.is_none());
         assert!(data.notifications.is_empty());
         assert!(data.project_tree.plans.is_empty());
+        assert!(data.projects.is_empty());
     }
 
     #[test]
@@ -249,4 +260,5 @@ pub enum MainView {
     WorkspaceView,
     Deliverables,
     Chat,
+    ProjectView,
 }
