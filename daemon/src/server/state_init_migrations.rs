@@ -159,4 +159,19 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
     "CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk)",
     "CREATE INDEX IF NOT EXISTS idx_tasks_plan_status ON tasks(plan_id, status)",
+    // Plan 724 — T4-01: repository registry table
+    "CREATE TABLE IF NOT EXISTS repositories (\
+      id INTEGER PRIMARY KEY,\
+      name TEXT NOT NULL UNIQUE,\
+      path TEXT NOT NULL,\
+      github_url TEXT,\
+      description TEXT,\
+      is_active BOOLEAN DEFAULT 1,\
+      transport TEXT DEFAULT 'local',\
+      health_status TEXT DEFAULT 'unknown',\
+      last_health_check DATETIME,\
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_repositories_name ON repositories(name)",
 ];

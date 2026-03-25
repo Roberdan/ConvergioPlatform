@@ -42,6 +42,7 @@ pub mod api_plan_db_review;
 pub mod api_plans;
 pub mod api_project_tree;
 pub mod api_readiness;
+pub mod api_repositories;
 pub mod api_runs;
 pub mod api_runs_handlers;
 pub mod api_tracking;
@@ -121,6 +122,8 @@ mod api_plan_db_checkpoint_tests;
 mod api_plan_db_query_tests;
 #[cfg(test)]
 mod api_plans_tests;
+#[cfg(test)]
+mod api_repositories_tests;
 #[cfg(test)]
 mod api_runs_tests;
 #[cfg(test)]

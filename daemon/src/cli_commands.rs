@@ -7,6 +7,7 @@ use crate::cli_bus;
 use crate::cli_checkpoint;
 use crate::cli_delegation;
 use crate::cli_reap;
+use crate::cli_repo;
 use crate::cli_domain;
 use crate::cli_kb;
 use crate::cli_lock;
@@ -203,5 +204,10 @@ pub enum Commands {
     Reap {
         #[command(subcommand)]
         command: cli_reap::ReapCommands,
+    },
+    /// Repository management commands (cvg repo add/list/show/link/sync)
+    Repo {
+        #[command(subcommand)]
+        command: cli_repo::RepoCommands,
     },
 }

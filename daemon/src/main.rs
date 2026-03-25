@@ -32,6 +32,7 @@ mod cli_task_approve;
 mod cli_wave;
 mod cli_wave_handlers;
 mod cli_reap;
+mod cli_repo;
 mod cli_who;
 mod cli_workspace;
 mod ipc_handler;
