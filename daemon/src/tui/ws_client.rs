@@ -10,6 +10,10 @@ pub enum BrainEvent {
     SessionUpdate { sessions: Vec<serde_json::Value> },
     TaskUpdate { task_id: i64, status: String, plan_id: i64 },
     Heartbeat,
+    /// Bulk snapshot sent by the server on initial WS connection.
+    /// Used to populate the brain canvas with the current state before
+    /// incremental updates arrive — without this the canvas starts blank.
+    HeartbeatSnapshot { peers: Vec<serde_json::Value> },
 }
 
 /// WebSocket client with exponential backoff and HTTP fallback support.
@@ -39,11 +43,27 @@ impl WsClient {
 
     /// Parse a JSON text frame into a BrainEvent.
     ///
-    /// Expected shape: {"kind":"brain_event","event_type":"<TYPE>","payload":<DATA>}
-    /// Returns None for unknown kinds, unknown event_type, or malformed JSON.
+    /// Accepted shapes:
+    /// - `{"kind":"brain_event","event_type":"<TYPE>","payload":<DATA>}`
+    /// - `{"kind":"heartbeat_snapshot","peers":[...]}`  (initial canvas seed)
+    ///
+    /// Returns None for unknown kinds/event_types or malformed JSON.
     pub fn parse_message(text: &str) -> Option<BrainEvent> {
         let v: serde_json::Value = serde_json::from_str(text).ok()?;
-        if v.get("kind")?.as_str()? != "brain_event" {
+        let kind = v.get("kind")?.as_str()?;
+
+        // heartbeat_snapshot is a top-level message kind (not wrapped in brain_event)
+        // sent immediately after the WS handshake to seed the initial brain canvas state.
+        if kind == "heartbeat_snapshot" {
+            let peers = v
+                .get("peers")
+                .and_then(|p| p.as_array())
+                .cloned()
+                .unwrap_or_default();
+            return Some(BrainEvent::HeartbeatSnapshot { peers });
+        }
+
+        if kind != "brain_event" {
             return None;
         }
         let event_type = v.get("event_type")?.as_str()?;
@@ -148,8 +168,43 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_heartbeat_snapshot_with_peers() {
+        let json = r#"{"kind":"heartbeat_snapshot","peers":[{"node":"mac-1","status":"ok"},{"node":"linux-2","status":"ok"}]}"#;
+        let event = WsClient::parse_message(json).unwrap();
+        match event {
+            BrainEvent::HeartbeatSnapshot { peers } => {
+                assert_eq!(peers.len(), 2);
+                assert_eq!(peers[0]["node"], "mac-1");
+                assert_eq!(peers[1]["node"], "linux-2");
+            }
+            _ => panic!("expected HeartbeatSnapshot"),
+        }
+    }
+
+    #[test]
+    fn test_parse_heartbeat_snapshot_empty_peers() {
+        // Server may send empty peers array on first connect before any heartbeat
+        let json = r#"{"kind":"heartbeat_snapshot","peers":[]}"#;
+        let event = WsClient::parse_message(json).unwrap();
+        match event {
+            BrainEvent::HeartbeatSnapshot { peers } => assert!(peers.is_empty()),
+            _ => panic!("expected HeartbeatSnapshot"),
+        }
+    }
+
+    #[test]
+    fn test_parse_heartbeat_snapshot_missing_peers_defaults_empty() {
+        let json = r#"{"kind":"heartbeat_snapshot"}"#;
+        let event = WsClient::parse_message(json).unwrap();
+        match event {
+            BrainEvent::HeartbeatSnapshot { peers } => assert!(peers.is_empty()),
+            _ => panic!("expected HeartbeatSnapshot"),
+        }
+    }
+
+    #[test]
     fn test_parse_heartbeat_none() {
-        // kind != brain_event → None
+        // kind != brain_event and kind != heartbeat_snapshot → None
         let json = r#"{"kind":"heartbeat","event_type":"ping"}"#;
         assert!(WsClient::parse_message(json).is_none());
     }
