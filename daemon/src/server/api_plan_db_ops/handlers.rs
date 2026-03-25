@@ -76,6 +76,17 @@ pub async fn handle_wave_update(
     let conn = state.get_conn()?;
     let conn = &conn;
 
+    // Read current status BEFORE the update to detect whether the transition
+    // to "done" is genuinely new (needed for waves_merged increment below).
+    let prev_row = query_one(
+        conn,
+        "SELECT plan_id, status FROM waves WHERE id = ?1",
+        rusqlite::params![wave_id],
+    )?;
+    if prev_row.is_none() {
+        return Err(ApiError::bad_request(format!("wave {wave_id} not found")));
+    }
+
     // Guard: if setting to done, all tasks must be done/cancelled/skipped
     if status == "done" {
         let pending = query_one(
@@ -110,23 +121,23 @@ pub async fn handle_wave_update(
         return Err(ApiError::bad_request(format!("wave {wave_id} not found")));
     }
 
-    // Update plan stats when wave completes
+    // Update plan stats when wave completes.
+    // Only increment waves_merged if the previous status was NOT already "done"
+    // — idempotent retries must not double-count the merge counter.
     if status == "done" {
-        let plan_id = query_one(
-            conn,
-            "SELECT plan_id FROM waves WHERE id = ?1",
-            rusqlite::params![wave_id],
-        )?
-        .and_then(|v| v.get("plan_id").and_then(Value::as_i64));
+        let plan_id = prev_row.as_ref().and_then(|v| v.get("plan_id").and_then(Value::as_i64));
+        let prev_status = prev_row
+            .as_ref()
+            .and_then(|v| v.get("status").and_then(Value::as_str).map(String::from));
 
         if let Some(pid) = plan_id {
-            // Recount done tasks and increment waves_merged
+            let increment = if prev_status.as_deref() == Some("done") { 0i64 } else { 1i64 };
             conn.execute(
                 "UPDATE plans SET tasks_done = \
                  (SELECT COUNT(*) FROM tasks WHERE plan_id = ?1 AND status = 'done'), \
-                 waves_merged = COALESCE(waves_merged, 0) + 1, \
+                 waves_merged = COALESCE(waves_merged, 0) + ?2, \
                  updated_at = datetime('now') WHERE id = ?1",
-                rusqlite::params![pid],
+                rusqlite::params![pid, increment],
             )
             .map_err(|e| ApiError::internal(format!("plan stats update failed: {e}")))?;
         }
