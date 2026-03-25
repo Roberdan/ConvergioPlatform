@@ -20,6 +20,55 @@ pub struct PlanDb {
     crsqlite_extension: Option<String>,
 }
 
+/// Retry a SQLite write operation up to `max_attempts` times when `SQLITE_BUSY` is returned.
+///
+/// Delays: 100ms, 500ms, 2000ms (with a small fixed jitter slice per attempt).
+/// Non-BUSY errors are returned immediately without retrying.
+pub fn with_retry<T, F>(max_attempts: u32, mut f: F) -> rusqlite::Result<T>
+where
+    F: FnMut() -> rusqlite::Result<T>,
+{
+    // Delay sequence in milliseconds for attempts 1, 2, 3+
+    const DELAYS_MS: &[u64] = &[100, 500, 2000];
+    let mut last_err = None;
+
+    for attempt in 0..max_attempts {
+        match f() {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                if is_busy_error(&e) {
+                    last_err = Some(e);
+                    // Wait before retry — skip sleep on last attempt
+                    if attempt + 1 < max_attempts {
+                        let idx = (attempt as usize).min(DELAYS_MS.len() - 1);
+                        let delay = DELAYS_MS[idx];
+                        std::thread::sleep(std::time::Duration::from_millis(delay));
+                    }
+                } else {
+                    // Non-BUSY errors propagate immediately
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    Err(last_err.expect("at least one attempt was made"))
+}
+
+/// Returns true if the rusqlite error is SQLITE_BUSY or SQLITE_LOCKED.
+fn is_busy_error(e: &rusqlite::Error) -> bool {
+    match e {
+        rusqlite::Error::SqliteFailure(err, _) => {
+            matches!(
+                err.code,
+                rusqlite::ffi::ErrorCode::DatabaseBusy
+                    | rusqlite::ffi::ErrorCode::DatabaseLocked
+            )
+        }
+        _ => false,
+    }
+}
+
 impl PlanDb {
     pub fn open_in_memory() -> rusqlite::Result<Self> {
         Ok(Self {

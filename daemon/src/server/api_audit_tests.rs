@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS plans (
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY, plan_id INTEGER, task_id TEXT,
-  title TEXT, status TEXT, model TEXT, effort TEXT, wave_id_fk INTEGER
+  title TEXT, status TEXT, model TEXT, effort_level TEXT, wave_id_fk INTEGER
 );
 CREATE TABLE IF NOT EXISTS execution_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, goal TEXT NOT NULL,
@@ -47,11 +47,11 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 const SEED: &str = "
 INSERT INTO plans(id,name,status,project_id,tasks_total,tasks_done,created_at,updated_at)
   VALUES(1,'Security Hardening','doing','proj-alpha',3,2,'2026-03-20','2026-03-22');
-INSERT INTO tasks(id,plan_id,task_id,title,status,model,effort,wave_id_fk)
+INSERT INTO tasks(id,plan_id,task_id,title,status,model,effort_level,wave_id_fk)
   VALUES(10,1,'W1-T1','Input validation','done','opus','M',NULL);
-INSERT INTO tasks(id,plan_id,task_id,title,status,model,effort,wave_id_fk)
+INSERT INTO tasks(id,plan_id,task_id,title,status,model,effort_level,wave_id_fk)
   VALUES(11,1,'W1-T2','Rate limiting','done','sonnet','S',NULL);
-INSERT INTO tasks(id,plan_id,task_id,title,status,model,effort,wave_id_fk)
+INSERT INTO tasks(id,plan_id,task_id,title,status,model,effort_level,wave_id_fk)
   VALUES(12,1,'W1-T3','Auth hardening','todo','opus','L',NULL);
 INSERT INTO knowledge_base(id,domain,title,content,created_at)
   VALUES(1,'proj-alpha','OWASP Top 10','Injection prevention','2026-03-21');

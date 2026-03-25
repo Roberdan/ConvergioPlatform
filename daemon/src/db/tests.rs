@@ -3,6 +3,77 @@ use super::{PlanDb, TaskStatus, UpdateTaskArgs};
 #[path = "tests_crud.rs"]
 mod tests_crud;
 
+// BUG 4 — SQLite retry with exponential backoff
+// These tests call the public retry API and verify correct attempt counts.
+#[test]
+fn db_retry_succeeds_on_first_attempt() {
+    let mut attempts = 0u32;
+    let result = super::with_retry(3, || {
+        attempts += 1;
+        Ok::<i32, rusqlite::Error>(42)
+    });
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 42);
+    assert_eq!(attempts, 1, "should succeed on first attempt");
+}
+
+#[test]
+fn db_retry_retries_on_busy_error() {
+    let mut attempts = 0u32;
+    let result = super::with_retry(3, || {
+        attempts += 1;
+        if attempts < 3 {
+            // Simulate SQLITE_BUSY by returning an error
+            Err(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error {
+                    code: rusqlite::ffi::ErrorCode::DatabaseBusy,
+                    extended_code: 5, // SQLITE_BUSY
+                },
+                Some("database is locked".to_string()),
+            ))
+        } else {
+            Ok::<i32, rusqlite::Error>(99)
+        }
+    });
+    assert!(result.is_ok(), "should succeed after retries");
+    assert_eq!(result.unwrap(), 99);
+    assert_eq!(attempts, 3, "should have taken 3 attempts");
+}
+
+#[test]
+fn db_retry_gives_up_after_max_attempts() {
+    let mut attempts = 0u32;
+    let result = super::with_retry(3, || {
+        attempts += 1;
+        Err::<i32, rusqlite::Error>(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error {
+                code: rusqlite::ffi::ErrorCode::DatabaseBusy,
+                extended_code: 5,
+            },
+            Some("database is locked".to_string()),
+        ))
+    });
+    assert!(result.is_err(), "should fail after exhausting retries");
+    assert_eq!(attempts, 3, "should have tried exactly 3 times");
+}
+
+#[test]
+fn db_retry_does_not_retry_non_busy_errors() {
+    let mut attempts = 0u32;
+    let result = super::with_retry(3, || {
+        attempts += 1;
+        Err::<i32, rusqlite::Error>(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error {
+                code: rusqlite::ffi::ErrorCode::ConstraintViolation,
+                extended_code: 19,
+            },
+            Some("UNIQUE constraint failed".to_string()),
+        ))
+    });
+    assert!(result.is_err(), "non-busy error should propagate immediately");
+    assert_eq!(attempts, 1, "should not retry on non-BUSY error");
+}
+
 fn seed_schema(db: &PlanDb) {
     db.connection()
         .execute_batch(

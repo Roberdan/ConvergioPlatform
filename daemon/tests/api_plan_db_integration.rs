@@ -147,7 +147,7 @@ async fn api_plan_db_integration_full_lifecycle() {
     let (status, _resp) = post_json(
         &app,
         "/api/plan-db/review/register",
-        json!({"plan_id": plan_id, "reviewer_agent": "plan-reviewer", "verdict": "approved"}),
+        json!({"plan_id": plan_id, "reviewer_agent": "plan-reviewer", "verdict": "proceed"}),
     )
     .await;
     assert_eq!(status, StatusCode::OK);

@@ -82,7 +82,7 @@ async fn non_code_plan_document_tasks_complete() {
         json!({
             "plan_id": plan_id,
             "reviewer_agent": "plan-reviewer",
-            "verdict": "approved"
+            "verdict": "proceed"
         }),
     )
     .await;
