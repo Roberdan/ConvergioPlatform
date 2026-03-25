@@ -163,10 +163,14 @@ phase_config() {
 		echo -e "  ${G}✓ dotclaude: local is newest${N}"
 	fi
 
-	# Push to all peers
-	"$SCRIPT_DIR/peer-sync.sh" push 2>&1 | sed 's/^/  /' || true
+	# Push to all peers — track failures explicitly
+	local _phase_config_failures=0
+	"$SCRIPT_DIR/peer-sync.sh" push 2>&1 | sed 's/^/  /' || { warn "peer-sync push failed"; ((_phase_config_failures++)) || true; }
 	echo -e "  ${C}SCP config files...${N}"
-	"$SCRIPT_DIR/mesh-sync-config.sh" ${TARGET_PEER:+--peer "$TARGET_PEER"} 2>&1 | sed 's/^/  /' || true
+	"$SCRIPT_DIR/mesh-sync-config.sh" ${TARGET_PEER:+--peer "$TARGET_PEER"} 2>&1 | sed 's/^/  /' || { warn "mesh-sync-config failed"; ((_phase_config_failures++)) || true; }
+	if [[ $_phase_config_failures -gt 0 ]]; then
+		echo -e "  ${R}WARN: $_phase_config_failures sync step(s) failed in phase_config${N}" >&2
+	fi
 	echo ""
 }
 
