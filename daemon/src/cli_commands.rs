@@ -6,6 +6,7 @@ use crate::cli_agent;
 use crate::cli_bus;
 use crate::cli_checkpoint;
 use crate::cli_delegation;
+use crate::cli_reap;
 use crate::cli_domain;
 use crate::cli_kb;
 use crate::cli_lock;
@@ -197,5 +198,10 @@ pub enum Commands {
     Delegation {
         #[command(subcommand)]
         command: cli_delegation::DelegationCommands,
+    },
+    /// Reap stale worktrees, merged branches, and expired lock files (zero-zombie enforcement)
+    Reap {
+        #[command(subcommand)]
+        command: cli_reap::ReapCommands,
     },
 }
