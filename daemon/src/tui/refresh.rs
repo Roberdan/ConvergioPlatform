@@ -70,8 +70,8 @@ impl TuiApp {
                     self.chat.sending = true;
                 }
             }
-            // BrainCanvas and CostCenter: no drill-down defined.
-            MainView::BrainCanvas | MainView::CostCenter => {}
+            // BrainCanvas, CostCenter, ProjectView: no drill-down defined.
+            MainView::BrainCanvas | MainView::CostCenter | MainView::ProjectView => {}
         }
     }
 

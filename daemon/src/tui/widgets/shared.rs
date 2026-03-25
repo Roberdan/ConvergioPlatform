@@ -116,6 +116,7 @@ pub fn progress_bar(pct: u16, width: u16) -> String {
 }
 
 /// Colored progress bar as styled spans: green >=80%, yellow >=50%, red <50%.
+/// Colored progress bar as styled spans: green >=80%, yellow >=50%, red <50%.
 pub fn progress_bar_line(pct: u16, width: u16) -> Line<'static> {
     let color = if pct >= 80 { OK } else if pct >= 50 { WARN } else { FAIL };
     let filled = ((pct as u32 * width as u32) / 100) as usize;

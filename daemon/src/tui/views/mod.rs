@@ -169,6 +169,9 @@ fn render_content(
         MainView::Chat => {
             chat::render_chat_view(frame, area, data, chat_input, chat_sending, chat_scroll);
         }
+        MainView::ProjectView => {
+            frame.render_widget(widgets::project_list(data, selected), area);
+        }
     }
 }
 
