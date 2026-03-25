@@ -59,27 +59,33 @@ fi
 
 # 3. Deploy crsqlite extension
 info "Step 3/8: crsqlite extension"
-if [[ "$OS" == "linux" ]]; then
-  EXT_FILE="crsqlite.so"
-  _ssh "test -f ~/.claude/lib/crsqlite/$EXT_FILE" && ok "crsqlite already present" || {
-    _ssh "mkdir -p ~/.claude/lib/crsqlite"
-    scp "$CLAUDE_HOME/lib/crsqlite/$EXT_FILE" "$TARGET:~/.claude/lib/crsqlite/" || {
-      warn "SCP failed, downloading directly"
-      _ssh "cd ~/.claude/lib/crsqlite && curl -sL https://github.com/vlcn-io/cr-sqlite/releases/download/v0.16.3/crsqlite-linux-x86_64.zip -o /tmp/crsql.zip && unzip -o /tmp/crsql.zip"
-    }
-    ok "crsqlite deployed"
-  }
-else
+# Detect remote arch and OS to pick the correct crsqlite binary
+REMOTE_UNAME_S="$(_ssh 'uname -s' 2>/dev/null || echo "Linux")"
+REMOTE_UNAME_M="$(_ssh 'uname -m' 2>/dev/null || echo "x86_64")"
+
+# Map uname -m to crsqlite arch suffix
+case "$REMOTE_UNAME_M" in
+  arm64|aarch64) REMOTE_ARCH="aarch64" ;;
+  x86_64|amd64)  REMOTE_ARCH="x86_64" ;;
+  *)             REMOTE_ARCH="x86_64"; warn "Unknown arch $REMOTE_UNAME_M — defaulting to x86_64" ;;
+esac
+
+if [[ "$REMOTE_UNAME_S" == "Darwin" ]]; then
   EXT_FILE="crsqlite.dylib"
-  _ssh "test -f ~/.claude/lib/crsqlite/$EXT_FILE" && ok "crsqlite already present" || {
-    _ssh "mkdir -p ~/.claude/lib/crsqlite"
-    scp "$CLAUDE_HOME/lib/crsqlite/$EXT_FILE" "$TARGET:~/.claude/lib/crsqlite/" || {
-      warn "SCP failed, downloading directly"
-      _ssh "cd ~/.claude/lib/crsqlite && curl -sL https://github.com/vlcn-io/cr-sqlite/releases/download/v0.16.3/crsqlite-darwin-aarch64.zip -o /tmp/crsql.zip && unzip -o /tmp/crsql.zip"
-    }
-    ok "crsqlite deployed"
-  }
+  CRSQL_ZIP="crsqlite-darwin-${REMOTE_ARCH}.zip"
+else
+  EXT_FILE="crsqlite.so"
+  CRSQL_ZIP="crsqlite-linux-${REMOTE_ARCH}.zip"
 fi
+
+_ssh "test -f ~/.claude/lib/crsqlite/$EXT_FILE" && ok "crsqlite already present" || {
+  _ssh "mkdir -p ~/.claude/lib/crsqlite"
+  scp "$CLAUDE_HOME/lib/crsqlite/$EXT_FILE" "$TARGET:~/.claude/lib/crsqlite/" 2>/dev/null || {
+    warn "SCP failed, downloading directly (arch: $REMOTE_ARCH)"
+    _ssh "cd ~/.claude/lib/crsqlite && curl -sL https://github.com/vlcn-io/cr-sqlite/releases/download/v0.16.3/${CRSQL_ZIP} -o /tmp/crsql.zip && unzip -o /tmp/crsql.zip"
+  }
+  ok "crsqlite deployed"
+}
 
 # 4. Copy master DB (with CRR schemas) and reset site_id
 info "Step 4/8: Database sync"
