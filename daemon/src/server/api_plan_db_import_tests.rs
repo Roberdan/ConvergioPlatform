@@ -110,3 +110,59 @@ fn plan_db_import_creates_rows() {
         .unwrap();
     assert_eq!(count, 2);
 }
+
+// BUG 2 — expanded task type list: all new types must parse without error
+#[test]
+fn plan_db_import_extended_task_types_parse() {
+    let new_types = &[
+        "pr",
+        "research",
+        "strategy",
+        "design",
+        "legal",
+        "analysis",
+        "planning",
+        "communication",
+    ];
+
+    for task_type in new_types {
+        let yaml = format!(
+            "waves:\n  - id: W1\n    name: Wave 1\n    tasks:\n      - id: T1\n        title: Task\n        type: {task_type}\n"
+        );
+        let body = json!({ "plan_id": 1, "spec": yaml });
+        let waves = parse_waves(&body)
+            .unwrap_or_else(|e| panic!("type '{task_type}' rejected: {e}"));
+        assert_eq!(
+            waves[0].tasks[0].task_type, *task_type,
+            "type mismatch for '{task_type}'"
+        );
+    }
+}
+
+#[test]
+fn plan_db_import_all_original_task_types_still_work() {
+    let original_types = &[
+        "bug",
+        "feature",
+        "fix",
+        "refactor",
+        "test",
+        "config",
+        "documentation",
+        "chore",
+        "doc",
+    ];
+
+    for task_type in original_types {
+        let yaml = format!(
+            "waves:\n  - id: W1\n    name: Wave 1\n    tasks:\n      - id: T1\n        title: Task\n        type: {task_type}\n"
+        );
+        let body = json!({ "plan_id": 1, "spec": yaml });
+        let waves = parse_waves(&body)
+            .unwrap_or_else(|e| panic!("original type '{task_type}' rejected: {e}"));
+        assert_eq!(
+            waves[0].tasks[0].task_type, *task_type,
+            "type mismatch for '{task_type}'"
+        );
+    }
+}

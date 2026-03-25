@@ -47,7 +47,7 @@ async fn project_audit(
     } else {
         let placeholders = plan_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let sql = format!(
-            "SELECT id, plan_id, task_id, title, status, model, effort, wave_id_fk \
+            "SELECT id, plan_id, task_id, title, status, model, effort_level, wave_id_fk \
              FROM tasks WHERE plan_id IN ({placeholders}) ORDER BY plan_id, id"
         );
         let params = plan_ids.to_vec();

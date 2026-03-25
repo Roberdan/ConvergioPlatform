@@ -3,15 +3,38 @@
 
 use clap::Subcommand;
 
+/// Valid verdict values for `cvg review register`.
+const VALID_VERDICTS: &[&str] = &["proceed", "revise", "reject"];
+
+/// Returns true if the verdict is one of the accepted values.
+pub fn is_valid_verdict(verdict: &str) -> bool {
+    VALID_VERDICTS.contains(&verdict)
+}
+
 #[derive(Debug, Subcommand)]
 pub enum ReviewCommands {
-    /// Register a plan review record
+    /// Register a plan review record.
+    ///
+    /// Usage (with plan ID):
+    ///   cvg review register --plan-id <ID> <reviewer_agent> <verdict> [--suggestions ...]
+    ///
+    /// Usage (pre-plan, by spec file — use before cvg plan create):
+    ///   cvg review register --spec-file <path> <reviewer_agent> <verdict> [--suggestions ...]
+    ///
+    /// Verdict must be one of: proceed | revise | reject
     Register {
-        /// Plan ID
-        plan_id: i64,
+        /// Plan DB ID (optional if --spec-file is supplied)
+        #[arg(long)]
+        plan_id: Option<i64>,
+        /// Path to the spec file (optional if --plan-id is supplied).
+        /// When supplied and plan_id is absent, the review is stored without a
+        /// plan link and automatically linked when `cvg plan create` imports
+        /// the matching spec file.
+        #[arg(long)]
+        spec_file: Option<String>,
         /// Reviewer agent name (e.g. plan-reviewer, plan-business-advisor)
         reviewer_agent: String,
-        /// Verdict (approved, rejected, proceed)
+        /// Verdict: must be one of proceed | revise | reject
         verdict: String,
         /// Optional suggestions text
         #[arg(long)]
@@ -51,15 +74,40 @@ pub async fn handle(cmd: ReviewCommands) {
     match cmd {
         ReviewCommands::Register {
             plan_id,
+            spec_file,
             reviewer_agent,
             verdict,
             suggestions,
             human,
             api_url,
         } => {
+            // Validate verdict before sending — catch user errors locally with clear message.
+            if !is_valid_verdict(&verdict) {
+                eprintln!(
+                    "error: invalid verdict '{verdict}'\n\
+                     Valid values: proceed | revise | reject\n\
+                     Usage: cvg review register [--plan-id <ID> | --spec-file <path>] \
+                     <reviewer_agent> <verdict>"
+                );
+                std::process::exit(1);
+            }
+
+            // At least one of plan_id or spec_file must be supplied.
+            if plan_id.is_none() && spec_file.is_none() {
+                eprintln!(
+                    "error: supply either --plan-id <ID> or --spec-file <path>\n\
+                     Usage: cvg review register [--plan-id <ID> | --spec-file <path>] \
+                     <reviewer_agent> <verdict>"
+                );
+                std::process::exit(1);
+            }
+
             let body = serde_json::json!({
-                "plan_id": plan_id, "reviewer_agent": reviewer_agent,
-                "verdict": verdict, "suggestions": suggestions,
+                "plan_id": plan_id,
+                "spec_file": spec_file,
+                "reviewer_agent": reviewer_agent,
+                "verdict": verdict,
+                "suggestions": suggestions,
             });
             crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/register"),
@@ -99,17 +147,78 @@ pub async fn handle(cmd: ReviewCommands) {
 mod tests {
     use super::*;
 
+    // BUG 1 — verdict validation tests
     #[test]
-    fn review_register_variant_exists() {
+    fn verdict_proceed_is_valid() {
+        assert!(is_valid_verdict("proceed"));
+    }
+
+    #[test]
+    fn verdict_revise_is_valid() {
+        assert!(is_valid_verdict("revise"));
+    }
+
+    #[test]
+    fn verdict_reject_is_valid() {
+        assert!(is_valid_verdict("reject"));
+    }
+
+    #[test]
+    fn verdict_approved_is_invalid() {
+        assert!(!is_valid_verdict("approved"));
+    }
+
+    #[test]
+    fn verdict_empty_is_invalid() {
+        assert!(!is_valid_verdict(""));
+    }
+
+    #[test]
+    fn verdict_typo_is_invalid() {
+        assert!(!is_valid_verdict("preceed"));
+    }
+
+    // BUG 3 — spec_file review registration tests
+    #[test]
+    fn review_register_with_spec_file_no_plan_id() {
         let cmd = ReviewCommands::Register {
-            plan_id: 685,
+            plan_id: None,
+            spec_file: Some("/tmp/plan.yaml".to_string()),
             reviewer_agent: "plan-reviewer".to_string(),
-            verdict: "approved".to_string(),
+            verdict: "proceed".to_string(),
             suggestions: None,
             human: false,
             api_url: "http://localhost:8420".to_string(),
         };
-        assert!(matches!(cmd, ReviewCommands::Register { plan_id: 685, .. }));
+        assert!(matches!(cmd, ReviewCommands::Register { plan_id: None, .. }));
+    }
+
+    #[test]
+    fn review_register_with_plan_id_no_spec_file() {
+        let cmd = ReviewCommands::Register {
+            plan_id: Some(685),
+            spec_file: None,
+            reviewer_agent: "plan-reviewer".to_string(),
+            verdict: "proceed".to_string(),
+            suggestions: None,
+            human: false,
+            api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, ReviewCommands::Register { plan_id: Some(685), .. }));
+    }
+
+    #[test]
+    fn review_register_variant_exists() {
+        let cmd = ReviewCommands::Register {
+            plan_id: Some(685),
+            spec_file: None,
+            reviewer_agent: "plan-reviewer".to_string(),
+            verdict: "proceed".to_string(),
+            suggestions: None,
+            human: false,
+            api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, ReviewCommands::Register { plan_id: Some(685), .. }));
     }
 
     #[test]
@@ -152,8 +261,8 @@ mod tests {
     fn review_register_body_shape() {
         let body = serde_json::json!({
             "plan_id": 685_i64, "reviewer_agent": "plan-reviewer",
-            "verdict": "approved", "suggestions": serde_json::Value::Null,
+            "verdict": "proceed", "suggestions": serde_json::Value::Null,
         });
-        assert_eq!(body["verdict"], "approved");
+        assert_eq!(body["verdict"], "proceed");
     }
 }
