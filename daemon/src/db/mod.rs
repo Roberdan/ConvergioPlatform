@@ -22,37 +22,29 @@ pub struct PlanDb {
 
 /// Retry a SQLite write operation up to `max_attempts` times when `SQLITE_BUSY` is returned.
 ///
-/// Delays: 100ms, 500ms, 2000ms (with a small fixed jitter slice per attempt).
+/// Delegates to `resilience::retry::retry_sync` with exponential backoff.
 /// Non-BUSY errors are returned immediately without retrying.
-pub fn with_retry<T, F>(max_attempts: u32, mut f: F) -> rusqlite::Result<T>
+pub fn with_retry<T, F>(max_attempts: u32, f: F) -> rusqlite::Result<T>
 where
     F: FnMut() -> rusqlite::Result<T>,
 {
-    // Delay sequence in milliseconds for attempts 1, 2, 3+
-    const DELAYS_MS: &[u64] = &[100, 500, 2000];
-    let mut last_err = None;
+    use crate::resilience::retry::{RetryConfig, retry_sync};
+    use std::time::Duration;
 
-    for attempt in 0..max_attempts {
-        match f() {
-            Ok(v) => return Ok(v),
-            Err(e) => {
-                if is_busy_error(&e) {
-                    last_err = Some(e);
-                    // Wait before retry — skip sleep on last attempt
-                    if attempt + 1 < max_attempts {
-                        let idx = (attempt as usize).min(DELAYS_MS.len() - 1);
-                        let delay = DELAYS_MS[idx];
-                        std::thread::sleep(std::time::Duration::from_millis(delay));
-                    }
-                } else {
-                    // Non-BUSY errors propagate immediately
-                    return Err(e);
-                }
-            }
-        }
-    }
-
-    Err(last_err.expect("at least one attempt was made"))
+    // Replicate previous behavior: 100ms → 500ms → 2000ms ≈ factor 4-5
+    // RetryConfig: max_retries = max_attempts - 1 (first attempt is free)
+    let retries = max_attempts.saturating_sub(1);
+    retry_sync(
+        f,
+        RetryConfig {
+            max_retries: retries,
+            initial_delay: Duration::from_millis(100),
+            max_delay: Duration::from_millis(2000),
+            backoff_factor: 5.0,
+            jitter: false,
+        },
+        is_busy_error,
+    )
 }
 
 /// Returns true if the rusqlite error is SQLITE_BUSY or SQLITE_LOCKED.
