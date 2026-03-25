@@ -13,7 +13,9 @@ INTERVAL="${2:-30}"
 PLAN_ID="${1:-}"
 
 MAX_BUDGET="${CONVERGIO_MAX_BUDGET:-10.00}"  # F2: daily budget cap in USD
-RETRY_FILE="/tmp/convergio-retry-state"
+# Scope retry state to the DB path so multiple autopilot instances don't collide
+DB_HASH="$(printf '%s' "$DB" | shasum 2>/dev/null | cut -c1-8 || printf '%s' "$DB" | md5 2>/dev/null | cut -c1-8 || echo "global")"
+RETRY_FILE="/tmp/convergio-retry-${DB_HASH}"
 
 # Source helpers (plan discovery, wave state machine, trigger_*, execution_runs)
 HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
