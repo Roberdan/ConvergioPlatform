@@ -7,6 +7,8 @@
 //! - [`circuit_breaker`]: Opens after N failures; probes on reset timeout.
 //! - [`retry`]: Async exponential backoff with optional jitter.
 //! - [`health`]: HealthCheck trait + HealthRegistry for component monitoring.
+//! - [`reaper`]: Zero-zombie enforcement — cleans stale worktrees, branches, locks.
+//! - [`checkpoint`]: Plan checkpoint persistence for restart-without-data-loss.
 //!
 //! # Quick start
 //!
@@ -28,6 +30,8 @@
 //! ).await;
 //! ```
 
+pub mod checkpoint;
 pub mod circuit_breaker;
 pub mod health;
+pub mod reaper;
 pub mod retry;
