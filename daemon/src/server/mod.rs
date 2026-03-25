@@ -1,3 +1,4 @@
+pub mod api_decisions;
 pub mod api_agent_catalog;
 mod api_agent_catalog_parse;
 pub mod api_agent_triage;
@@ -125,6 +126,8 @@ mod api_runs_tests;
 mod api_runs_tests_lifecycle;
 #[cfg(test)]
 mod api_tests;
+#[cfg(test)]
+mod api_decisions_tests;
 #[cfg(test)]
 mod api_tracking_tests;
 #[cfg(test)]

@@ -1,5 +1,6 @@
 pub mod background;
 pub mod background_sync;
+pub mod resilience;
 pub mod db;
 pub mod digest;
 pub mod errors;
