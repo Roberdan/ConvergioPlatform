@@ -9,5 +9,10 @@
   "mesh": {
     "sync_interval_minutes": 30,
     "peers": ["m5"]
+  },
+  "ntfy": {
+    "enabled": true,
+    "url": "https://ntfy.sh",
+    "topic": "convergio"
   }
 }

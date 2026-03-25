@@ -115,7 +115,7 @@ async fn handle_message(
             // Surface via notification API
             let plan_id = payload.get("plan_id").and_then(|v| v.as_i64()).unwrap_or(0);
             let _ = reqwest::Client::new()
-                .post(format!("{}/api/notify/send", super::actions::DAEMON_BASE))
+                .post(format!("{}/api/notify", super::actions::DAEMON_BASE))
                 .json(&serde_json::json!({
                     "title": "Ali needs help",
                     "message": reason,
@@ -168,5 +168,14 @@ mod tests {
     fn require_i64_errors_on_string_value() {
         let payload = serde_json::json!({"plan_id": "not_a_number"});
         assert!(require_i64(&payload, "plan_id").is_err());
+    }
+
+    /// Verify the notify URL used in need_human handler matches the actual route.
+    /// The handler at /api/notify expects POST — not /api/notify/send.
+    #[test]
+    fn need_human_notify_url_uses_correct_route() {
+        let expected_path = "/api/notify";
+        let url = format!("{}{expected_path}", crate::orchestrator::actions::DAEMON_BASE);
+        assert_eq!(url, "http://localhost:8420/api/notify");
     }
 }

@@ -29,26 +29,39 @@ pub async fn handle_notify(
     let plan_id = body.get("plan_id").and_then(Value::as_i64);
     let link = body.get("link").and_then(Value::as_str);
 
-    let conn = state.get_conn()?;
-    let conn = &conn;
+    // DB insert must complete before any .await (rusqlite::Connection is !Send)
+    let (notif_id, native_ok) = {
+        let conn = state.get_conn()?;
+        conn.execute(
+            "INSERT INTO notification_queue (severity, title, message, plan_id, link, status) \
+             VALUES (?1, ?2, ?3, ?4, ?5, 'pending')",
+            rusqlite::params![severity, title, message, plan_id, link],
+        )
+        .map_err(|e| ApiError::internal(format!("notify insert failed: {e}")))?;
 
-    // Insert into notification_queue
-    conn.execute(
-        "INSERT INTO notification_queue (severity, title, message, plan_id, link, status) \
-         VALUES (?1, ?2, ?3, ?4, ?5, 'pending')",
-        rusqlite::params![severity, title, message, plan_id, link],
-    )
-    .map_err(|e| ApiError::internal(format!("notify insert failed: {e}")))?;
+        let nid: i64 = conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .map_err(|e| ApiError::internal(format!("rowid failed: {e}")))?;
 
-    let notif_id: i64 = conn
-        .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
-        .map_err(|e| ApiError::internal(format!("rowid failed: {e}")))?;
+        let native = try_native_notify(title, message, severity);
+        (nid, native)
+    };
 
-    // Attempt native notification (non-blocking)
-    let native_ok = try_native_notify(title, message, severity);
+    // Attempt ntfy.sh push notification (best-effort, requires .await)
+    let ntfy_cfg = super::ntfy::load_config();
+    let ntfy_ok = match super::ntfy::send(&ntfy_cfg, title, message, severity).await {
+        Ok(delivered) => delivered,
+        Err(e) => {
+            tracing::warn!("ntfy delivery failed: {e}");
+            false
+        }
+    };
 
-    // Mark as delivered if native succeeded
-    if native_ok {
+    let delivered = native_ok || ntfy_ok;
+
+    // Mark as delivered if any channel succeeded
+    if delivered {
+        let conn = state.get_conn()?;
         let _ = conn.execute(
             "UPDATE notification_queue SET status = 'delivered', \
              delivered_at = datetime('now') WHERE id = ?1",
@@ -69,7 +82,8 @@ pub async fn handle_notify(
         "ok": true,
         "id": notif_id,
         "native_delivered": native_ok,
-        "status": if native_ok { "delivered" } else { "pending" },
+        "ntfy_delivered": ntfy_ok,
+        "status": if delivered { "delivered" } else { "pending" },
     })))
 }
 

@@ -1,4 +1,5 @@
 mod handlers;
+pub mod ntfy;
 pub use handlers::router;
 
 #[cfg(test)]
