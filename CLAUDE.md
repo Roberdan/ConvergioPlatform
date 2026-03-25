@@ -37,14 +37,32 @@ cvg agent complete "<type>-$(hostname -s)-$$"  # before /exit
 | `cd daemon && cargo test` | Daemon tests |
 | `cd daemon && cargo run -- tui` | Launch TUI |
 | `./daemon/start.sh` | Run daemon |
-| `cd dashboard && ./start.sh` | Run Control Room |
-| `cd evolution && npx tsc --noEmit` | Type check evolution |
 | `cd evolution && npx vitest run` | Evolution tests |
 | `cvg plan status convergio` | Plan status |
 | `cvg project create\|list\|show <id>` | Project ops |
 | `cvg audit --project <id>` | Project audit |
 | `scripts/mesh/mesh-heartbeat.sh` | Mesh health |
-| `bash scripts/platform/convergio-openclaw-skills.sh` | Generate OpenClaw skills |
+
+**Multi-Repo (W4)**
+
+| Command | Purpose |
+|---|---|
+| `cvg repo add <name> --path <p> [--github-url <u>]` | Register repo |
+| `cvg repo list` | List registered repos |
+| `cvg repo show <name>` | Repo details |
+| `cvg repo link <name> <project-id>` | Link repo to project |
+| `cvg repo sync` | Health-check all repos |
+
+**Resilience (W2)**
+
+| Command | Purpose |
+|---|---|
+| `cvg reap [--dry-run]` | Run zombie reaper |
+| `cvg checkpoint save <plan_id>` | Snapshot plan state |
+| `cvg checkpoint restore <plan_id>` | Restore from snapshot |
+| `cvg watchdog start\|stop\|status` | Manage local LLM watchdog |
+| `cvg notify send <title> <msg> [--severity ...]` | Send notification |
+| `cvg decision log [--plan-id <id>]` | Query decision audit trail |
 
 ## Architecture
 
