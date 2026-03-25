@@ -19,8 +19,8 @@ agent_register() {
   local type="${2:-claude}"
   local pid="${3:-$$}"
   local body
-  body=$(printf '{"agent_id":"%s","agent_type":"%s","host":"%s","pid":%d}' \
-    "$name" "$type" "$(hostname)" "$pid")
+  body=$(jq -n --arg id "$name" --arg t "$type" --arg h "$(hostname)" --argjson p "$pid" \
+    '{agent_id:$id,agent_type:$t,host:$h,pid:$p}')
   if _post "/api/ipc/agents/register" "$body" >/dev/null; then
     echo "Registered agent: $name (type=$type, pid=$pid)" >&2
   else
@@ -32,7 +32,7 @@ agent_register() {
 agent_unregister() {
   local name="${1:?agent name required}"
   local body
-  body=$(printf '{"agent_id":"%s","host":"%s"}' "$name" "$(hostname)")
+  body=$(jq -n --arg id "$name" --arg h "$(hostname)" '{agent_id:$id,host:$h}')
   if _post "/api/ipc/agents/unregister" "$body" >/dev/null; then
     echo "Unregistered agent: $name" >&2
   else
@@ -45,8 +45,8 @@ agent_heartbeat() {
   local name="${1:?agent name required}"
   local current_task="${2:-idle}"
   local body
-  body=$(printf '{"agent_id":"%s","host":"%s","current_task":"%s"}' \
-    "$name" "$(hostname)" "$current_task")
+  body=$(jq -n --arg id "$name" --arg h "$(hostname)" --arg t "$current_task" \
+    '{agent_id:$id,host:$h,current_task:$t}')
   if _post "/api/ipc/agents/heartbeat" "$body" >/dev/null; then
     echo "Heartbeat sent: $name (task=$current_task)" >&2
   else
@@ -60,8 +60,8 @@ agent_checkpoint() {
   local key="${2:?checkpoint key required}"
   local value="${3:?checkpoint value required}"
   local body
-  body=$(printf '{"sender_name":"%s","channel":"checkpoint","content":"%s=%s"}' \
-    "$name" "$key" "$value")
+  body=$(jq -n --arg sn "$name" --arg c "checkpoint" --arg ct "${key}=${value}" \
+    '{sender_name:$sn,channel:$c,content:$ct}')
   if _post "/api/ipc/send" "$body" >/dev/null; then
     echo "Checkpoint sent: $name ($key=$value)" >&2
   else

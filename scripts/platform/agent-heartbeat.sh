@@ -43,10 +43,10 @@ main() {
     fi
   fi
 
-  # POST heartbeat to daemon
+  # POST heartbeat to daemon — use jq to prevent JSON injection via field values
   local heartbeat_body
-  heartbeat_body=$(printf '{"agent_id":"%s","host":"%s","current_task":"%s"}' \
-    "$name" "$(hostname)" "$task")
+  heartbeat_body=$(jq -n --arg id "$name" --arg h "$(hostname)" --arg t "$task" \
+    '{agent_id:$id,host:$h,current_task:$t}')
 
   if ! curl -s --max-time 3 -X POST \
     "${CONVERGIO_DAEMON_URL}/api/ipc/agents/heartbeat" \
@@ -58,8 +58,9 @@ main() {
 
   # Send info message on heartbeat channel for dashboard visibility
   local info_body
-  info_body=$(printf '{"sender_name":"%s","channel":"heartbeat","content":"branch=%s worktree=%s task=%s"}' \
-    "$name" "$branch" "$worktree" "$task")
+  info_body=$(jq -n --arg sn "$name" --arg ch "heartbeat" \
+    --arg ct "branch=${branch} worktree=${worktree} task=${task}" \
+    '{sender_name:$sn,channel:$ch,content:$ct}')
 
   if ! curl -s --max-time 3 -X POST \
     "${CONVERGIO_DAEMON_URL}/api/ipc/send" \
