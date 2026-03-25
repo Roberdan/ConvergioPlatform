@@ -11,6 +11,9 @@ DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
 _db() { sqlite3 "$DB" "$1" 2>/dev/null; }
 
+# Escape single quotes for safe SQL string interpolation
+sql_escape() { printf '%s' "${1//\'/\'\'}"; }
+
 # ─── Repo Registry ──────────────────────────────────────────────────
 
 cmd_register_repo() {
@@ -29,10 +32,13 @@ cmd_register_repo() {
   [ -d "$path/.claude" ] && has_claude=1
   [ -d "$path/.github/agents" ] && has_github=1
 
+  local safe_name safe_path
+  safe_name="$(sql_escape "$name")"
+  safe_path="$(sql_escape "$path")"
   _db "INSERT OR REPLACE INTO repo_registry (name, path, has_claude_config, has_github_agents)
-       VALUES ('$name', '$path', $has_claude, $has_github);"
+       VALUES ('${safe_name}', '${safe_path}', $has_claude, $has_github);"
 
-  echo "Registered: $name → $path (claude:$has_claude, copilot:$has_github)"
+  echo "Registered: $name -> $path (claude:$has_claude, copilot:$has_github)"
 }
 
 cmd_list_repos() {
@@ -63,8 +69,12 @@ cmd_request() {
     completed_at TEXT
   );"
 
+  local safe_from safe_to safe_desc
+  safe_from="$(sql_escape "$from_repo")"
+  safe_to="$(sql_escape "$to_repo")"
+  safe_desc="$(sql_escape "$description")"
   _db "INSERT INTO cross_repo_requests (from_repo, to_repo, description)
-       VALUES ('$from_repo', '$to_repo', '$(echo "$description" | sed "s/'/''/g")');"
+       VALUES ('${safe_from}', '${safe_to}', '${safe_desc}');"
 
   local req_id
   req_id=$(_db "SELECT last_insert_rowid();")
@@ -80,7 +90,11 @@ cmd_pending() {
   local repo="${1:-}"
   echo "Pending cross-repo requests:"
   local query="SELECT id, from_repo, to_repo, description, status FROM cross_repo_requests WHERE status IN ('pending','accepted','in_progress')"
-  [ -n "$repo" ] && query="$query AND to_repo = '$repo'"
+  if [ -n "$repo" ]; then
+    local safe_repo
+    safe_repo="$(sql_escape "$repo")"
+    query="$query AND to_repo = '${safe_repo}'"
+  fi
   query="$query ORDER BY created_at DESC LIMIT 20;"
 
   _db "$query" | while IFS='|' read -r id from to desc status; do
@@ -92,7 +106,11 @@ cmd_accept() {
   local req_id="${1:?Usage: accept <request-id> [agent-name]}"
   local agent="${2:-ali}"
 
-  _db "UPDATE cross_repo_requests SET status='accepted', assigned_agent='$agent' WHERE id=$req_id;"
+  local safe_agent
+  safe_agent="$(sql_escape "$agent")"
+  # req_id is a user-supplied integer; validate it is numeric
+  [[ "$req_id" =~ ^[0-9]+$ ]] || { echo "error: request id must be numeric" >&2; exit 1; }
+  _db "UPDATE cross_repo_requests SET status='accepted', assigned_agent='${safe_agent}' WHERE id=${req_id};"
   local desc
   desc=$(_db "SELECT description FROM cross_repo_requests WHERE id=$req_id;")
 
@@ -105,7 +123,11 @@ cmd_complete() {
   shift
   local result="$*"
 
-  _db "UPDATE cross_repo_requests SET status='done', result='$(echo "$result" | sed "s/'/''/g")', completed_at=datetime('now') WHERE id=$req_id;"
+  # req_id is a user-supplied integer; validate it is numeric
+  [[ "$req_id" =~ ^[0-9]+$ ]] || { echo "error: request id must be numeric" >&2; exit 1; }
+  local safe_result
+  safe_result="$(sql_escape "$result")"
+  _db "UPDATE cross_repo_requests SET status='done', result='${safe_result}', completed_at=datetime('now') WHERE id=${req_id};"
 
   local from_repo
   from_repo=$(_db "SELECT from_repo FROM cross_repo_requests WHERE id=$req_id;")
@@ -127,8 +149,9 @@ cmd_auto_dispatch() {
     echo "  Processing #$id: $from → $to: $desc"
 
     # Find repo path
-    local repo_path
-    repo_path=$(_db "SELECT path FROM repo_registry WHERE name='$to';")
+    local safe_to_name repo_path
+    safe_to_name="$(sql_escape "$to")"
+    repo_path=$(_db "SELECT path FROM repo_registry WHERE name='${safe_to_name}';")
 
     if [ -z "$repo_path" ]; then
       echo "    SKIP: repo '$to' not registered"
