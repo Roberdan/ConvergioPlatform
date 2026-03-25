@@ -3,8 +3,9 @@
 
 #[cfg(test)]
 mod tests {
+    use super::super::notify::ChannelConfig;
     use super::super::watchdog::{
-        CheckResult, NotificationChannel, WatchdogConfig, WatchdogStatus,
+        CheckResult, WatchdogConfig, WatchdogStatus,
     };
 
     #[test]
@@ -26,7 +27,7 @@ mod tests {
         let cfg = WatchdogConfig {
             check_interval_secs: 60,
             ollama_url: "http://localhost:11434".to_string(),
-            notification_channels: vec![NotificationChannel::Ntfy {
+            notification_channels: vec![ChannelConfig::Ntfy {
                 topic: "test-topic".to_string(),
                 base_url: "https://ntfy.sh".to_string(),
             }],
@@ -69,20 +70,20 @@ mod tests {
 
     #[test]
     fn notification_channel_ntfy_topic() {
-        let ch = NotificationChannel::Ntfy {
+        let ch = ChannelConfig::Ntfy {
             topic: "convergio-alerts".to_string(),
             base_url: "https://ntfy.sh".to_string(),
         };
         match ch {
-            NotificationChannel::Ntfy { topic, .. } => assert_eq!(topic, "convergio-alerts"),
+            ChannelConfig::Ntfy { topic, .. } => assert_eq!(topic, "convergio-alerts"),
             _ => panic!("wrong variant"),
         }
     }
 
     #[test]
     fn notification_channel_macos_variant_exists() {
-        let ch = NotificationChannel::MacOS;
+        let ch = ChannelConfig::MacOS;
         // Just ensure the enum variant is usable
-        assert!(matches!(ch, NotificationChannel::MacOS));
+        assert!(matches!(ch, ChannelConfig::MacOS));
     }
 }
