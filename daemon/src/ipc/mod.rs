@@ -32,3 +32,9 @@ pub mod budget;
 pub mod models;
 pub mod router;
 pub mod skills;
+
+// Plan 724: IPC optimization — compact MessagePack serialization
+pub mod compact;
+
+#[cfg(test)]
+mod compact_tests;

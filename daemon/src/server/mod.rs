@@ -13,6 +13,7 @@ pub mod api_domain;
 pub mod api_evolution;
 pub mod api_github;
 pub mod api_github_handlers;
+pub mod api_health_deep;
 pub mod api_heartbeat;
 pub mod api_heartbeat_handlers;
 pub mod api_ideas;
@@ -137,6 +138,8 @@ mod api_workspace_tests;
 mod state_init_tests;
 #[cfg(test)]
 mod ws_pty_tests;
+#[cfg(test)]
+mod api_health_deep_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};
