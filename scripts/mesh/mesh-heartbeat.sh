@@ -23,6 +23,9 @@ err() { echo -e "${R}[heartbeat]${N} $*" >&2; }
 
 _db() { sqlite3 "$DB" "$@"; }
 
+# Escape single quotes for safe SQL string interpolation
+sql_escape() { printf '%s' "${1//\'/\'\'}"; }
+
 _load_json() {
 	local cpu tasks mem_total=0 mem_used=0
 	# uptime load average (1-min) — portable across macOS and Linux
@@ -76,8 +79,12 @@ _write_heartbeat() {
 	load_json="$(_load_json)"
 	caps="$(_capabilities)"
 
+	local safe_peer safe_load safe_caps
+	safe_peer="$(sql_escape "$peer_name")"
+	safe_load="$(sql_escape "$load_json")"
+	safe_caps="$(sql_escape "$caps")"
 	_db "INSERT OR REPLACE INTO peer_heartbeats (peer_name, last_seen, load_json, capabilities)
-	     VALUES ('${peer_name}', unixepoch(), '${load_json}', '${caps}');" 2>/dev/null || {
+	     VALUES ('${safe_peer}', unixepoch(), '${safe_load}', '${safe_caps}');" 2>/dev/null || {
 		warn "DB write failed (will retry)"
 	}
 }
@@ -87,37 +94,52 @@ _emit_event() {
 	local event_type="$1" plan_id="$2" payload="${3:-}"
 	local peer_name
 	peer_name="$(peers_self 2>/dev/null || echo "$(hostname -s 2>/dev/null || hostname)")"
+	local safe_event safe_peer safe_payload
+	safe_event="$(sql_escape "$event_type")"
+	safe_peer="$(sql_escape "$peer_name")"
+	safe_payload="$(sql_escape "$payload")"
+	# plan_id is numeric — validated by caller via DB query, safe to interpolate
 	local exists
-	exists=$(_db "SELECT COUNT(*) FROM mesh_events WHERE event_type='${event_type}' AND plan_id=${plan_id} AND source_peer='${peer_name}' AND status='pending';" 2>/dev/null || echo "0")
+	exists=$(_db "SELECT COUNT(*) FROM mesh_events WHERE event_type='${safe_event}' AND plan_id=${plan_id} AND source_peer='${safe_peer}' AND status='pending';" 2>/dev/null || echo "0")
 	if [[ "$exists" -eq 0 ]]; then
-		_db "INSERT INTO mesh_events (event_type, plan_id, source_peer, payload) VALUES ('${event_type}', ${plan_id}, '${peer_name}', '${payload}');" 2>/dev/null || true
+		_db "INSERT INTO mesh_events (event_type, plan_id, source_peer, payload) VALUES ('${safe_event}', ${plan_id}, '${safe_peer}', '${safe_payload}');" 2>/dev/null || true
 	fi
 }
 
 _check_plan_events() {
-	local peer_name
+	local peer_name safe_peer
 	peer_name="$(peers_self 2>/dev/null || echo "$(hostname -s 2>/dev/null || hostname)")"
+	safe_peer="$(sql_escape "$peer_name")"
 	while IFS='|' read -r plan_id plan_name tasks_done tasks_total; do
 		[[ -z "$plan_id" ]] && continue
-		local resolved
+		# plan_id, tasks_done, tasks_total come from DB — numeric, safe to interpolate
+		local resolved safe_plan_name
+		safe_plan_name="$(sql_escape "$plan_name")"
 		resolved=$(_db "SELECT COUNT(*) FROM tasks t JOIN waves w ON t.wave_id_fk=w.id WHERE w.plan_id=${plan_id} AND t.status IN ('done','skipped','cancelled');" 2>/dev/null || echo "0")
 		if [[ "$resolved" -ge "$tasks_total" && "$tasks_total" -gt 0 ]]; then
-			_emit_event "plan_completed" "$plan_id" "{\"name\":\"${plan_name}\",\"tasks\":${tasks_total}}"
+			local plan_payload
+			plan_payload="$(jq -cn --arg n "$plan_name" --argjson t "$tasks_total" '{name:$n,tasks:$t}')"
+			_emit_event "plan_completed" "$plan_id" "$plan_payload"
 		fi
 		local blocked
 		blocked=$(_db "SELECT task_id FROM tasks t JOIN waves w ON t.wave_id_fk=w.id WHERE w.plan_id=${plan_id} AND t.status='blocked' LIMIT 1;" 2>/dev/null || echo "")
 		if [[ -n "$blocked" ]]; then
-			_emit_event "human_needed" "$plan_id" "{\"action\":\"blocked\",\"task\":\"${blocked}\"}"
+			local blocked_payload
+			blocked_payload="$(jq -cn --arg t "$blocked" '{action:"blocked",task:$t}')"
+			_emit_event "human_needed" "$plan_id" "$blocked_payload"
 		fi
-	done < <(_db "SELECT id, name, tasks_done, tasks_total FROM plans WHERE status='doing' AND (execution_host LIKE '%${peer_name}%' OR execution_host='${peer_name}');" 2>/dev/null || true)
+	done < <(_db "SELECT id, name, tasks_done, tasks_total FROM plans WHERE status='doing' AND (execution_host LIKE '%${safe_peer}%' OR execution_host='${safe_peer}');" 2>/dev/null || true)
 	while IFS='|' read -r wave_id wave_name plan_id wd wt; do
 		[[ -z "$wave_id" ]] && continue
-		local wave_resolved
-		wave_resolved=$(_db "SELECT COUNT(*) FROM tasks WHERE wave_id_fk=(SELECT id FROM waves WHERE wave_id='${wave_id}' AND plan_id=${plan_id}) AND status IN ('done','skipped','cancelled');" 2>/dev/null || echo "0")
+		local safe_wave_id wave_resolved
+		safe_wave_id="$(sql_escape "$wave_id")"
+		wave_resolved=$(_db "SELECT COUNT(*) FROM tasks WHERE wave_id_fk=(SELECT id FROM waves WHERE wave_id='${safe_wave_id}' AND plan_id=${plan_id}) AND status IN ('done','skipped','cancelled');" 2>/dev/null || echo "0")
 		if [[ "$wave_resolved" -ge "$wt" && "$wt" -gt 0 ]]; then
-			_emit_event "wave_completed" "$plan_id" "{\"wave\":\"${wave_id}\",\"name\":\"${wave_name}\"}"
+			local wave_payload
+			wave_payload="$(jq -cn --arg w "$wave_id" --arg n "$wave_name" '{wave:$w,name:$n}')"
+			_emit_event "wave_completed" "$plan_id" "$wave_payload"
 		fi
-	done < <(_db "SELECT w.wave_id, w.name, w.plan_id, w.tasks_done, w.tasks_total FROM waves w JOIN plans p ON w.plan_id=p.id WHERE p.status='doing' AND w.status='in_progress' AND (p.execution_host LIKE '%${peer_name}%' OR p.execution_host='${peer_name}');" 2>/dev/null || true)
+	done < <(_db "SELECT w.wave_id, w.name, w.plan_id, w.tasks_done, w.tasks_total FROM waves w JOIN plans p ON w.plan_id=p.id WHERE p.status='doing' AND w.status='in_progress' AND (p.execution_host LIKE '%${safe_peer}%' OR p.execution_host='${safe_peer}');" 2>/dev/null || true)
 }
 _poll_remote_peers() {
 	# Coordinator-only: SSH into remote peers, read their heartbeat, merge locally
