@@ -27,7 +27,8 @@ case "${1:-}" in
   create)
     shift; local proj="${1:-}"; local name="${2:-}"
     [[ -z "$proj" || -z "$name" ]] && { echo "Usage: plan-db.sh create <project_id> <name>"; exit 1; }
-    api POST "/api/plan-db/create" -d "{\"project_id\":\"$proj\",\"name\":\"$name\"}"
+    local body; body="$(jq -n --arg p "$proj" --arg n "$name" '{project_id:$p,name:$n}')"
+    api POST "/api/plan-db/create" -d "$body"
     ;;
   start)
     shift; local plan_id="${1:-}"
@@ -42,7 +43,8 @@ case "${1:-}" in
   cancel)
     shift; local plan_id="${1:-}"; local reason="${2:-cancelled}"
     [[ -z "$plan_id" ]] && { echo "Usage: plan-db.sh cancel <plan_id> [reason]"; exit 1; }
-    api POST "/api/plan-db/cancel/$plan_id" -d "{\"reason\":\"$reason\"}"
+    local body; body="$(jq -n --arg r "$reason" '{reason:$r}')"
+    api POST "/api/plan-db/cancel/$plan_id" -d "$body"
     ;;
   approve)
     shift; local plan_id="${1:-}"
@@ -53,9 +55,14 @@ case "${1:-}" in
     shift; local task_id="${1:-}"; local status="${2:-}"; shift 2 || true
     local notes="${*:-}"
     [[ -z "$task_id" || -z "$status" ]] && { echo "Usage: plan-db.sh update-task <id> <status> [notes]"; exit 1; }
-    local payload="{\"task_id\":$task_id,\"status\":\"$status\""
-    [[ -n "$notes" ]] && payload+=",\"notes\":\"$notes\""
-    payload+="}"
+    local payload
+    if [[ -n "$notes" ]]; then
+      payload="$(jq -n --argjson tid "$task_id" --arg s "$status" --arg n "$notes" \
+        '{task_id:$tid,status:$s,notes:$n}')"
+    else
+      payload="$(jq -n --argjson tid "$task_id" --arg s "$status" \
+        '{task_id:$tid,status:$s}')"
+    fi
     api POST "/api/plan-db/task/update" -d "$payload"
     ;;
   json)
@@ -97,20 +104,25 @@ case "${1:-}" in
   wave-update|update-wave)
     shift; local wave_id="${1:-}"; local status="${2:-}"
     [[ -z "$wave_id" || -z "$status" ]] && { echo "Usage: plan-db.sh update-wave <wave_id> <status>"; exit 1; }
-    api POST "/api/plan-db/wave/update" -d "{\"wave_id\":$wave_id,\"status\":\"$status\"}"
+    local body; body="$(jq -n --argjson wid "$wave_id" --arg s "$status" '{wave_id:$wid,status:$s}')"
+    api POST "/api/plan-db/wave/update" -d "$body"
     ;;
   kb-search)
     shift; local query="${1:-}"
     [[ -z "$query" ]] && { echo "Usage: plan-db.sh kb-search <query>"; exit 1; }
-    api GET "/api/plan-db/kb-search?q=$(python3 -c "import urllib.parse;print(urllib.parse.quote('$query'))")"
+    local encoded_q; encoded_q="$(jq -rn --arg q "$query" '$q | @uri')"
+    api GET "/api/plan-db/kb-search?q=${encoded_q}"
     ;;
   agent-start)
     shift; local agent_id="${1:-}"; local agent_type="${2:-}"; local desc="${3:-}"
-    api POST "/api/plan-db/agent/start" -d "{\"agent_id\":\"$agent_id\",\"agent_type\":\"$agent_type\",\"description\":\"$desc\"}"
+    local body; body="$(jq -n --arg id "$agent_id" --arg t "$agent_type" --arg d "$desc" \
+      '{agent_id:$id,agent_type:$t,description:$d}')"
+    api POST "/api/plan-db/agent/start" -d "$body"
     ;;
   agent-complete)
     shift; local agent_id="${1:-}"
-    api POST "/api/plan-db/agent/complete" -d "{\"agent_id\":\"$agent_id\"}"
+    local body; body="$(jq -n --arg id "$agent_id" '{agent_id:$id}')"
+    api POST "/api/plan-db/agent/complete" -d "$body"
     ;;
   show|status)
     shift; api GET "/api/plan-db/list" | python3 -m json.tool
