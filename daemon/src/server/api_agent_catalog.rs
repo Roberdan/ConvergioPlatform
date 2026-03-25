@@ -11,6 +11,37 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
+/// Validate agent name: only `[a-zA-Z0-9_-]` allowed.
+/// Rejects path traversal sequences like `../`, absolute paths, and shell metacharacters.
+fn validate_agent_name(name: &str) -> Result<(), ApiError> {
+    if name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err(ApiError::bad_request(
+            "name must match ^[a-zA-Z0-9_-]+$ (no path separators or special characters)",
+        ));
+    }
+    Ok(())
+}
+
+/// Verify that `child` is strictly inside `parent` after canonicalization.
+/// Prevents path traversal even when `name` passes the regex check.
+fn assert_path_under(parent: &Path, child: &Path) -> Result<(), ApiError> {
+    let canonical_parent = std::fs::canonicalize(parent)
+        .map_err(|e| ApiError::bad_request(format!("invalid target_dir: {e}")))?;
+    // child may not exist yet — canonicalize its parent directory instead
+    let child_dir = child.parent().unwrap_or(child);
+    let canonical_child_dir = std::fs::canonicalize(child_dir)
+        .map_err(|e| ApiError::bad_request(format!("invalid target path: {e}")))?;
+    if !canonical_child_dir.starts_with(&canonical_parent) {
+        return Err(ApiError::bad_request(
+            "resolved path escapes target_dir — request rejected",
+        ));
+    }
+    Ok(())
+}
+
 pub fn router() -> Router<ServerState> {
     Router::new()
         .route("/api/agents/catalog", get(catalog_list))
@@ -144,6 +175,9 @@ async fn catalog_enable(
     State(state): State<ServerState>,
     Json(body): Json<EnableBody>,
 ) -> Result<Json<Value>, ApiError> {
+    // BUG-1: validate name before using it as a filesystem path component
+    validate_agent_name(&body.name)?;
+
     let conn = state.get_conn()?;
     let row = query_rows(
         &conn,
@@ -161,6 +195,8 @@ async fn catalog_enable(
     }
 
     let file_path = target.join(format!("{}.agent.md", body.name));
+    // BUG-1: verify resolved path stays inside target_dir (defense-in-depth)
+    assert_path_under(target, &file_path)?;
     let description = agent["description"].as_str().unwrap_or("");
     let model = agent["model"].as_str().unwrap_or("claude-sonnet-4-6");
     let tools_str = agent["tools"].as_str().unwrap_or("view, edit, bash");
@@ -192,7 +228,15 @@ async fn catalog_disable(
     State(_state): State<ServerState>,
     Json(body): Json<DisableBody>,
 ) -> Result<Json<Value>, ApiError> {
-    let file_path = Path::new(&body.target_dir).join(format!("{}.agent.md", body.name));
+    // BUG-1: validate name before using it as a filesystem path component
+    validate_agent_name(&body.name)?;
+
+    let target = Path::new(&body.target_dir);
+    let file_path = target.join(format!("{}.agent.md", body.name));
+    // BUG-1: verify resolved path stays inside target_dir (defense-in-depth)
+    if target.exists() {
+        assert_path_under(target, &file_path)?;
+    }
     if file_path.exists() {
         fs::remove_file(&file_path)
             .map_err(|e| ApiError::internal(format!("remove failed: {e}")))?;
