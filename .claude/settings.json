@@ -68,6 +68,28 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/scripts/platform/subagent-completion-gate.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); \"$ROOT/scripts/platform/pre-compaction-snapshot.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

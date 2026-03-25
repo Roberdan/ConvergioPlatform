@@ -138,11 +138,25 @@ pub fn gate_pattern_check(files: &[&str]) -> GateResult {
 }
 
 /// Run shell commands and verify they all exit 0.
+/// Commands run from the project root (parent of daemon/) so that
+/// verify paths like "test -f daemon/src/foo.rs" or "cd daemon && cargo test"
+/// work regardless of the daemon process cwd.
 pub fn gate_verify_commands(commands: &[&str]) -> GateResult {
     let mut details = Vec::new();
     let mut all_ok = true;
+    // Why: daemon process cwd is daemon/, but verify commands in plan specs
+    // reference paths relative to project root. Run from parent dir.
+    let project_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
     for cmd in commands {
-        match Command::new("sh").arg("-c").arg(cmd).output() {
+        match Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .current_dir(&project_root)
+            .output()
+        {
             Ok(o) if o.status.success() => details.push(format!("PASS: {cmd}")),
             Ok(o) => {
                 all_ok = false;
