@@ -10,6 +10,7 @@ pub mod mesh;
 pub mod message_error;
 pub mod orchestrator;
 pub mod platform_paths;
+pub mod resilience;
 pub mod server;
 pub mod tui;
 pub mod validation;
