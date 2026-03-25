@@ -1,7 +1,6 @@
 pub mod background;
-pub mod channels;
 pub mod background_sync;
-pub mod resilience;
+pub mod channels;
 pub mod db;
 pub mod digest;
 pub mod errors;
@@ -12,6 +11,7 @@ pub mod mesh;
 pub mod message_error;
 pub mod orchestrator;
 pub mod platform_paths;
+pub mod resilience;
 pub mod server;
 pub mod tui;
 pub mod validation;

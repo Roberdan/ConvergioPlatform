@@ -1,16 +1,11 @@
-// Why: Plan 725 T1-02 — ChannelAdapter trait for bidirectional external channel integration.
-// Follows Pin<Box<dyn Future>> pattern (same as workspace/git_connector.rs) for dyn-compatibility.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 
-/// Boxed async result for trait methods — enables dyn ChannelAdapter without async_trait crate.
 pub type AsyncChannelResult<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, ChannelError>> + Send + 'a>>;
 
-/// Message flowing through a channel (inbound or outbound).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelMessage {
     pub id: String,
@@ -21,7 +16,6 @@ pub struct ChannelMessage {
     pub timestamp: DateTime<Utc>,
 }
 
-/// Health status of a channel adapter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelHealth {
     pub connected: bool,
@@ -30,7 +24,6 @@ pub struct ChannelHealth {
     pub channel_name: String,
 }
 
-/// Errors that channel adapters can produce.
 #[derive(Debug, thiserror::Error)]
 pub enum ChannelError {
     #[error("connection failed: {0}")]
@@ -45,23 +38,17 @@ pub enum ChannelError {
     Other(String),
 }
 
-/// Bidirectional channel adapter trait for external service integration.
-/// Object-safe: uses Pin<Box<Future>> instead of async fn in trait.
 pub trait ChannelAdapter: Send + Sync {
-    /// Connect to the external service.
     fn connect<'a>(&'a mut self) -> AsyncChannelResult<'a, ()>;
-    /// Send a message through the channel.
     fn send<'a>(&'a self, msg: &'a ChannelMessage) -> AsyncChannelResult<'a, ()>;
-    /// Disconnect from the external service.
     fn disconnect<'a>(&'a mut self) -> AsyncChannelResult<'a, ()>;
-    /// Get current health status.
     fn health<'a>(
         &'a self,
     ) -> Pin<Box<dyn Future<Output = ChannelHealth> + Send + 'a>>;
-    /// Channel name identifier.
     fn name(&self) -> &str;
 }
 
+pub mod router;
 pub mod telegram;
 
 #[cfg(test)]
