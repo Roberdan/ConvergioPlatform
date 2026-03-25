@@ -1,4 +1,5 @@
 pub mod background;
+pub mod channels;
 pub mod background_sync;
 pub mod resilience;
 pub mod db;
