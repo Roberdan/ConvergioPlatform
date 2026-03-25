@@ -27,6 +27,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/coordinator/status",
     "/api/coordinator/toggle",
     "/api/health",
+    "/api/health/deep",
     "/api/peers",
     "/api/peers/discover",
     "/api/agents",

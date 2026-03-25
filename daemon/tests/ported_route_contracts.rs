@@ -6,7 +6,8 @@ use claude_core::server::routes::{
 
 #[test]
 fn get_route_count_matches_python_port_contract() {
-    assert_eq!(GET_ROUTES.len(), 88);
+    // +1 for GET /api/health/deep added in Plan 724 T2-02
+    assert_eq!(GET_ROUTES.len(), 89);
 }
 
 #[test]
