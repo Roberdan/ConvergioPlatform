@@ -3,7 +3,9 @@
 use super::types::JoinError;
 use std::path::Path;
 
-/// Start an axum HTTP server on `0.0.0.0:7979` serving auth + env bundles.
+/// Start an axum HTTP server on `127.0.0.1:7979` serving auth + env bundles.
+/// Binds loopback only — the Tailscale tunnel provides the secure transport;
+/// binding 0.0.0.0 would expose this unauthenticated port on the LAN.
 ///
 /// `GET /bundle` requires `Authorization: Bearer <HMAC(invite_token, "download")>`.
 /// The server auto-shuts down after the first successful download or `timeout_minutes`.
@@ -105,7 +107,8 @@ pub async fn serve_bundles(
         )
         .with_state(state);
 
-    let listener = TcpListener::bind("0.0.0.0:7979")
+    // Bind loopback only — traffic reaches the joining node via Tailscale tunnel.
+    let listener = TcpListener::bind("127.0.0.1:7979")
         .await
         .map_err(|e| JoinError::Network(e.to_string()))?;
 
