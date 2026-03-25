@@ -18,10 +18,12 @@ EOF
 	exit 1
 }
 
-# Fetch plan JSON from daemon API; fail gracefully if daemon is down
+# Fetch plan JSON from cvg CLI (wraps daemon API); fail gracefully
 fetch_plan() {
 	local plan_id="$1"
-	curl -s --max-time 3 "${API_BASE}/plan-db/plan/${plan_id}" 2>/dev/null || echo ""
+	local raw
+	raw=$(cvg plan show "$plan_id" 2>/dev/null | sed '1{/^[0-9]\{4\}-/d;}') || echo ""
+	echo "$raw"
 }
 
 save_checkpoint() {
@@ -42,19 +44,16 @@ save_checkpoint() {
 import json, sys
 try:
     d = json.loads(sys.argv[1])
-    plan = d if isinstance(d, dict) else d[0] if isinstance(d, list) else {}
-    name = plan.get('name', plan.get('plan_name', '?'))
-    status = plan.get('status', plan.get('plan_status', '?'))
-    waves = plan.get('waves', [])
+    plan = d.get('plan', d) if isinstance(d, dict) else {}
+    name = plan.get('name', '?')
+    status = plan.get('status', '?')
+    waves = d.get('waves', plan.get('waves', []))
     current_wave = ''
     for w in waves:
         if w.get('status') == 'in_progress':
             current_wave = w.get('wave_id', w.get('id', ''))
             break
-    tasks = plan.get('tasks', [])
-    if not tasks:
-        for w in waves:
-            tasks.extend(w.get('tasks', []))
+    tasks = d.get('tasks', plan.get('tasks', []))
     counts = {}
     for t in tasks:
         s = t.get('status', 'unknown')
