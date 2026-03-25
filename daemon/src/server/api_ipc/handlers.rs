@@ -69,11 +69,14 @@ pub async fn api_ipc_channels(State(state): State<ServerState>) -> Result<Json<V
 }
 
 pub async fn api_ipc_context(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
+    // Use ipc_shared_context — the canonical context table managed by IpcEngine.
+    // The former ipc_context table (api_ipc/mod.rs) has been removed; all context
+    // reads/writes must go through ipc_shared_context to stay consistent.
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
     let rows = query_rows(
         &conn,
-        "SELECT key, value, updated_by, updated_at FROM ipc_context ORDER BY key",
+        "SELECT key, value, version, set_by, updated_at FROM ipc_shared_context ORDER BY key",
         [],
     )?;
     Ok(Json(json!({ "ok": true, "context": rows })))

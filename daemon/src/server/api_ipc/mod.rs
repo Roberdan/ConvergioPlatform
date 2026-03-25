@@ -38,12 +38,6 @@ CREATE TABLE IF NOT EXISTS ipc_channels (
     created_by TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now'))
 );
-CREATE TABLE IF NOT EXISTS ipc_context (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_by TEXT,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
 CREATE TABLE IF NOT EXISTS ipc_file_locks (
     file_path TEXT PRIMARY KEY NOT NULL,
     locked_by TEXT NOT NULL DEFAULT '',
