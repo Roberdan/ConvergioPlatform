@@ -4,6 +4,18 @@ use axum::Json;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+/// Reject INI-unsafe characters: newline, `[`, `]`, `=`.
+/// These would allow injecting new sections or key=value pairs into peers.conf.
+fn validate_ini_field(value: &str, field: &str) -> Result<(), Json<Value>> {
+    if value.chars().any(|c| matches!(c, '\n' | '\r' | '[' | ']' | '=')) {
+        Err(Json(
+            json!({"error": format!("invalid characters in field '{field}': newline, '[', ']', '=' are not allowed")}),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 pub(crate) async fn handle_mesh_action(Query(qs): Query<HashMap<String, String>>) -> Json<Value> {
     let action = qs.get("action").cloned().unwrap_or_default();
     let peer = qs.get("peer").cloned().unwrap_or_default();
@@ -26,6 +38,19 @@ fn handle_add_node(peer: &str, qs: &HashMap<String, String>) -> Json<Value> {
     if ip.is_empty() {
         return Json(json!({"error": "Tailscale IP is required"}));
     }
+    // Validate all fields that will be written into the INI file to prevent injection.
+    for (val, name) in [
+        (peer, "peer"),
+        (ssh.as_str(), "ssh"),
+        (os.as_str(), "os"),
+        (caps.as_str(), "caps"),
+        (role.as_str(), "role"),
+        (ip.as_str(), "ip"),
+    ] {
+        if let Err(e) = validate_ini_field(val, name) {
+            return e;
+        }
+    }
     let conf_path = std::env::var("HOME").unwrap_or_default() + "/.claude/config/peers.conf";
     let entry = format!(
         "\n[{peer}]\nssh_alias={ssh}\nos={os}\ntailscale_ip={ip}\ncapabilities={caps}\nrole={role}\nstatus=active\n"
@@ -37,6 +62,40 @@ fn handle_add_node(peer: &str, qs: &HashMap<String, String>) -> Json<Value> {
             Json(json!({"ok": true, "output": format!("Added {peer} ({ip}) to peers.conf")}))
         }
         Err(e) => Json(json!({"error": format!("Failed to write peers.conf: {e}")})),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_ini_field_accepts_clean_values() {
+        assert!(validate_ini_field("worker-node-1", "peer").is_ok());
+        assert!(validate_ini_field("linux", "os").is_ok());
+        assert!(validate_ini_field("claude,copilot", "caps").is_ok());
+        assert!(validate_ini_field("worker", "role").is_ok());
+        assert!(validate_ini_field("100.64.0.1", "ip").is_ok());
+    }
+
+    #[test]
+    fn validate_ini_field_rejects_newline() {
+        assert!(validate_ini_field("bad\nvalue", "peer").is_err());
+        assert!(validate_ini_field("bad\rvalue", "peer").is_err());
+    }
+
+    #[test]
+    fn validate_ini_field_rejects_bracket_injection() {
+        // Attacker could close the current section and open a new one
+        assert!(validate_ini_field("node]\n[evil", "peer").is_err());
+        assert!(validate_ini_field("[evil]", "os").is_err());
+    }
+
+    #[test]
+    fn validate_ini_field_rejects_equals_injection() {
+        // Attacker could inject extra key=value pairs
+        assert!(validate_ini_field("val\nstatus=compromised", "role").is_err());
+        assert!(validate_ini_field("key=inject", "caps").is_err());
     }
 }
 
