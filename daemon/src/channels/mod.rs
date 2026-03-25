@@ -62,6 +62,8 @@ pub trait ChannelAdapter: Send + Sync {
     fn name(&self) -> &str;
 }
 
+pub mod telegram;
+
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;

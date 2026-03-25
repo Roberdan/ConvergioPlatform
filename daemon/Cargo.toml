@@ -70,6 +70,7 @@ tower = "0.5"
 tempfile = "3.10"
 http-body-util = "0.1"
 futures-util = "0.3"
+wiremock = "0.6"
 
 [profile.release]
 opt-level = 3
