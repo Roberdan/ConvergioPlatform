@@ -29,9 +29,21 @@ _ssh_cmd() {
   gh_acct="$(peers_get "$peer" "gh_account" 2>/dev/null || echo "")"
   local target="${user:+${user}@}${dest}"
   local prefix="export PATH=/opt/homebrew/bin:/usr/local/bin:\$PATH"
-  [[ -n "$gh_acct" ]] && prefix="$prefix; gh auth switch --user $gh_acct 2>/dev/null || true"
+  # Quote gh_acct to prevent shell injection via peers.conf values
+  if [[ -n "$gh_acct" ]]; then
+    local safe_acct
+    safe_acct="$(printf '%q' "$gh_acct")"
+    prefix="$prefix; gh auth switch --user $safe_acct 2>/dev/null || true"
+  fi
   shift
-  ssh -n -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$target" "$prefix; $*"
+  # Build remote command: each argument is individually shell-quoted so that
+  # paths/branches with spaces or special chars are safe over SSH.
+  local remote_cmd="$prefix"
+  local arg
+  for arg in "$@"; do
+    remote_cmd+=" $(printf '%q' "$arg")"
+  done
+  ssh -n -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$target" "$remote_cmd"
 }
 
 _sync_peer() {

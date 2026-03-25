@@ -178,8 +178,10 @@ _local_commit_ts() {
 # Get commit timestamp from a remote peer via SSH
 _remote_commit_ts() {
 	local dest="$1" rpath="$2"
+	local safe_path
+	safe_path="$(printf '%q' "$rpath")"
 	ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$dest" \
-		"${REMOTE_PATH_PREFIX}git -C $rpath log -1 --format='%ct' 2>/dev/null || echo 0" 2>/dev/null || echo "0"
+		"${REMOTE_PATH_PREFIX}git -C $safe_path log -1 --format='%ct' 2>/dev/null || echo 0" 2>/dev/null || echo "0"
 }
 
 # Phase 2: Bidirectional repo sync — find newest, pull if behind, push to all
@@ -254,13 +256,17 @@ phase_repos() {
 		local_sha=$(git -C "$local_repo" log --oneline -1 2>/dev/null | cut -c1-7)
 		echo -e "    local: ${G}${local_sha:-???}${N} (ts=$local_ts)"
 
+		local safe_rpath safe_rbranch safe_raccount
+		safe_rpath="$(printf '%q' "$rpath")"
+		safe_rbranch="$(printf '%q' "$rbranch")"
+		safe_raccount="${raccount:+$(printf '%q' "$raccount")}"
 		for idx in "${!online_peers[@]}"; do
 			local p="${online_peers[$idx]}" d="${online_dests[$idx]}"
 			local rts
 			rts=$(_remote_commit_ts "$d" "$rpath")
 			local rsha
 			rsha=$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$d" \
-				"${REMOTE_PATH_PREFIX}git -C $rpath log --oneline -1 2>/dev/null | cut -c1-7" 2>/dev/null) || rsha="???"
+				"${REMOTE_PATH_PREFIX}git -C $safe_rpath log --oneline -1 2>/dev/null | cut -c1-7" 2>/dev/null) || rsha="???"
 			echo -e "    $p: ${G}${rsha}${N} (ts=$rts)"
 			if [[ "$rts" -gt "$newest_ts" ]]; then
 				newest_ts="$rts"
@@ -273,18 +279,20 @@ phase_repos() {
 		if [[ "$newest_src" != "local" && -n "$newest_dest" ]]; then
 			echo -e "    ${Y}⟵ PULL from $newest_src (ahead)${N}"
 			local pull_cmd="$REMOTE_PATH_PREFIX"
-			[[ -n "$raccount" ]] && pull_cmd+="gh auth switch --user $raccount 2>&1; "
+			[[ -n "$safe_raccount" ]] && pull_cmd+="gh auth switch --user $safe_raccount 2>&1; "
 			# Create a bundle on the ahead peer and fetch it locally
 			local bundle_file="/tmp/mesh-sync-${rname}-$$.bundle"
 			local remote_bundle="/tmp/mesh-sync-${rname}-$$.bundle"
+			local safe_remote_bundle
+			safe_remote_bundle="$(printf '%q' "$remote_bundle")"
 			local bundle_ok=false
 
 			# Try 1: git bundle from remote peer
 			ssh -n -o ConnectTimeout=15 "$newest_dest" \
-				"${REMOTE_PATH_PREFIX}cd $rpath && git bundle create $remote_bundle $rbranch 2>/dev/null && echo BUNDLE_OK" 2>/dev/null | grep -q 'BUNDLE_OK' &&
+				"${REMOTE_PATH_PREFIX}cd $safe_rpath && git bundle create $safe_remote_bundle $safe_rbranch 2>/dev/null && echo BUNDLE_OK" 2>/dev/null | grep -q 'BUNDLE_OK' &&
 				scp -o ConnectTimeout=15 "$newest_dest:$remote_bundle" "$bundle_file" 2>/dev/null &&
 				bundle_ok=true
-			ssh -n "$newest_dest" "rm -f $remote_bundle" 2>/dev/null || true
+			ssh -n "$newest_dest" "rm -f $safe_remote_bundle" 2>/dev/null || true
 
 			if $bundle_ok && [[ -f "$bundle_file" ]]; then
 				if git -C "$local_repo" fetch "$bundle_file" "$rbranch" 2>/dev/null; then
@@ -313,11 +321,11 @@ phase_repos() {
 		for idx in "${!online_peers[@]}"; do
 			local p="${online_peers[$idx]}" d="${online_dests[$idx]}"
 			local cmd="$REMOTE_PATH_PREFIX"
-			[[ -n "$raccount" ]] && cmd+="gh auth switch --user $raccount 2>&1; "
+			[[ -n "$safe_raccount" ]] && cmd+="gh auth switch --user $safe_raccount 2>&1; "
 			if $FORCE; then
-				cmd+="cd $rpath && git fetch origin $rbranch 2>&1 && git reset --hard origin/$rbranch 2>&1"
+				cmd+="cd $safe_rpath && git fetch origin $safe_rbranch 2>&1 && git reset --hard origin/$safe_rbranch 2>&1"
 			else
-				cmd+="cd $rpath && git pull --ff-only origin $rbranch 2>&1"
+				cmd+="cd $safe_rpath && git pull --ff-only origin $safe_rbranch 2>&1"
 			fi
 			cmd+=" && echo 'SYNC_OK:'\$(git log --oneline -1)"
 
@@ -390,7 +398,9 @@ phase_verify() {
 	local verify_cmd=""
 	for rp in "${repo_remote[@]}"; do
 		[[ -n "$verify_cmd" ]] && verify_cmd+="; "
-		verify_cmd+="git -C $rp log --oneline -1 2>/dev/null | cut -c1-7 || echo '???'"
+		local safe_rp
+		safe_rp="$(printf '%q' "$rp")"
+		verify_cmd+="git -C $safe_rp log --oneline -1 2>/dev/null | cut -c1-7 || echo '???'"
 	done
 
 	# Parallel: fetch all peer SHAs concurrently
