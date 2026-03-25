@@ -83,12 +83,17 @@ except Exception as e:
 	task_summary=$(echo "$summary" | sed -n '5p')
 
 	local checkpoint_file="$CHECKPOINT_DIR/plan-${plan_id}.md"
+	# Write atomically: write to a temp file first, then mv into place
+	# Prevents partial reads if the process is interrupted mid-write
+	local tmpfile="${checkpoint_file}.tmp.$$"
+	trap 'rm -f "$tmpfile"' EXIT
 	{
 		echo "# Checkpoint: Plan $plan_id"
 		echo "**${plan_name}** | Status: ${plan_status} | Wave: ${current_wave:-none}"
 		echo "Tasks: ${progress} (${task_summary})"
 		echo "Recovery: \`cvg plan execution-tree ${plan_id}\`"
-	} >"$checkpoint_file"
+	} >"$tmpfile"
+	mv "$tmpfile" "$checkpoint_file"
 
 	echo "$checkpoint_file"
 }
