@@ -7,3 +7,5 @@ export { ClaudeConfigAdapter } from './claude-adapter.js';
 export { DashboardAdapter } from './dashboard-adapter.js';
 export { TemplateAdapter } from './template-adapter.js';
 export { AgentMetricCollector } from './agent-telemetry-collector.js';
+export { EscalationMetricCollector } from './escalation-collector.js';
+export type { EscalationEvent, AgentEscalationStats } from './escalation-collector.js';
