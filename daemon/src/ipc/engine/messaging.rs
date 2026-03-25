@@ -81,24 +81,32 @@ impl IpcEngine {
 
         let param_refs: Vec<&dyn rusqlite::types::ToSql> =
             params.iter().map(|p| p.as_ref()).collect();
-        let mut stmt = conn.prepare(&sql)?;
-        let ids_and_msgs: Vec<(String, MessageInfo)> = stmt
-            .query_map(param_refs.as_slice(), |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    MessageInfo {
-                        id: row.get(0)?,
-                        from_agent: row.get(1)?,
-                        to_agent: row.get(2)?,
-                        channel: row.get(3)?,
-                        content: row.get(4)?,
-                        msg_type: row.get(5)?,
-                        created_at: row.get(6)?,
-                    },
-                ))
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
+
+        // Wrap SELECT + UPDATE in a single transaction so concurrent receivers
+        // cannot claim the same messages (TOCTOU race → duplicate delivery).
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        let ids_and_msgs: Vec<(String, MessageInfo)> = {
+            let mut stmt = conn.prepare(&sql)?;
+            let rows: Vec<(String, MessageInfo)> = stmt
+                .query_map(param_refs.as_slice(), |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        MessageInfo {
+                            id: row.get(0)?,
+                            from_agent: row.get(1)?,
+                            to_agent: row.get(2)?,
+                            channel: row.get(3)?,
+                            content: row.get(4)?,
+                            msg_type: row.get(5)?,
+                            created_at: row.get(6)?,
+                        },
+                    ))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+            rows
+            // stmt is dropped here, releasing the borrow on conn
+        };
 
         if !peek {
             for (id, _) in &ids_and_msgs {
@@ -108,6 +116,7 @@ impl IpcEngine {
                 )?;
             }
         }
+        conn.execute_batch("COMMIT")?;
 
         let messages: Vec<MessageInfo> = ids_and_msgs.into_iter().map(|(_, m)| m).collect();
         Ok(IpcResponse::MessageList { messages })
@@ -218,5 +227,67 @@ impl IpcEngine {
             .collect();
 
         Ok(IpcResponse::MessageList { messages })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::core::IpcEngine;
+    use crate::ipc::protocol::IpcResponse;
+    use std::path::PathBuf;
+    use tempfile::NamedTempFile;
+
+    fn make_engine() -> (IpcEngine, NamedTempFile) {
+        let tmp = NamedTempFile::new().unwrap();
+        let engine = IpcEngine::new(PathBuf::from(tmp.path()));
+        // Initialise schema
+        engine.open_conn().unwrap();
+        (engine, tmp)
+    }
+
+    #[test]
+    fn receive_marks_messages_read_atomically() {
+        let (engine, _tmp) = make_engine();
+
+        // Send two messages to "alice"
+        engine.send_message("bob", "alice", "hello", "text", 0).unwrap();
+        engine.send_message("bob", "alice", "world", "text", 0).unwrap();
+
+        // First receive should return both and mark them read
+        let resp = engine.receive("alice", None, None, 10, false).unwrap();
+        let msgs = match resp {
+            IpcResponse::MessageList { messages } => messages,
+            _ => panic!("expected MessageList"),
+        };
+        assert_eq!(msgs.len(), 2, "first receive must return both messages");
+
+        // Second receive must return zero — messages are already marked read
+        let resp2 = engine.receive("alice", None, None, 10, false).unwrap();
+        let msgs2 = match resp2 {
+            IpcResponse::MessageList { messages } => messages,
+            _ => panic!("expected MessageList"),
+        };
+        assert_eq!(msgs2.len(), 0, "second receive must not re-deliver messages");
+    }
+
+    #[test]
+    fn peek_does_not_consume_messages() {
+        let (engine, _tmp) = make_engine();
+        engine.send_message("bot", "carol", "ping", "text", 0).unwrap();
+
+        // Peek must not mark as read
+        let r1 = engine.receive("carol", None, None, 10, true).unwrap();
+        let c1 = match r1 { IpcResponse::MessageList { messages } => messages.len(), _ => 0 };
+        assert_eq!(c1, 1);
+
+        // Normal receive still gets the message
+        let r2 = engine.receive("carol", None, None, 10, false).unwrap();
+        let c2 = match r2 { IpcResponse::MessageList { messages } => messages.len(), _ => 0 };
+        assert_eq!(c2, 1);
+
+        // Now it's consumed
+        let r3 = engine.receive("carol", None, None, 10, false).unwrap();
+        let c3 = match r3 { IpcResponse::MessageList { messages } => messages.len(), _ => 0 };
+        assert_eq!(c3, 0);
     }
 }
