@@ -40,10 +40,7 @@ pub(crate) fn render_inline(text: &str, base: ratatui::style::Color) -> Vec<Span
             }
             Some((mk, pos)) => {
                 if pos > 0 {
-                    spans.push(Span::styled(
-                        rest[..pos].to_string(),
-                        Style::default().fg(base),
-                    ));
+                    spans.push(Span::styled(rest[..pos].to_string(), Style::default().fg(base)));
                 }
                 let after = &rest[pos + mk.len()..];
                 if let Some(end) = after.find(mk) {
@@ -87,16 +84,15 @@ pub(crate) fn styled_line(
         ]);
     }
 
-    // Headers
-    let (header_text, header_mod) = if let Some(t) = trimmed.strip_prefix("### ") {
-        (Some(t), Modifier::BOLD)
-    } else if let Some(t) = trimmed.strip_prefix("## ") {
-        (Some(t), Modifier::BOLD)
-    } else if let Some(t) = trimmed.strip_prefix("# ") {
-        (Some(t), Modifier::BOLD | Modifier::UNDERLINED)
-    } else {
-        (None, Modifier::empty())
-    };
+    // Headers: ### and ## → bold; # → bold+underlined
+    let (header_text, header_mod) =
+        if let Some(t) = trimmed.strip_prefix("### ").or_else(|| trimmed.strip_prefix("## ")) {
+            (Some(t), Modifier::BOLD)
+        } else if let Some(t) = trimmed.strip_prefix("# ") {
+            (Some(t), Modifier::BOLD | Modifier::UNDERLINED)
+        } else {
+            (None, Modifier::empty())
+        };
 
     if let Some(ht) = header_text {
         return Line::from(vec![
@@ -153,12 +149,11 @@ pub(crate) fn styled_line(
 
 // ── Message rendering ───────────────────────────────────────────────────
 
-/// Walking dino animation.
+/// Walking dino animation frames (left→right→left bounce).
 const DINO_FRAMES: &[&str] = &[
-    "🦕        ", " 🦕       ", "  🦕      ", "   🦕     ",
-    "    🦕    ", "     🦕   ", "      🦕  ", "       🦕 ",
-    "      🦕  ", "     🦕   ", "    🦕    ", "   🦕     ",
-    "  🦕      ", " 🦕       ",
+    "🦕        ", " 🦕       ", "  🦕      ", "   🦕     ", "    🦕    ",
+    "     🦕   ", "      🦕  ", "       🦕 ", "      🦕  ", "     🦕   ",
+    "    🦕    ", "   🦕     ", "  🦕      ", " 🦕       ",
 ];
 
 pub(crate) fn dino_frame() -> &'static str {
