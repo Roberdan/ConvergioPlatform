@@ -62,7 +62,10 @@ async fn handle_import(
             })))
         }
         Err(e) => {
+            // ROLLBACK TO restores state but keeps the savepoint active;
+            // RELEASE is required to remove it from the savepoint stack.
             conn.execute_batch("ROLLBACK TO import_spec").ok();
+            conn.execute_batch("RELEASE import_spec").ok();
             Err(e)
         }
     }
