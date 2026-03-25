@@ -1,3 +1,4 @@
+pub mod api_channels;
 pub mod api_decisions;
 pub mod api_agent_catalog;
 mod api_agent_catalog_parse;
@@ -144,6 +145,8 @@ mod api_workspace_tests;
 mod state_init_tests;
 #[cfg(test)]
 mod ws_pty_tests;
+#[cfg(test)]
+mod api_channels_tests;
 #[cfg(test)]
 mod api_health_deep_tests;
 

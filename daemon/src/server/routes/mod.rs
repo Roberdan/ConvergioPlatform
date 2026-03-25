@@ -4,6 +4,7 @@ pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROU
 
 use super::api_agent_catalog;
 use super::api_agent_triage;
+use super::api_channels;
 use super::api_agents;
 use super::api_audit;
 use super::api_chat;
@@ -123,6 +124,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_crdt::router())
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())
+        .merge(api_channels::router())
         .merge(api_health_deep::router())
         .route("/api/chat/stream/:sid", get(sse::chat_stream_sse))
         .route("/api/mesh/action/stream", get(sse::mesh_action_sse))
