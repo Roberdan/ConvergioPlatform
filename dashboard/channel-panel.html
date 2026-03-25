@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'" />
+    <title>Channels — Convergio</title>
+    <style>
+      /* Maranello DS baseline tokens (subset) */
+      :root {
+        --mn-bg: #0d0d0d;
+        --mn-surface: #1a1a1a;
+        --mn-border: #2a2a2a;
+        --mn-text: #e8e8e8;
+        --mn-accent: #6ee7b7;
+        --mn-danger: #f87171;
+        --mn-muted: #9ca3af;
+        --mn-radius: 8px;
+        --mn-gap: 1rem;
+      }
+
+      /* mn- class implementations */
+      .mn-nero { background: var(--mn-bg); color: var(--mn-text); min-height: 100vh; margin: 0; font-family: system-ui, sans-serif; }
+      .mn-section-dark { background: var(--mn-surface); border-radius: var(--mn-radius); padding: 1.5rem; }
+      .mn-card { background: var(--mn-bg); border: 1px solid var(--mn-border); border-radius: var(--mn-radius); padding: 1rem; }
+      .mn-title { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; color: var(--mn-text); }
+      .mn-body { font-size: 0.9rem; color: var(--mn-muted); margin: 0; }
+      .mn-link { color: var(--mn-accent); text-decoration: none; }
+      .mn-link:hover { text-decoration: underline; }
+
+      /* Channel panel layout */
+      body { padding: 2rem; box-sizing: border-box; }
+      .channel-panel { max-width: 1200px; margin: 0 auto; }
+      .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--mn-gap); margin-top: 1rem; }
+      .channel-card { display: flex; flex-direction: column; gap: 0.5rem; }
+      .channel-name { font-size: 1rem; margin-bottom: 0.25rem; }
+
+      /* Health indicator */
+      .channel-health {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+        align-self: flex-end;
+      }
+      .channel-health--connected { background: var(--mn-accent); }
+      .channel-health--disconnected { background: var(--mn-danger); }
+
+      /* Meta dl */
+      .channel-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 0.5rem; margin-top: 0.5rem; }
+      .channel-meta dt { color: var(--mn-muted); font-size: 0.8rem; }
+      .channel-meta dd { margin: 0; font-size: 0.9rem; }
+
+      /* Escalation table */
+      .channel-escalation-section { margin-top: 2rem; }
+      .channel-escalations { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+      .channel-escalations th, .channel-escalations td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--mn-border); }
+      .channel-escalations thead th { color: var(--mn-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+      /* Responsive: stack at narrow viewports */
+      @media (max-width: 480px) {
+        .channel-grid { grid-template-columns: 1fr; }
+        body { padding: 1rem; }
+      }
+    </style>
+  </head>
+  <body class="mn-nero">
+    <main id="app" aria-label="Channel monitoring dashboard"></main>
+
+    <script type="module">
+      import { createChannelPanel } from './channel-panel.js';
+      const app = document.getElementById('app');
+      createChannelPanel(app);
+    </script>
+  </body>
+</html>
