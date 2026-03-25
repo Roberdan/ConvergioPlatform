@@ -69,7 +69,8 @@ fn aggregate(node: &ProjectTreeNode) -> (i64, i64) {
 
 fn depends_label(dep: &Option<String>) -> String {
     match dep {
-        Some(d) => format!(" \u{2190} {d}"),
+        // → depends on: <name>
+        Some(d) => format!(" \u{2192} depends on: {d}"),
         None => String::new(),
     }
 }
@@ -130,10 +131,12 @@ pub fn build_tree_lines(
         lines.push(Line::from(spans));
 
         if is_expanded {
-            for child in &master.children {
+            let child_count = master.children.len();
+            for (ci, child) in master.children.iter().enumerate() {
                 let is_sel = idx == selected;
+                let is_last = ci + 1 == child_count;
                 idx += 1;
-                render_child(&mut lines, child, is_sel);
+                render_child(&mut lines, child, is_sel, is_last);
             }
         }
         lines.push("".into());
@@ -144,10 +147,12 @@ pub fn build_tree_lines(
             " \u{2500}\u{2500} Other Plans \u{2500}\u{2500}",
             Style::default().fg(MUTED),
         )));
-        for orphan in &orphans {
+        let orphan_count = orphans.len();
+        for (oi, orphan) in orphans.iter().enumerate() {
             let is_sel = idx == selected;
+            let is_last = oi + 1 == orphan_count;
             idx += 1;
-            render_child(&mut lines, orphan, is_sel);
+            render_child(&mut lines, orphan, is_sel, is_last);
         }
         lines.push("".into());
     }
@@ -162,12 +167,19 @@ pub fn build_tree_lines(
     (lines, idx)
 }
 
-fn render_child(lines: &mut Vec<Line<'static>>, node: &ProjectTreeNode, is_sel: bool) {
+fn render_child(lines: &mut Vec<Line<'static>>, node: &ProjectTreeNode, is_sel: bool, is_last: bool) {
     let icon = status_icon(&node.status);
     let color = status_color(&node.status);
     let name = truncate(&node.name, 44);
     let dep = depends_label(&node.depends_on);
-    let frac = format!("{}/{}", node.tasks_done, node.tasks_total);
+    // [N/M] bracket notation as required
+    let frac = format!("[{}/{}]", node.tasks_done, node.tasks_total);
+    // ├── for non-last children, └── for the last child
+    let branch = if is_last {
+        "\u{2514}\u{2500}\u{2500}" // └──
+    } else {
+        "\u{251c}\u{2500}\u{2500}" // ├──
+    };
 
     let name_style = if is_sel {
         selected_style()
@@ -176,7 +188,7 @@ fn render_child(lines: &mut Vec<Line<'static>>, node: &ProjectTreeNode, is_sel: 
     };
 
     let mut spans = vec![
-        Span::styled(format!("   {icon} "), Style::default().fg(color)),
+        Span::styled(format!(" {branch} {icon} "), Style::default().fg(color)),
         Span::styled(format!("#{:<4} ", node.id), Style::default().fg(ACCENT)),
         Span::styled(name, name_style),
     ];
@@ -184,8 +196,7 @@ fn render_child(lines: &mut Vec<Line<'static>>, node: &ProjectTreeNode, is_sel: 
         spans.push(Span::styled(dep, Style::default().fg(MUTED)));
     }
     spans.push(Span::raw("  "));
-    spans.extend(progress_bar(node.tasks_done, node.tasks_total, 12));
-    spans.push(Span::styled(format!(" {frac}"), Style::default().fg(TEXT_SECONDARY)));
+    spans.push(Span::styled(frac, Style::default().fg(TEXT_SECONDARY)));
     lines.push(Line::from(spans));
 }
 
