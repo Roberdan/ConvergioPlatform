@@ -10,7 +10,14 @@ export interface DetectedAnomaly {
 export class AnomalyDetector {
   detect(metric: string, current: number, baseline: number, threshold: number): DetectedAnomaly | null {
     if (baseline <= 0) {
-      return null;
+      // New metric appeared: current > 0 when baseline was 0 is always anomalous.
+      if (current <= 0) return null;
+      return {
+        metric,
+        severity: 'medium',
+        detail: `new metric appeared: current=${current.toFixed(2)} baseline was 0`,
+        confidence: 1,
+      };
     }
 
     const ratio = Math.abs(current - baseline) / baseline;
