@@ -96,6 +96,28 @@ impl IpcEngine {
         })
     }
 
+    /// Remove remote agent registrations that have not been seen within `ttl_secs`.
+    ///
+    /// Remote agents (host != local) cannot be probed with kill(2), so the only
+    /// signal we have is `last_seen`. Entries older than the TTL are stale and
+    /// accumulate forever without this cleanup. Default TTL: 3600 s (1 hour).
+    pub fn prune_stale(&self, ttl_secs: u64) -> rusqlite::Result<IpcResponse> {
+        let conn = self.open_conn()?;
+        let local_host = Self::hostname();
+        let pruned = conn.execute(
+            "DELETE FROM ipc_agents
+              WHERE host != ?1
+                AND last_seen < strftime('%Y-%m-%dT%H:%M:%f', 'now', ?2)",
+            rusqlite::params![
+                local_host,
+                format!("-{ttl_secs} seconds"),
+            ],
+        )?;
+        Ok(IpcResponse::Ok {
+            message: format!("pruned {pruned} stale remote agent(s)"),
+        })
+    }
+
     pub fn heartbeat_local_agents(&self) -> Result<usize, super::super::error::IpcError> {
         let conn = self.open_conn()?;
         let local_host = Self::hostname();

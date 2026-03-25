@@ -2,6 +2,7 @@ use rusqlite::Connection;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use super::{resolve_interval_secs, spawn_sync_loop};
+use crate::db_path_from_env;
 
 /// Serialise all env-var-mutating tests to prevent parallel interference.
 static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -80,4 +81,25 @@ fn test_query_active_peers_returns_non_unreachable() {
     assert!(peers.contains(&"node-a".to_string()));
     assert!(peers.contains(&"node-c".to_string()));
     assert!(!peers.contains(&"node-b".to_string()));
+}
+
+#[test]
+fn test_db_path_from_env_uses_dashboard_db() {
+    let _guard = env_lock().lock().expect("env lock");
+    std::env::set_var("DASHBOARD_DB", "/tmp/test-convergio.db");
+    let path = db_path_from_env();
+    std::env::remove_var("DASHBOARD_DB");
+    assert_eq!(path.to_str().unwrap(), "/tmp/test-convergio.db");
+}
+
+#[test]
+fn test_db_path_from_env_fallback_to_home() {
+    let _guard = env_lock().lock().expect("env lock");
+    std::env::remove_var("DASHBOARD_DB");
+    let path = db_path_from_env();
+    assert!(
+        path.to_str().unwrap().ends_with(".claude/data/dashboard.db"),
+        "fallback must resolve to ~/.claude/data/dashboard.db, got: {}",
+        path.display()
+    );
 }

@@ -1,6 +1,7 @@
 // Tests for agents, messaging, and core operations
 use super::super::protocol::{IpcRequest, IpcResponse};
 use super::core::IpcEngine;
+use rusqlite::Connection;
 
 pub(super) fn temp_engine() -> (IpcEngine, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
@@ -132,5 +133,91 @@ fn test_rate_limit() {
             assert!(message.contains("exceeded"));
         }
         _ => panic!("expected rate limit error"),
+    }
+}
+
+#[test]
+fn test_prune_stale_removes_old_remote_agents() {
+    let (engine, _dir) = temp_engine();
+
+    // Insert a remote agent with a last_seen timestamp 2 hours in the past.
+    // We bypass engine.register() so we can control last_seen directly.
+    {
+        let conn = Connection::open(&engine.db_path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
+        ).unwrap();
+        super::super::schema::ensure_ipc_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO ipc_agents (name, host, agent_type, pid, metadata, registered_at, last_seen)
+             VALUES ('remote-worker', 'other-host', 'executor', NULL, NULL,
+                     strftime('%Y-%m-%dT%H:%M:%f','now','-7200 seconds'),
+                     strftime('%Y-%m-%dT%H:%M:%f','now','-7200 seconds'))",
+            [],
+        ).unwrap();
+    }
+
+    // Also register a fresh local agent (must NOT be pruned).
+    engine
+        .register("local-agent", "claude", None, &IpcEngine::hostname(), None)
+        .unwrap();
+
+    let resp = engine.prune_stale(3600).unwrap();
+    match resp {
+        IpcResponse::Ok { message } => {
+            assert!(
+                message.contains('1'),
+                "must report 1 pruned agent, got: {message}"
+            );
+        }
+        _ => panic!("expected Ok response"),
+    }
+
+    // Local agent must still be present.
+    match engine.who().unwrap() {
+        IpcResponse::AgentList { agents } => {
+            assert_eq!(agents.len(), 1, "local agent must survive prune_stale");
+            assert_eq!(agents[0].name, "local-agent");
+        }
+        _ => panic!("expected AgentList"),
+    }
+}
+
+#[test]
+fn test_prune_stale_keeps_recent_remote_agents() {
+    let (engine, _dir) = temp_engine();
+
+    // Register a remote agent that was seen 30 minutes ago — within 1-hour TTL.
+    {
+        let conn = Connection::open(&engine.db_path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
+        ).unwrap();
+        super::super::schema::ensure_ipc_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO ipc_agents (name, host, agent_type, pid, metadata, registered_at, last_seen)
+             VALUES ('fresh-remote', 'other-host', 'claude', NULL, NULL,
+                     strftime('%Y-%m-%dT%H:%M:%f','now','-1800 seconds'),
+                     strftime('%Y-%m-%dT%H:%M:%f','now','-1800 seconds'))",
+            [],
+        ).unwrap();
+    }
+
+    let resp = engine.prune_stale(3600).unwrap();
+    match resp {
+        IpcResponse::Ok { message } => {
+            assert!(
+                message.contains('0'),
+                "must report 0 pruned agents, got: {message}"
+            );
+        }
+        _ => panic!("expected Ok response"),
+    }
+
+    match engine.who().unwrap() {
+        IpcResponse::AgentList { agents } => {
+            assert_eq!(agents.len(), 1, "recent remote agent must survive prune_stale");
+        }
+        _ => panic!("expected AgentList"),
     }
 }

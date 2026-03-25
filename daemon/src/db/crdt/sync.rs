@@ -2,6 +2,7 @@ use std::io::{Error as IoError, ErrorKind, Write};
 use std::process::{Command, Stdio};
 
 use rusqlite::params;
+use rusqlite::OptionalExtension;
 
 use crate::db::PlanDb;
 
@@ -32,21 +33,59 @@ impl PlanDb {
     pub(crate) fn apply_changes(&self, changes: &[CrdtChange]) -> rusqlite::Result<usize> {
         let mut applied = 0usize;
         for change in changes {
-            self.conn.execute(
-                r#"INSERT INTO crsql_changes ("table", pk, cid, val, col_version, db_version, site_id, cl, seq)
-                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"#,
-                params![
-                    change.table_name,
-                    change.pk,
-                    change.cid,
-                    change.val,
-                    change.col_version,
-                    change.db_version,
-                    change.site_id,
-                    change.cl,
-                    change.seq
-                ],
-            )?;
+            // Idempotency guard: skip if a row with the same (table, pk, cid,
+            // site_id) already has an equal or higher col_version. This prevents
+            // duplicate application and lost-update on repeated sync rounds.
+            let existing_version: Option<i64> = self
+                .conn
+                .query_row(
+                    r#"SELECT col_version FROM crsql_changes
+                       WHERE "table" = ?1 AND pk = ?2 AND cid = ?3 AND site_id = ?4
+                       LIMIT 1"#,
+                    params![change.table_name, change.pk, change.cid, change.site_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+
+            if let Some(existing) = existing_version {
+                if existing >= change.col_version {
+                    // Already at this version or newer — skip to stay idempotent.
+                    continue;
+                }
+                // Newer version arrived: replace the stale row.
+                self.conn.execute(
+                    r#"UPDATE crsql_changes
+                       SET val = ?4, col_version = ?5, db_version = ?6, cl = ?7, seq = ?8
+                       WHERE "table" = ?1 AND pk = ?2 AND cid = ?3 AND site_id = ?9"#,
+                    params![
+                        change.table_name,
+                        change.pk,
+                        change.cid,
+                        change.val,
+                        change.col_version,
+                        change.db_version,
+                        change.cl,
+                        change.seq,
+                        change.site_id,
+                    ],
+                )?;
+            } else {
+                self.conn.execute(
+                    r#"INSERT INTO crsql_changes ("table", pk, cid, val, col_version, db_version, site_id, cl, seq)
+                       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"#,
+                    params![
+                        change.table_name,
+                        change.pk,
+                        change.cid,
+                        change.val,
+                        change.col_version,
+                        change.db_version,
+                        change.site_id,
+                        change.cl,
+                        change.seq
+                    ],
+                )?;
+            }
             applied += 1;
         }
         Ok(applied)

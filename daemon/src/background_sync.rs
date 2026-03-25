@@ -128,13 +128,14 @@ pub fn spawn_sync_loop(
                 continue;
             }
 
-            // Open a PlanDb backed by in-memory storage to drive the SSH sync.
-            // The actual data exchange happens via SSH subprocess (see sync.rs),
-            // so this PlanDb is only used to provide the API surface.
-            let plan_db = match PlanDb::open_in_memory() {
+            // Open PlanDb backed by the real dashboard DB so CRDT changes are
+            // read from and written to persistent storage. Using in-memory here
+            // would silently discard all sync results.
+            let db_path = crate::db_path_from_env();
+            let plan_db = match PlanDb::open_path(&db_path, None) {
                 Ok(db) => db,
                 Err(e) => {
-                    warn!("background_sync: cannot open in-memory PlanDb: {e}");
+                    warn!("background_sync: cannot open PlanDb at {}: {e}", db_path.display());
                     continue;
                 }
             };

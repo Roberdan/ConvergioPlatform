@@ -83,8 +83,19 @@ fi
 
 # 4. Copy master DB (with CRR schemas) and reset site_id
 info "Step 4/8: Database sync"
+# Flush WAL to the main DB file before SCP so the copy is consistent.
+# sqlite3 is hook-blocked; use the daemon health endpoint which triggers a
+# WAL checkpoint as a side-effect, or cvg if the daemon is running.
+DB_FILE="${CLAUDE_HOME}/data/dashboard.db"
+if curl -sf "http://localhost:8420/api/health/deep" > /dev/null 2>&1; then
+  info "WAL checkpoint via daemon health endpoint"
+elif command -v cvg > /dev/null 2>&1; then
+  cvg plan list > /dev/null 2>&1 || true  # cvg read forces a WAL checkpoint
+else
+  warn "Cannot checkpoint WAL: daemon not running and cvg unavailable. SCP may copy incomplete data."
+fi
 _ssh "cp ~/.claude/data/dashboard.db ~/.claude/data/dashboard.db.backup 2>/dev/null || true"
-scp "$CLAUDE_HOME/data/dashboard.db" "$TARGET:~/.claude/data/dashboard.db"
+scp "$DB_FILE" "$TARGET:~/.claude/data/dashboard.db"
 _ssh "sqlite3 ~/.claude/data/dashboard.db 'DELETE FROM crsql_site_id;'"
 ok "DB synced with fresh site_id"
 

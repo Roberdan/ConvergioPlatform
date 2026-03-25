@@ -151,6 +151,80 @@ fn crdt_changes_converge_between_two_nodes() {
 }
 
 #[test]
+fn crdt_apply_is_idempotent() {
+    // Applying the same CrdtChange twice must be a no-op on the second call.
+    let db = PlanDb::open_in_memory().expect("db");
+    seed_change_schema(&db);
+
+    let changes = vec![crate::db::crdt::CrdtChange {
+        table_name: "tasks".into(),
+        pk: "id=42".into(),
+        cid: "title".into(),
+        val: Some("Buy milk".into()),
+        col_version: 3,
+        db_version: 1,
+        site_id: "node-a".into(),
+        cl: 1,
+        seq: 0,
+    }];
+
+    // First apply — must succeed and count 1.
+    let n1 = db.apply_changes(&changes).expect("first apply");
+    assert_eq!(n1, 1, "first apply should insert one change");
+
+    // Identical second apply — must be a no-op (idempotent).
+    let n2 = db.apply_changes(&changes).expect("second apply");
+    assert_eq!(n2, 0, "duplicate apply must be skipped");
+
+    // Total rows in crsql_changes must remain 1.
+    let count: i64 = db
+        .connection()
+        .query_row("SELECT COUNT(*) FROM crsql_changes", [], |r| r.get(0))
+        .expect("count");
+    assert_eq!(count, 1, "table must hold exactly one row after duplicate apply");
+}
+
+#[test]
+fn crdt_apply_newer_version_replaces_older() {
+    let db = PlanDb::open_in_memory().expect("db");
+    seed_change_schema(&db);
+
+    let base = crate::db::crdt::CrdtChange {
+        table_name: "tasks".into(),
+        pk: "id=7".into(),
+        cid: "status".into(),
+        val: Some("pending".into()),
+        col_version: 1,
+        db_version: 1,
+        site_id: "node-b".into(),
+        cl: 1,
+        seq: 0,
+    };
+    db.apply_changes(&[base.clone()]).expect("base insert");
+
+    let newer = crate::db::crdt::CrdtChange {
+        col_version: 5,
+        val: Some("done".into()),
+        ..base
+    };
+    let n = db.apply_changes(&[newer]).expect("newer apply");
+    assert_eq!(n, 1, "newer version must be applied");
+
+    let val: Option<String> = db
+        .connection()
+        .query_row(
+            r#"SELECT val FROM crsql_changes WHERE "table" = 'tasks' AND pk = 'id=7'"#,
+            [],
+            |r| r.get(0),
+        )
+        .expect("query val");
+    assert_eq!(val.as_deref(), Some("done"), "col value must be updated to newer version");
+}
+
+// Needed by newer_version test: CrdtChange must be Clone
+// (already derived in mod.rs — this is a compile-time check)
+
+#[test]
 fn crdt_avoids_format_sql_for_dynamic_identifiers() {
     // Verify that migration.rs (the file that does actual SQL) avoids raw format! for SQL identifiers
     let source = include_str!("migration.rs");
