@@ -5,7 +5,7 @@
 use super::state::{query_one, query_rows, ApiError, ServerState};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};

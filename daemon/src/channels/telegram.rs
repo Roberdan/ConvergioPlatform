@@ -28,7 +28,9 @@ struct TelegramResponse<T> {
 }
 
 /// Telegram User from API.
+// Fields are deserialized from Telegram API response; not all are used in current logic.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TelegramUser {
     id: i64,
     is_bot: bool,
@@ -45,7 +47,9 @@ struct TelegramChat {
 }
 
 /// Telegram Message from API.
+// Fields are deserialized from Telegram API response; not all are used in current logic.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TelegramMsg {
     message_id: i64,
     date: i64,

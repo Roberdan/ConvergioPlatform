@@ -93,7 +93,7 @@ async fn check_stale_locks() -> CheckResult {
     if let Ok(rd) = std::fs::read_dir(tmp) {
         for entry in rd.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "lock") {
+            if path.extension().is_some_and(|e| e == "lock") {
                 if let Ok(meta) = std::fs::metadata(&path) {
                     if let Ok(modified) = meta.modified() {
                         if now.duration_since(modified).unwrap_or_default() > cutoff {
