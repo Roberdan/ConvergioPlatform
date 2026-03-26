@@ -1,4 +1,4 @@
-// Checklist runners — concrete implementations of execution paradigms.
-pub mod read_do;
+pub mod do_confirm;
 
-pub use read_do::ReadDoRunner;
+#[cfg(test)]
+mod do_confirm_tests;
