@@ -1,7 +1,7 @@
 // Project tree navigation — Enter handling for master expand/collapse and child drill-down.
 
 use super::app::TuiApp;
-use super::data::MainView;
+use super::data::{MainView, PlanHierarchyContext, SiblingPlanInfo};
 
 impl TuiApp {
     /// Handle Enter in project tree view: toggle master expand or drill into child plan.
@@ -25,7 +25,25 @@ impl TuiApp {
             if expanded.contains(&master.id) {
                 for child in &master.children {
                     if idx == self.selected_index {
-                        self.istate.selected_plan_id = Some(child.id);
+                        let child_id = child.id;
+                        // Build hierarchy context with all siblings, marking the drilled child.
+                        let siblings: Vec<SiblingPlanInfo> = master.children.iter().map(|c| {
+                            SiblingPlanInfo {
+                                id: c.id,
+                                name: c.name.clone(),
+                                status: c.status.clone(),
+                                tasks_done: c.tasks_done,
+                                tasks_total: c.tasks_total,
+                                is_current: c.id == child_id,
+                                depends_on: c.depends_on.clone(),
+                            }
+                        }).collect();
+                        self.istate.hierarchy_context = Some(PlanHierarchyContext {
+                            master_name: master.name.clone(),
+                            master_id: master.id,
+                            siblings,
+                        });
+                        self.istate.selected_plan_id = Some(child_id);
                         self.active_view = MainView::TaskPipeline;
                         self.selected_index = 0;
                         return;

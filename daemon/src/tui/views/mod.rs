@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{MainView, TuiData};
+use super::{MainView, PlanHierarchyContext, TuiData};
 use crate::tui::widgets::{self, ACCENT, MUTED, OK, TEXT_PRIMARY};
 
 pub mod brain;
@@ -18,6 +18,7 @@ pub mod cost;
 pub mod deliverables;
 pub mod events;
 pub mod help;
+pub mod hierarchy_bar;
 pub mod popup;
 pub mod project_tree;
 pub mod workspace;
@@ -58,6 +59,7 @@ pub fn render_view(
     show_all_plans: bool,
     chat_scroll: u16,
     expanded_masters: &[i64],
+    hierarchy_context: Option<&PlanHierarchyContext>,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -71,7 +73,7 @@ pub fn render_view(
 
     render_tab_bar(frame, chunks[0], view);
     frame.render_widget(widgets::kpi_strip(data), chunks[1]);
-    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans, chat_scroll, expanded_masters);
+    render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans, chat_scroll, expanded_masters, hierarchy_context);
     let unread = data.notifications.iter().filter(|n| !n.read).count();
     render_status_bar(frame, chunks[3], api_url, auto_refresh, refresh_interval_secs, unread);
 
@@ -131,6 +133,7 @@ fn render_content(
     show_all_plans: bool,
     chat_scroll: u16,
     expanded_masters: &[i64],
+    hierarchy_context: Option<&PlanHierarchyContext>,
 ) {
     match view {
         MainView::PlanKanban => {
@@ -143,7 +146,17 @@ fn render_content(
             }
         }
         MainView::TaskPipeline => {
-            frame.render_widget(widgets::task_pipeline(data, selected), area);
+            // If a hierarchy context exists, split area: 3-line bar on top, pipeline below.
+            if let Some(ctx) = hierarchy_context {
+                let splits = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(3), Constraint::Min(1)])
+                    .split(area);
+                hierarchy_bar::render_hierarchy_bar(frame, splits[0], ctx);
+                frame.render_widget(widgets::task_pipeline(data, selected), splits[1]);
+            } else {
+                frame.render_widget(widgets::task_pipeline(data, selected), area);
+            }
         }
         MainView::MeshStatus => {
             frame.render_widget(widgets::mesh_status(data, selected), area);

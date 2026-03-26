@@ -1,7 +1,7 @@
 // TUI input handling — key dispatch, command parsing, interactive state.
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use super::data::MainView;
+use super::data::{MainView, PlanHierarchyContext};
 use super::views::PopupContent;
 
 pub use super::drill_down::DrillDownRequest;
@@ -30,6 +30,8 @@ pub struct InteractiveState {
     pub expanded_masters: Vec<i64>,
     /// Set to true when 'p' is pressed to switch to the Project view.
     pub switch_to_project_view: bool,
+    /// Hierarchy context populated when drilling into a child plan from the project tree.
+    pub hierarchy_context: Option<PlanHierarchyContext>,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.
@@ -172,6 +174,8 @@ fn handle_esc(state: &mut InteractiveState) {
         state.show_notifications = false;
     } else if state.selected_plan_id.is_some() {
         state.selected_plan_id = None;
+        // Clear hierarchy context when leaving the drill-down view.
+        state.hierarchy_context = None;
     }
     // If nothing to close, Esc is a no-op.
 }

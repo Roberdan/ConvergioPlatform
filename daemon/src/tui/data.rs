@@ -140,6 +140,27 @@ pub struct ProjectInfo {
     pub path: String,
 }
 
+// --- Plan Hierarchy Context (shown as context bar when drilling into a sub-plan) ---
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SiblingPlanInfo {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+    pub tasks_done: i64,
+    pub tasks_total: i64,
+    pub is_current: bool,
+    pub depends_on: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlanHierarchyContext {
+    pub master_name: String,
+    pub master_id: i64,
+    pub siblings: Vec<SiblingPlanInfo>,
+}
+
+
 // --- Project Tree data ---
 
 #[derive(Clone, Debug, Default, PartialEq)]
