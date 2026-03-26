@@ -1,6 +1,5 @@
 // cvg delegation — manage plan delegation to mesh workers.
 // Why: Plan 706 — no orchestration for remote execution. Zero traceability.
-// Plan 720 T2-01 — added live progress display via /api/delegation/:id/progress.
 
 use crate::cli_error::CliError;
 use crate::cli_http;
@@ -8,8 +7,17 @@ use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
 pub enum DelegationCommands {
-    /// Show delegation status for a plan
-    Status { plan_id: i64 },
+    /// Show delegation status for a plan (peer, status, task, last update, output)
+    Status {
+        /// Plan ID to inspect (alias: --plan)
+        #[arg(long, short = 'p')]
+        plan: Option<i64>,
+        /// Positional plan_id (legacy; prefer --plan)
+        plan_id: Option<i64>,
+        /// Poll every 5s and refresh output
+        #[arg(long)]
+        live: bool,
+    },
     /// List all active plans (potential delegations)
     List,
 }
@@ -18,53 +26,78 @@ fn api_err(code: i32) -> CliError {
     CliError::ApiCallFailed(format!("daemon returned error (code {code})"))
 }
 
+/// Render a single delegation row (padded columns).
+pub fn format_progress_row(d: &serde_json::Value) -> String {
+    let peer = d["peer"].as_str().unwrap_or("-");
+    let status = d["status"].as_str().unwrap_or("-");
+    let task = d["current_task"].as_str().unwrap_or("-");
+    let updated = d["last_update"].as_str().unwrap_or("-");
+    let summary = d["output_summary"].as_str().unwrap_or("");
+    // Truncate long fields to fit 100-char terminal width
+    let task_short = if task.len() > 20 { &task[..20] } else { task };
+    let summary_short = if summary.len() > 40 {
+        &summary[..40]
+    } else {
+        summary
+    };
+    format!(
+        "{:<20} {:<10} {:<22} {:<24} {}",
+        peer, status, task_short, updated, summary_short
+    )
+}
+
+/// Render the column header line.
+pub fn format_progress_header() -> String {
+    format!(
+        "{:<20} {:<10} {:<22} {:<24} {}",
+        "PEER", "STATUS", "TASK", "LAST UPDATE", "OUTPUT"
+    )
+}
+
+/// Render a full progress table from the API response.
+pub fn format_progress_table(body: &serde_json::Value) -> String {
+    let list = match body["delegations"].as_array() {
+        Some(arr) if !arr.is_empty() => arr,
+        _ => return "No active delegations.".to_string(),
+    };
+    let sep = "-".repeat(100);
+    let mut lines = vec![format_progress_header(), sep];
+    for d in list {
+        lines.push(format_progress_row(d));
+    }
+    lines.join("\n")
+}
+
+async fn fetch_progress(api_url: &str, plan_id: i64) -> Result<serde_json::Value, CliError> {
+    let url = format!("{api_url}/api/delegation/{plan_id}/progress");
+    cli_http::get_and_return(&url).await.map_err(api_err)
+}
+
 pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliError> {
     match cmd {
-        DelegationCommands::Status { plan_id } => {
-            let url = format!("{api_url}/api/plan-db/json/{plan_id}");
-            let body = cli_http::get_and_return(&url).await.map_err(api_err)?;
-            let plan = &body["plan"];
-            let host = plan["execution_host"].as_str().unwrap_or("none");
-            let status = plan["status"].as_str().unwrap_or("?");
-            let done = plan["tasks_done"].as_i64().unwrap_or(0);
-            let total = plan["tasks_total"].as_i64().unwrap_or(0);
-            println!("Plan {plan_id}: status={status}, host={host}, progress={done}/{total}");
+        DelegationCommands::Status {
+            plan,
+            plan_id,
+            live,
+        } => {
+            let id = plan.or(plan_id).ok_or_else(|| {
+                CliError::ApiCallFailed("provide --plan <ID> or positional plan_id".to_string())
+            })?;
 
-            // Show live peer progress if available (Plan 720 T2-01)
-            let delegation_id = format!("plan-{plan_id}");
-            let progress_url = format!("{api_url}/api/delegation/{delegation_id}/progress");
-            if let Ok(pb) = cli_http::get_and_return(&progress_url).await {
-                if pb["ok"].as_bool().unwrap_or(false) {
-                    let peer_status = pb["status"].as_str().unwrap_or("?");
-                    let current = pb["current_task"].as_str().unwrap_or("-");
-                    let summary = pb["output_summary"].as_str().unwrap_or("-");
-                    let updated = pb["updated_at"].as_str().unwrap_or("?");
-                    println!(
-                        "Peer progress [{peer_status}]: task={current} | summary={summary} | updated={updated}"
-                    );
+            if live {
+                // Poll every 5s until interrupted
+                loop {
+                    // Clear screen with ANSI escape for live refresh
+                    print!("\x1B[2J\x1B[H");
+                    let body = fetch_progress(api_url, id).await?;
+                    println!("Plan {id} — delegation status (live, Ctrl+C to exit)");
+                    println!("{}", format_progress_table(&body));
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
-            }
-
-            // Show workers for this plan
-            let workers_url = format!("{api_url}/api/workers");
-            if let Ok(wb) = cli_http::get_and_return(&workers_url).await {
-                if let Some(list) = wb["workers"].as_array() {
-                    let active: Vec<_> = list
-                        .iter()
-                        .filter(|w| w["plan_id"].as_i64() == Some(plan_id))
-                        .collect();
-                    if active.is_empty() {
-                        println!("No active workers.");
-                    } else {
-                        for w in &active {
-                            println!(
-                                "  worker: {} on {}",
-                                w["agent_id"].as_str().unwrap_or("?"),
-                                w["host"].as_str().unwrap_or("?")
-                            );
-                        }
-                    }
-                }
+            } else {
+                let body = fetch_progress(api_url, id).await?;
+                println!("Plan {id} — delegation status");
+                println!("{}", format_progress_table(&body));
             }
             Ok(())
         }
@@ -96,3 +129,7 @@ pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliErr
         }
     }
 }
+
+#[cfg(test)]
+#[path = "cli_delegation_tests.rs"]
+mod tests;
