@@ -93,6 +93,12 @@ impl ChecklistRegistry {
         self.checklists.values().collect()
     }
 
+    /// Construct a registry from an in-memory collection (primarily for tests).
+    pub fn from_checklists(checklists: Vec<Checklist>) -> Self {
+        let map = checklists.into_iter().map(|c| (c.name.clone(), c)).collect();
+        Self { checklists: map }
+    }
+
     /// Re-scan the directory, replacing the entire registry.
     pub fn reload(&mut self, path: &Path) -> Result<(), ChecklistError> {
         let mut fresh = HashMap::new();

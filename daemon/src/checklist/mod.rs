@@ -1,6 +1,9 @@
+pub mod api;
+pub mod cli;
 pub mod engine;
 pub mod registry;
 pub mod runners;
+pub mod telemetry;
 pub mod thor_gate;
 
 #[cfg(test)]
