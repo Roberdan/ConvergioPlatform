@@ -17,6 +17,8 @@ async fn handle_plan_validate(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
+    // Axum path extractor should never yield a non-positive plan_id for this route.
+    debug_assert!(plan_id > 0, "handle_plan_validate: plan_id must be positive, got {plan_id}");
     let conn = state.get_conn()?;
     let count = conn
         .execute(
@@ -68,6 +70,8 @@ async fn handle_plan_cancel(
         .ok_or_else(|| ApiError::bad_request("missing plan_id"))?
         .parse::<i64>()
         .map_err(|_| ApiError::bad_request("invalid plan_id"))?;
+    // After parsing, plan_id must be positive — any other value would corrupt the DB.
+    debug_assert!(plan_id > 0, "handle_plan_cancel: plan_id must be positive, got {plan_id}");
     let conn = state.get_conn()?;
     conn.execute(
         "UPDATE plans SET status='cancelled' WHERE id=?1",
@@ -137,6 +141,9 @@ async fn handle_plan_move(
         .filter(|v| !v.is_empty())
         .ok_or_else(|| ApiError::bad_request("missing target"))?
         .clone();
+    // Parsed plan_id must be positive; target already verified non-empty above.
+    debug_assert!(plan_id > 0, "handle_plan_move: plan_id must be positive, got {plan_id}");
+    debug_assert!(!target.is_empty(), "handle_plan_move: target host must not be empty");
     let conn = state.get_conn()?;
     conn.execute(
         "UPDATE plans SET execution_host=?1 WHERE id=?2",

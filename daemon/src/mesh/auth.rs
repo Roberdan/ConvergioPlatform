@@ -19,6 +19,10 @@ pub fn generate_nonce() -> Vec<u8> {
 
 /// Compute HMAC-SHA256(secret, nonce) for challenge-response
 pub fn compute_hmac(secret: &[u8], nonce: &[u8]) -> Result<Vec<u8>, MeshError> {
+    // HMAC-SHA256 requires a non-empty key; a zero-length key defeats authentication.
+    debug_assert!(!secret.is_empty(), "compute_hmac: secret key must not be empty");
+    // A zero-length nonce makes the challenge trivially predictable.
+    debug_assert!(!nonce.is_empty(), "compute_hmac: nonce must not be empty");
     let mut mac = HmacSha256::new_from_slice(secret)
         .map_err(|_| MeshError::Auth("invalid HMAC key length".into()))?;
     mac.update(nonce);
@@ -27,6 +31,10 @@ pub fn compute_hmac(secret: &[u8], nonce: &[u8]) -> Result<Vec<u8>, MeshError> {
 
 /// Verify a peer's HMAC response against expected
 pub fn verify_hmac(secret: &[u8], nonce: &[u8], response: &[u8]) -> Result<bool, MeshError> {
+    // Our own key and challenge must be non-empty — those are under our control.
+    // response may be empty (malformed peer input); the HMAC comparison will reject it.
+    debug_assert!(!secret.is_empty(), "verify_hmac: secret must not be empty");
+    debug_assert!(!nonce.is_empty(), "verify_hmac: nonce must not be empty");
     let mut mac = HmacSha256::new_from_slice(secret)
         .map_err(|_| MeshError::Auth("invalid HMAC key length".into()))?;
     mac.update(nonce);

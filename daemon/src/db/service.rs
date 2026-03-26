@@ -8,6 +8,11 @@ use std::io::{Error as IoError, ErrorKind};
 
 impl PlanDb {
     pub fn status(&self, project_id: Option<&str>) -> rusqlite::Result<StatusView> {
+        // Caller must never pass an empty string — use None to query all projects.
+        debug_assert!(
+            project_id.map_or(true, |id| !id.is_empty()),
+            "project_id must be non-empty (use None to query all projects)"
+        );
         let active_plans = if let Some(project_id) = project_id {
             let mut stmt = self.conn.prepare(queries::SELECT_ACTIVE_PLANS_BY_PROJECT)?;
             let rows = stmt.query_map(params![project_id], map_active_plan)?;
@@ -42,6 +47,13 @@ impl PlanDb {
         status: TaskStatus,
         args: &UpdateTaskArgs,
     ) -> rusqlite::Result<UpdateTaskResult> {
+        // DB row IDs are always positive; zero or negative indicates a caller bug.
+        debug_assert!(task_id > 0, "task_id must be a positive DB row ID, got {task_id}");
+        // Status string representation must be a known non-empty value.
+        debug_assert!(
+            !status.as_str().is_empty(),
+            "status string must not be empty"
+        );
         let old_status: String =
             self.conn
                 .query_row(queries::SELECT_TASK_STATUS_BY_ID, params![task_id], |row| {
@@ -94,6 +106,16 @@ impl PlanDb {
     }
 
     pub fn validate_task(&self, args: &ValidateTaskArgs) -> rusqlite::Result<ValidateTaskResult> {
+        // Identifier is the human task_id (e.g. "T1-03") or numeric DB id — must not be empty.
+        debug_assert!(
+            !args.identifier.is_empty(),
+            "validate_task: identifier must not be empty"
+        );
+        // Validator name must be provided so the audit trail is meaningful.
+        debug_assert!(
+            !args.validated_by.is_empty(),
+            "validate_task: validated_by must not be empty"
+        );
         let (task_db_id, task_id, old_status, validated_at): (i64, String, String, Option<String>) =
             if let Ok(id) = args.identifier.parse::<i64>() {
                 self.conn.query_row(
@@ -158,6 +180,8 @@ impl PlanDb {
     }
 
     pub fn execution_tree(&self, plan_id: i64) -> rusqlite::Result<ExecutionTree> {
+        // plan_id must be a positive DB row ID; 0 or negative is always wrong.
+        debug_assert!(plan_id > 0, "execution_tree: plan_id must be positive, got {plan_id}");
         let (plan_id, plan_name, plan_status): (i64, String, String) =
             self.conn
                 .query_row(queries::SELECT_PLAN_NODE, params![plan_id], |row| {

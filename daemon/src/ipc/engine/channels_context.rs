@@ -10,6 +10,10 @@ impl IpcEngine {
         description: Option<&str>,
         created_by: &str,
     ) -> rusqlite::Result<IpcResponse> {
+        // Channel name is the routing key — blank names cannot be resolved.
+        debug_assert!(!name.is_empty(), "channel_create: name must not be empty");
+        // Creator must be recorded for audit — anonymous channel creation is not allowed.
+        debug_assert!(!created_by.is_empty(), "channel_create: created_by must not be empty");
         let conn = self.open_conn()?;
         conn.execute(
             "INSERT OR IGNORE INTO ipc_channels (name, description, created_by) VALUES (?1, ?2, ?3)",

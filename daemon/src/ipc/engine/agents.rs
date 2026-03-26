@@ -10,6 +10,12 @@ impl IpcEngine {
         host: &str,
         metadata: Option<&str>,
     ) -> rusqlite::Result<IpcResponse> {
+        // Agent name identifies the executor in the bus — blank names break routing.
+        debug_assert!(!name.is_empty(), "register: agent name must not be empty");
+        // Agent type categorises the role (e.g. "claude", "copilot") — must be specified.
+        debug_assert!(!agent_type.is_empty(), "register: agent_type must not be empty");
+        // Host ties the agent to a machine; empty host breaks deduplication.
+        debug_assert!(!host.is_empty(), "register: host must not be empty");
         let conn = self.open_conn()?;
         conn.execute(
             "INSERT INTO ipc_agents (name, host, agent_type, pid, metadata, registered_at, last_seen)
@@ -27,6 +33,9 @@ impl IpcEngine {
     }
 
     pub fn unregister(&self, name: &str, host: &str) -> rusqlite::Result<IpcResponse> {
+        // Same invariants as register: must identify a specific agent on a specific host.
+        debug_assert!(!name.is_empty(), "unregister: agent name must not be empty");
+        debug_assert!(!host.is_empty(), "unregister: host must not be empty");
         let conn = self.open_conn()?;
         let deleted = conn.execute(
             "DELETE FROM ipc_agents WHERE name = ?1 AND host = ?2",
@@ -93,28 +102,6 @@ impl IpcEngine {
         }
         Ok(IpcResponse::Ok {
             message: format!("pruned {pruned} dead agent(s)"),
-        })
-    }
-
-    /// Remove remote agent registrations that have not been seen within `ttl_secs`.
-    ///
-    /// Remote agents (host != local) cannot be probed with kill(2), so the only
-    /// signal we have is `last_seen`. Entries older than the TTL are stale and
-    /// accumulate forever without this cleanup. Default TTL: 3600 s (1 hour).
-    pub fn prune_stale(&self, ttl_secs: u64) -> rusqlite::Result<IpcResponse> {
-        let conn = self.open_conn()?;
-        let local_host = Self::hostname();
-        let pruned = conn.execute(
-            "DELETE FROM ipc_agents
-              WHERE host != ?1
-                AND last_seen < strftime('%Y-%m-%dT%H:%M:%f', 'now', ?2)",
-            rusqlite::params![
-                local_host,
-                format!("-{ttl_secs} seconds"),
-            ],
-        )?;
-        Ok(IpcResponse::Ok {
-            message: format!("pruned {pruned} stale remote agent(s)"),
         })
     }
 
