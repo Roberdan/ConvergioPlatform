@@ -2,6 +2,7 @@ pub mod background;
 pub mod background_sync;
 pub mod channels;
 pub mod checklist;
+pub mod memory;
 pub mod db;
 pub mod digest;
 pub mod inference;
