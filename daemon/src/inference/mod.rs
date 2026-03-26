@@ -2,6 +2,7 @@ pub mod agent_config;
 pub mod classifier;
 pub mod fallback;
 pub mod health;
+pub mod ipc;
 pub mod metrics;
 pub mod router;
 pub mod types;
@@ -12,3 +13,7 @@ mod agent_config_tests;
 #[cfg(test)]
 #[path = "fallback_tests.rs"]
 mod fallback_tests;
+
+#[cfg(test)]
+#[path = "ipc_tests.rs"]
+mod ipc_tests;

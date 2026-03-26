@@ -105,6 +105,22 @@ impl IpcEngine {
         })
     }
 
+    /// Remove agents whose `last_seen` is older than `ttl_secs` seconds.
+    ///
+    /// This evicts stale remote agents that no longer heartbeat. Local agents
+    /// are kept alive through `heartbeat_local_agents`, so they will typically
+    /// have a recent `last_seen` and survive the TTL check.
+    pub fn prune_stale(&self, ttl_secs: u64) -> rusqlite::Result<IpcResponse> {
+        let conn = self.open_conn()?;
+        let pruned = conn.execute(
+            "DELETE FROM ipc_agents WHERE last_seen < strftime('%Y-%m-%dT%H:%M:%f', 'now', printf('-%d seconds', ?1))",
+            rusqlite::params![ttl_secs],
+        )?;
+        Ok(IpcResponse::Ok {
+            message: format!("pruned {pruned} stale agent(s)"),
+        })
+    }
+
     pub fn heartbeat_local_agents(&self) -> Result<usize, super::super::error::IpcError> {
         let conn = self.open_conn()?;
         let local_host = Self::hostname();

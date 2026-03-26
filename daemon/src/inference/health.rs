@@ -138,6 +138,11 @@ impl HealthChecker {
             .unwrap_or(EndpointHealthStatus::Healthy)
     }
 
+    /// Return the names of all tracked endpoints.
+    pub fn endpoint_names(&self) -> Vec<String> {
+        self.endpoints.iter().map(|ep| ep.name.clone()).collect()
+    }
+
     /// Run a single probe against an HTTP endpoint and record the result.
     /// Returns the measured `ProbeResult` for the caller to act on.
     pub async fn probe_http(
