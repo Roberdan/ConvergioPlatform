@@ -1,0 +1,10 @@
+# Inference fallback chains — Plan 717 F-06
+#
+# Each tier defines an ordered list of model names tried in sequence.
+# The executor stops after max_attempts regardless of chain length.
+max_attempts: 3
+chains:
+  t1: [local, haiku, sonnet]   # T1Trivial: prefer local first, cheapest path
+  t2: [haiku, local, sonnet]   # T2Standard: Haiku leads, local as backup
+  t3: [sonnet, opus]           # T3Complex: Sonnet default, Opus escalation
+  t4: [opus, sonnet]           # T4Critical: Opus first, Sonnet with warning
