@@ -1,3 +1,4 @@
+pub mod apple_fm;
 pub mod serialization;
 pub mod types;
 
@@ -9,6 +10,7 @@ pub use types::{
     get_all_models, probe_lmstudio, probe_ollama, store_models, ModelEntry, NodeCapabilities,
     OllamaModel,
 };
+pub use apple_fm::{AppleFmBridge, AppleFmResponse, InferenceError, InferenceRequest};
 
 #[cfg(test)]
 mod tests {
