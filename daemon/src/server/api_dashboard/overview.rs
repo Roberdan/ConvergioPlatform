@@ -61,6 +61,7 @@ pub async fn api_overview(State(state): State<ServerState>) -> Result<Json<Value
 
     // Return cached lines instantly; spawn background refresh if stale
     let (today_lines, week_lines, yesterday_lines, prev_week_lines) = {
+        // SAFETY: lock() only fails on mutex poison; LINES_CACHE is only written in refresh_lines_cache which does not panic
         let cached = LINES_CACHE.lock().unwrap();
         if let Some(ref c) = *cached {
             let vals = (c.today, c.week, c.yesterday, c.prev_week);
@@ -109,6 +110,7 @@ pub async fn api_overview(State(state): State<ServerState>) -> Result<Json<Value
 fn refresh_lines_cache(db_path: &std::path::Path) {
     if let Ok(conn) = Connection::open(db_path) {
         let vals = today_lines_changed(&conn);
+        // SAFETY: lock() only fails on mutex poison; this function does not panic while holding the lock
         let mut cache = LINES_CACHE.lock().unwrap();
         *cache = Some(LinesCache {
             today: vals.0,

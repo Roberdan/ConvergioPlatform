@@ -54,6 +54,7 @@ impl InboundConnectionRateLimiter {
     pub fn check(&self, remote: SocketAddr) -> Result<(), MeshError> {
         let ip = remote.ip();
         {
+            // SAFETY: lock() only fails on mutex poison; check() does not panic while holding lock
             let mut windows = self.second_windows.lock().unwrap();
             let entry = windows.entry(ip).or_default();
             let cutoff = std::time::Instant::now() - Duration::from_secs(1);
