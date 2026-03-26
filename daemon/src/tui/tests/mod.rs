@@ -165,6 +165,7 @@ pub(crate) fn sample_data() -> TuiData {
         project_tree: Default::default(),
         projects: vec![],
         delegations: vec![],
+        active_project_name: String::new(),
         chat_session_id: Some("sess-test-123".to_string()),
     }
 }
