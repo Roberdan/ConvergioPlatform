@@ -10,6 +10,9 @@
 use rusqlite::{params, Connection};
 use serde::Serialize;
 
+/// Tuple alias for raw plan rows from DB to avoid complex type repetition.
+type PlanRow = (i64, String, String, i64, i64, Option<String>, Option<String>, bool, Option<i64>);
+
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanNode {
     pub id: i64,
@@ -50,8 +53,7 @@ pub fn project_plan_tree(conn: &Connection, project_id: &str) -> rusqlite::Resul
          ORDER BY is_master DESC, id ASC",
     )?;
 
-    let rows: Vec<(i64, String, String, i64, i64, Option<String>, Option<String>, bool, Option<i64>)> =
-        stmt.query_map(params![project_id], |r| {
+    let rows: Vec<PlanRow> = stmt.query_map(params![project_id], |r| {
             Ok((
                 r.get(0)?, r.get(1)?, r.get(2)?,
                 r.get(3)?, r.get(4)?, r.get(5)?,
@@ -98,8 +100,8 @@ pub fn project_plan_tree(conn: &Connection, project_id: &str) -> rusqlite::Resul
     let mut all_plans = masters;
     all_plans.extend(orphans);
 
-    let total_tasks: i64 = all_plans.iter().map(|p| sum_tasks_total(p)).sum();
-    let done_tasks: i64 = all_plans.iter().map(|p| sum_tasks_done(p)).sum();
+    let total_tasks: i64 = all_plans.iter().map(sum_tasks_total).sum();
+    let done_tasks: i64 = all_plans.iter().map(sum_tasks_done).sum();
 
     Ok(ProjectTree {
         project_id: project_id.to_string(),
@@ -167,11 +169,11 @@ pub fn master_rollup(conn: &Connection, master_id: i64) -> rusqlite::Result<(i64
 }
 
 fn sum_tasks_total(node: &PlanNode) -> i64 {
-    node.tasks_total + node.children.iter().map(|c| sum_tasks_total(c)).sum::<i64>()
+    node.tasks_total + node.children.iter().map(sum_tasks_total).sum::<i64>()
 }
 
 fn sum_tasks_done(node: &PlanNode) -> i64 {
-    node.tasks_done + node.children.iter().map(|c| sum_tasks_done(c)).sum::<i64>()
+    node.tasks_done + node.children.iter().map(sum_tasks_done).sum::<i64>()
 }
 
 #[cfg(test)]

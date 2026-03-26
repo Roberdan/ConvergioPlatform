@@ -1,0 +1,6 @@
+# Clippy configuration for ConvergioPlatform daemon
+# Enforces function size and cognitive complexity limits
+# Why: Large functions hide bugs and resist refactoring (Plan H — Hardening NASA)
+
+cognitive-complexity-threshold = 25
+too-many-lines-threshold = 40

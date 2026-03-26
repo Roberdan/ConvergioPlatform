@@ -29,7 +29,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
                 &body,
                 human,
             )
-            .await;
+            .await?;
         }
         AgentCommands::Complete {
             agent_id,
@@ -46,10 +46,10 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
                 &body,
                 human,
             )
-            .await;
+            .await?;
         }
         AgentCommands::List { human, api_url } => {
-            crate::cli_http::fetch_and_print(&format!("{api_url}/api/agents"), human).await;
+            crate::cli_http::fetch_and_print(&format!("{api_url}/api/agents"), human).await?;
         }
         AgentCommands::Sync {
             source_dir,
@@ -58,7 +58,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
         } => {
             let body = serde_json::json!({"source_dir": source_dir});
             crate::cli_http::post_and_print(&format!("{api_url}/api/agents/sync"), &body, human)
-                .await;
+                .await?;
         }
         AgentCommands::Enable {
             name,
@@ -69,7 +69,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
             let dir = target_dir.unwrap_or_else(|| ".github/agents".to_string());
             let body = serde_json::json!({"name": name, "target_dir": dir});
             crate::cli_http::post_and_print(&format!("{api_url}/api/agents/enable"), &body, human)
-                .await;
+                .await?;
         }
         AgentCommands::Disable {
             name,
@@ -80,7 +80,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
             let dir = target_dir.unwrap_or_else(|| ".github/agents".to_string());
             let body = serde_json::json!({"name": name, "target_dir": dir});
             crate::cli_http::post_and_print(&format!("{api_url}/api/agents/disable"), &body, human)
-                .await;
+                .await?;
         }
         AgentCommands::Catalog {
             category,
@@ -92,7 +92,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
             } else {
                 format!("{api_url}/api/agents/catalog")
             };
-            crate::cli_http::fetch_and_print(&url, human).await;
+            crate::cli_http::fetch_and_print(&url, human).await?;
         }
         AgentCommands::Triage {
             description,
@@ -105,7 +105,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
                 "domain": domain,
             });
             crate::cli_http::post_and_print(&format!("{api_url}/api/agents/triage"), &body, human)
-                .await;
+                .await?;
         }
         AgentCommands::Create {
             name,
@@ -120,7 +120,7 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
                 "description": description, "model": model,
             });
             crate::cli_http::post_and_print(&format!("{api_url}/api/agents/create"), &body, human)
-                .await;
+                .await?;
         }
     }
     Ok(())

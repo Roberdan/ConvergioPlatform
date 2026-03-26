@@ -10,6 +10,7 @@ pub use crate::tui::chat_messages::{
 };
 
 /// State related to the chat view, owned by TuiApp.
+#[derive(Default)]
 pub struct ChatState {
     pub input: String,
     pub sending: bool,
@@ -19,18 +20,6 @@ pub struct ChatState {
     pub streaming: bool,
     /// Manual scroll offset from bottom (0 = auto-scroll to bottom).
     pub scroll_offset: u16,
-}
-
-impl Default for ChatState {
-    fn default() -> Self {
-        Self {
-            input: String::new(),
-            sending: false,
-            session: None,
-            streaming: false,
-            scroll_offset: 0,
-        }
-    }
 }
 
 impl ChatState {

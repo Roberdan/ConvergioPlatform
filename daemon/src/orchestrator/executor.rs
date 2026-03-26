@@ -201,7 +201,7 @@ async fn build_plan_prompt(plan_id: i64, client: &reqwest::Client) -> String {
 
 fn base64_encode(data: &[u8]) -> String {
     const C: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let (b0, b1, b2) = (chunk[0] as u32, chunk.get(1).copied().unwrap_or(0) as u32, chunk.get(2).copied().unwrap_or(0) as u32);
         let t = (b0 << 16) | (b1 << 8) | b2;

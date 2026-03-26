@@ -2,7 +2,7 @@
 
 use crate::db::plan_hierarchy;
 use crate::ipc::IpcEngine;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use super::actions;
@@ -12,7 +12,7 @@ type AliResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 /// plan_started / plan_ready — check dependencies, delegate if met.
 pub async fn on_plan_ready(
     engine: &Arc<IpcEngine>,
-    db_path: &PathBuf,
+    db_path: &Path,
     plan_id: i64,
 ) -> AliResult {
     let conn = rusqlite::Connection::open(db_path)?;
@@ -31,7 +31,7 @@ pub async fn on_plan_ready(
 /// task_done — check if wave is complete.
 pub async fn on_task_done(
     engine: &Arc<IpcEngine>,
-    db_path: &PathBuf,
+    db_path: &Path,
     task_id: &str,
     plan_id: i64,
 ) -> AliResult {
@@ -145,7 +145,7 @@ pub fn on_plan_done(engine: &Arc<IpcEngine>, db_path: &Path, plan_id: i64) -> Al
 /// wave_ready — start executing tasks in this wave by delegating the plan.
 pub async fn on_wave_ready(
     engine: &Arc<IpcEngine>,
-    db_path: &PathBuf,
+    db_path: &Path,
     wave_id: i64,
     plan_id: i64,
 ) -> AliResult {
@@ -173,7 +173,7 @@ pub async fn on_wave_ready(
 /// delegation_failed — retry on different peer, or escalate to human.
 pub async fn on_delegation_failed(
     engine: &Arc<IpcEngine>,
-    db_path: &PathBuf,
+    db_path: &Path,
     plan_id: i64,
     failed_peer: &str,
     reason: &str,

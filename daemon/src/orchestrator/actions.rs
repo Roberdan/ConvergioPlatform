@@ -43,7 +43,7 @@ pub async fn find_available_peer(db_path: &Path, exclude: Option<&str>) -> Optio
         let name = peer.get("peer_name")?.as_str()?;
         let online = peer.get("is_online").and_then(|v| v.as_bool()).unwrap_or(false);
 
-        if online && exclude.map_or(true, |ex| ex != name) {
+        if online && (exclude != Some(name)) {
             return Some(name.to_string());
         }
     }
