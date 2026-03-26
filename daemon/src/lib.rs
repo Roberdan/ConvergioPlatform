@@ -3,6 +3,7 @@ pub mod background_sync;
 pub mod channels;
 pub mod db;
 pub mod digest;
+pub mod inference;
 pub mod errors;
 pub mod hooks;
 pub mod ipc;
