@@ -57,4 +57,4 @@ Dashboard won't start → check `data/dashboard.db`, port 8788, DASHBOARD_DB | D
 
 ## Ecosystem
 
-ConvergioPlatform (this) | MaranelloLuceDesign (DS) | convergio (Go+Python backend) | ConvergioCLI (C++) | convergio.io (gateway)
+ConvergioPlatform (this) | maranello-design (DS) | convergio-community (community skills) | convergio (Go+Python backend) | ConvergioCLI (C++) | convergio.io (gateway)

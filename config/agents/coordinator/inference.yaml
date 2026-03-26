@@ -1,0 +1,8 @@
+preferred_model: sonnet
+max_tier: t3
+budget_tokens_per_day: 1000000
+latency_sla_ms: 5000
+allowed_models:
+  - haiku
+  - sonnet
+  - opus

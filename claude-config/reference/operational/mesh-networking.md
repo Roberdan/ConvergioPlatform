@@ -40,7 +40,7 @@ tmux aliases: `tlm` (<mac-worker-1>), `tlx` (<linux-worker>), `tl` (local). Auto
 
 ### SSH Multiplexing
 
-Already configured for `<linux-worker-ts>` and `mac-dev-ts` in `~/.ssh/config`:
+Already configured for `<linux-worker-ts>` and `roberdandev-m1Pro` in `~/.ssh/config`:
 ```
 ControlMaster auto
 ControlPath ~/.ssh/sockets/%r@%h-%p

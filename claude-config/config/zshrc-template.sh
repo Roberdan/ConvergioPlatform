@@ -238,9 +238,9 @@ alias rm="trash"
 export MAC_DEV_USER="mariodan"
 
 _macdev_host() {
-  # Tailscale direct — local blocked by firewall
-  if ssh -o ConnectTimeout=3 -o BatchMode=yes mac-dev-ts true 2>/dev/null; then
-    echo "mac-dev-ts"
+  # Smart failover: Thunderbolt → LAN → Tailscale (via SSH ProxyCommand)
+  if ssh -o ConnectTimeout=3 -o BatchMode=yes roberdandev-m1Pro true 2>/dev/null; then
+    echo "roberdandev-m1Pro"
   else
     echo "UNREACHABLE"; return 1
   fi
@@ -275,8 +275,8 @@ mac-run() {
 }
 
 # IDE remote
-code-mac() { code --remote ssh-remote+mac-dev-ts "${1:-/Users/Shared/GitHub/VirtualBPM}"; }
-cursor-mac() { cursor --remote ssh-remote+mac-dev-ts "${1:-/Users/Shared/GitHub/VirtualBPM}"; }
+code-mac() { code --remote ssh-remote+roberdandev-m1Pro "${1:-/Users/Shared/GitHub/VirtualBPM}"; }
+cursor-mac() { cursor --remote ssh-remote+roberdandev-m1Pro "${1:-/Users/Shared/GitHub/VirtualBPM}"; }
 
 # Dev Mesh Status — all 3 machines at a glance
 mesh-status() {

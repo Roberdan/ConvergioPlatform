@@ -45,6 +45,13 @@ With plan: add `--task-id`. `cvg who agents` tracks. Unregistered = invisible.
 | Exploration | haiku-4.5 | explore |
 | Coordinator | sonnet-4.6 | default |
 
+## Subagent Discipline (NON-NEGOTIABLE)
+
+Before launching fix agents: `git log --oneline | grep -i "BUG\|fix"` to check for existing fixes. **Never re-fix already-fixed bugs.**
+After agent completes: `SubagentStop` hook auto-commits uncommitted work. Verify with `git log` before cherry-pick.
+Cherry-picks: ALWAYS delegate to an agent. Never resolve conflicts inline in coordinator context.
+Auth failures: `SubagentStop` hook blocks and requests retry. If persistent, `/login` then re-launch.
+
 ## Workflow (HOOK-ENFORCED)
 
 `/solve` → `/planner` (Opus) → review (Sonnet) → DB → `/execute` (Codex) → thor (Opus) → merge → done
