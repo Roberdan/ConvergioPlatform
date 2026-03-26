@@ -33,7 +33,7 @@ async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<Value>, in
         return;
     }
 
-    loop {
+    loop { // UNBOUNDED: event loop
         select! {
             inbound = socket.recv() => {
                 match inbound {

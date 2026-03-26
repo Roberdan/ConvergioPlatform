@@ -68,7 +68,7 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
         let hb_engine = ipc_engine.clone();
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(Duration::from_secs(10));
-            loop {
+            loop { // UNBOUNDED: event loop
                 ticker.tick().await;
                 if let Err(e) = hb_engine.heartbeat_local_agents() {
                     tracing::warn!("heartbeat error: {e}");
@@ -99,7 +99,7 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
     let hb_state = state.clone();
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
-        loop {
+        loop { // UNBOUNDED: event loop
             ticker.tick().await;
             let mut hb = hb_state.heartbeats.write().await;
             let now = now_ts();
@@ -151,7 +151,7 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
     let local_node = resolve_local_node_name(&config.peers_conf_path, &config.bind_ip);
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(10));
-        loop {
+        loop { // UNBOUNDED: event loop
             ticker.tick().await;
             let load = collect_system_stats();
             if let Ok(conn) = crate::mesh::sync::open_persistent_sync_conn(
@@ -167,7 +167,7 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
         }
     });
 
-    loop {
+    loop { // UNBOUNDED: event loop
         tokio::select! {
             result = listener.accept() => {
                 let (mut stream, remote) = result

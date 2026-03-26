@@ -114,7 +114,7 @@ pub async fn merge_wave(
         .map_err(|e| WorkspaceError::Event(e.to_string()))?;
 
     let mut attempts = 0u32;
-    let ready = loop {
+    let ready = loop { // UNBOUNDED: event loop
         let status = connector
             .pr_readiness(repo_slug, pr_info.number)
             .await

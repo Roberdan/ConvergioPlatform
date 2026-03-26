@@ -71,7 +71,7 @@ async fn read_payload_streaming<R: AsyncRead + Unpin>(
     let mut limited = reader.take(payload_len as u64);
     let mut buffered = BufReader::new(&mut limited);
     let mut chunk = [0_u8; 8 * 1024];
-    loop {
+    loop { // UNBOUNDED: event loop
         let read = buffered.read(&mut chunk).await?;
         if read == 0 {
             break;

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use super::handlers;
 
 pub async fn run(engine: Arc<IpcEngine>, db_path: PathBuf) {
-    loop {
+    loop { // UNBOUNDED: event loop
         let resp = engine
             .receive_wait(
                 super::ALI_AGENT,

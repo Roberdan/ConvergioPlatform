@@ -146,7 +146,7 @@ impl IpcEngine {
         let ch_owned = channel_filter.map(|s| s.to_string());
 
         match tokio::time::timeout(deadline, async {
-            loop {
+            loop { // UNBOUNDED: event loop
                 notified.notified().await;
                 let resp = self.receive(
                     &agent_owned,

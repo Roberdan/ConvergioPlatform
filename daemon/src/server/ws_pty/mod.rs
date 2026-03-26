@@ -178,7 +178,7 @@ async fn handle_pty(mut socket: WebSocket, params: PtyParams, state: ServerState
         }
     });
     let mut last_activity = Instant::now();
-    loop {
+    loop { // UNBOUNDED: event loop
         tokio::select! {
             Some(data) = rx.recv() => {
                 last_activity = Instant::now();

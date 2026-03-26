@@ -10,7 +10,7 @@ pub async fn start_model_probe(conn_path: std::path::PathBuf, interval_secs: u64
     let host = hostname::get()
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_else(|_| "unknown".to_string());
-    loop {
+    loop { // UNBOUNDED: event loop
         if let Ok(conn) = rusqlite::Connection::open(&conn_path) {
             if let Ok(models) = probe_ollama().await {
                 let _ = store_models(&conn, &host, "ollama", &models);

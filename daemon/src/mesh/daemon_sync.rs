@@ -140,7 +140,7 @@ pub(super) async fn handle_socket(
         );
     }
     let mut consecutive_errors: u32 = 0;
-    loop {
+    loop { // UNBOUNDED: event loop
         let framed = match sync::read_frame_with_quota(&mut read_half, &mut peer_quota).await? {
             Some(framed) => framed,
             None => break,

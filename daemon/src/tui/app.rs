@@ -100,7 +100,7 @@ impl TuiApp {
         // Initial data fetch before first render
         self.refresh_data().await;
 
-        loop {
+        loop { // UNBOUNDED: event loop
             tokio::select! {
                 _ = poll_tick.tick() => {
                     // HTTP polling fallback when WS has exceeded max retries.

@@ -53,7 +53,7 @@ pub fn validate_config(config: &DaemonConfig) -> Result<(), MeshError> {
 
 pub(super) async fn connect_peer_loop(peer: String, state: DaemonState, config: DaemonConfig) {
     let mut backoff_secs = 3u64;
-    loop {
+    loop { // UNBOUNDED: event loop
         match TcpStream::connect(&peer).await {
             Ok(stream) => {
                 backoff_secs = 3;

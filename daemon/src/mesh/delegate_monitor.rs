@@ -36,7 +36,7 @@ pub fn spawn_monitor(state: ServerState) {
             .timeout(HTTP_TIMEOUT)
             .build()
             .unwrap_or_default();
-        loop {
+        loop { // UNBOUNDED: event loop
             tokio::time::sleep(POLL_INTERVAL).await;
             if let Err(e) = poll_delegated_tasks(&state, &client).await {
                 warn!("delegate_monitor: poll cycle failed: {e}");

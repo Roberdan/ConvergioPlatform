@@ -34,7 +34,7 @@ pub async fn run_pause_bridge(db_path: PathBuf) {
     // server has finished binding its sockets.
     ticker.tick().await;
 
-    loop {
+    loop { // UNBOUNDED: event loop
         ticker.tick().await;
         if let Err(e) = process_tick(&conn, &mut seen) {
             warn!("pause_bridge tick error: {e}");

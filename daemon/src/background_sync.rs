@@ -112,7 +112,7 @@ pub fn spawn_sync_loop(
         // Skip the immediate first tick — let the server finish binding.
         ticker.tick().await;
 
-        loop {
+        loop { // UNBOUNDED: event loop
             ticker.tick().await;
 
             let peers = match query_active_peers(&db) {

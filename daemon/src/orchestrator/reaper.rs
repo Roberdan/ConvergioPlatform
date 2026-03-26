@@ -107,7 +107,7 @@ async fn reap_peer_tmp_files() -> Result<usize, Box<dyn std::error::Error + Send
 pub fn spawn_reaper(db_path: std::path::PathBuf) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
-        loop {
+        loop { // UNBOUNDED: event loop
             interval.tick().await;
             // Local cleanup (sync DB operations)
             match reap(&db_path) {

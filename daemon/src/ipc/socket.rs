@@ -35,7 +35,7 @@ pub async fn start_ipc_server(
 
     tracing::info!("IPC server listening on {}", socket_path.display());
 
-    loop {
+    loop { // UNBOUNDED: event loop
         match listener.accept().await {
             Ok((stream, _)) => {
                 let eng = engine.clone();
@@ -59,7 +59,7 @@ async fn handle_client(
 ) -> Result<(), IpcError> {
     let (mut reader, mut writer) = stream.into_split();
 
-    loop {
+    loop { // UNBOUNDED: event loop
         let frame = match read_ipc_frame(&mut reader).await {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),

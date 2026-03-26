@@ -12,7 +12,7 @@ use sync::MeshSyncFrame;
 pub(super) fn spawn_heartbeat_loop(out_tx: mpsc::Sender<MeshSyncFrame>, node_id: String) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(5));
-        loop {
+        loop { // UNBOUNDED: event loop
             ticker.tick().await;
             if out_tx
                 .send(MeshSyncFrame::Heartbeat {
@@ -43,7 +43,7 @@ pub(super) fn spawn_delta_loop(
         let mut staged_changes = Vec::new();
         let mut idle_ticks: u32 = 0;
         let mut anti_entropy_done = false;
-        loop {
+        loop { // UNBOUNDED: event loop
             ticker.tick().await;
             if idle_ticks > 0 {
                 let extra_wait = Duration::from_secs((2u64.pow(idle_ticks.min(4))).min(30));
