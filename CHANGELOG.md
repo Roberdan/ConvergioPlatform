@@ -1,5 +1,18 @@
 # Changelog
 
+## [18.2.0] - 26 Marzo 2026
+
+### Added
+- TUI Project view tab with project list (T1-01)
+- Master plan tree rendering with dependency arrows and expand/collapse (T1-02)
+- Plan detail drill-down with hierarchy context bar showing parent + siblings (T1-03)
+- Rollup progress bar for master plans with aggregate percentage (T1-04)
+- Execution mode badges (SEQ/PAR/MIX/CND) with semantic colors on plan cards (T2-01)
+- Delegation status in Mesh view showing peer assignments and progress (T2-02)
+- ASCII dependency graph visualization for master plan children (T2-03)
+- Project switcher (Ctrl+P) in tab bar with session persistence (T2-04)
+- ADR-0115: TUI Project Hierarchy (Plan 719)
+
 ## [18.1.0] - 25 Marzo 2026
 
 ### Added
