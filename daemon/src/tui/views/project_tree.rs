@@ -75,11 +75,24 @@ fn depends_label(dep: &Option<String>) -> String {
     }
 }
 
-fn mode_badge(mode: &Option<String>) -> String {
-    match mode.as_deref() {
-        Some(m) if !m.is_empty() => format!(" [{m}]"),
-        _ => String::new(),
-    }
+/// Returns colored badge spans for the execution mode. Empty if no mode set.
+/// sequential=MUTED (single-threaded), parallel=OK (fast), mixed=WARN, conditional=ACCENT.
+pub fn mode_badge_spans(mode: &Option<String>) -> Vec<Span<'static>> {
+    let (label, color) = match mode.as_deref() {
+        Some("sequential") => ("[SEQ]", MUTED),
+        Some("parallel")   => ("[PAR]", OK),
+        Some("mixed")      => ("[MIX]", WARN),
+        Some("conditional") => ("[CND]", ACCENT),
+        Some(m) if !m.is_empty() => return vec![
+            Span::raw(" "),
+            Span::styled(format!("[{m}]"), Style::default().fg(MUTED)),
+        ],
+        _ => return vec![],
+    };
+    vec![
+        Span::raw(" "),
+        Span::styled(label, Style::default().fg(color)),
+    ]
 }
 
 /// Flatten tree into renderable lines. Returns (lines, total_selectable_items).
@@ -115,17 +128,16 @@ pub fn build_tree_lines(
         idx += 1;
 
         let name = truncate(&master.name, 50);
-        let badge = mode_badge(&master.execution_mode);
+        let badge = mode_badge_spans(&master.execution_mode);
         let frac = format!("{agg_done}/{agg_total}");
 
+        let name_style = if is_sel { selected_style() } else { Style::default().fg(TEXT_PRIMARY).bold() };
         let mut spans = vec![
             Span::styled(format!(" {toggle} "), Style::default().fg(ACCENT)),
-            Span::styled(
-                format!("{name}{badge}"),
-                if is_sel { selected_style() } else { Style::default().fg(TEXT_PRIMARY).bold() },
-            ),
-            Span::raw("  "),
+            Span::styled(name, name_style),
         ];
+        spans.extend(badge);
+        spans.push(Span::raw("  "));
         spans.extend(progress_bar(agg_done, agg_total, 16));
         let pct = if agg_total > 0 { agg_done * 100 / agg_total } else { 0 };
         spans.push(Span::styled(format!(" {frac}"), Style::default().fg(TEXT_SECONDARY)));
