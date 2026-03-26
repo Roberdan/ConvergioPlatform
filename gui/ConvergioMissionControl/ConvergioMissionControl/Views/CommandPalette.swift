@@ -87,7 +87,8 @@ struct CommandPalette: View {
                 Divider()
                 actionList
             }
-            .frame(width: 480, maxHeight: 400)
+            .frame(width: 480)
+            .frame(maxHeight: 400)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
             .padding(.top, 80)
@@ -103,7 +104,7 @@ struct CommandPalette: View {
             TextField("Search actions...", text: $query)
                 .textFieldStyle(.plain).font(.title3)
                 .focused($isSearchFocused)
-                .onChange(of: query) { _ in selectedIndex = 0 }
+                .onChange(of: query) { selectedIndex = 0 }
                 .onSubmit { executeSelected() }
             if !query.isEmpty {
                 Button { query = "" } label: {
@@ -133,7 +134,7 @@ struct CommandPalette: View {
                 }
                 .padding(.vertical, 4)
             }
-            .onChange(of: selectedIndex) { idx in
+            .onChange(of: selectedIndex) { _, idx in
                 if idx >= 0, idx < flat.count { proxy.scrollTo(flat[idx].id, anchor: .center) }
             }
             .onKeyPress(.upArrow) { moveSelection(by: -1, count: flat.count); return .handled }

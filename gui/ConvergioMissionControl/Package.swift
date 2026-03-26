@@ -13,6 +13,11 @@ let package = Package(
             name: "ConvergioMissionControl",
             path: "ConvergioMissionControl",
             exclude: ["Info.plist"]
+        ),
+        .testTarget(
+            name: "DaemonClientTests",
+            dependencies: ["ConvergioMissionControl"],
+            path: "Tests/DaemonClientTests"
         )
     ]
 )
