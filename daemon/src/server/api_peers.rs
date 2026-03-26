@@ -29,14 +29,14 @@ async fn api_peer_list(State(state): State<ServerState>) -> Result<Json<Value>, 
         .unwrap_or(0.0);
     let peers: Vec<Value> = rows
         .into_iter()
-        .map(|mut row| {
+        .filter_map(|mut row| {
             let name = row
                 .get("peer_name")
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_owned();
             let seen = row.get("last_seen").and_then(Value::as_f64).unwrap_or(0.0);
-            let obj = row.as_object_mut().unwrap();
+            let obj = row.as_object_mut()?; // skip malformed rows — query_rows always returns objects
             obj.insert("is_online".to_string(), json!(now - seen < 3600.0));
             obj.insert(
                 "is_local".to_string(),
@@ -48,7 +48,7 @@ async fn api_peer_list(State(state): State<ServerState>) -> Result<Json<Value>, 
                 "worker"
             };
             obj.insert("role".to_string(), json!(role));
-            row
+            Some(row)
         })
         .collect();
     Ok(Json(json!({"peers": peers})))

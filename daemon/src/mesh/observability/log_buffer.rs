@@ -29,6 +29,7 @@ impl LogBuffer {
         if self.capacity == 0 {
             return;
         }
+        // SAFETY: lock() only fails on mutex poison; push() does not panic while holding the lock
         let mut entries = self.entries.lock().unwrap();
         if entries.len() >= self.capacity {
             entries.pop_front(); // O(1) vs Vec::remove(0) O(n)
@@ -37,6 +38,7 @@ impl LogBuffer {
     }
 
     pub fn recent(&self, limit: usize) -> Vec<LogEntry> {
+        // SAFETY: lock() only fails on mutex poison; recent() does not panic while holding the lock
         let entries = self.entries.lock().unwrap();
         let skip = entries.len().saturating_sub(limit);
         entries.iter().skip(skip).cloned().collect()

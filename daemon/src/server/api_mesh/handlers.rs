@@ -143,7 +143,11 @@ pub(crate) async fn api_mesh(State(state): State<ServerState>) -> Result<Json<Va
     // Include any heartbeat-only peers not in peers.conf (shouldn't happen, but safe)
     for (name, mut hb) in hb_map {
         let seen = hb.get("last_seen").and_then(Value::as_f64).unwrap_or(0.0);
-        let obj = hb.as_object_mut().unwrap();
+        let Some(obj) = hb.as_object_mut() else {
+            // query_rows always returns JSON objects; skip any malformed row
+            tracing::warn!("skipping non-object heartbeat row for peer {name}");
+            continue;
+        };
         if !obj.contains_key("is_online") {
             obj.insert("is_online".into(), json!(now - seen < 3600.0));
         }

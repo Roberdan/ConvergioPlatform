@@ -87,6 +87,7 @@ impl RateLimiter {
     /// Check if a new connection from this IP is allowed
     pub fn check_and_record(&self, ip: IpAddr) -> Result<(), MeshError> {
         {
+            // SAFETY: lock() only fails on mutex poison (thread panic while holding lock); not expected in normal operation
             let active = self.active.lock().unwrap();
             if let Some(&count) = active.get(&ip) {
                 if count >= self.max_concurrent {
@@ -98,6 +99,7 @@ impl RateLimiter {
             }
         }
         {
+            // SAFETY: lock() only fails on mutex poison; windows mutex is not held across panics
             let mut windows = self.windows.lock().unwrap();
             let entry = windows.entry(ip).or_default();
             let cutoff = Instant::now() - Duration::from_secs(60);
@@ -111,6 +113,7 @@ impl RateLimiter {
             entry.push(Instant::now());
         }
         {
+            // SAFETY: lock() only fails on mutex poison; active mutex is not held across panics
             let mut active = self.active.lock().unwrap();
             *active.entry(ip).or_insert(0) += 1;
         }
@@ -119,6 +122,7 @@ impl RateLimiter {
 
     /// Release an active connection slot
     pub fn release(&self, ip: IpAddr) {
+        // SAFETY: lock() only fails on mutex poison; release() does not panic while holding lock
         let mut active = self.active.lock().unwrap();
         if let Some(count) = active.get_mut(&ip) {
             *count = count.saturating_sub(1);
