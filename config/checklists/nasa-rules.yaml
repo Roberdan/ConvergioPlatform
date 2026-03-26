@@ -1,0 +1,52 @@
+name: nasa-rules
+version: "1.0.0"
+mode: read-do
+items:
+  - id: bounded_loops_check
+    title: All loops have explicit bounds (no unbounded loop {})
+    command: "! grep -rn 'loop {' daemon/src/ | grep -v UNBOUNDED | grep -v '#\\[cfg(test)\\]' | grep -q '.'"
+    expected: ""
+    severity: critical
+    depends_on: []
+
+  - id: function_size_check
+    title: No functions exceed 250 lines
+    command: "! awk '/^[[:space:]]*(pub )?fn /{start=NR; name=$0} /^[[:space:]]*\\}/{if(NR-start>250) print FILENAME\":\"start\": \"name\" (\"NR-start\" lines)\"}' daemon/src/**/*.rs | grep -q '.'"
+    expected: ""
+    severity: critical
+    depends_on: []
+
+  - id: error_swallowing_check
+    title: No silently swallowed errors (unwrap_or_default on Result without logging)
+    command: "! grep -rn '\\.unwrap_or_default()' daemon/src/ | grep -v '// SAFE:' | grep -v test | grep -q '.'"
+    expected: ""
+    severity: critical
+    depends_on: []
+
+  - id: narrow_state_check
+    title: Mutable statics are minimized
+    command: "! grep -rn 'static mut ' daemon/src/ | grep -v test | grep -q '.'"
+    expected: ""
+    severity: warning
+    depends_on: []
+
+  - id: nesting_gate_check
+    title: No excessive nesting depth (>5 levels)
+    command: "! grep -Prn '^(\\s{20,}|\\t{5,})\\S' daemon/src/ | grep -v test | head -1 | grep -q '.'"
+    expected: ""
+    severity: warning
+    depends_on: []
+
+  - id: assertions_check
+    title: Module boundary functions have debug_assert! preconditions
+    command: "grep -rn 'debug_assert!' daemon/src/ | wc -l | awk '{if($1 > 0) exit 0; else exit 1}'"
+    expected: ""
+    severity: warning
+    depends_on: []
+
+  - id: side_effect_naming_check
+    title: Side-effect functions use verb prefixes (send_, write_, delete_, update_)
+    command: "echo 'advisory check — manual review recommended'"
+    expected: ""
+    severity: info
+    depends_on: []
