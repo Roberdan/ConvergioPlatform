@@ -7,7 +7,6 @@ pub mod digest;
 pub mod inference;
 pub mod errors;
 pub mod hooks;
-pub mod inference;
 pub mod ipc;
 pub mod lock;
 pub mod mesh;
