@@ -109,69 +109,15 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status)",
     "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
     "CREATE INDEX IF NOT EXISTS idx_waves_plan_id ON waves(plan_id)",
-    // Plan 724 — Bug 2: expand task type CHECK to include all real-world types.
-    // SQLite does not support ALTER TABLE ... ADD CHECK; we must recreate the table.
-    // New allowed types: original set + pr, research, strategy, design, legal, analysis,
-    // planning, communication (used by non-code plans in practice).
-    //
-    // Guard: ensure every column we SELECT exists in tasks before creating tasks_new.
-    // Tests use minimal SEED schemas; ALTER TABLE ADD COLUMN on an existing column
-    // produces "duplicate column" which the migration runner silently skips — safe.
-    "ALTER TABLE tasks ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE tasks ADD COLUMN wave_id TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE tasks ADD COLUMN task_id TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE tasks ADD COLUMN title TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE tasks ADD COLUMN tokens INTEGER DEFAULT 0",
-    "ALTER TABLE tasks ADD COLUMN model TEXT DEFAULT 'haiku'",
-    "ALTER TABLE tasks ADD COLUMN output_data TEXT",
-    "ALTER TABLE tasks ADD COLUMN notes TEXT",
-    "ALTER TABLE tasks ADD COLUMN output_type TEXT DEFAULT 'pr'",
-    "ALTER TABLE tasks ADD COLUMN validator_agent TEXT DEFAULT 'thor'",
-    "ALTER TABLE tasks ADD COLUMN effort_level INTEGER DEFAULT 1",
-    "ALTER TABLE tasks ADD COLUMN validation_report TEXT",
-    "ALTER TABLE tasks ADD COLUMN priority TEXT",
-    "ALTER TABLE tasks ADD COLUMN type TEXT",
-    "ALTER TABLE tasks ADD COLUMN assignee TEXT",
-    "ALTER TABLE tasks ADD COLUMN description TEXT",
-    "ALTER TABLE tasks ADD COLUMN test_criteria TEXT",
-    "ALTER TABLE tasks ADD COLUMN duration_minutes REAL",
-    "ALTER TABLE tasks ADD COLUMN wave_id_fk INTEGER",
-    "ALTER TABLE tasks ADD COLUMN executor_host TEXT",
-    "ALTER TABLE tasks ADD COLUMN executor_agent TEXT",
-    "ALTER TABLE tasks ADD COLUMN started_at DATETIME",
-    "ALTER TABLE tasks ADD COLUMN completed_at DATETIME",
-    "ALTER TABLE tasks ADD COLUMN validated_at DATETIME",
-    "ALTER TABLE tasks ADD COLUMN validated_by TEXT",
-    "DROP TABLE IF EXISTS tasks_new",
-    "CREATE TABLE tasks_new AS SELECT * FROM tasks WHERE 0",
-    "INSERT INTO tasks_new SELECT * FROM tasks",
-    "DROP TABLE tasks",
-    "CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL DEFAULT '', wave_id TEXT NOT NULL DEFAULT '', task_id TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', tokens INTEGER DEFAULT 0, wave_id_fk INTEGER, plan_id INTEGER, model TEXT DEFAULT 'haiku', output_data TEXT, started_at DATETIME, completed_at DATETIME, notes TEXT, output_type TEXT DEFAULT 'pr', validator_agent TEXT DEFAULT 'thor', effort_level INTEGER DEFAULT 1, validated_at DATETIME, validated_by TEXT, validation_report TEXT, priority TEXT, type TEXT CHECK(type IS NULL OR type IN ('bug','feature','fix','refactor','test','config','documentation','chore','doc','pr','research','strategy','design','legal','analysis','planning','communication')), assignee TEXT, description TEXT, test_criteria TEXT, executor_host TEXT, executor_agent TEXT, duration_minutes REAL, executor_session_id TEXT)",
-    "INSERT INTO tasks SELECT id, project_id, wave_id, task_id, title, status, tokens, wave_id_fk, plan_id, model, output_data, started_at, completed_at, notes, output_type, validator_agent, effort_level, validated_at, validated_by, validation_report, priority, type, assignee, description, test_criteria, executor_host, executor_agent, duration_minutes, NULL FROM tasks_new",
-    "DROP TABLE tasks_new",
-    // Plan 724 — Bug 3: add spec_file column to plan_reviews for pre-plan review registration.
-    // Reviews can now be created before a plan exists, linked by spec_file path.
-    // cvg plan create auto-links matching reviews via /api/plan-db/review/link-by-spec.
-    "ALTER TABLE plan_reviews ADD COLUMN spec_file TEXT",
-    "CREATE INDEX IF NOT EXISTS idx_plan_reviews_spec_file ON plan_reviews(spec_file)",
-    // Plan 724 — re-create indexes dropped by tasks table recreation above
-    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_wave_id ON tasks(wave_id_fk)",
-    "CREATE INDEX IF NOT EXISTS idx_tasks_plan_status ON tasks(plan_id, status)",
-    // Plan 724 — T4-01: repository registry table
-    "CREATE TABLE IF NOT EXISTS repositories (\
-      id INTEGER PRIMARY KEY,\
-      name TEXT NOT NULL UNIQUE,\
-      path TEXT NOT NULL,\
-      github_url TEXT,\
-      description TEXT,\
-      is_active BOOLEAN DEFAULT 1,\
-      transport TEXT DEFAULT 'local',\
-      health_status TEXT DEFAULT 'unknown',\
-      last_health_check DATETIME,\
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\
-    )",
-    "CREATE INDEX IF NOT EXISTS idx_repositories_name ON repositories(name)",
+    // Plan 720 T2-01 — delegation progress tracking
+    "CREATE TABLE IF NOT EXISTS delegation_progress (
+         id            INTEGER PRIMARY KEY AUTOINCREMENT,
+         delegation_id TEXT NOT NULL UNIQUE,
+         status        TEXT NOT NULL DEFAULT 'running'
+             CHECK(status IN ('running','blocked','done')),
+         current_task  TEXT,
+         output_summary TEXT,
+         updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+     )",
+    "CREATE INDEX IF NOT EXISTS idx_delegation_progress_id ON delegation_progress(delegation_id)",
 ];

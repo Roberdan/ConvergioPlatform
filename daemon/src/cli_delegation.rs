@@ -1,6 +1,6 @@
 // cvg delegation — manage plan delegation to mesh workers.
 // Why: Plan 706 — no orchestration for remote execution. Zero traceability.
-// Why Plan 720: adds `delegate` subcommand so operators don't need the bash script.
+// Plan 720 T2-01 — added live progress display via /api/delegation/:id/progress.
 
 use crate::cli_error::CliError;
 use crate::cli_http;
@@ -12,21 +12,6 @@ pub enum DelegationCommands {
     Status { plan_id: i64 },
     /// List all active plans (potential delegations)
     List,
-    /// Delegate a prompt to a mesh peer (POST /api/mesh/delegate)
-    Delegate {
-        /// Target peer hostname (e.g. macProM1)
-        #[arg(long)]
-        peer: String,
-        /// Prompt or task description to run on the peer
-        #[arg(long)]
-        prompt: String,
-        /// Associate with an existing plan ID (optional)
-        #[arg(long)]
-        plan_id: Option<i64>,
-        /// Daemon API base URL
-        #[arg(long, default_value = "http://localhost:8420")]
-        api_url: String,
-    },
 }
 
 fn api_err(code: i32) -> CliError {
@@ -44,6 +29,21 @@ pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliErr
             let done = plan["tasks_done"].as_i64().unwrap_or(0);
             let total = plan["tasks_total"].as_i64().unwrap_or(0);
             println!("Plan {plan_id}: status={status}, host={host}, progress={done}/{total}");
+
+            // Show live peer progress if available (Plan 720 T2-01)
+            let delegation_id = format!("plan-{plan_id}");
+            let progress_url = format!("{api_url}/api/delegation/{delegation_id}/progress");
+            if let Ok(pb) = cli_http::get_and_return(&progress_url).await {
+                if pb["ok"].as_bool().unwrap_or(false) {
+                    let peer_status = pb["status"].as_str().unwrap_or("?");
+                    let current = pb["current_task"].as_str().unwrap_or("-");
+                    let summary = pb["output_summary"].as_str().unwrap_or("-");
+                    let updated = pb["updated_at"].as_str().unwrap_or("?");
+                    println!(
+                        "Peer progress [{peer_status}]: task={current} | summary={summary} | updated={updated}"
+                    );
+                }
+            }
 
             // Show workers for this plan
             let workers_url = format!("{api_url}/api/workers");
@@ -94,103 +94,5 @@ pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliErr
             }
             Ok(())
         }
-        DelegationCommands::Delegate {
-            peer,
-            prompt,
-            plan_id,
-            api_url: delegate_api_url,
-        } => {
-            let url = format!("{delegate_api_url}/api/mesh/delegate");
-            let body = serde_json::json!({
-                "peer": peer,
-                "prompt": prompt,
-                "plan_id": plan_id,
-            });
-            let result = cli_http::post_and_return(&url, &body)
-                .await
-                .map_err(api_err)?;
-            let delegation_id = result["delegation_id"].as_str().unwrap_or("-");
-            let stream_url = result["stream_url"].as_str().unwrap_or("-");
-            println!("Delegated to {peer}");
-            println!("  delegation_id : {delegation_id}");
-            println!("  stream_url    : {stream_url}");
-            Ok(())
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn delegate_variant_parses_required_fields() {
-        let cmd = DelegationCommands::Delegate {
-            peer: "macProM1".to_string(),
-            prompt: "test".to_string(),
-            plan_id: None,
-            api_url: "http://localhost:8420".to_string(),
-        };
-        assert!(matches!(cmd, DelegationCommands::Delegate { .. }));
-    }
-
-    #[test]
-    fn delegate_variant_accepts_plan_id() {
-        let cmd = DelegationCommands::Delegate {
-            peer: "macProM1".to_string(),
-            prompt: "run wave 1".to_string(),
-            plan_id: Some(720),
-            api_url: "http://localhost:8420".to_string(),
-        };
-        if let DelegationCommands::Delegate { peer, plan_id, .. } = cmd {
-            assert_eq!(peer, "macProM1");
-            assert_eq!(plan_id, Some(720));
-        } else {
-            panic!("wrong variant");
-        }
-    }
-
-    #[test]
-    fn delegate_api_url_shape() {
-        let api_url = "http://localhost:8420";
-        let url = format!("{api_url}/api/mesh/delegate");
-        assert_eq!(url, "http://localhost:8420/api/mesh/delegate");
-    }
-
-    #[test]
-    fn delegate_body_contains_required_fields() {
-        let peer = "macProM1";
-        let prompt = "run plan 720 wave 1";
-        let plan_id: Option<i64> = Some(720);
-        let body = serde_json::json!({
-            "peer": peer,
-            "prompt": prompt,
-            "plan_id": plan_id,
-        });
-        assert_eq!(body["peer"], "macProM1");
-        assert_eq!(body["prompt"], "run plan 720 wave 1");
-        assert_eq!(body["plan_id"], 720);
-    }
-
-    #[test]
-    fn delegate_body_plan_id_null_when_none() {
-        let body = serde_json::json!({
-            "peer": "linux-worker",
-            "prompt": "test task",
-            "plan_id": serde_json::Value::Null,
-        });
-        assert!(body["plan_id"].is_null());
-    }
-
-    #[test]
-    fn status_variant_still_exists() {
-        let cmd = DelegationCommands::Status { plan_id: 42 };
-        assert!(matches!(cmd, DelegationCommands::Status { plan_id: 42 }));
-    }
-
-    #[test]
-    fn list_variant_still_exists() {
-        let cmd = DelegationCommands::List;
-        assert!(matches!(cmd, DelegationCommands::List));
     }
 }

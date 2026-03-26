@@ -27,7 +27,6 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/coordinator/status",
     "/api/coordinator/toggle",
     "/api/health",
-    "/api/health/deep",
     "/api/peers",
     "/api/peers/discover",
     "/api/agents",
@@ -89,8 +88,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/workspace/events",
     "/api/workspace/deliverables",
     "/api/project/:id/tree",
-    "/api/repositories",
-    "/api/repositories/:name",
+    "/api/delegation/:id/progress",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -160,7 +158,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/workspace/events/record",
     "/api/workspace/quality-gate",
     "/api/workspace/release",
-    "/api/repositories",
+    "/api/delegation/:id/progress",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",

@@ -1,10 +1,9 @@
-pub mod api_channels;
-pub mod api_decisions;
 pub mod api_agent_catalog;
 mod api_agent_catalog_parse;
 pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_audit;
+pub mod api_delegation;
 pub mod api_chat;
 pub mod api_coordinator;
 pub mod api_crdt;
@@ -15,7 +14,6 @@ pub mod api_domain;
 pub mod api_evolution;
 pub mod api_github;
 pub mod api_github_handlers;
-pub mod api_health_deep;
 pub mod api_heartbeat;
 pub mod api_heartbeat_handlers;
 pub mod api_ideas;
@@ -43,7 +41,6 @@ pub mod api_plan_db_review;
 pub mod api_plans;
 pub mod api_project_tree;
 pub mod api_readiness;
-pub mod api_repositories;
 pub mod api_runs;
 pub mod api_runs_handlers;
 pub mod api_tracking;
@@ -124,15 +121,11 @@ mod api_plan_db_query_tests;
 #[cfg(test)]
 mod api_plans_tests;
 #[cfg(test)]
-mod api_repositories_tests;
-#[cfg(test)]
 mod api_runs_tests;
 #[cfg(test)]
 mod api_runs_tests_lifecycle;
 #[cfg(test)]
 mod api_tests;
-#[cfg(test)]
-mod api_decisions_tests;
 #[cfg(test)]
 mod api_tracking_tests;
 #[cfg(test)]
@@ -140,15 +133,13 @@ mod api_workspace_events_tests;
 #[cfg(test)]
 mod api_workspace_integration_tests;
 #[cfg(test)]
+mod api_delegation_tests;
+#[cfg(test)]
 mod api_workspace_tests;
 #[cfg(test)]
 mod state_init_tests;
 #[cfg(test)]
 mod ws_pty_tests;
-#[cfg(test)]
-mod api_channels_tests;
-#[cfg(test)]
-mod api_health_deep_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};
