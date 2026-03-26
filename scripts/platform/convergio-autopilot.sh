@@ -25,7 +25,7 @@ source "$HELPERS_DIR/convergio-autopilot-helpers.sh"
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[$(date '+%H:%M:%S')] WARN: $*" >&2; }
 
-_db() { sqlite3 "$DB" "$1" 2>/dev/null; }
+_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
 
 # ─── F1-F3: Cost Tracking ───────────────────────────────────────────
 

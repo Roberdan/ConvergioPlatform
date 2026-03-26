@@ -12,12 +12,12 @@ RETRY=0
 
 plan_done() {
 	local pending
-	pending=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID AND status NOT IN ('done','validated','skipped','cancelled');")
+	pending=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID AND status NOT IN ('done','validated','skipped','cancelled');")
 	[ "$pending" -eq 0 ]
 }
 
 plan_summary() {
-	sqlite3 "$DB" "SELECT status, COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID GROUP BY status;"
+	sqlite3 "$DB" ".timeout 5000" "SELECT status, COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID GROUP BY status;"
 }
 
 echo "=== Plan #$PLAN_ID Runner (auto-restart) ==="
@@ -30,14 +30,14 @@ while ! plan_done; do
 		exit 1
 	fi
 
-	REMAINING=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID AND status NOT IN ('done','validated','skipped','cancelled');")
+	REMAINING=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID AND status NOT IN ('done','validated','skipped','cancelled');")
 	echo ""
 	echo "[Run $RETRY/$MAX_RETRIES] $REMAINING tasks remaining..."
 	plan_summary
 	echo ""
 
 	# Reset any stuck in_progress tasks from previous crashed run
-	sqlite3 "$DB" "UPDATE tasks SET status='pending' WHERE plan_id = $PLAN_ID AND status='in_progress';"
+	sqlite3 "$DB" ".timeout 5000" "UPDATE tasks SET status='pending' WHERE plan_id = $PLAN_ID AND status='in_progress';"
 
 	copilot --yolo -p "@execute $PLAN_ID" 2>&1
 	EXIT_CODE=$?

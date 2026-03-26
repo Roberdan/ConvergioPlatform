@@ -13,7 +13,7 @@ STATE_RS="${HOME}/.claude/rust/claude-core/src/server/state.rs"
 ok=0 skip=0
 while IFS= read -r sql; do
   [[ -z "$sql" ]] && continue
-  if sqlite3 "$DB" "$sql" 2>/dev/null; then
+  if sqlite3 "$DB" ".timeout 5000" "$sql" 2>/dev/null; then
     ok=$((ok + 1))
   else
     skip=$((skip + 1))

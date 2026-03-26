@@ -16,7 +16,7 @@ TASK_ID="${1:?Usage: verify-task-update.sh <db_task_id> [expected_status]}"
 EXPECTED_STATUS="${2:-done}"
 
 # Check task exists
-TASK=$(sqlite3 "$DB" "SELECT id, task_id, status, notes FROM tasks WHERE id=$TASK_ID;" 2>/dev/null)
+TASK=$(sqlite3 "$DB" ".timeout 5000" "SELECT id, task_id, status, notes FROM tasks WHERE id=$TASK_ID;" 2>/dev/null)
 
 if [ -z "$TASK" ]; then
 	echo "ERROR: Task $TASK_ID not found in database"

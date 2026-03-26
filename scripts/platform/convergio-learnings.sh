@@ -6,7 +6,7 @@ set -euo pipefail
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 
-_db() { sqlite3 "$DB" "$1" 2>/dev/null; }
+_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
 
 cmd_analyze() {
   echo "=== Learning Pattern Analysis ==="

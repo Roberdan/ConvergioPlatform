@@ -7,7 +7,7 @@ PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
 DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
-_db() { sqlite3 "$DB" "$1" 2>/dev/null; }
+_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
 
 # Data sources:
 # - ipc_messages: from_agent, to_agent, channel, content, created_at (daemon core)

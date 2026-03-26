@@ -9,7 +9,7 @@ DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 BUS="$PLATFORM_DIR/scripts/platform/convergio-bus.sh"
 DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
-_db() { sqlite3 "$DB" "$1" 2>/dev/null; }
+_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
 
 # Escape single quotes for safe SQL string interpolation
 sql_escape() { printf '%s' "${1//\'/\'\'}"; }

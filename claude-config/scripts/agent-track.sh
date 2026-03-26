@@ -18,7 +18,7 @@ case "${1:-}" in
       --parent) PSESS="$2"; shift 2;; *) shift;; esac; done
     TV="${TID:+$TID}"; TV="${TV:-NULL}"; PV="${PID:+$PID}"; PV="${PV:-NULL}"
     PSV="${PSESS:+'$(_esc "$PSESS")'}"; PSV="${PSV:-NULL}"
-    sqlite3 "$DB" "INSERT INTO agent_activity (agent_id,agent_type,description,task_db_id,plan_id,model,host,status,parent_session) \
+    sqlite3 "$DB" ".timeout 5000" "INSERT INTO agent_activity (agent_id,agent_type,description,task_db_id,plan_id,model,host,status,parent_session) \
       VALUES ('$(_esc "$AID")','$(_esc "$TYPE")','$(_esc "$DESC")',$TV,$PV,'$(_esc "${MDL:-unknown}")','$(_esc "$HOST")','running',$PSV);"
     echo "{\"ok\":true,\"agent_id\":\"$AID\"}" ;;
 
@@ -28,11 +28,11 @@ case "${1:-}" in
     while [[ $# -gt 0 ]]; do case "$1" in
       --status) ST="$2"; shift 2;; --tokens-in) TIN="$2"; shift 2;;
       --tokens-out) TOUT="$2"; shift 2;; --cost) COST="$2"; shift 2;; *) shift;; esac; done
-    sqlite3 "$DB" "UPDATE agent_activity SET status='$ST',completed_at=datetime('now'), \
+    sqlite3 "$DB" ".timeout 5000" "UPDATE agent_activity SET status='$ST',completed_at=datetime('now'), \
       tokens_in=$TIN,tokens_out=$TOUT,tokens_total=$TIN+$TOUT,cost_usd=$COST, \
       duration_s=CAST((julianday('now')-julianday(started_at))*86400 AS REAL) \
       WHERE agent_id='$(_esc "$AID")' AND status='running';"
-    sqlite3 "$DB" "UPDATE tasks SET tokens_total=tokens_total+$TIN+$TOUT,cost_usd=cost_usd+$COST, \
+    sqlite3 "$DB" ".timeout 5000" "UPDATE tasks SET tokens_total=tokens_total+$TIN+$TOUT,cost_usd=cost_usd+$COST, \
       agent_count=agent_count+1 WHERE id=(SELECT task_db_id FROM agent_activity \
       WHERE agent_id='$(_esc "$AID")' AND task_db_id IS NOT NULL);" 2>/dev/null || true
     echo "{\"ok\":true,\"agent_id\":\"$AID\",\"status\":\"$ST\"}" ;;

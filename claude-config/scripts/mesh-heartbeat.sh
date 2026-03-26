@@ -21,7 +21,7 @@ err() { echo -e "${R}[heartbeat]${N} $*" >&2; }
 
 # Helpers
 
-_db() { sqlite3 "$DB" "$@"; }
+_db() { sqlite3 "$DB" ".timeout 5000" ".timeout 5000" "$@"; }
 
 _load_json() {
 	local cpu tasks mem_total=0 mem_used=0

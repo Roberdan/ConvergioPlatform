@@ -23,7 +23,7 @@ err() { echo -e "${R}[heartbeat]${N} $*" >&2; }
 
 # Helpers
 
-_db() { sqlite3 "$DB" "$@"; }
+_db() { sqlite3 "$DB" ".timeout 5000" "$@"; }
 
 _capabilities() {
 	peers_load 2>/dev/null || true

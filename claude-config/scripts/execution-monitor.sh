@@ -41,8 +41,8 @@ fi
 
 # Get latest plan if not specified
 if [ -z "$PLAN_ID" ]; then
-	PLAN_ID=$(sqlite3 "$DB" "SELECT id FROM plans WHERE status='doing' ORDER BY id DESC LIMIT 1;" 2>/dev/null)
-	[ -z "$PLAN_ID" ] && PLAN_ID=$(sqlite3 "$DB" "SELECT id FROM plans ORDER BY id DESC LIMIT 1;" 2>/dev/null)
+	PLAN_ID=$(sqlite3 "$DB" ".timeout 5000" "SELECT id FROM plans WHERE status='doing' ORDER BY id DESC LIMIT 1;" 2>/dev/null)
+	[ -z "$PLAN_ID" ] && PLAN_ID=$(sqlite3 "$DB" ".timeout 5000" "SELECT id FROM plans ORDER BY id DESC LIMIT 1;" 2>/dev/null)
 fi
 
 if [ -z "$PLAN_ID" ]; then
@@ -154,7 +154,7 @@ while true; do
 	echo ""
 
 	# Token usage
-	TOTAL_TOKENS=$(sqlite3 "$DB" "SELECT COALESCE(SUM(tokens), 0) FROM tasks WHERE plan_id=$PLAN_ID;" 2>/dev/null)
+	TOTAL_TOKENS=$(sqlite3 "$DB" ".timeout 5000" "SELECT COALESCE(SUM(tokens), 0) FROM tasks WHERE plan_id=$PLAN_ID;" 2>/dev/null)
 	echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
 	echo -e "  ${BOLD}Tokens Used:${NC} ${TOTAL_TOKENS}"
 

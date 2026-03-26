@@ -133,7 +133,7 @@ EOF
 echo "✅ Generated: ${TASK_FILE}"
 
 # Update database with markdown_path (direct DB write)
-sqlite3 "$DB" ".timeout 3000" \
+sqlite3 "$DB" ".timeout 5000" ".timeout 3000" \
 	"UPDATE tasks SET markdown_path = '${TASK_FILE}' WHERE task_id = '${TASK_ID}' AND plan_id IN (SELECT id FROM plans WHERE project_id = '${PROJECT}');" 2>/dev/null &&
 	echo "Database updated with markdown_path" ||
 	echo "Task not yet in database (will be created during planning)"

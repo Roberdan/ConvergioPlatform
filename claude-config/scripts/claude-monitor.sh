@@ -64,8 +64,8 @@ while true; do
 	if [[ -f "$DB" ]]; then
 		active=0
 		done_t=0
-		active=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE status='in_progress';" 2>/dev/null || echo 0)
-		done_t=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE status='done' AND completed_at > datetime('now','-1 hour');" 2>/dev/null || echo 0)
+		active=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE status='in_progress';" 2>/dev/null || echo 0)
+		done_t=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE status='done' AND completed_at > datetime('now','-1 hour');" 2>/dev/null || echo 0)
 		[[ "$active" -gt 0 || "$done_t" -gt 0 ]] && echo -e "  ${YELLOW}DB: ${active} active, ${done_t} done (1h)${NC}"
 	fi
 

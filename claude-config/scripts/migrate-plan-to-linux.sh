@@ -40,7 +40,7 @@ info "Using host: $HOST"
 
 # --- Get plan info from DB ---
 DB="$HOME/.claude/data/dashboard.db"
-PLAN_ROW=$(sqlite3 "$DB" "SELECT name, worktree_path, project_id FROM plans WHERE id = $PLAN_ID;")
+PLAN_ROW=$(sqlite3 "$DB" ".timeout 5000" "SELECT name, worktree_path, project_id FROM plans WHERE id = $PLAN_ID;")
 if [[ -z "$PLAN_ROW" ]]; then
 	err "Plan $PLAN_ID not found in DB"
 	exit 1
@@ -185,11 +185,11 @@ if [[ ! -f "$DB" ]]; then
 fi
 
 # Update worktree path and execution host
-sqlite3 "$DB" "UPDATE plans SET worktree_path = '$LINUX_WT', execution_host = '$EXECUTION_HOST' WHERE id = $PLAN_ID;"
+sqlite3 "$DB" ".timeout 5000" "UPDATE plans SET worktree_path = '$LINUX_WT', execution_host = '$EXECUTION_HOST' WHERE id = $PLAN_ID;"
 
 # Verify
 echo "[migrate] DB updated:"
-sqlite3 "$DB" "SELECT id, name, status, execution_host, worktree_path FROM plans WHERE id = $PLAN_ID;"
+sqlite3 "$DB" ".timeout 5000" "SELECT id, name, status, execution_host, worktree_path FROM plans WHERE id = $PLAN_ID;"
 REMOTE_DB
 
 # --- Summary ---

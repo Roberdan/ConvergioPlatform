@@ -155,11 +155,11 @@ DB="$1"
 _common_cols() {
 	local tbl="$1"
 	local lcols rcols
-	lcols=$(sqlite3 "$DB" "PRAGMA table_info($tbl);" | cut -d'|' -f2 | sort)
-	rcols=$(sqlite3 "$DB" "PRAGMA src.table_info($tbl);" | cut -d'|' -f2 | sort)
+	lcols=$(sqlite3 "$DB" ".timeout 5000" "PRAGMA table_info($tbl);" | cut -d'|' -f2 | sort)
+	rcols=$(sqlite3 "$DB" ".timeout 5000" "PRAGMA src.table_info($tbl);" | cut -d'|' -f2 | sort)
 	comm -12 <(echo "$lcols") <(echo "$rcols") | tr '\n' ',' | sed 's/,$//'
 }
-for id in $(sqlite3 "$DB" "
+for id in $(sqlite3 "$DB" ".timeout 5000" "
 	ATTACH '/tmp/sync_source.db' AS src;
 	SELECT DISTINCT src_p.id FROM src.plans src_p LEFT JOIN plans p ON p.id = src_p.id
 	LEFT JOIN src.tasks src_t ON src_t.plan_id = src_p.id
@@ -172,11 +172,11 @@ for id in $(sqlite3 "$DB" "
 "); do
 	[ -z "$id" ] && continue
 	echo "[INFO] Push plan $id"
-	sqlite3 "$DB" "ATTACH '/tmp/sync_source.db' AS src;"
+	sqlite3 "$DB" ".timeout 5000" "ATTACH '/tmp/sync_source.db' AS src;"
 	PCOLS=$(_common_cols "plans")
 	WCOLS=$(_common_cols "waves")
 	TCOLS=$(_common_cols "tasks")
-	sqlite3 "$DB" "
+	sqlite3 "$DB" ".timeout 5000" "
 		DROP TRIGGER IF EXISTS enforce_thor_done;
 		DROP TRIGGER IF EXISTS task_done_counter;
 		DROP TRIGGER IF EXISTS task_undone_counter;
@@ -233,12 +233,12 @@ copy_plan() {
 DB="$1"; PID="$2"
 _common_cols() {
 	local tbl="$1"
-	comm -12 <(sqlite3 "$DB" "PRAGMA table_info($tbl);" | cut -d'|' -f2 | sort) \
-	         <(sqlite3 "$DB" "PRAGMA src.table_info($tbl);" | cut -d'|' -f2 | sort) | tr '\n' ',' | sed 's/,$//'
+	comm -12 <(sqlite3 "$DB" ".timeout 5000" "PRAGMA table_info($tbl);" | cut -d'|' -f2 | sort) \
+	         <(sqlite3 "$DB" ".timeout 5000" "PRAGMA src.table_info($tbl);" | cut -d'|' -f2 | sort) | tr '\n' ',' | sed 's/,$//'
 }
-sqlite3 "$DB" "ATTACH '/tmp/source_dashboard.db' AS src;"
+sqlite3 "$DB" ".timeout 5000" "ATTACH '/tmp/source_dashboard.db' AS src;"
 PCOLS=$(_common_cols "plans"); WCOLS=$(_common_cols "waves"); TCOLS=$(_common_cols "tasks")
-sqlite3 "$DB" "
+sqlite3 "$DB" ".timeout 5000" "
 	DROP TRIGGER IF EXISTS enforce_thor_done;
 	DROP TRIGGER IF EXISTS task_done_counter;
 	DROP TRIGGER IF EXISTS task_undone_counter;
