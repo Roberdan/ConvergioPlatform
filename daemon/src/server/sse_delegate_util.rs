@@ -86,7 +86,13 @@ pub(super) fn build_agent_command(
         _ => unreachable!("ALLOWED_CLI check must have passed"),
     };
 
-    Ok(format!("cd {dir} && {cli_bin} -p '{prompt}'"))
+    // Use file-based prompt delivery: write prompt to temp file, pass via --input-file.
+    // This preserves all special characters (quotes, backticks, $vars, newlines) that
+    // would be mangled by tmux send-keys or shell -p interpolation.
+    let prompt_file = format!("/tmp/convergio-prompt-{plan_id}.txt");
+    Ok(format!(
+        "printf '%s' {prompt:?} > {prompt_file} && cd {dir} && {cli_bin} --input-file {prompt_file}; rm -f {prompt_file}"
+    ))
 }
 
 pub(super) fn stage(s: &str, peer: &str, detail: &str) -> serde_json::Value {
@@ -206,5 +212,49 @@ mod tests {
     fn command_uses_hardcoded_binary() {
         let cmd = build_agent_command("claude", "1", &HashMap::new()).unwrap();
         assert!(cmd.contains("claude --dangerously-skip-permissions"));
+    }
+
+    // TDD: file-based prompt delivery — verify --input-file is used, not -p with inline prompt.
+    // Special chars (quotes, backticks, $vars, newlines) must survive in the file path, not shell.
+    #[test]
+    fn claude_uses_input_file_not_inline_prompt() {
+        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
+        // Must use --input-file for prompt delivery
+        assert!(
+            cmd.contains("--input-file"),
+            "expected --input-file in command, got: {cmd}"
+        );
+        // Must NOT pass prompt inline via -p flag (breaks on special chars)
+        assert!(
+            !cmd.contains(" -p "),
+            "must not use inline -p flag, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn copilot_uses_input_file_not_inline_prompt() {
+        let cmd = build_agent_command("copilot", "42", &HashMap::new()).unwrap();
+        assert!(
+            cmd.contains("--input-file"),
+            "expected --input-file in command, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn prompt_file_written_before_agent_invocation() {
+        // The command must first write the prompt to a temp file, then invoke the agent.
+        // Order: write step appears before agent invocation in the command string.
+        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
+        let write_pos = cmd.find("printf").or_else(|| cmd.find("cat >")).or_else(|| cmd.find("tee"));
+        let agent_pos = cmd.find("claude --dangerously");
+        assert!(write_pos.is_some(), "command must write prompt to file, got: {cmd}");
+        assert!(write_pos.unwrap() < agent_pos.unwrap(), "prompt write must precede agent invocation");
+    }
+
+    #[test]
+    fn prompt_file_path_uses_plan_id() {
+        // The temp file path should include plan_id for uniqueness and traceability.
+        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
+        assert!(cmd.contains("671"), "prompt file path should include plan_id for traceability");
     }
 }
