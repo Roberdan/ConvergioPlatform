@@ -90,6 +90,24 @@ pub fn mesh_status(data: &TuiData, selected: usize) -> Paragraph<'static> {
                 Span::styled(spark_str, base.fg(cpu_color)),
             ]));
         }
+        // Show active delegations for this node beneath its row.
+        for d in data.delegations.iter().filter(|d| d.peer_name == node.name) {
+            let pct = if d.tasks_total > 0 {
+                (d.tasks_done * 100 / d.tasks_total) as u16
+            } else {
+                0
+            };
+            lines.push(Line::from(vec![
+                Span::styled("  \u{2192} ", Style::default().fg(ACCENT)), // → indented
+                Span::styled(d.plan_name.clone(), Style::default().fg(TEXT_PRIMARY)),
+                Span::styled(
+                    format!(" [{}/{}] ({}%)", d.tasks_done, d.tasks_total, pct),
+                    Style::default().fg(if pct >= 80 { OK } else if pct >= 50 { WARN } else { MUTED }),
+                ),
+                Span::styled(format!(" by {}", d.agent_name), Style::default().fg(TEXT_SECONDARY)),
+                Span::styled(format!("  \u{2665} {}", d.last_heartbeat), Style::default().fg(MUTED)),
+            ]));
+        }
     }
     if data.mesh_nodes.is_empty() {
         lines.push(Line::from(vec![
@@ -130,122 +148,5 @@ pub fn progress_bar_line(pct: u16, width: u16) -> Line<'static> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::tui::{
-        data::{MeshNode, TaskPipelineItem},
-        TuiData,
-    };
-
-    fn sample_pipeline() -> Vec<TaskPipelineItem> {
-        vec![TaskPipelineItem {
-            task_id: "T1-01".to_string(),
-            title: "Fix column alignment".to_string(),
-            status: "in_progress".to_string(),
-            agent: "executor".to_string(),
-        }]
-    }
-
-    fn sample_mesh() -> Vec<MeshNode> {
-        vec![MeshNode {
-            name: "macProM1".to_string(),
-            online: true,
-            role: "coordinator".to_string(),
-            cpu_percent: 42.0,
-        }]
-    }
-
-    // --- Pipeline column-width tests ---
-
-    #[test]
-    fn pipeline_header_uses_12_char_agent_column() {
-        // Header must use {:<12} for agent, not {:<10}
-        let data = TuiData {
-            pipeline: sample_pipeline(),
-            ..TuiData::default()
-        };
-        let p = task_pipeline(&data, 0);
-        let debug = format!("{p:?}");
-        // "ID       Status        Agent        Title" — 12 spaces after "Agent" padded
-        assert!(
-            debug.contains("Agent        "),
-            "Pipeline header must pad Agent to 12 chars: {debug}"
-        );
-    }
-
-    #[test]
-    fn pipeline_row_agent_padded_to_12() {
-        // Data row must use {:<12} for agent
-        let data = TuiData {
-            pipeline: sample_pipeline(),
-            ..TuiData::default()
-        };
-        let p = task_pipeline(&data, 0);
-        let debug = format!("{p:?}");
-        // "executor    " — 8 chars + 4 spaces = 12
-        assert!(
-            debug.contains("executor    "),
-            "Pipeline row must pad agent to 12 chars: {debug}"
-        );
-    }
-
-    // --- Mesh column-width tests ---
-
-    #[test]
-    fn mesh_header_uses_correct_labels() {
-        let data = TuiData {
-            mesh_nodes: sample_mesh(),
-            ..TuiData::default()
-        };
-        let p = mesh_status(&data, 0);
-        let debug = format!("{p:?}");
-        assert!(
-            debug.contains("Node"),
-            "Mesh header must contain Node: {debug}"
-        );
-        assert!(
-            debug.contains("Role"),
-            "Mesh header must contain Role: {debug}"
-        );
-        assert!(
-            debug.contains("CPU"),
-            "Mesh header must contain CPU: {debug}"
-        );
-        assert!(
-            debug.contains("Load"),
-            "Mesh header must contain Load: {debug}"
-        );
-    }
-
-    #[test]
-    fn mesh_row_name_padded_to_16() {
-        // "macProM1" (8 chars) should be padded to 16
-        let data = TuiData {
-            mesh_nodes: sample_mesh(),
-            ..TuiData::default()
-        };
-        let p = mesh_status(&data, 0);
-        let debug = format!("{p:?}");
-        // name padded to 16: "macProM1        "
-        assert!(
-            debug.contains("macProM1        "),
-            "Mesh row must pad name to 16 chars: {debug}"
-        );
-    }
-
-    #[test]
-    fn mesh_row_role_padded_to_12() {
-        // "coordinator" (11 chars) padded to 12
-        let data = TuiData {
-            mesh_nodes: sample_mesh(),
-            ..TuiData::default()
-        };
-        let p = mesh_status(&data, 0);
-        let debug = format!("{p:?}");
-        // "coordinator " — 11 chars + 1 space = 12
-        assert!(
-            debug.contains("coordinator "),
-            "Mesh row must pad role to 12 chars: {debug}"
-        );
-    }
-}
+#[path = "shared_tests.rs"]
+mod tests;
