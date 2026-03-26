@@ -127,7 +127,9 @@ pub fn build_tree_lines(
             Span::raw("  "),
         ];
         spans.extend(progress_bar(agg_done, agg_total, 16));
+        let pct = if agg_total > 0 { agg_done * 100 / agg_total } else { 0 };
         spans.push(Span::styled(format!(" {frac}"), Style::default().fg(TEXT_SECONDARY)));
+        spans.push(Span::styled(format!(" ({pct}%)"), Style::default().fg(TEXT_SECONDARY)));
         lines.push(Line::from(spans));
 
         if is_expanded {
@@ -138,6 +140,11 @@ pub fn build_tree_lines(
                 idx += 1;
                 render_child(&mut lines, child, is_sel, is_last);
             }
+            // Rollup summary: aggregate progress across all children.
+            lines.push(Line::from(vec![
+                Span::styled("    Rollup: ", Style::default().fg(MUTED)),
+                Span::styled(format!("{agg_done}/{agg_total} ({pct}%)"), Style::default().fg(ACCENT)),
+            ]));
         }
         lines.push("".into());
     }
