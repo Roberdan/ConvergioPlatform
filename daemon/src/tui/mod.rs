@@ -8,6 +8,7 @@ pub(crate) mod session_lifecycle;
 pub mod data;
 pub mod drill_down;
 pub mod input;
+pub mod persistence;
 pub mod refresh;
 mod tree_nav;
 pub mod views;

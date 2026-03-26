@@ -25,12 +25,15 @@ impl TuiApp {
         let show_all_plans = self.istate.show_all_plans;
         let expanded_masters = self.istate.expanded_masters.clone();
         let hierarchy_context = self.istate.hierarchy_context.clone();
+        let show_project_switcher = self.istate.show_project_switcher;
+        let project_switcher_selected = self.istate.project_switcher_selected;
         self.terminal.draw(|frame| {
             views::render_view(
                 frame, frame.area(), view, data, selected, &api_url,
                 show_help, auto_refresh, refresh_interval_secs,
                 &chat_input, chat_sending, popup_content.as_ref(), show_all_plans,
                 chat_scroll, &expanded_masters, hierarchy_context.as_ref(),
+                show_project_switcher, project_switcher_selected,
             );
             // Rich popup overlay (if open)
             if let Some(ref pc) = popup_content {

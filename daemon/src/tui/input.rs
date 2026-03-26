@@ -32,11 +32,26 @@ pub struct InteractiveState {
     pub switch_to_project_view: bool,
     /// Hierarchy context populated when drilling into a child plan from the project tree.
     pub hierarchy_context: Option<PlanHierarchyContext>,
+    /// Whether the Ctrl+P project switcher overlay is visible.
+    pub show_project_switcher: bool,
+    /// Currently highlighted index in the project switcher list.
+    pub project_switcher_selected: usize,
+    /// Index of the project to switch to (set on Enter, cleared after app processes it).
+    pub pending_project_switch: Option<String>,
 }
 
 /// Handle a single key event; mutates state. Returns true if the app should quit.
-/// Priority order: command_mode → popup_open → help overlay → normal keys.
+/// Priority order: command_mode → popup_open → project_switcher → help overlay → normal keys.
 pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut InteractiveState) -> bool {
+    // Ctrl+P always toggles the project switcher (even from other modes).
+    if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('p') {
+        state.show_project_switcher = !state.show_project_switcher;
+        if state.show_project_switcher {
+            state.project_switcher_selected = 0;
+        }
+        return false;
+    }
+
     if state.command_mode {
         handle_command_key(code, state);
         return state.quit;
@@ -48,11 +63,18 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
         return false;
     }
 
+    // Project switcher captures Up/Down/Enter/Esc when open.
+    if state.show_project_switcher {
+        handle_project_switcher_key(code, state);
+        return false;
+    }
+
     // Notification inbox captures focus when open.
     if state.show_notifications {
         handle_notification_key(code, state);
         return false;
     }
+
 
     if state.show_help {
         match code {
@@ -83,6 +105,29 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
         _ => {}
     }
     false
+}
+
+/// Handle keys while project switcher is open.
+fn handle_project_switcher_key(code: KeyCode, state: &mut InteractiveState) {
+    match code {
+        KeyCode::Esc => {
+            state.show_project_switcher = false;
+        }
+        KeyCode::Up => {
+            state.project_switcher_selected = state.project_switcher_selected.saturating_sub(1);
+        }
+        KeyCode::Down => {
+            state.project_switcher_selected += 1;
+        }
+        KeyCode::Enter => {
+            // Store the selected index as a string so app.rs can resolve it against the
+            // projects list and switch context. Switcher closes immediately.
+            state.pending_project_switch =
+                Some(state.project_switcher_selected.to_string());
+            state.show_project_switcher = false;
+        }
+        _ => {}
+    }
 }
 
 /// Handle a key while in command mode.
@@ -167,7 +212,9 @@ fn handle_notification_key(code: KeyCode, state: &mut InteractiveState) {
 
 /// Handle Esc outside command/popup mode: close overlays/filters in priority order.
 fn handle_esc(state: &mut InteractiveState) {
-    if state.popup_open {
+    if state.show_project_switcher {
+        state.show_project_switcher = false;
+    } else if state.popup_open {
         state.popup_open = false;
         state.popup_content = None;
     } else if state.show_notifications {

@@ -21,6 +21,7 @@ pub mod events;
 pub mod help;
 pub mod hierarchy_bar;
 pub mod popup;
+pub mod project_switcher;
 pub mod project_tree;
 pub mod workspace;
 
@@ -43,6 +44,7 @@ const ALL_VIEWS: &[(MainView, &str)] = &[
 ///
 /// If `popup_content` is Some, a rich popup is rendered as the topmost overlay.
 /// If `show_help` is true, the help overlay is rendered (below popup in z-order).
+/// If `show_project_switcher` is true, the project switcher overlay is rendered.
 #[allow(clippy::too_many_arguments)]
 pub fn render_view(
     frame: &mut Frame<'_>,
@@ -61,6 +63,8 @@ pub fn render_view(
     chat_scroll: u16,
     expanded_masters: &[i64],
     hierarchy_context: Option<&PlanHierarchyContext>,
+    show_project_switcher: bool,
+    project_switcher_selected: usize,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -72,7 +76,7 @@ pub fn render_view(
         ])
         .split(area);
 
-    render_tab_bar(frame, chunks[0], view);
+    render_tab_bar(frame, chunks[0], view, &data.active_project_name);
     frame.render_widget(widgets::kpi_strip(data), chunks[1]);
     render_content(frame, chunks[2], view, data, selected, chat_input, chat_sending, show_all_plans, chat_scroll, expanded_masters, hierarchy_context);
     let unread = data.notifications.iter().filter(|n| !n.read).count();
@@ -80,6 +84,13 @@ pub fn render_view(
 
     if show_help {
         help::render_help_overlay(frame, area);
+    }
+
+    // Project switcher overlay (below rich popup in z-order).
+    if show_project_switcher {
+        project_switcher::render_project_switcher(
+            frame, area, &data.projects, project_switcher_selected,
+        );
     }
 
     // Rich popup renders last (topmost overlay).
@@ -90,9 +101,12 @@ pub fn render_view(
 
 // --- Tab bar ---
 
-fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, active: MainView) {
+fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, active: MainView, project_name: &str) {
+    // Show active project name after the logo; fall back to "Convergio" when unset.
+    let display_project = if project_name.is_empty() { "Convergio" } else { project_name };
+    let header = format!(" ◆ {}  ", display_project);
     let mut spans: Vec<Span<'static>> = vec![Span::styled(
-        " ◆ Convergio  ",
+        header,
         Style::default().fg(ACCENT).bold(),
     )];
 

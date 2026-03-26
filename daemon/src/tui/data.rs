@@ -217,6 +217,8 @@ pub struct TuiData {
     pub project_tree: ProjectTreeData,
     pub projects: Vec<ProjectInfo>,
     pub delegations: Vec<DelegationInfo>,
+    /// Name of the currently active project (shown in tab bar).
+    pub active_project_name: String,
 }
 
 #[cfg(test)]
