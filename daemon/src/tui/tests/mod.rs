@@ -1,5 +1,6 @@
 // Shared helpers and core tests. Sub-modules hold view/input/integration tests.
 mod hierarchy;
+mod dep_graph;
 mod integration;
 mod input;
 mod input_actions;

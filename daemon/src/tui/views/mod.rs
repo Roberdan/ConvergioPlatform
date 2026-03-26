@@ -16,6 +16,7 @@ pub(super) mod chat_render;
 mod chat_tests;
 pub mod cost;
 pub mod deliverables;
+pub mod dep_graph;
 pub mod events;
 pub mod help;
 pub mod hierarchy_bar;

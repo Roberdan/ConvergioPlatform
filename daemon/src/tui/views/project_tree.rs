@@ -6,6 +6,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
+use super::dep_graph::build_dep_graph;
+
 use crate::tui::data::{ProjectTreeData, ProjectTreeNode, TuiData};
 use crate::tui::widgets::{selected_style, ACCENT, FAIL, MUTED, OK, TEXT_PRIMARY, TEXT_SECONDARY, WARN};
 
@@ -157,6 +159,12 @@ pub fn build_tree_lines(
                 Span::styled("    Rollup: ", Style::default().fg(MUTED)),
                 Span::styled(format!("{agg_done}/{agg_total} ({pct}%)"), Style::default().fg(ACCENT)),
             ]));
+            // Render dependency graph when master has children with deps.
+            let has_any_dep = master.children.iter().any(|c| c.depends_on.is_some());
+            if has_any_dep {
+                let graph = build_dep_graph(&master.children);
+                lines.extend(graph);
+            }
         }
         lines.push("".into());
     }
