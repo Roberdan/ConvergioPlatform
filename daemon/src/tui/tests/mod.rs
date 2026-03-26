@@ -159,7 +159,9 @@ pub(crate) fn sample_data() -> TuiData {
             },
         ],
         notifications: vec![],
-        project_tree: Default::default(), chat_session_id: Some("sess-test-123".to_string()),
+        project_tree: Default::default(),
+        projects: vec![],
+        chat_session_id: Some("sess-test-123".to_string()),
     }
 }
 

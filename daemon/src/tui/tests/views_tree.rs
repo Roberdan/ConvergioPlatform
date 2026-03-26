@@ -95,7 +95,6 @@ fn tree_empty_shows_placeholder() {
     let text: String = lines.iter().map(|l| format!("{l:?}")).collect();
     assert!(text.contains("No project data"), "should show placeholder: {text}");
 }
-<<<<<<< HEAD
 
 // ---- new tests for T1-02 requirements ----
 
