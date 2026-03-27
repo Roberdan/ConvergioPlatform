@@ -1,7 +1,7 @@
 # ADR-0101: Dashboard Rebuild with Maranello Presentation Runtime
 
 **Date:** 2026-03-19
-**Status:** Accepted
+**Status:** Superseded by [ADR-0117](0117-convergio-ui-platform-strategy.md)
 
 ## Context
 

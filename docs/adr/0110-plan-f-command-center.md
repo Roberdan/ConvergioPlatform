@@ -3,7 +3,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-0117](0117-convergio-ui-platform-strategy.md)
 
 ## Context
 

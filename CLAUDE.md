@@ -69,7 +69,8 @@ cvg agent complete "<type>-$(hostname -s)-$$"  # before /exit
 | Layer | Path | Lang | Modules |
 |---|---|---|---|
 | Daemon | `daemon/` | Rust | mesh(40) server(32) ipc(15) db(7) hooks(3) tui(3) |
-| Dashboard | `dashboard/` | JS (Maranello DS) | app, KPI, mesh, chat, brain, IPC |
+| Web+Desktop | `convergio-web/` | Next.js+Tauri | ADR-0117. Replaces dashboard+CommandCenter |
+| Dashboard (legacy) | `dashboard/` | JS (Maranello DS) | Superseded by convergio-web |
 | Evolution | `evolution/` | TypeScript | core/types, adapters |
 | Scripts | `scripts/` | Bash | mesh(12), platform(5) |
 | Data | `data/dashboard.db` | SQLite WAL | plans, tasks, waves, KB, heartbeats |
