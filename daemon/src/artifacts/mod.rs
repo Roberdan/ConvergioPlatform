@@ -1,3 +1,4 @@
+pub mod blueprint;
 pub mod registry;
 pub mod renderer;
 pub mod scanner;
