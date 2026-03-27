@@ -47,22 +47,53 @@ fn gethostname() -> String {
 }
 
 /// Parse peers.conf → (role, capabilities) for this node.
+/// Matches by: section name, dns_name, ssh_alias, or hostname substring.
 fn parse_peers_conf() -> (String, Vec<String>) {
     let content = std::fs::read_to_string(
         format!("{}/.claude/config/peers.conf", home())
     ).unwrap_or_default();
-    let hostname = gethostname();
-    let (mut role, mut caps, mut active) = (String::new(), Vec::new(), false);
+    let hostname = gethostname().to_lowercase();
+    let (mut role, mut caps) = (String::new(), Vec::new());
+    let mut current_role = String::new();
+    let mut current_caps: Vec<String> = Vec::new();
+    let mut current_match = false;
     for line in content.lines() {
         let t = line.trim();
         if t.starts_with('[') && t.ends_with(']') {
-            active = &t[1..t.len()-1] == hostname;
-        } else if active {
-            if let Some(v) = t.strip_prefix("role=") { role = v.into(); }
+            // Save previous section if it matched
+            if current_match && !current_role.is_empty() {
+                role = current_role.clone();
+                caps = current_caps.clone();
+            }
+            let section = &t[1..t.len()-1];
+            // Match section name directly
+            current_match = section.to_lowercase() == hostname
+                || hostname.contains(&section.to_lowercase())
+                || section.to_lowercase().contains(&hostname);
+            current_role.clear();
+            current_caps.clear();
+        } else if !t.is_empty() && !t.starts_with('#') {
+            if let Some(v) = t.strip_prefix("role=") { current_role = v.into(); }
             if let Some(v) = t.strip_prefix("capabilities=") {
-                caps = v.split(',').map(|s| s.trim().to_string()).collect();
+                current_caps = v.split(',').map(|s| s.trim().to_string()).collect();
+            }
+            // Also match dns_name or ssh_alias fields
+            if let Some(v) = t.strip_prefix("dns_name=") {
+                if v.to_lowercase().contains(&hostname) || hostname.contains(&v.to_lowercase().replace(".tail01f12c.ts.net","").replace("-","")) {
+                    current_match = true;
+                }
+            }
+            if let Some(v) = t.strip_prefix("ssh_alias=") {
+                if v.to_lowercase().contains(&hostname) || hostname.contains(&v.to_lowercase()) {
+                    current_match = true;
+                }
             }
         }
+    }
+    // Check last section
+    if current_match && !current_role.is_empty() {
+        role = current_role;
+        caps = current_caps;
     }
     (role, caps)
 }
@@ -124,13 +155,20 @@ fn check_disk_space(path: &str) -> Check {
 }
 
 fn check_models_downloaded() -> Check {
-    let cache = format!("{}/.cache/huggingface", home());
-    let found = std::fs::read_dir(&cache).ok().and_then(|e| {
-        e.flatten().find(|f| f.file_name().to_string_lossy().to_lowercase().contains("mistral"))
-    });
-    match found {
-        Some(e) => Check::pass("models_downloaded", format!("found {}", e.file_name().to_string_lossy())),
-        None => Check::fail("models_downloaded", format!("no mistral-7b dir in {cache}")),
+    let hub = format!("{}/.cache/huggingface/hub", home());
+    let found = std::fs::read_dir(&hub).ok().map(|entries| {
+        entries.flatten()
+            .filter(|f| {
+                let name = f.file_name().to_string_lossy().to_lowercase();
+                name.contains("mistral") || name.contains("whisper") || name.contains("voxtral") || name.contains("qwen")
+            })
+            .map(|f| f.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+    }).unwrap_or_default();
+    if found.is_empty() {
+        Check::fail("models_downloaded", format!("no MLX models in {hub}"))
+    } else {
+        Check::pass("models_downloaded", format!("{} model(s): {}", found.len(), found.join(", ")))
     }
 }
 

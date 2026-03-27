@@ -36,12 +36,9 @@ install_plist() {
   tmp_plist="$(mktemp /tmp/com.convergio.kernel.XXXXXX.plist)"
   trap 'rm -f "${tmp_plist}"' RETURN
 
-  local token="${CONVERGIO_TELEGRAM_TOKEN:-}"
-  local chat_id="${CONVERGIO_TELEGRAM_CHAT_ID:-}"
-
   sed \
-    -e "s|__CONVERGIO_TELEGRAM_TOKEN__|${token}|g" \
-    -e "s|__CONVERGIO_TELEGRAM_CHAT_ID__|${chat_id}|g" \
+    -e "s|__REPO_PATH__|${REPO_ROOT}|g" \
+    -e "s|__HOME__|${HOME}|g" \
     "${PLIST_SRC}" > "${tmp_plist}"
 
   mkdir -p "${HOME}/Library/LaunchAgents"

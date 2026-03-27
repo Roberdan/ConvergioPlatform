@@ -7,10 +7,8 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/Roberdan/GitHub/ConvergioPlatform/daemon/target/release/convergio-platform-daemon</string>
-        <string>serve</string>
-        <string>--dev-mode</string>
-        <string>--kernel</string>
+        <string>/bin/bash</string>
+        <string>__REPO_PATH__/scripts/kernel/start-kernel.sh</string>
     </array>
 
     <key>KeepAlive</key>
@@ -19,24 +17,24 @@
     <key>RunAtLoad</key>
     <true/>
 
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
     <key>StandardOutPath</key>
-    <string>/Users/Roberdan/Library/Logs/convergio-kernel.log</string>
+    <string>__HOME__/Library/Logs/convergio-kernel.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/Roberdan/Library/Logs/convergio-kernel.log</string>
+    <string>__HOME__/Library/Logs/convergio-kernel.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO_PATH__</string>
 
     <key>EnvironmentVariables</key>
     <dict>
-        <key>CONVERGIO_TELEGRAM_TOKEN</key>
-        <string>__CONVERGIO_TELEGRAM_TOKEN__</string>
-        <key>CONVERGIO_TELEGRAM_CHAT_ID</key>
-        <string>__CONVERGIO_TELEGRAM_CHAT_ID__</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
-
-    <key>WorkingDirectory</key>
-    <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
-
-    <key>ThrottleInterval</key>
-    <integer>10</integer>
 </dict>
 </plist>
