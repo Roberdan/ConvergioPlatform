@@ -97,7 +97,7 @@ async fn run_poll_loop(
     engine: &KernelEngine,
 ) {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(45)) // must exceed Telegram long poll timeout (30s)
         .build()
         .unwrap_or_default();
 
@@ -135,9 +135,12 @@ async fn run_poll_loop(
                     offset = api_upd.update_id + 1;
                 }
             }
-            Err(e) => warn!("telegram_poll: getUpdates error: {e}"),
+            Err(e) => {
+                warn!("telegram_poll: getUpdates error: {e}");
+                sleep(Duration::from_secs(5)).await; // backoff on error only
+            }
         }
-        sleep(Duration::from_secs(5)).await;
+        // No sleep on success — long poll (timeout=30) already waits for messages.
     }
 }
 
@@ -162,7 +165,9 @@ async fn fetch_updates(
     base: &str,
     offset: i64,
 ) -> Result<Vec<ApiUpdate>, String> {
-    let url = format!("{base}/getUpdates?offset={offset}&timeout=0&allowed_updates=[\"message\"]");
+    // Long poll: Telegram holds the connection open up to 30s and returns immediately
+    // when a message arrives. Zero wasted requests vs polling every 5s.
+    let url = format!("{base}/getUpdates?offset={offset}&timeout=30&allowed_updates=[\"message\"]");
     let resp = client
         .get(&url)
         .send()
