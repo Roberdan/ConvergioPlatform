@@ -1,14 +1,5 @@
 use crate::cli_error::CliError;
 
-const R: &str = "\x1b[0m";
-const B: &str = "\x1b[1m";
-const D: &str = "\x1b[2m";
-const GR: &str = "\x1b[32m";
-const YL: &str = "\x1b[33m";
-const BL: &str = "\x1b[34m";
-const CY: &str = "\x1b[36m";
-const RD: &str = "\x1b[31m";
-
 pub async fn handle(api_url: &str) -> Result<(), CliError> {
     let health = fetch_json(&format!("{api_url}/api/health")).await;
     let plans = fetch_json(&format!("{api_url}/api/plan-db/list")).await;
@@ -22,16 +13,15 @@ pub async fn handle(api_url: &str) -> Result<(), CliError> {
     let ok = health.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     let uptime = health.get("uptime_secs").and_then(|v| v.as_i64()).unwrap_or(0);
 
-    let dot = if ok { format!("{GR}●{R}") } else { format!("{RD}●{R}") };
-    let line = format!("{D}──────────────────────────────────────{R}");
+    let status = if ok { "online" } else { "OFFLINE" };
 
     println!();
-    println!("{B}{CY}◆ Convergio{R} {D}v{version}{R} {dot} {D}{}{R} {BL}{peers}{R} peers", fmt_up(uptime));
-    println!("{line}");
+    println!("Convergio v{version} [{status}] {peers} peers, up {}", fmt_up(uptime));
+    println!("{}", "-".repeat(50));
 
     let plan_list = plans.get("plans").and_then(|v| v.as_array());
     let Some(all) = plan_list else {
-        println!("{RD}Cannot reach daemon{R}");
+        println!("ERROR: Cannot reach daemon");
         return Ok(());
     };
 
@@ -48,40 +38,30 @@ pub async fn handle(api_url: &str) -> Result<(), CliError> {
     }
 
     if !active.is_empty() {
-        println!("{B}{YL}▶ In Progress{R}");
-        for p in &active { print_plan(p, YL, "◉"); }
+        println!("IN PROGRESS:");
+        for p in &active { print_plan(p, ">"); }
     } else {
-        println!("{GR}✓ No active plans{R}");
+        println!("No active plans.");
     }
     if !queued.is_empty() {
-        println!("{B}{BL}◇ Queued{R}");
-        for p in &queued { print_plan(p, D, "○"); }
+        println!("QUEUED:");
+        for p in &queued { print_plan(p, " "); }
     }
 
-    let t_done = if proj_done > 0 { proj_done } else { 0 };
-    let t_total = if proj_total > 0 { proj_total } else { 0 };
-    let pct = if t_total > 0 { t_done * 100 / t_total } else { 0 };
-    let bar = progress_bar(pct as usize, 16);
-    println!("{line}");
-    println!("{B}{t_done}{R}/{t_total} tasks {bar} {B}{pct}%{R} {D}({proj_plans} plans){R}");
+    let pct = if proj_total > 0 { proj_done * 100 / proj_total } else { 0 };
+    println!("{}", "-".repeat(50));
+    println!("{}/{} tasks ({}%) | {} plans", proj_done, proj_total, pct, proj_plans);
     println!();
     Ok(())
 }
 
-fn print_plan(p: &serde_json::Value, color: &str, icon: &str) {
+fn print_plan(p: &serde_json::Value, marker: &str) {
     let id = p.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
     let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("?");
     let done = p.get("tasks_done").and_then(|v| v.as_i64()).unwrap_or(0);
     let total = p.get("tasks_total").and_then(|v| v.as_i64()).unwrap_or(0);
-    let short: String = name.chars().take(30).collect();
-    println!("  {color}{icon}{R} #{id} {short} {D}[{done}/{total}]{R}");
-}
-
-fn progress_bar(pct: usize, w: usize) -> String {
-    let filled = (pct * w / 100).min(w);
-    let empty = w - filled;
-    format!("\x1b[42m{}\x1b[0m\x1b[48;5;236m{}\x1b[0m",
-        " ".repeat(filled), " ".repeat(empty))
+    let short: String = name.chars().take(35).collect();
+    println!("  {marker} #{id} {short} [{done}/{total}]");
 }
 
 fn fmt_up(secs: i64) -> String {

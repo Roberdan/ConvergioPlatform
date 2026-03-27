@@ -19,6 +19,9 @@ pub enum VoiceIntent {
     PlanQuery { plan_id: u32 },
     Restart { target: String },
     Mute,
+    /// Anything the kernel can't handle locally → forward to Ali (Opus)
+    AskAli { question: String },
+    /// Unrecognised intent
     Unknown,
 }
 
@@ -42,7 +45,8 @@ pub fn route_intent(intent: VoiceIntent, daemon_url: &str) -> String {
         VoiceIntent::PlanQuery { plan_id } => route_plan_query(plan_id, daemon_url),
         VoiceIntent::Restart { ref target } => route_restart(target),
         VoiceIntent::Mute => route_mute(),
-        VoiceIntent::Unknown => "Non ho capito. Prova: stato, costi, piano, riavvia.".to_string(),
+        VoiceIntent::AskAli { ref question } => route_ask_ali(question, daemon_url),
+        VoiceIntent::Unknown => "Non ho capito. Riprova.".to_string(),
     }
 }
 
@@ -63,14 +67,15 @@ pub fn voice_command(text: &str, engine: &KernelEngine, daemon_url: &str) -> Str
 fn classify_via_llm(text: &str, engine: &KernelEngine) -> Option<VoiceIntent> {
     let prompt = format!(
         "Classify this voice command into one of: \
-         status_check, cost_query, plan_query, restart, mute, unknown. \
+         status_check, cost_query, plan_query, restart, mute, ask_ali. \
+         Use ask_ali for anything complex that needs reasoning. \
          Command: '{text}'. Return JSON: \
          {{\"intent\": \"<name>\", \"params\": {{\"plan_id\": null, \"target\": null}}}}"
     );
-    parse_llm_json(&engine.classify(&prompt).reason)
+    parse_llm_json(&engine.classify(&prompt).reason, text)
 }
 
-fn parse_llm_json(raw: &str) -> Option<VoiceIntent> {
+fn parse_llm_json(raw: &str, original_text: &str) -> Option<VoiceIntent> {
     let start = raw.find('{')?;
     let end = raw.rfind('}')?;
     let v: Value = serde_json::from_str(&raw[start..=end]).ok()?;
@@ -80,7 +85,7 @@ fn parse_llm_json(raw: &str) -> Option<VoiceIntent> {
         "status_check" => Some(VoiceIntent::StatusCheck),
         "cost_query" => Some(VoiceIntent::CostQuery),
         "mute" => Some(VoiceIntent::Mute),
-        "unknown" => Some(VoiceIntent::Unknown),
+        "unknown" | "ask_ali" => Some(VoiceIntent::AskAli { question: original_text.to_string() }),
         "plan_query" => Some(VoiceIntent::PlanQuery {
             plan_id: params
                 .and_then(|p| p.get("plan_id"))
@@ -123,7 +128,8 @@ fn keyword_classify(text: &str) -> VoiceIntent {
         let id = s.split_whitespace().filter_map(|t| t.parse::<u32>().ok()).next().unwrap_or(0);
         return VoiceIntent::PlanQuery { plan_id: id };
     }
-    VoiceIntent::Unknown
+    // Anything the kernel can't handle → forward to Ali
+    VoiceIntent::AskAli { question: text.to_string() }
 }
 
 // --- Route handlers ----------------------------------------------------------
@@ -178,6 +184,56 @@ fn route_mute() -> String {
         *guard = Some(Instant::now() + Duration::from_secs(3600));
     }
     "Silenzio attivato per un'ora.".to_string()
+}
+
+fn route_ask_ali(question: &str, daemon_url: &str) -> String {
+    // Create a chat session and send the question to Ali (Opus)
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(60)) // Ali may take time to reason
+        .build()
+        .unwrap_or_else(|_| reqwest::blocking::Client::new());
+
+    // Step 1: create or reuse session
+    let session_res = client
+        .post(format!("{daemon_url}/api/chat/session"))
+        .json(&serde_json::json!({"name": "kernel-telegram"}))
+        .send();
+
+    let session_id = match session_res {
+        Ok(r) => r.json::<Value>().ok()
+            .and_then(|v| v.get("session_id").and_then(|s| s.as_str().map(|s| s.to_string())))
+            .unwrap_or_else(|| "kernel-tg".to_string()),
+        Err(e) => {
+            warn!("voice_router: ask_ali session create failed: {e}");
+            return format!("Non riesco a contattare Ali. Errore: {e}");
+        }
+    };
+
+    // Step 2: send message
+    let msg_res = client
+        .post(format!("{daemon_url}/api/chat/message"))
+        .json(&serde_json::json!({
+            "session_id": session_id,
+            "message": question,
+            "model": "claude-opus-4-6"
+        }))
+        .send();
+
+    match msg_res {
+        Ok(r) => {
+            let body = r.json::<Value>().unwrap_or_default();
+            body.get("response")
+                .or_else(|| body.get("content"))
+                .or_else(|| body.get("text"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Ali non ha risposto.")
+                .to_string()
+        }
+        Err(e) => {
+            warn!("voice_router: ask_ali message failed: {e}");
+            format!("Non riesco a raggiungere Ali. Errore: {e}")
+        }
+    }
 }
 
 // --- HTTP helper + mute ------------------------------------------------------
