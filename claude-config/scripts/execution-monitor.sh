@@ -9,8 +9,9 @@ set -euo pipefail
 
 PLAN_ID="${1:-}"
 REFRESH="${2:-3}"
-DB="$HOME/.claude/data/dashboard.db"
-DB="$HOME/.claude/data/dashboard.db"
+DAEMON_API="http://localhost:8420"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 # Colors
 RED='\033[0;31m'
@@ -33,16 +34,10 @@ progress_bar() {
 	printf "%s%s %d%%" "$(printf '█%.0s' $(seq 1 $filled 2>/dev/null))" "$(printf '░%.0s' $(seq 1 $empty 2>/dev/null))" "$pct"
 }
 
-# Check database
-if [ ! -f "$DB" ]; then
-	echo -e "${RED}Error: Database not found at $DB${NC}"
-	exit 1
-fi
-
 # Get latest plan if not specified
 if [ -z "$PLAN_ID" ]; then
-	PLAN_ID=$(sqlite3 "$DB" ".timeout 5000" "SELECT id FROM plans WHERE status='doing' ORDER BY id DESC LIMIT 1;" 2>/dev/null)
-	[ -z "$PLAN_ID" ] && PLAN_ID=$(sqlite3 "$DB" ".timeout 5000" "SELECT id FROM plans ORDER BY id DESC LIMIT 1;" 2>/dev/null)
+	PLAN_ID="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null | jq -r '[.[] | select(.status == "doing")] | sort_by(.id) | last | .id // empty' 2>/dev/null || echo '')"
+	[ -z "$PLAN_ID" ] && PLAN_ID="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null | jq -r '[.[] | sort_by(.id) | last | .id // empty]' 2>/dev/null || echo '')"
 fi
 
 if [ -z "$PLAN_ID" ]; then
@@ -54,20 +49,19 @@ fi
 while true; do
 	clear
 
-	# Get plan info
-	PLAN_INFO=$(sqlite3 -separator '|' "$DB" \
-		"SELECT name, status, tasks_done, tasks_total, project_id FROM plans WHERE id=$PLAN_ID;" 2>/dev/null)
+	# Get plan info via cvg CLI
+	_pj="$(cvg plan show "$PLAN_ID" 2>/dev/null || echo '{}')"
 
-	if [ -z "$PLAN_INFO" ]; then
+	if [ "$(echo "$_pj" | jq -r '.name // ""')" = "" ]; then
 		echo -e "${RED}Error: Plan $PLAN_ID not found${NC}"
 		exit 1
 	fi
 
-	PLAN_NAME=$(echo "$PLAN_INFO" | cut -d'|' -f1)
-	PLAN_STATUS=$(echo "$PLAN_INFO" | cut -d'|' -f2)
-	TASKS_DONE=$(echo "$PLAN_INFO" | cut -d'|' -f3)
-	TASKS_TOTAL=$(echo "$PLAN_INFO" | cut -d'|' -f4)
-	PROJECT_ID=$(echo "$PLAN_INFO" | cut -d'|' -f5)
+	PLAN_NAME="$(echo "$_pj" | jq -r '.name // ""')"
+	PLAN_STATUS="$(echo "$_pj" | jq -r '.status // ""')"
+	TASKS_DONE="$(echo "$_pj" | jq -r '.tasks_done // 0')"
+	TASKS_TOTAL="$(echo "$_pj" | jq -r '.tasks_total // 0')"
+	PROJECT_ID="$(echo "$_pj" | jq -r '.project_id // ""')"
 
 	# Header
 	echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
@@ -94,8 +88,7 @@ while true; do
 	echo -e "  ${BOLD}WAVES${NC}"
 	echo ""
 
-	sqlite3 -separator '|' "$DB" \
-		"SELECT wave_id, name, status, tasks_done, tasks_total FROM waves WHERE plan_id=$PLAN_ID ORDER BY position;" 2>/dev/null |
+	echo "$_pj" | jq -r '.waves[]? | "\(.wave_id)|\(.name)|\(.status)|\(.tasks_done)|\(.tasks_total)"' 2>/dev/null |
 		while IFS='|' read -r WAVE_ID WAVE_NAME WAVE_STATUS WAVE_DONE WAVE_TOTAL; do
 			case "$WAVE_STATUS" in
 			"done") W_ICON="${GREEN}✓${NC}" ;;
@@ -112,17 +105,13 @@ while true; do
 	echo ""
 
 	# Show in_progress tasks first, then recent done tasks
-	sqlite3 -separator '|' "$DB" "
-        SELECT task_id, title, status, tokens,
-               COALESCE(started_at, '') as started,
-               COALESCE(completed_at, '') as completed
-        FROM tasks
-        WHERE plan_id=$PLAN_ID
-        ORDER BY
-            CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
-            COALESCE(completed_at, started_at) DESC
-        LIMIT 8;
-    " 2>/dev/null |
+	echo "$_pj" | jq -r '
+		[.tasks[] | {task_id, title, status, tokens: (.tokens // 0),
+		 started: (.started_at // ""), completed: (.completed_at // "")}]
+		| sort_by(if .status == "in_progress" then 0 else 1 end, .completed, .started)
+		| reverse | .[:8][]
+		| "\(.task_id)|\(.title)|\(.status)|\(.tokens)|\(.started)|\(.completed)"
+	' 2>/dev/null |
 		while IFS='|' read -r TASK_ID TITLE STATUS TOKENS STARTED COMPLETED; do
 			# Truncate title
 			SHORT_TITLE=$(echo "$TITLE" | cut -c1-40)
@@ -154,7 +143,7 @@ while true; do
 	echo ""
 
 	# Token usage
-	TOTAL_TOKENS=$(sqlite3 "$DB" ".timeout 5000" "SELECT COALESCE(SUM(tokens), 0) FROM tasks WHERE plan_id=$PLAN_ID;" 2>/dev/null)
+	TOTAL_TOKENS="$(echo "$_pj" | jq '[.tasks[]? | .tokens // 0] | add // 0' 2>/dev/null || echo 0)"
 	echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
 	echo -e "  ${BOLD}Tokens Used:${NC} ${TOTAL_TOKENS}"
 

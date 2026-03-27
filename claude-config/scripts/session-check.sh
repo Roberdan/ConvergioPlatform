@@ -4,8 +4,13 @@
 # No web calls except gh pr list (3s timeout)
 set -euo pipefail
 
-DB="$HOME/.claude/data/dashboard.db"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
+# Check daemon is reachable
+_api_available() { curl -sf "${DAEMON_URL}/api/health" &>/dev/null; }
 
 # --- Git status ---
 BRANCH=$(git -C "$HOME/.claude" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -21,61 +26,60 @@ GIT_STATUS=$(jq -n \
 	--argjson unpushed "$UNPUSHED" \
 	'{branch: $branch, clean: $clean, uncommitted: $uncommitted, unpushed: $unpushed}')
 
-# --- Plans from DB ---
+# --- Plans from daemon API ---
 PLANS_JSON="[]"
 STUCK_WAVE_MESSAGES="[]"
 STALE_TASK_MESSAGES="[]"
 
-if [[ -f "$DB" ]]; then
-	# Active/recent plans (doing or todo)
-	PLANS_ROWS=$(sqlite3 -separator $'\t' "$DB" \
-		"SELECT id, name, status, tasks_done, tasks_total FROM plans
-     WHERE status IN ('doing','todo')
-     ORDER BY id DESC LIMIT 10;" 2>/dev/null || echo "")
+if _api_available; then
+	# Active/recent plans via daemon API
+	ALL_PLANS=$(curl -sf "${DAEMON_URL}/api/plan-db/plans" 2>/dev/null || echo '[]')
 
-	if [[ -n "$PLANS_ROWS" ]]; then
-		PLANS_JSON=$(echo "$PLANS_ROWS" | awk -F'\t' '{
-      printf "{\"id\":%s,\"name\":%s,\"status\":%s,\"progress\":\"%s/%s\",\"waves_stuck\":0}\n",
-        $1, "\"" $2 "\"", "\"" $3 "\"", $4, $5
-    }' | jq -s '.')
-	fi
+	PLANS_JSON=$(echo "$ALL_PLANS" | jq '[
+		.[] | select(.status == "doing" or .status == "todo")
+		| {id: .id, name: .name, status: .status,
+		   progress: "\(.tasks_done // 0)/\(.tasks_total // 0)",
+		   waves_stuck: 0}
+	] | sort_by(-.id) | .[0:10]')
 
-	# Waves stuck in merging state — count per plan
-	STUCK_WAVES=$(sqlite3 -separator $'\t' "$DB" \
-		"SELECT w.plan_id, p.name, w.wave_id, COUNT(*) as cnt
-     FROM waves w
-     JOIN plans p ON p.id = w.plan_id
-     WHERE w.status = 'merging'
-     GROUP BY w.plan_id, p.name, w.wave_id;" 2>/dev/null || echo "")
+	# Waves stuck in merging state — iterate active plans
+	ACTIVE_PLAN_IDS=$(echo "$PLANS_JSON" | jq -r '.[].id')
+	for pid in $ACTIVE_PLAN_IDS; do
+		PLAN_DETAIL=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" 2>/dev/null || echo '{}')
+		STUCK=$(echo "$PLAN_DETAIL" | jq -r '
+			[.waves[]? | select(.status == "merging")] |
+			group_by(.wave_id) | .[] |
+			"\(.[0].wave_id)\t\(length)"' 2>/dev/null || echo "")
+		PLAN_NAME=$(echo "$PLAN_DETAIL" | jq -r '.name // "unknown"')
+		if [[ -n "$STUCK" ]]; then
+			while IFS=$'\t' read -r wave_id cnt; do
+				[[ -z "$wave_id" ]] && continue
+				PLANS_JSON=$(echo "$PLANS_JSON" | jq \
+					--argjson pid "$pid" \
+					--argjson cnt "$cnt" \
+					'map(if .id == $pid then .waves_stuck += $cnt else . end)')
+				STUCK_WAVE_MESSAGES=$(echo "$STUCK_WAVE_MESSAGES" | jq \
+					--arg msg "Wave $wave_id stuck in merging state (plan $pid: $PLAN_NAME)" \
+					'. + [$msg]')
+			done <<<"$STUCK"
+		fi
 
-	if [[ -n "$STUCK_WAVES" ]]; then
-		# Update waves_stuck count per plan in PLANS_JSON
-		while IFS=$'\t' read -r plan_id plan_name wave_id cnt; do
-			PLANS_JSON=$(echo "$PLANS_JSON" | jq \
-				--argjson pid "$plan_id" \
-				--argjson cnt "$cnt" \
-				'map(if .id == $pid then .waves_stuck += $cnt else . end)')
-			STUCK_WAVE_MESSAGES=$(echo "$STUCK_WAVE_MESSAGES" | jq \
-				--arg msg "Wave $wave_id stuck in merging state (plan $plan_id: $plan_name)" \
-				'. + [$msg]')
-		done <<<"$STUCK_WAVES"
-	fi
-
-	# Stale in_progress tasks (older than 2h)
-	STALE_TASKS=$(sqlite3 -separator $'\t' "$DB" \
-		"SELECT t.task_id, t.title, t.plan_id
-     FROM tasks t
-     WHERE t.status = 'in_progress'
-       AND t.started_at < datetime('now', '-2 hours')
-     LIMIT 5;" 2>/dev/null || echo "")
-
-	if [[ -n "$STALE_TASKS" ]]; then
-		while IFS=$'\t' read -r task_id title plan_id; do
-			STALE_TASK_MESSAGES=$(echo "$STALE_TASK_MESSAGES" | jq \
-				--arg msg "Task $task_id ('$title') in_progress >2h (plan $plan_id)" \
-				'. + [$msg]')
-		done <<<"$STALE_TASKS"
-	fi
+		# Stale in_progress tasks (older than 2h)
+		TWO_HOURS_AGO=$(date -u -v-2H '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d '2 hours ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "")
+		if [[ -n "$TWO_HOURS_AGO" ]]; then
+			STALE=$(echo "$PLAN_DETAIL" | jq -r --arg cutoff "$TWO_HOURS_AGO" '
+				[.tasks[]? | select(.status == "in_progress" and .started_at != null and .started_at < $cutoff)]
+				| .[:5][] | "\(.task_id)\t\(.title // "untitled")\t\(.plan_id // "")"' 2>/dev/null || echo "")
+			if [[ -n "$STALE" ]]; then
+				while IFS=$'\t' read -r task_id title stale_plan_id; do
+					[[ -z "$task_id" ]] && continue
+					STALE_TASK_MESSAGES=$(echo "$STALE_TASK_MESSAGES" | jq \
+						--arg msg "Task $task_id ('$title') in_progress >2h (plan ${stale_plan_id:-$pid})" \
+						'. + [$msg]')
+				done <<<"$STALE"
+			fi
+		fi
+	done
 fi
 
 # --- Open PRs (gh with 3s timeout) ---
@@ -117,15 +121,15 @@ FORGOTTEN=$(echo "$FORGOTTEN" | jq \
 # --- Next steps ---
 NEXT_STEPS="[]"
 
-# Per plan: remaining tasks
-if [[ -f "$DB" ]]; then
-	REMAINING=$(sqlite3 -separator $'\t' "$DB" \
-		"SELECT id, name, (tasks_total - tasks_done) as remaining
-     FROM plans
-     WHERE status IN ('doing','todo') AND (tasks_total - tasks_done) > 0
-     ORDER BY id DESC LIMIT 5;" 2>/dev/null || echo "")
+# Per plan: remaining tasks (from already-fetched plans data)
+if _api_available; then
+	REMAINING=$(echo "$ALL_PLANS" | jq -r '
+		[.[] | select((.status == "doing" or .status == "todo") and ((.tasks_total // 0) - (.tasks_done // 0)) > 0)]
+		| sort_by(-.id) | .[0:5][]
+		| "\(.id)\t\(.name)\t\((.tasks_total // 0) - (.tasks_done // 0))"' 2>/dev/null || echo "")
 	if [[ -n "$REMAINING" ]]; then
 		while IFS=$'\t' read -r pid pname rem; do
+			[[ -z "$pid" ]] && continue
 			NEXT_STEPS=$(echo "$NEXT_STEPS" | jq \
 				--arg msg "Complete remaining $rem task(s) in plan $pid ($pname)" \
 				'. + [$msg]')

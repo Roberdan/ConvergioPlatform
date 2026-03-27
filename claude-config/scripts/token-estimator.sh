@@ -4,8 +4,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="${HOME}/.claude/data/dashboard.db"
+DAEMON_API="http://localhost:8420"
 export PATH="$SCRIPT_DIR:$PATH"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 # Hardcoded defaults for first-plan-ever (no historical data)
 DEFAULT_EFFORT_1=15000
@@ -16,22 +18,10 @@ DEFAULT_EFFORT_3=90000
 
 get_historical_avg() {
 	local effort="$1"
-	local token_range
-	case "$effort" in
-	1) token_range="estimated_tokens <= 25000" ;;
-	2) token_range="estimated_tokens > 25000 AND estimated_tokens <= 60000" ;;
-	3) token_range="estimated_tokens > 60000" ;;
-	*)
-		echo "0"
-		return
-		;;
-	esac
+	local metrics
+	metrics="$(curl -sf "${DAEMON_API}/api/metrics/summary" 2>/dev/null || echo '{}')"
 	local avg
-	avg=$(sqlite3 "$DB_FILE" "
-        SELECT COALESCE(CAST(ROUND(AVG(actual_tokens)) AS INTEGER), 0)
-        FROM plan_token_estimates
-        WHERE actual_tokens IS NOT NULL AND $token_range;
-    " 2>/dev/null || echo "0")
+	avg="$(echo "$metrics" | jq -r --arg e "$effort" '.token_estimates_avg_by_effort[$e] // 0' 2>/dev/null || echo 0)"
 	echo "${avg:-0}"
 }
 
@@ -75,9 +65,7 @@ cmd_estimate() {
 
 	# Check if historical data exists
 	local hist_count
-	hist_count=$(sqlite3 "$DB_FILE" "
-        SELECT COUNT(*) FROM plan_token_estimates WHERE actual_tokens IS NOT NULL;
-    " 2>/dev/null || echo "0")
+	hist_count="$(curl -sf "${DAEMON_API}/api/metrics/summary" 2>/dev/null | jq -r '.token_estimates_count // 0' 2>/dev/null || echo "0")"
 
 	if [[ "$hist_count" -eq 0 ]]; then
 		echo "[INFO] No historical data — using hardcoded defaults (effort 1=${DEFAULT_EFFORT_1}, 2=${DEFAULT_EFFORT_2}, 3=${DEFAULT_EFFORT_3})"
@@ -148,26 +136,19 @@ cmd_reconcile() {
 		esac
 	done
 
-	# Get estimates for this plan from plan_token_estimates
+	# Get estimates for this plan via daemon API
 	local estimates
-	estimates=$(sqlite3 -separator '|' "$DB_FILE" "
-        SELECT e.id, e.scope_id, e.estimated_tokens
-        FROM plan_token_estimates e
-        WHERE e.plan_id = $plan_id AND e.scope = 'task' AND e.actual_tokens IS NULL;
-    " 2>/dev/null || echo "")
+	estimates="$(curl -sf "${DAEMON_API}/api/tokens/estimates?plan_id=${plan_id}&scope=task&unreconciled=true" 2>/dev/null | jq -r '.[] | "\(.id)|\(.scope_id)|\(.estimated_tokens)"' 2>/dev/null || echo "")"
 
 	if [[ -z "$estimates" ]]; then
 		echo "[INFO] No unreconciled estimates for plan $plan_id"
 		return 0
 	fi
 
-	# Get actual token usage from tasks table
-	local actuals
-	actuals=$(sqlite3 -separator '|' "$DB_FILE" "
-        SELECT task_id, COALESCE(tokens, 0)
-        FROM tasks
-        WHERE plan_id = $plan_id AND status = 'done' AND tokens > 0;
-    " 2>/dev/null || echo "")
+	# Get actual token usage from tasks via plan show
+	local plan_json actuals
+	plan_json="$(cvg plan show "$plan_id" 2>/dev/null || echo '{}')"
+	actuals="$(echo "$plan_json" | jq -r '.tasks[] | select(.status == "done" and (.tokens // 0) > 0) | "\(.task_id)|\(.tokens)"' 2>/dev/null || echo "")"
 
 	# Build lookup of task_id -> actual_tokens
 	declare -A actual_map=()

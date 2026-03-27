@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# mesh-heartbeat.sh — Liveness daemon: writes heartbeat to peer_heartbeats every 30s
-# Version: 1.1.0
+# mesh-heartbeat.sh — Liveness daemon: writes heartbeat via daemon API every 30s
+# Version: 2.0.0
 # Usage: mesh-heartbeat.sh [start|stop|status]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
-DB="${CLAUDE_DB:-$CLAUDE_HOME/data/dashboard.db}"
 PID_FILE="$CLAUDE_HOME/data/mesh-heartbeat.pid"
 INTERVAL=30
+DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+command -v curl &>/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
 
 # shellcheck source=lib/peers.sh
 source "$SCRIPT_DIR/lib/peers.sh"
@@ -23,7 +26,7 @@ err() { echo -e "${R}[heartbeat]${N} $*" >&2; }
 
 # Helpers
 
-_db() { sqlite3 "$DB" ".timeout 5000" "$@"; }
+_daemon_up() { curl -sf --connect-timeout 2 "${DAEMON_URL}/api/health" > /dev/null 2>&1; }
 
 _capabilities() {
 	peers_load 2>/dev/null || true
@@ -48,9 +51,10 @@ _write_heartbeat() {
 	load_json="$(_load_json)"
 	caps="$(_capabilities)"
 
-	_db "INSERT OR REPLACE INTO peer_heartbeats (peer_name, last_seen, load_json, capabilities)
-	     VALUES ('${peer_name}', unixepoch(), '${load_json}', '${caps}');" 2>/dev/null || {
-		warn "DB write failed (will retry)"
+	curl -sf -X POST "${DAEMON_URL}/api/heartbeat" \
+		-H 'Content-Type: application/json' \
+		-d "{\"peer\":\"${peer_name}\",\"status\":\"online\",\"load_json\":${load_json},\"capabilities\":\"${caps}\"}" 2>/dev/null || {
+		warn "Heartbeat API write failed (will retry)"
 	}
 }
 
@@ -114,9 +118,9 @@ cmd_start() {
 		fi
 	fi
 
-	if [[ ! -f "$DB" ]]; then
-		err "Database not found: $DB"
-		err "Set CLAUDE_DB or ensure $CLAUDE_HOME/data/dashboard.db exists."
+	if ! _daemon_up; then
+		err "Daemon not reachable at $DAEMON_URL"
+		err "Start the daemon first: ./daemon/start.sh"
 		return 1
 	fi
 
@@ -171,35 +175,37 @@ cmd_status() {
 	fi
 
 	echo ""
-	# Show last_seen for all peers from DB
-	if [[ ! -f "$DB" ]]; then
-		warn "Database not found: $DB"
+	# Show last_seen for all peers from daemon API
+	if ! _daemon_up; then
+		warn "Daemon not reachable at $DAEMON_URL"
 		return 0
 	fi
 
 	printf "  %-20s %-22s %-30s %s\n" "PEER" "LAST_SEEN" "LOAD" "CAPABILITIES"
 	printf "  %-20s %-22s %-30s %s\n" "----" "---------" "----" "------------"
 
-	local now
+	local now json
 	now="$(date +%s)"
+	json=$(curl -sf "${DAEMON_URL}/api/heartbeat/status" 2>/dev/null || echo "")
 
-	while IFS='|' read -r peer_name last_seen load_json caps; do
-		[[ -z "$peer_name" ]] && continue
-		local age_str="never"
-		if [[ -n "$last_seen" && "$last_seen" =~ ^[0-9]+$ ]]; then
-			local age=$((now - last_seen))
-			if ((age < 60)); then
-				age_str="${age}s ago"
-			elif ((age < 3600)); then
-				age_str="$((age / 60))m ago"
-			else
-				age_str="$((age / 3600))h ago"
+	if [[ -n "$json" ]]; then
+		echo "$json" | jq -r '.peers[]? | [.peer_name, (.last_seen // ""), (.load_json // "{}"), (.capabilities // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r peer_name last_seen load_json caps; do
+			[[ -z "$peer_name" ]] && continue
+			local age_str="never"
+			if [[ -n "$last_seen" && "$last_seen" =~ ^[0-9]+$ ]]; then
+				local age=$((now - last_seen))
+				if ((age < 60)); then
+					age_str="${age}s ago"
+				elif ((age < 3600)); then
+					age_str="$((age / 60))m ago"
+				else
+					age_str="$((age / 3600))h ago"
+				fi
 			fi
-		fi
-		printf "  %-20s %-22s %-30s %s\n" \
-			"$peer_name" "$age_str" "${load_json:-{}}" "${caps:-}"
-	done < <(_db "SELECT peer_name, last_seen, load_json, capabilities
-	              FROM peer_heartbeats ORDER BY peer_name;" 2>/dev/null || true)
+			printf "  %-20s %-22s %-30s %s\n" \
+				"$peer_name" "$age_str" "${load_json:-{}}" "${caps:-}"
+		done
+	fi
 
 	echo ""
 }
@@ -207,8 +213,8 @@ cmd_status() {
 cmd_daemon() {
 	# Foreground mode for service managers (launchd, systemd).
 	# Runs the heartbeat loop WITHOUT forking — the OS manages the process.
-	if [[ ! -f "$DB" ]]; then
-		err "Database not found: $DB"
+	if ! _daemon_up; then
+		err "Daemon not reachable at $DAEMON_URL"
 		return 1
 	fi
 	info "Running in foreground (service mode). PID=$$"

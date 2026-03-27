@@ -67,10 +67,20 @@ require_commands() {
 }
 
 # ============================================================================
-# Database query helper (for scripts using SQLite)
+# Daemon API helper (replaces direct sqlite3 calls)
 # ============================================================================
-db_query() {
-    local db_file="${1:-$DB_FILE}"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
+
+_api() {
+    local endpoint="${1:?endpoint required}"
     shift
-    sqlite3 -cmd ".timeout 5000" "$db_file" "$@"
+    curl -sf "${DAEMON_URL}/${endpoint}" "$@"
+}
+
+_api_post() {
+    local endpoint="${1:?endpoint required}"
+    local data="${2:?data required}"
+    curl -sf -X POST "${DAEMON_URL}/${endpoint}" \
+        -H 'Content-Type: application/json' \
+        -d "$data"
 }

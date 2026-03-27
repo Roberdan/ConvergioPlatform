@@ -4,7 +4,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="${PLAN_DB_FILE:-${DB_FILE:-${CLAUDE_HOME:-$HOME/.claude}/data/dashboard.db}}"
+DAEMON_API="http://localhost:8420"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 # shellcheck source=scripts/lib/delegate-utils.sh
 source "${SCRIPT_DIR}/lib/delegate-utils.sh"
@@ -61,7 +63,7 @@ echo "ERROR: task not found: $TASK_DB_ID" >&2
 exit 1
 fi
 
-STATUS="$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id=$TASK_DB_ID;")"
+STATUS="$(echo "$TASK_SPEC" | jq -r '.status // ""')"
 if [[ "$STATUS" != "pending" && "$STATUS" != "in_progress" ]]; then
 echo "ERROR: task status is $STATUS (expected pending/in_progress)" >&2
 exit 1
@@ -71,7 +73,7 @@ PLAN_ID="$(echo "$TASK_SPEC" | jq -r '.plan_id')"
 PROJECT_ID="$(echo "$TASK_SPEC" | jq -r '.project_id')"
 WORKTREE_RAW="$(echo "$TASK_SPEC" | jq -r '.worktree_path')"
 WORKTREE="${WORKTREE_RAW/#\~/$HOME}"
-PROMPT="$(build_task_envelope "$TASK_DB_ID" "$DB_FILE")"
+PROMPT="$(build_task_envelope "$TASK_DB_ID")"
 PROMPT_TOKENS="$(printf '%s' "$PROMPT" | python3 -c 'import math,sys;print(max(0,math.ceil(len(sys.stdin.read())/4)))')"
 
 START_TS="$(date +%s)"
@@ -104,19 +106,23 @@ else
 EXIT_CODE=$?
 fi
 
+_refresh_task_status() {
+  cvg plan show "$PLAN_ID" 2>/dev/null | jq -r --argjson tid "$TASK_DB_ID" '.tasks[] | select((.id // .db_task_id) == $tid) | .status // ""' 2>/dev/null || echo ""
+}
+
 if verify_work_done "$WORKTREE" >/dev/null 2>&1; then
-FINAL_STATUS="$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id=$TASK_DB_ID;")"
+FINAL_STATUS="$(_refresh_task_status)"
 if [[ "$FINAL_STATUS" != "done" ]]; then
 safe_update_task "$TASK_DB_ID" done "Auto-marked done by opencode-worker after detected file changes." || true
-FINAL_STATUS="$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id=$TASK_DB_ID;")"
+FINAL_STATUS="$(_refresh_task_status)"
 fi
 else
-FINAL_STATUS="$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id=$TASK_DB_ID;")"
+FINAL_STATUS="$(_refresh_task_status)"
 fi
 
 if [[ "$EXIT_CODE" -eq 124 ]]; then
 recover_on_timeout
-FINAL_STATUS="$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id=$TASK_DB_ID;")"
+FINAL_STATUS="$(_refresh_task_status)"
 fi
 
 log_and_exit

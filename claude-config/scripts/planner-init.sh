@@ -1,16 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 # Planner Init - Single-call project context bootstrap
+# Version: 2.0.0 — migrated from sqlite3 to cvg CLI / daemon API
 # Returns JSON with everything the planner needs in ONE call
 # Usage: planner-init.sh [project_path]
-
-# Version: 1.1.0
-set -euo pipefail
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="${HOME}/.claude/data/dashboard.db"
-# shellcheck source=./lib/sql-utils.sh
-source "$SCRIPT_DIR/lib/sql-utils.sh"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 PROJECT_PATH="${1:-$(pwd)}"
 PROJECT_PATH="$(cd "$PROJECT_PATH" && pwd)"
@@ -19,12 +16,9 @@ PROJECT_PATH="$(cd "$PROJECT_PATH" && pwd)"
 FOLDER_NAME=$(basename "$PROJECT_PATH")
 PROJECT_ID=$(echo "$FOLDER_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
 
-SAFE_PROJECT_ID=$(sql_escape "$PROJECT_ID")
-
-# Auto-register if not in DB
-PROJECT_EXISTS=$(sqlite3 "$DB_FILE" \
-	"SELECT COUNT(*) FROM projects WHERE id='$SAFE_PROJECT_ID';" 2>/dev/null || echo "0")
-if [[ "$PROJECT_EXISTS" == "0" ]]; then
+# Auto-register if not in DB — check via daemon API
+PROJECT_EXISTS=$(curl -sf "${DAEMON_URL}/api/projects/${PROJECT_ID}" 2>/dev/null | jq -r '.id // ""' 2>/dev/null || echo "")
+if [[ -z "$PROJECT_EXISTS" ]]; then
 	"$SCRIPT_DIR/register-project.sh" "$PROJECT_PATH" >/dev/null 2>&1 || true
 fi
 
@@ -32,33 +26,33 @@ fi
 GIT_BRANCH=$(cd "$PROJECT_PATH" && git branch --show-current 2>/dev/null || echo "none")
 GIT_REMOTE=$(cd "$PROJECT_PATH" && git remote get-url origin 2>/dev/null || echo "")
 
-# Combined DB query: project name + active plans + recent plans
-PLAN_DATA=$(sqlite3 -json "$DB_FILE" "
-    SELECT
-        (SELECT COALESCE(name, '') FROM projects WHERE id='$SAFE_PROJECT_ID') as project_name,
-        (SELECT COALESCE(json_group_array(json_object(
-            'id', id, 'name', name, 'status', status,
-            'progress', tasks_done || '/' || tasks_total,
-            'worktree_path', COALESCE(worktree_path, '')
-        )), '[]') FROM (
-            SELECT * FROM plans
-            WHERE project_id='$SAFE_PROJECT_ID' AND status IN ('todo','doing')
-            ORDER BY CASE status WHEN 'doing' THEN 0 ELSE 1 END, id ASC LIMIT 5
-        )) as active_plans,
-        (SELECT COALESCE(json_group_array(json_object(
-            'id', id, 'name', name,
-            'completed_at', COALESCE(completed_at, '')
-        )), '[]') FROM (
-            SELECT * FROM plans
-            WHERE project_id='$SAFE_PROJECT_ID' AND status='done'
-            ORDER BY completed_at DESC LIMIT 3
-        )) as recent_plans
-;" 2>/dev/null || echo '[{}]')
+# Get project plans via daemon API
+PROJECT_NAME=""
+ACTIVE_PLANS="[]"
+RECENT_PLANS="[]"
 
-PROJECT_NAME=$(echo "$PLAN_DATA" | jq -r '.[0].project_name // ""' 2>/dev/null)
+# Try cvg first, fall back to daemon API
+PLAN_LIST_JSON=$(cvg project plans "$PROJECT_ID" 2>/dev/null) || \
+PLAN_LIST_JSON=$(curl -sf "${DAEMON_URL}/api/plan-db/list" 2>/dev/null) || \
+PLAN_LIST_JSON='[]'
+
+# Extract project name
+PROJECT_NAME=$(curl -sf "${DAEMON_URL}/api/projects/${PROJECT_ID}" 2>/dev/null | jq -r '.name // ""' 2>/dev/null || echo "")
 [[ -z "$PROJECT_NAME" ]] && PROJECT_NAME="$FOLDER_NAME"
-ACTIVE_PLANS=$(echo "$PLAN_DATA" | jq -r '.[0].active_plans // "[]"' 2>/dev/null || echo "[]")
-RECENT_PLANS=$(echo "$PLAN_DATA" | jq -r '.[0].recent_plans // "[]"' 2>/dev/null || echo "[]")
+
+# Filter active plans (todo/doing) for this project
+ACTIVE_PLANS=$(echo "$PLAN_LIST_JSON" | jq -c --arg pid "$PROJECT_ID" '
+    [.[] | select(.project_id == $pid and (.status == "todo" or .status == "doing"))
+    | {id, name, status, progress: ((.tasks_done // 0) | tostring) + "/" + ((.tasks_total // 0) | tostring), worktree_path: (.worktree_path // "")}]
+    | sort_by(if .status == "doing" then 0 else 1 end, .id) | .[0:5]
+' 2>/dev/null || echo '[]')
+
+# Filter recent completed plans
+RECENT_PLANS=$(echo "$PLAN_LIST_JSON" | jq -c --arg pid "$PROJECT_ID" '
+    [.[] | select(.project_id == $pid and .status == "done")
+    | {id, name, completed_at: (.completed_at // "")}]
+    | sort_by(.completed_at) | reverse | .[0:3]
+' 2>/dev/null || echo '[]')
 
 # Worktrees
 WORKTREES="[]"

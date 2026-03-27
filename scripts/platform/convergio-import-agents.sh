@@ -8,7 +8,9 @@ SOURCE="${1:?Usage: convergio-import-agents.sh <source-agents-dir> [--dry-run]}"
 DRY_RUN="${2:-}"
 PLATFORM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEST="$PLATFORM_DIR/claude-config/agents"
-DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
+DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
+
+command -v curl &>/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
 
 if [ ! -d "$SOURCE" ]; then
   echo "ERROR: $SOURCE not found" >&2
@@ -18,9 +20,11 @@ fi
 echo "=== Convergio Agent Import ==="
 echo "Source: $SOURCE"
 echo "Dest:   $DEST"
-echo "DB:     $DB"
+echo "API:    $DAEMON_URL"
 [ "$DRY_RUN" = "--dry-run" ] && echo "MODE: DRY RUN"
 echo ""
+
+_api_post() { curl -sf -X POST "${DAEMON_URL}${1}" -H 'Content-Type: application/json' -d "$2" 2>/dev/null; }
 
 # Skip files that aren't agents
 SKIP_PATTERNS="README|CONSTITUTION|EXECUTION_DISCIPLINE|CommonValues|MICROSOFT_VALUES|SECURITY_FRAMEWORK_TEMPLATE"
@@ -28,20 +32,6 @@ SKIP_PATTERNS="README|CONSTITUTION|EXECUTION_DISCIPLINE|CommonValues|MICROSOFT_V
 imported=0
 skipped=0
 skills_added=0
-
-# Ensure DB has skills table
-if [ -f "$DB" ] && [ "$DRY_RUN" != "--dry-run" ]; then
-  sqlite3 "$DB" "CREATE TABLE IF NOT EXISTS agent_catalog (
-    name TEXT PRIMARY KEY,
-    category TEXT NOT NULL DEFAULT '',
-    description TEXT NOT NULL DEFAULT '',
-    model TEXT NOT NULL DEFAULT 'sonnet',
-    tools TEXT DEFAULT '[]',
-    skills TEXT DEFAULT '[]',
-    source_repo TEXT DEFAULT '',
-    imported_at TEXT DEFAULT (datetime('now'))
-  );" 2>/dev/null
-fi
 
 find "$SOURCE" -name "*.md" -not -path "*archive*" | sort | while read -r f; do
   filename=$(basename "$f" .md)
@@ -66,28 +56,25 @@ find "$SOURCE" -name "*.md" -not -path "*archive*" | sort | while read -r f; do
   # Default model
   [ -z "$model" ] && model="sonnet"
 
-  echo "  ✓ $name ($category) — $model"
+  echo "  OK $name ($category) — $model"
 
   if [ "$DRY_RUN" != "--dry-run" ]; then
     # Copy to destination (preserve category structure)
     mkdir -p "$DEST/$category"
     cp "$f" "$DEST/$category/"
 
-    # Insert into catalog DB
-    if [ -f "$DB" ]; then
-      sqlite3 "$DB" "INSERT OR REPLACE INTO agent_catalog
-        (name, category, description, model, tools, skills, source_repo)
-        VALUES ('$name', '$category', '$(echo "$desc" | sed "s/'/''/g")', '$model', '$tools', '$skills_raw', 'MyConvergio');" 2>/dev/null
+    # Insert into catalog via daemon API
+    _api_post "/api/plan-db/agent/catalog" \
+      "{\"name\":\"${name}\",\"category\":\"${category}\",\"description\":\"$(echo "$desc" | sed 's/"/\\"/g')\",\"model\":\"${model}\",\"tools\":\"${tools}\",\"skills\":\"${skills_raw}\",\"source_repo\":\"MyConvergio\"}" 2>/dev/null || {
+      echo "    WARN: failed to write to agent catalog via API" >&2
+    }
 
-      # Extract skills from description keywords and insert
-      # Simple heuristic: words after key patterns
-      for skill in $(echo "$desc" | tr ' ,.-' '\n' | grep -iE '^(debug|review|security|compliance|design|architecture|deploy|test|budget|strategy|analytics|marketing|sales|hr|legal|research|performance|data|devops|ux|ui|quality|validation)' | tr '[:upper:]' '[:lower:]' | sort -u); do
-        sqlite3 "$DB" "INSERT OR IGNORE INTO ipc_agent_skills
-          (agent_name, skill, confidence, source)
-          VALUES ('$name', '$skill', 0.7, 'import');" 2>/dev/null
-        skills_added=$((skills_added + 1))
-      done
-    fi
+    # Extract skills from description keywords and insert
+    for skill in $(echo "$desc" | tr ' ,.-' '\n' | grep -iE '^(debug|review|security|compliance|design|architecture|deploy|test|budget|strategy|analytics|marketing|sales|hr|legal|research|performance|data|devops|ux|ui|quality|validation)' | tr '[:upper:]' '[:lower:]' | sort -u); do
+      _api_post "/api/plan-db/agent/skill" \
+        "{\"agent_name\":\"${name}\",\"skill\":\"${skill}\",\"confidence\":0.7,\"source\":\"import\"}" 2>/dev/null || true
+      skills_added=$((skills_added + 1))
+    done
   fi
 
   imported=$((imported + 1))

@@ -12,7 +12,7 @@ exit 1
 
 # --- LEGACY CODE BELOW (disabled) ---
 
-DB_FILE="${CLAUDE_DB:-$HOME/.claude/data/dashboard.db}"
+DAEMON_API="http://localhost:8420"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BATCH_ELIGIBLE=false
 
@@ -72,18 +72,17 @@ fi
 
 # ── Eligibility Check ─────────────────────────────────────────────────────────
 check_eligibility() {
-	local row
-	row="$(sqlite3 "$DB_FILE" \
-		"SELECT effort_level, type FROM tasks WHERE id=$TASK_ID AND plan_id=$PLAN_ID LIMIT 1;" 2>/dev/null || true)"
+	local _task_json
+	_task_json="$(cvg plan show "$PLAN_ID" 2>/dev/null | jq -c --argjson tid "$TASK_ID" '.tasks[] | select((.id // .db_task_id) == $tid)' 2>/dev/null || echo '')"
 
-	if [[ -z "$row" ]]; then
+	if [[ -z "$_task_json" ]]; then
 		echo '{"error":"task_not_found","task_id":'"$TASK_ID"',"plan_id":'"$PLAN_ID"'}' >&2
 		exit 1
 	fi
 
 	local effort type
-	effort="$(echo "$row" | cut -d'|' -f1)"
-	type="$(echo "$row" | cut -d'|' -f2)"
+	effort="$(echo "$_task_json" | jq -r '.effort_level // ""')"
+	type="$(echo "$_task_json" | jq -r '.type // ""')"
 
 	if [[ "$effort" != "1" ]]; then
 		echo '{"error":"not_eligible","reason":"effort_level_not_1","effort_level":'"$effort"',"task_id":'"$TASK_ID"'}' >&2
@@ -179,11 +178,10 @@ parse_and_log() {
 		fi
 	fi
 
-	local ts
-	ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-	sqlite3 "$DB_FILE" \
-		"INSERT OR IGNORE INTO token_usage (plan_id, task_id, agent, model, input_tokens, output_tokens, created_at) \
-		 VALUES ($PLAN_ID, '$TASK_ID', 'batch-api', '$MODEL', $input_tokens, $output_tokens, '$ts');" 2>/dev/null || true
+	# Log token usage via daemon API
+	curl -sf -X POST "${DAEMON_API}/api/tracking/tokens" \
+		-H 'Content-Type: application/json' \
+		-d "{\"plan_id\":$PLAN_ID,\"task_id\":\"$TASK_ID\",\"agent\":\"batch-api\",\"model\":\"$MODEL\",\"input_tokens\":$input_tokens,\"output_tokens\":$output_tokens}" 2>/dev/null || true
 
 	echo "$input_tokens $output_tokens"
 }

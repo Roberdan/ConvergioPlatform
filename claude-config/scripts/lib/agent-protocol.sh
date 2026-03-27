@@ -1,7 +1,10 @@
 #!/bin/bash
 # Shared JSON protocol for worker communication.
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
 AGENT_PROTOCOL_CONTEXT_BUDGET="${AGENT_PROTOCOL_CONTEXT_BUDGET:-2000}"
-_ap_db_file() { echo "${PLAN_DB_FILE:-${DB_FILE:-$HOME/.claude/data/dashboard.db}}"; }
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
+
 _ap_tokens() { local p="${1-}"; [[ -n "$p" ]] || p='{}'; printf '%s' "$p" | python3 -c 'import sys,math; print(max(0,math.ceil(len(sys.stdin.read())/4)))'; }
 _ap_meta() {
 	local t="${1-}" d="${2-}" tc="${3-}"; [[ -n "$tc" ]] || tc='{}'
@@ -48,14 +51,41 @@ print(json.dumps(out,separators=(",",":")))
 PY
 }
 build_task_envelope() {
-	local db_task_id="${1:?task db_id required}" db_file="${2:-$(_ap_db_file)}"
-	local row; row=$(sqlite3 "$db_file" "SELECT json_object('task_id',t.task_id,'plan_id',t.plan_id,'project_id',t.project_id,'wave_id_fk',t.wave_id_fk,'title',COALESCE(t.title,''),'description',COALESCE(t.description,''),'test_criteria',COALESCE(t.test_criteria,'{}'),'worktree',COALESCE(p.worktree_path,'')) FROM tasks t LEFT JOIN plans p ON p.id=t.plan_id WHERE t.id=$db_task_id;")
-	[[ -n "$row" ]] || return 1
+	local db_task_id="${1:?task db_id required}"
+	# Fetch plan JSON via daemon API, extract task by db id
+	local plan_json task_json
+	# First get the plan_id for this task via the daemon
+	task_json=$(curl -sf "${DAEMON_URL}/api/plan-db/task/${db_task_id}" 2>/dev/null) || {
+		# Fallback: search across plans for this task db id
+		# TODO: needs daemon endpoint for direct task-by-db-id lookup
+		local plan_list plan_id_found=""
+		plan_list=$(curl -sf "${DAEMON_URL}/api/plan-db/list" | jq -r '.[].id' 2>/dev/null) || return 1
+		for pid in $plan_list; do
+			task_json=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" | jq -c ".tasks[] | select(.db_id==${db_task_id} or .id==${db_task_id})" 2>/dev/null)
+			if [[ -n "$task_json" ]]; then
+				plan_id_found="$pid"
+				plan_json=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}")
+				break
+			fi
+		done
+		[[ -n "$task_json" ]] || return 1
+	}
+	# Extract fields from task JSON
 	local task_id plan_id project_id wave_id_fk title description test_criteria worktree
-	task_id=$(echo "$row" | jq -r '.task_id // ""'); plan_id=$(echo "$row" | jq -r '.plan_id // 0')
-	project_id=$(echo "$row" | jq -r '.project_id // ""'); wave_id_fk=$(echo "$row" | jq -r '.wave_id_fk // 0')
-	title=$(echo "$row" | jq -r '.title // ""'); description=$(echo "$row" | jq -r '.description // ""')
-	test_criteria=$(echo "$row" | jq -cr '.test_criteria // "{}"'); worktree=$(echo "$row" | jq -r '.worktree // ""')
+	task_id=$(echo "$task_json" | jq -r '.task_id // ""')
+	plan_id=$(echo "$task_json" | jq -r '.plan_id // 0')
+	project_id=$(echo "$task_json" | jq -r '.project_id // ""')
+	wave_id_fk=$(echo "$task_json" | jq -r '.wave_id_fk // 0')
+	title=$(echo "$task_json" | jq -r '.title // ""')
+	description=$(echo "$task_json" | jq -r '.description // ""')
+	test_criteria=$(echo "$task_json" | jq -cr '.test_criteria // "{}"')
+	# Get worktree from plan data
+	if [[ -n "${plan_json:-}" ]]; then
+		worktree=$(echo "$plan_json" | jq -r '.worktree_path // ""')
+	else
+		plan_json=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${plan_id}" 2>/dev/null) || plan_json='{}'
+		worktree=$(echo "$plan_json" | jq -r '.worktree_path // ""')
+	fi
 	local meta do_field files_json ref_field blocked_by_json verify_json
 	meta=$(_ap_meta "$title" "$description" "$test_criteria")
 	do_field=$(echo "$meta" | jq -r '.do // ""'); files_json=$(echo "$meta" | jq -c '.files // []')
@@ -63,11 +93,12 @@ build_task_envelope() {
 	verify_json=$(echo "$test_criteria" | jq -c '.verify // []' 2>/dev/null || echo '[]')
 	local wave_siblings_json='[]' prior_outputs_json='[]'
 	if [[ "$wave_id_fk" != "0" && "$wave_id_fk" != "null" ]]; then
-		wave_siblings_json=$(sqlite3 "$db_file" "SELECT COALESCE(json_group_array(task_id),'[]') FROM (SELECT task_id FROM tasks WHERE wave_id_fk=$wave_id_fk AND id<>$db_task_id ORDER BY id);")
+		# Get wave siblings from plan JSON
+		wave_siblings_json=$(echo "$plan_json" | jq -c "[.tasks[] | select(.wave_id_fk==${wave_id_fk} and (.db_id!=${db_task_id} and .id!=${db_task_id})) | .task_id]" 2>/dev/null || echo '[]')
 	fi
 	if [[ "$(echo "$blocked_by_json" | jq 'length')" -gt 0 ]]; then
-		local in_list; in_list=$(echo "$blocked_by_json" | jq -r "map(\"'\" + gsub(\"'\";\"''\") + \"'\") | join(\",\")")
-		[[ -n "$in_list" ]] && prior_outputs_json=$(sqlite3 "$db_file" "SELECT COALESCE(json_group_array(json_object('task_id',task_id,'output_data',CASE WHEN json_valid(output_data) THEN json(output_data) ELSE output_data END)),'[]') FROM tasks WHERE plan_id=$plan_id AND task_id IN ($in_list) AND output_data IS NOT NULL AND output_data!='';")
+		# Get prior outputs from plan JSON for blocked-by tasks
+		prior_outputs_json=$(echo "$plan_json" | jq -c --argjson blocked "$blocked_by_json" '[.tasks[] | select(.task_id as $tid | $blocked | index($tid)) | select(.output_data != null and .output_data != "") | {task_id, output_data}]' 2>/dev/null || echo '[]')
 	fi
 	local context_json project_rules_json; project_rules_json=$(_ap_rules "$project_id")
 	context_json=$(jq -cn --argjson wave "$wave_siblings_json" --argjson prior "$prior_outputs_json" --argjson rules "$project_rules_json" '{wave_siblings:$wave,prior_outputs:$prior,project_rules:$rules}')

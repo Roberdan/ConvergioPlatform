@@ -114,26 +114,18 @@ done
 
 # --- 6. Token usage trend (last 30d) ---
 header "6. Token usage (last 30 days)"
-DB_FILE="$HOME/.claude/data/dashboard.db"
-if [ -f "$DB_FILE" ] && have_bin sqlite3; then
-	TOTAL=$(sqlite3 "$DB_FILE" "
-    SELECT COALESCE(SUM(input_tokens + output_tokens), 0)
-    FROM token_usage
-    WHERE created_at >= datetime('now', '-30 days');
-  " 2>/dev/null || echo "0")
-	COST=$(sqlite3 "$DB_FILE" "
-    SELECT COALESCE(printf('%.2f', SUM(cost_usd)), '0.00')
-    FROM token_usage
-    WHERE created_at >= datetime('now', '-30 days');
-  " 2>/dev/null || echo "0.00")
-	SESSIONS=$(sqlite3 "$DB_FILE" "
-    SELECT COUNT(DISTINCT session_id)
-    FROM token_usage
-    WHERE created_at >= datetime('now', '-30 days');
-  " 2>/dev/null || echo "0")
-	pass "Tokens: $TOTAL | Cost: \$$COST | Sessions: $SESSIONS"
+if have_bin jq; then
+	_metrics="$(curl -sf http://localhost:8420/api/metrics/summary 2>/dev/null || echo '')"
+	if [ -n "$_metrics" ]; then
+		TOTAL=$(echo "$_metrics" | jq -r '.total_tokens // 0' 2>/dev/null || echo "0")
+		COST=$(echo "$_metrics" | jq -r '.total_cost_usd // "0.00"' 2>/dev/null || echo "0.00")
+		SESSIONS=$(echo "$_metrics" | jq -r '.sessions_30d // 0' 2>/dev/null || echo "0")
+		pass "Tokens: $TOTAL | Cost: \$$COST | Sessions: $SESSIONS"
+	else
+		warn "Daemon API not available (http://localhost:8420)"
+	fi
 else
-	warn "Dashboard DB not found or sqlite3 missing"
+	warn "jq not installed"
 fi
 
 # --- 7. Project CLAUDE.md audit ---

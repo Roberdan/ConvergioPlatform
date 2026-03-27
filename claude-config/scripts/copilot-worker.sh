@@ -5,8 +5,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="${HOME}/.claude/data/dashboard.db"
 CONTEXT_LOADER="${SCRIPT_DIR}/lib/agent-context-loader.sh"
+DAEMON_API="http://localhost:8420"
+
+command -v jq &>/dev/null || { echo '{"error":"jq required"}' >&2; exit 1; }
 
 # PATH hardening: ensure copilot CLI is findable in non-login SSH shells
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:$HOME/.claude/scripts:$PATH"
@@ -52,14 +54,14 @@ trap _worker_cleanup EXIT INT TERM
 source "${SCRIPT_DIR}/lib/delegate-utils.sh"
 source "${SCRIPT_DIR}/lib/agent-protocol.sh"
 
-# _emit_mesh_event() — emit lifecycle events to mesh_events for coordinator
+# _emit_mesh_event() — emit lifecycle events via daemon API
 _emit_mesh_event() {
 	local etype="${1:?event_type}" payload="${2:-{}}"
-	local db="$DB_FILE" host
+	local host
 	host="$(hostname -s 2>/dev/null || echo 'unknown')"
-	sqlite3 -cmd ".timeout 3000" "$db" \
-		"INSERT INTO mesh_events (event_type, source_peer, plan_id, payload, status, created_at)
-		 VALUES ('${etype}', '${host}', ${PLAN_ID:-0}, '${payload}', 'pending', unixepoch());" 2>/dev/null || true
+	curl -sf -X POST "${DAEMON_API}/api/coordinator/emit" \
+		-H 'Content-Type: application/json' \
+		-d "{\"event_type\":\"${etype}\",\"source_peer\":\"${host}\",\"plan_id\":${PLAN_ID:-0},\"payload\":${payload}}" 2>/dev/null || true
 }
 
 TASK_ID="${1:-}"
@@ -108,8 +110,16 @@ if [[ -z "${GH_TOKEN:-}" && -z "${COPILOT_TOKEN:-}" ]] && ! gh auth status &>/de
 	exit 1
 fi
 
-# Verify task exists and is pending
-STATUS=$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id=$TASK_ID;")
+# Verify task exists and is pending — find plan containing this task via API
+_plan_list="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '[]')"
+_found_plan_id="$(echo "$_plan_list" | jq -r --argjson tid "$TASK_ID" '[.[] | select(.tasks[]? | (.id // .db_task_id) == $tid)] | .[0].id // empty' 2>/dev/null || echo '')"
+if [[ -z "$_found_plan_id" ]]; then
+	echo '{"error":"task not found"}' >&2
+	exit 1
+fi
+_plan_json="$(cvg plan show "$_found_plan_id" 2>/dev/null || echo '{}')"
+_task_json="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '.tasks[] | select((.id // .db_task_id) == $tid)' 2>/dev/null || echo '{}')"
+STATUS="$(echo "$_task_json" | jq -r '.status // ""' 2>/dev/null || echo '')"
 if [[ -z "$STATUS" ]]; then
 	echo '{"error":"task not found"}' >&2
 	exit 1
@@ -120,22 +130,16 @@ if [[ "$STATUS" != "pending" && "$STATUS" != "in_progress" ]]; then
 fi
 
 # Get context for execution and delegation log
-# Bug fix: resolve wave worktree first (wave-per-worktree model), fallback to plan worktree
-TASK_CTX=$(sqlite3 "$DB_FILE" "
-	SELECT json_object(
-		'worktree', COALESCE(w.worktree_path, p.worktree_path, ''),
-		'plan_id', COALESCE(t.plan_id,0),
-		'wave_db_id', COALESCE(t.wave_id_fk,0),
-		'wave_id', COALESCE(w.wave_id,''),
-		'project_id', COALESCE(p.project_id,''),
-		'task_type', COALESCE(t.type,'code'),
-		'task_title', COALESCE(t.title,'')
-	)
-	FROM tasks t
-	JOIN plans p ON t.plan_id = p.id
-	LEFT JOIN waves w ON t.wave_id_fk = w.id
-	WHERE t.id = $TASK_ID;
-")
+TASK_CTX="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '
+	(.tasks[] | select((.id // .db_task_id) == $tid)) as $t |
+	{worktree: ($t.worktree_path // .worktree_path // ""),
+	 plan_id: (.id // 0),
+	 wave_db_id: ($t.wave_id_fk // 0),
+	 wave_id: ($t.wave_id // ""),
+	 project_id: (.project_id // ""),
+	 task_type: ($t.type // "code"),
+	 task_title: ($t.title // "")}
+' 2>/dev/null || echo '{}')"
 WT="$(echo "$TASK_CTX" | jq -r '.worktree // ""')"
 WT="${WT/#\~/$HOME}"
 PLAN_ID="$(echo "$TASK_CTX" | jq -r '.plan_id // 0')"
@@ -150,7 +154,7 @@ if [[ -z "$TASK_CTX" || "$TASK_CTX" == "{}" || "$TASK_CTX" == "null" ]]; then
 	echo '{"error":"get-context returned empty — DB may be locked or task missing"}' >&2
 	exit 78
 fi
-TASK_DESC=$(sqlite3 "$DB_FILE" "SELECT COALESCE(description,'') FROM tasks WHERE id=$TASK_ID;" 2>/dev/null || echo "")
+TASK_DESC="$(echo "$_task_json" | jq -r '.description // ""' 2>/dev/null || echo '')"
 if [[ -z "$TASK_TITLE" && -z "$TASK_DESC" ]]; then
 	echo '{"error":"task has no title or description — cannot execute without instructions"}' >&2
 	exit 78
@@ -291,7 +295,7 @@ if [[ "$TOKENS_USED" == "0" || "$TOKENS_USED" == "" ]]; then
 fi
 
 # Process results and update task status based on exit code
-FINAL_STATUS=$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id=$TASK_ID;")
+FINAL_STATUS="$(cvg plan show "$_found_plan_id" 2>/dev/null | jq -r --argjson tid "$TASK_ID" '.tasks[] | select((.id // .db_task_id) == $tid) | .status // ""' 2>/dev/null || echo '')"
 NOTE=""
 THOR_RESULT="UNKNOWN"
 STASH_REF=""
@@ -370,10 +374,9 @@ complete_agent_tracking
 if [[ "$AUTO_VALIDATE" == "true" && "$FINAL_STATUS" == "submitted" && "$WAVE_DB_ID" != "0" ]]; then
 	eval_json="$("$SCRIPT_DIR/plan-db.sh" evaluate-wave "$WAVE_DB_ID" 2>/dev/null || echo '{"result":"BLOCKED"}')"
 	eval_result="$(echo "$eval_json" | jq -r '.result // "BLOCKED"' 2>/dev/null || echo "BLOCKED")"
-	unresolved_count=$(sqlite3 "$DB_FILE" \
-		"SELECT COUNT(*) FROM tasks WHERE wave_id_fk = $WAVE_DB_ID AND status NOT IN ('submitted','done','cancelled','skipped');" 2>/dev/null || echo "1")
-	submitted_count=$(sqlite3 "$DB_FILE" \
-		"SELECT COUNT(*) FROM tasks WHERE wave_id_fk = $WAVE_DB_ID AND status = 'submitted';" 2>/dev/null || echo "0")
+	_wave_tasks="$(cvg plan show "$_found_plan_id" 2>/dev/null | jq --argjson wid "$WAVE_DB_ID" '[.tasks[] | select(.wave_id_fk == $wid)]' 2>/dev/null || echo '[]')"
+	unresolved_count="$(echo "$_wave_tasks" | jq '[.[] | select(.status | IN("submitted","done","cancelled","skipped") | not)] | length' 2>/dev/null || echo "1")"
+	submitted_count="$(echo "$_wave_tasks" | jq '[.[] | select(.status == "submitted")] | length' 2>/dev/null || echo "0")"
 
 	if [[ "$eval_result" == "READY" && "$unresolved_count" -eq 0 && "$submitted_count" -gt 0 ]]; then
 		validate_prompt="@validate Wave ${WAVE_ID:-$WAVE_DB_ID} in plan ${PLAN_ID}. All wave tasks are submitted. Run wave-level validation now."

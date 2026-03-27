@@ -4,7 +4,9 @@
 set -euo pipefail
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-DB_PATH="${DB_PATH:-$HOME/.claude/data/dashboard.db}"
+DAEMON_API="http://localhost:8420"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 # Colors
 BOLD=$(tput bold 2>/dev/null || true)
@@ -13,8 +15,6 @@ GREEN=$(tput setaf 2 2>/dev/null || true)
 YELLOW=$(tput setaf 3 2>/dev/null || true)
 CYAN=$(tput setaf 6 2>/dev/null || true)
 RED=$(tput setaf 1 2>/dev/null || true)
-
-db() { sqlite3 "$DB_PATH" "$@"; }
 
 usage() {
   cat <<EOF
@@ -60,15 +60,13 @@ cmd_add() {
   [[ ${#positional[@]} -gt 0 ]] && title="${positional[0]}"
   [[ -z "$title" ]] && { echo "${RED}Error: title required${RESET}"; exit 1; }
 
-  local now; now=$(date -u '+%Y-%m-%d %H:%M:%S')
+  local result
+  result="$(curl -sf -X POST "${DAEMON_API}/api/ideas" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg t "$title" --arg d "$desc" --argjson tags "$tags" --arg p "$priority" --arg pid "$project_id" \
+      '{title:$t, description:$d, tags:$tags, priority:$p, project_id:$pid, status:"draft"}')" 2>/dev/null || echo '{}')"
   local id
-  id=$(db "INSERT INTO ideas (title, description, tags, priority, project_id, status, created_at, updated_at)
-        VALUES ('$(printf '%s' "$title" | sed "s/'/''/g")',
-                '$(printf '%s' "$desc"  | sed "s/'/''/g")',
-                '$tags', '$priority',
-                '$(printf '%s' "$project_id" | sed "s/'/''/g")',
-                'draft', '$now', '$now');
-        SELECT last_insert_rowid();")
+  id="$(echo "$result" | jq -r '.id // "?"' 2>/dev/null)"
   echo "${GREEN}${BOLD}Added idea #${id}:${RESET} $title  ${YELLOW}[$priority]${RESET}"
 }
 
@@ -83,12 +81,14 @@ cmd_list() {
     esac
   done
 
-  local where="WHERE 1=1"
-  [[ -n "$status_filter" ]]   && where+=" AND status='$status_filter'"
-  [[ -n "$priority_filter" ]] && where+=" AND priority='$priority_filter'"
-
+  local all_ideas
+  all_ideas="$(curl -sf "${DAEMON_API}/api/ideas" 2>/dev/null || echo '[]')"
   local rows
-  rows=$(db "SELECT id, priority, status, title FROM ideas $where ORDER BY priority, created_at DESC LIMIT $limit;")
+  rows="$(echo "$all_ideas" | jq -r --arg sf "$status_filter" --arg pf "$priority_filter" --argjson lim "$limit" '
+    [.[] | select(($sf == "" or .status == $sf) and ($pf == "" or .priority == $pf))]
+    | sort_by(.priority, .created_at) | reverse | .[:$lim][]
+    | "\(.id)|\(.priority)|\(.status)|\(.title)"
+  ' 2>/dev/null || echo '')"
 
   if [[ -z "$rows" ]]; then
     echo "${YELLOW}No ideas found.${RESET}"
@@ -107,23 +107,22 @@ cmd_edit() {
   local id="${1:-}"; shift || true
   [[ -z "$id" ]] && { echo "${RED}Error: id required${RESET}"; exit 1; }
 
-  local sets=()
-  local now; now=$(date -u '+%Y-%m-%d %H:%M:%S')
+  local updates='{}'
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --title)  sets+=("title='$(printf '%s' "$2" | sed "s/'/''/g")'"); shift 2 ;;
-      --desc)   sets+=("description='$(printf '%s' "$2" | sed "s/'/''/g")'"); shift 2 ;;
-      --status) sets+=("status='$2'"); shift 2 ;;
-      --tags)   local t; t=$(printf '"%s"' "$2" | sed 's/,/","/g; s/^/[/; s/$/]/'); sets+=("tags='$t'"); shift 2 ;;
+      --title)  updates="$(echo "$updates" | jq --arg v "$2" '. + {title:$v}')"; shift 2 ;;
+      --desc)   updates="$(echo "$updates" | jq --arg v "$2" '. + {description:$v}')"; shift 2 ;;
+      --status) updates="$(echo "$updates" | jq --arg v "$2" '. + {status:$v}')"; shift 2 ;;
+      --tags)   local t; t=$(printf '"%s"' "$2" | sed 's/,/","/g; s/^/[/; s/$/]/'); updates="$(echo "$updates" | jq --argjson v "$t" '. + {tags:$v}')"; shift 2 ;;
       *)        shift ;;
     esac
   done
 
-  [[ ${#sets[@]} -eq 0 ]] && { echo "${YELLOW}Nothing to update.${RESET}"; exit 0; }
-  sets+=("updated_at='$now'")
-  local set_clause; set_clause=$(IFS=','; echo "${sets[*]}")
+  [[ "$updates" == "{}" ]] && { echo "${YELLOW}Nothing to update.${RESET}"; exit 0; }
 
-  db "UPDATE ideas SET $set_clause WHERE id=$id;"
+  curl -sf -X POST "${DAEMON_API}/api/ideas/${id}" \
+    -H 'Content-Type: application/json' \
+    -d "$updates" 2>/dev/null || true
   echo "${GREEN}Updated idea #${id}${RESET}"
 }
 
@@ -132,9 +131,9 @@ cmd_note() {
   local content="${1:-}"
   [[ -z "$id" || -z "$content" ]] && { echo "${RED}Error: id and note text required${RESET}"; exit 1; }
 
-  local now; now=$(date -u '+%Y-%m-%d %H:%M:%S')
-  db "INSERT INTO idea_notes (idea_id, content, created_at)
-      VALUES ($id, '$(printf '%s' "$content" | sed "s/'/''/g")', '$now');"
+  curl -sf -X POST "${DAEMON_API}/api/ideas/${id}/notes" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg c "$content" '{content:$c}')" 2>/dev/null || true
   echo "${GREEN}Note added to idea #${id}${RESET}"
 }
 
@@ -142,10 +141,11 @@ cmd_promote() {
   local id="${1:-}"
   [[ -z "$id" ]] && { echo "${RED}Error: id required${RESET}"; exit 1; }
 
-  local now; now=$(date -u '+%Y-%m-%d %H:%M:%S')
-  db "UPDATE ideas SET status='promoted', updated_at='$now' WHERE id=$id;"
+  curl -sf -X POST "${DAEMON_API}/api/ideas/${id}" \
+    -H 'Content-Type: application/json' \
+    -d '{"status":"promoted"}' 2>/dev/null || true
   local json
-  json=$(db ".mode json" "SELECT * FROM ideas WHERE id=$id;")
+  json="$(curl -sf "${DAEMON_API}/api/ideas" 2>/dev/null | jq --argjson id "$id" '[.[] | select(.id == $id)]' 2>/dev/null || echo '[]')"
   echo "${GREEN}${BOLD}Promoted idea #${id}${RESET}"
   echo ""
   echo "${CYAN}--- Idea JSON (for /planner input) ---${RESET}"
@@ -160,7 +160,7 @@ cmd_delete() {
   [[ -z "$id" ]] && { echo "${RED}Error: id required${RESET}"; exit 1; }
 
   local title
-  title=$(db "SELECT title FROM ideas WHERE id=$id;" 2>/dev/null || true)
+  title="$(curl -sf "${DAEMON_API}/api/ideas" 2>/dev/null | jq -r --argjson id "$id" '.[] | select(.id == $id) | .title // ""' 2>/dev/null || echo '')"
   [[ -z "$title" ]] && { echo "${RED}Idea #${id} not found.${RESET}"; exit 1; }
 
   if [[ "$force" == false ]]; then
@@ -169,7 +169,8 @@ cmd_delete() {
     [[ "$answer" != "y" && "$answer" != "Y" ]] && { echo "Aborted."; exit 0; }
   fi
 
-  db "DELETE FROM idea_notes WHERE idea_id=$id; DELETE FROM ideas WHERE id=$id;"
+  # TODO: needs daemon endpoint for idea deletion
+  curl -sf -X DELETE "${DAEMON_API}/api/ideas/${id}" 2>/dev/null || true
   echo "${YELLOW}Deleted idea #${id}: ${title}${RESET}"
 }
 

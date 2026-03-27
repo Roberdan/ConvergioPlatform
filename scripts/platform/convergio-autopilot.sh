@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # convergio-autopilot.sh — Autonomous plan execution loop
-# Watches plan state in DB and auto-triggers: execution → Thor → merge
+# Watches plan state via daemon API and auto-triggers: execution -> Thor -> merge
 # Usage: convergio-autopilot.sh [plan_id] [--interval 30]
 set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
-DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 SCRIPTS="$PLATFORM_DIR/claude-config/scripts"
 BUS="$PLATFORM_DIR/scripts/platform/convergio-bus.sh"
 DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
@@ -13,9 +12,12 @@ INTERVAL="${2:-30}"
 PLAN_ID="${1:-}"
 
 MAX_BUDGET="${CONVERGIO_MAX_BUDGET:-10.00}"  # F2: daily budget cap in USD
-# Scope retry state to the DB path so multiple autopilot instances don't collide
-DB_HASH="$(printf '%s' "$DB" | shasum 2>/dev/null | cut -c1-8 || printf '%s' "$DB" | md5 2>/dev/null | cut -c1-8 || echo "global")"
-RETRY_FILE="/tmp/convergio-retry-${DB_HASH}"
+# Scope retry state to the daemon URL so multiple autopilot instances don't collide
+URL_HASH="$(printf '%s' "$DAEMON_URL" | shasum 2>/dev/null | cut -c1-8 || printf '%s' "$DAEMON_URL" | md5 2>/dev/null | cut -c1-8 || echo "global")"
+RETRY_FILE="/tmp/convergio-retry-${URL_HASH}"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+command -v curl &>/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
 
 # Source helpers (plan discovery, wave state machine, trigger_*, execution_runs)
 HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,13 +27,15 @@ source "$HELPERS_DIR/convergio-autopilot-helpers.sh"
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[$(date '+%H:%M:%S')] WARN: $*" >&2; }
 
-_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
+_api_get() { curl -sf --connect-timeout 2 "${DAEMON_URL}${1}" 2>/dev/null; }
+_api_post() { curl -sf -X POST "${DAEMON_URL}${1}" -H 'Content-Type: application/json' -d "$2" 2>/dev/null; }
 
 # ─── F1-F3: Cost Tracking ───────────────────────────────────────────
 
 get_daily_cost() {
-  _db "SELECT COALESCE(SUM(cost_usd), 0) FROM execution_runs
-       WHERE started_at > datetime('now', '-1 day');"
+  local json
+  json=$(_api_get "/api/metrics/cost") || { echo "0"; return; }
+  echo "$json" | jq -r '.daily_cost // 0' 2>/dev/null || echo "0"
 }
 
 check_budget() {
@@ -111,11 +115,9 @@ run_once() {
     return 1  # No actionable plan
   fi
 
-  # B3: check if this plan's run is paused
+  # B3: check if this plan's run is paused via daemon API
   local run_status
-  run_status=$(_db "SELECT status FROM execution_runs
-                    WHERE plan_id = $pid AND status IN ('running','paused')
-                    ORDER BY started_at DESC LIMIT 1;" 2>/dev/null || true)
+  run_status=$(_api_get "/api/runs" | jq -r "[.runs[]? | select(.plan_id == ${pid} and (.status == \"running\" or .status == \"paused\"))] | sort_by(.started_at) | last | .status // empty" 2>/dev/null || echo "")
   if [ "${run_status:-}" = "paused" ]; then
     log "PAUSED: Plan $pid execution is paused — skipping"
     return 0
@@ -127,7 +129,8 @@ run_once() {
   if [ -z "$wave_info" ]; then
     # All waves done — plan complete
     log "COMPLETE: Plan $pid — all waves done"
-    _db "UPDATE plans SET status = 'done', completed_at = datetime('now') WHERE id = $pid AND status = 'doing';"
+    cvg plan complete "$pid" 2>/dev/null || \
+      _api_post "/api/plan-db/complete/${pid}" "{}" || true
     execution_runs_complete "$pid"
     trigger_calibration "$pid"
     trigger_postmortem "$pid"
@@ -198,14 +201,15 @@ cmd_watch() {
 
 cmd_status() {
   echo "=== Autopilot Status ==="
+  local json
+  json=$(_api_get "/api/overview") || { echo "  Daemon not reachable"; return 0; }
+
   local active
-  active=$(_db "SELECT count(*) FROM plans WHERE status = 'doing';")
+  active=$(echo "$json" | jq -r '.active_plans | length // 0' 2>/dev/null || echo "0")
   echo "  Active plans: ${active:-0}"
 
-  _db "SELECT p.id, p.name, p.status, p.tasks_done || '/' || p.tasks_total as progress
-       FROM plans p WHERE p.status = 'doing' ORDER BY p.id DESC LIMIT 5;" | \
-  while IFS='|' read -r id name status progress; do
-    echo "  Plan $id: $name ($progress)"
+  echo "$json" | jq -r '.active_plans[]? | [(.id // ""), (.name // ""), (.tasks_done // 0), (.tasks_total // 0)] | @tsv' 2>/dev/null | head -5 | while IFS=$'\t' read -r id name tasks_done tasks_total; do
+    echo "  Plan $id: $name ($tasks_done/$tasks_total)"
   done
 }
 

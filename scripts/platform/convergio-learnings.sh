@@ -4,41 +4,36 @@
 set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
-DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
+DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
-_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+command -v curl &>/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
+
+_api_get() { curl -sf --connect-timeout 2 "${DAEMON_URL}${1}" 2>/dev/null; }
+_api_post() { curl -sf -X POST "${DAEMON_URL}${1}" -H 'Content-Type: application/json' -d "$2" 2>/dev/null; }
 
 cmd_analyze() {
   echo "=== Learning Pattern Analysis ==="
   echo ""
 
+  # TODO: needs daemon endpoint for plan_learnings aggregation queries
+  local json
+  json=$(_api_get "/api/plan-db/learnings/analysis") || { echo "  Daemon not reachable or endpoint not available"; return 0; }
+
   echo "--- Recurring learning categories ---"
-  _db "SELECT category, severity, count(*) as occurrences
-       FROM plan_learnings
-       GROUP BY category, severity
-       HAVING occurrences >= 2
-       ORDER BY occurrences DESC
-       LIMIT 20;" | while IFS='|' read -r cat sev count; do
+  echo "$json" | jq -r '.categories[]? | [(.category // ""), (.severity // ""), (.occurrences // 0)] | @tsv' 2>/dev/null | while IFS=$'\t' read -r cat sev count; do
     printf "  %-20s %-10s %s occurrences\n" "$cat" "$sev" "$count"
   done
 
   echo ""
   echo "--- Most common learning titles ---"
-  _db "SELECT title, count(*) as freq
-       FROM plan_learnings
-       GROUP BY title
-       HAVING freq >= 2
-       ORDER BY freq DESC
-       LIMIT 10;" | while IFS='|' read -r title freq; do
+  echo "$json" | jq -r '.common_titles[]? | [(.freq // 0), (.title // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r freq title; do
     printf "  [%sx] %s\n" "$freq" "$title"
   done
 
   echo ""
   echo "--- Actionable learnings not yet acted on ---"
-  _db "SELECT plan_id, title FROM plan_learnings
-       WHERE actionable = 1 AND (action_taken IS NULL OR action_taken = '')
-       ORDER BY created_at DESC
-       LIMIT 10;" | while IFS='|' read -r pid title; do
+  echo "$json" | jq -r '.actionable[]? | [(.plan_id // ""), (.title // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r pid title; do
     echo "  Plan $pid: $title"
   done
 }
@@ -47,58 +42,69 @@ cmd_promote() {
   echo "=== Auto-Promoting Recurring Learnings ==="
   local promoted=0
 
-  # Find learning titles that appear 3+ times → promote to knowledge_base
-  _db "SELECT title, category, count(*) as freq, group_concat(DISTINCT plan_id) as plans
-       FROM plan_learnings
-       GROUP BY title
-       HAVING freq >= 3
-       ORDER BY freq DESC;" | while IFS='|' read -r title cat freq plans; do
+  # Promote learnings to knowledge base via daemon API
+  # TODO: needs daemon endpoint for plan_learnings promotion
+  local json
+  json=$(_api_get "/api/plan-db/learnings/promotable") || { echo "  Daemon not reachable or endpoint not available"; return 0; }
 
-    # Check if already in knowledge_base
-    local existing
-    existing=$(_db "SELECT count(*) FROM knowledge_base WHERE title = '$(echo "$title" | sed "s/'/''/g")';")
+  echo "$json" | jq -r '.promotable[]? | [(.title // ""), (.category // ""), (.freq // 0), (.plans // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r title cat freq plans; do
+    [[ -z "$title" ]] && continue
 
-    if [ "${existing:-0}" -eq 0 ]; then
-      _db "INSERT INTO knowledge_base (domain, title, content, confidence, source_type, source_ref)
-           VALUES ('$cat', '$(echo "$title" | sed "s/'/''/g")', 'Auto-promoted from $freq plan learnings',
-                   $(echo "scale=2; 0.5 + ($freq * 0.1)" | bc), 'learned', 'Plans: $plans');"
-      echo "  PROMOTED: $title (${freq}x across plans $plans)"
-      promoted=$((promoted + 1))
-    fi
+    # Write to knowledge base via cvg kb
+    cvg kb write --category "$cat" --content "Auto-promoted from $freq plan learnings: $title" 2>/dev/null || \
+      _api_post "/api/plan-db/kb-write" "{\"domain\":\"${cat}\",\"title\":\"${title}\",\"content\":\"Auto-promoted from ${freq} plan learnings\",\"source_type\":\"learned\",\"source_ref\":\"Plans: ${plans}\"}" 2>/dev/null || true
+
+    echo "  PROMOTED: $title (${freq}x across plans $plans)"
+    promoted=$((promoted + 1))
   done
 
-  # Find knowledge_base entries with hit_count >= 5 → promote to earned_skills
-  _db "SELECT id, domain, title, content, hit_count
-       FROM knowledge_base
-       WHERE promoted = 0 AND hit_count >= 5
-       ORDER BY hit_count DESC;" | while IFS='|' read -r id domain title content hits; do
+  # Promote high-hit KB entries to earned_skills
+  # TODO: needs daemon endpoint for knowledge_base promotion to skills
+  local kb_json
+  kb_json=$(_api_get "/api/plan-db/kb/promotable-skills") || kb_json=""
 
-    local skill_name
-    skill_name=$(echo "$title" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-50)
+  if [[ -n "$kb_json" ]]; then
+    echo "$kb_json" | jq -r '.promotable[]? | [(.id // ""), (.domain // ""), (.title // ""), (.content // ""), (.hit_count // 0)] | @tsv' 2>/dev/null | while IFS=$'\t' read -r id domain title content hits; do
+      [[ -z "$id" ]] && continue
+      local skill_name
+      skill_name=$(echo "$title" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | cut -c1-50)
 
-    _db "INSERT OR IGNORE INTO earned_skills (name, domain, content, confidence, hit_count, source)
-         VALUES ('$skill_name', '$domain', '$(echo "$content" | sed "s/'/''/g")', 'medium', $hits, 'auto-promoted');"
-    _db "UPDATE knowledge_base SET promoted = 1, skill_name = '$skill_name' WHERE id = $id;"
-    echo "  SKILL: $skill_name (from KB entry with $hits hits)"
-  done
+      _api_post "/api/plan-db/skill/promote" "{\"name\":\"${skill_name}\",\"domain\":\"${domain}\",\"content\":\"${content}\",\"hit_count\":${hits},\"kb_id\":${id}}" 2>/dev/null || true
+      echo "  SKILL: $skill_name (from KB entry with $hits hits)"
+    done
+  fi
 
   echo "  Promoted: $promoted learnings to knowledge base"
 }
 
 cmd_calibrate() {
   echo "=== Estimation Calibration ==="
-  bash "$PLATFORM_DIR/claude-config/scripts/plan-db.sh" calibrate-estimates 2>/dev/null || {
+  cvg plan calibrate-estimates 2>/dev/null || {
     echo "  No calibration data yet"
   }
 }
 
 cmd_summary() {
   echo "=== Knowledge System Status ==="
-  echo "  Knowledge base: $(_db "SELECT count(*) FROM knowledge_base;") entries"
-  echo "  Plan learnings: $(_db "SELECT count(*) FROM plan_learnings;") entries"
-  echo "  Agent skills:   $(_db "SELECT count(*) FROM agent_skills;") mappings"
-  echo "  Earned skills:  $(_db "SELECT count(*) FROM earned_skills;" 2>/dev/null || echo "0") skills"
-  echo "  Agent catalog:  $(_db "SELECT count(*) FROM agent_catalog;") agents"
+  local json
+  json=$(_api_get "/api/metrics/summary") || { echo "  Daemon not reachable"; return 0; }
+
+  # Get counts from overview/metrics
+  local overview
+  overview=$(_api_get "/api/overview") || overview=""
+
+  local kb_count learning_count skill_count agent_count earned_count
+  kb_count=$(echo "$overview" | jq -r '.knowledge_base_count // "?"' 2>/dev/null || echo "?")
+  learning_count=$(echo "$overview" | jq -r '.plan_learnings_count // "?"' 2>/dev/null || echo "?")
+  skill_count=$(echo "$overview" | jq -r '.agent_skills_count // "?"' 2>/dev/null || echo "?")
+  earned_count=$(echo "$overview" | jq -r '.earned_skills_count // "?"' 2>/dev/null || echo "?")
+  agent_count=$(echo "$overview" | jq -r '.agent_catalog_count // "?"' 2>/dev/null || echo "?")
+
+  echo "  Knowledge base: $kb_count entries"
+  echo "  Plan learnings: $learning_count entries"
+  echo "  Agent skills:   $skill_count mappings"
+  echo "  Earned skills:  $earned_count skills"
+  echo "  Agent catalog:  $agent_count agents"
 }
 
 case "${1:-summary}" in

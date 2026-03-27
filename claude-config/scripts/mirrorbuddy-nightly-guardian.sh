@@ -18,22 +18,8 @@ CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
 CONFIG_FILE="${MIRRORBUDDY_NIGHTLY_CONFIG:-$CLAUDE_HOME/config/mirrorbuddy-nightly.conf}"
 [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
 
-# ── CRR-aware SQLite wrapper (dashboard.db uses crsqlite triggers) ──
-_CRSQLITE_EXT="${CLAUDE_HOME}/lib/crsqlite/crsqlite"
-_find_capable_sqlite3() {
-  for p in /opt/homebrew/opt/sqlite/bin/sqlite3 /usr/local/opt/sqlite/bin/sqlite3; do
-    [[ -x "$p" ]] && echo "$p" && return
-  done
-  echo "$(command -v sqlite3 2>/dev/null || echo sqlite3)"
-}
-_REAL_SQLITE3="$(_find_capable_sqlite3)"
-sqlite3() {
-  if [[ -f "$_CRSQLITE_EXT.dylib" || -f "$_CRSQLITE_EXT.so" || -f "$_CRSQLITE_EXT" ]]; then
-    "$_REAL_SQLITE3" -cmd ".load $_CRSQLITE_EXT" "$@" 2>/dev/null
-  else
-    "$_REAL_SQLITE3" "$@"
-  fi
-}
+DAEMON_API="http://localhost:8420"
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 CONFIG_SNAPSHOT=$({ env | grep "^MIRRORBUDDY_" || true; } | sort | jq -Rs 'split("\n") | map(select(length>0)) | map(split("=") | {(.[0]): (.[1:] | join("="))}) | add // {}')
 REPO_PATH="${MIRRORBUDDY_REPO_PATH:-$HOME/GitHub/MirrorBuddy}"
 DEFAULT_BRANCH="${MIRRORBUDDY_DEFAULT_BRANCH:-main}"
@@ -45,14 +31,12 @@ RUN_FIXES="${MIRRORBUDDY_RUN_FIXES:-true}"
 RUN_RELEASE_GATE="${MIRRORBUDDY_RUN_RELEASE_GATE:-false}"
 AUTO_MERGE="${MIRRORBUDDY_AUTO_MERGE:-false}"
 FIX_TIMEOUT_SEC="${MIRRORBUDDY_FIX_TIMEOUT_SEC:-5400}"
-DB_FILE="${CLAUDE_DB:-$CLAUDE_HOME/data/dashboard.db}"
 REPORT_DIR="$CLAUDE_HOME/data/nightly-jobs"
 SCRIPTS_DIR="$CLAUDE_HOME/scripts"
 RUN_ID="mirrorbuddy-nightly-$(date -u +%Y%m%d-%H%M%S)"
 STARTED_EPOCH=$(date +%s)
 log() { printf '[nightly-guardian] %s\n' "$*"; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { log "Missing command: $1"; exit 1; }; }
-sql_escape() { printf "%s" "$1" | sed "s/'/''/g"; }
 json_or_default() {
   local default_json="$1"; shift
   local raw
@@ -60,32 +44,12 @@ json_or_default() {
   if [[ -n "$raw" ]] && jq -e . >/dev/null 2>&1 <<<"$raw"; then printf '%s' "$raw"; else printf '%s' "$default_json"; fi
 }
 insert_dashboard_notification() {
-  local notif_type="$1" severity="$2" title="$3" message="$4" link="${5:-}" has_extended_schema
-  has_extended_schema="$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM pragma_table_info('notifications') WHERE name IN ('severity','link','link_type','source_table','source_id');" 2>/dev/null || echo 0)"
-  if [[ "$has_extended_schema" -eq 5 ]]; then
-    sqlite3 "$DB_FILE" <<SQL >/dev/null 2>&1 || { log "WARNING: failed to persist dashboard notification"; return 0; }
-INSERT INTO notifications (
-  project_id, type, severity, title, message, link, link_type, source_table, source_id, is_read
-)
-SELECT
-  'mirrorbuddy',
-  '$(sql_escape "$notif_type")',
-  '$(sql_escape "$severity")',
-  '$(sql_escape "$title")',
-  '$(sql_escape "$message")',
-  '$(sql_escape "$link")',
-  'url',
-  'nightly_jobs',
-  '$(sql_escape "$RUN_ID")',
-  0
-WHERE NOT EXISTS (
-  SELECT 1 FROM notifications
-  WHERE source_table='nightly_jobs' AND source_id='$(sql_escape "$RUN_ID")'
-);
-SQL
-    return 0
-  fi
-  sqlite3 "$DB_FILE" "INSERT INTO notifications (project_id, type, title, message, is_read) VALUES ('mirrorbuddy','$(sql_escape "$notif_type")','$(sql_escape "$title")','$(sql_escape "$message")',0);" >/dev/null 2>&1 || log "WARNING: failed to persist dashboard notification"
+  local notif_type="$1" severity="$2" title="$3" message="$4" link="${5:-}"
+  curl -sf -X POST "${DAEMON_API}/api/notify" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg pid "mirrorbuddy" --arg t "$notif_type" --arg sev "$severity" \
+      --arg title "$title" --arg msg "$message" --arg link "$link" --arg rid "$RUN_ID" \
+      '{project_id:$pid, type:$t, severity:$sev, title:$title, message:$msg, link:$link, source_table:"nightly_jobs", source_id:$rid}')" 2>/dev/null || log "WARNING: failed to persist dashboard notification"
 }
 build_report_json() {
   local exit_code="${1:-0}" error_detail="${2:-}"
@@ -93,25 +57,18 @@ build_report_json() {
     '{run_id:$run_id,host:$host,status:$status,summary:$summary,branch:$branch,pr_url:$pr_url,trigger:$trigger,parent_run_id:$parent_run_id,exit_code:$exit_code,error_detail:$error_detail,sentry_unresolved:$sentry_unresolved,github_open_issues:$github_open_issues,actionable_github:$actionable_github,processed_items:$processed_items,fixed_items:$fixed_items,top_sentry_issues:$top_sentry_issues,top_github_issues:$top_github_issues,deploy:$deploy}'
 }
 write_report_files() { REPORT_PATH="$REPORT_DIR/${RUN_ID}.json"; printf '%s\n' "$REPORT_JSON" > "$REPORT_PATH"; printf '%s\n' "$REPORT_JSON" > "$REPORT_DIR/latest-mirrorbuddy-nightly.json"; }
-ensure_nightly_jobs_column() {
-  local column_def="$1" column_name="${1%% *}" present
-  present="$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM pragma_table_info('nightly_jobs') WHERE name='$(sql_escape "$column_name")';" 2>/dev/null || echo 0)"
-  [[ "$present" -eq 1 ]] || sqlite3 "$DB_FILE" "ALTER TABLE nightly_jobs ADD COLUMN $column_def;" >/dev/null 2>&1
-}
-require_cmd jq; require_cmd sqlite3; require_cmd git; require_cmd gh; require_cmd timeout
+require_cmd jq; require_cmd git; require_cmd gh; require_cmd timeout
 [[ "$RUN_FIXES" == "true" ]] && { require_cmd copilot; require_cmd npm; }
 [[ -d "$REPO_PATH/.git" ]] || { log "Repository not found at $REPO_PATH"; exit 1; }
 
 # ── Enabled-flag check (soft pause from dashboard) ──
-if [[ -f "$DB_FILE" ]]; then
-  _enabled="$(sqlite3 "$DB_FILE" "SELECT enabled FROM nightly_job_definitions WHERE project_id='mirrorbuddy' LIMIT 1;" 2>/dev/null || echo 1)"
-  if [[ "$_enabled" == "0" ]]; then
-    log "Guardian paused via dashboard (enabled=0). Exiting gracefully."
-    exit 0
-  fi
+_enabled="$(curl -sf "${DAEMON_API}/api/overview" 2>/dev/null | jq -r '.nightly_jobs_definitions // [] | .[] | select(.project_id == "mirrorbuddy") | .enabled // 1' 2>/dev/null || echo 1)"
+if [[ "$_enabled" == "0" ]]; then
+  log "Guardian paused via dashboard (enabled=0). Exiting gracefully."
+  exit 0
 fi
 
-mkdir -p "$REPORT_DIR" "$(dirname "$DB_FILE")"
+mkdir -p "$REPORT_DIR"
 LOG_DIR="$CLAUDE_HOME/data/nightly-jobs/logs"; mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/${RUN_ID}.log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -128,35 +85,19 @@ if [[ -z "$REPO_SLUG" ]]; then ORIGIN_URL="$(git -C "$REPO_PATH" config --get re
 [[ -n "$REPO_SLUG" ]] || { log "Cannot determine GitHub repo slug"; exit 1; }
 PROJECT_AGENT_FILE="${REPO_PATH}/${PROJECT_AGENT_REL_PATH}"
 PROJECT_AGENT_CONTENT=""; [[ -f "$PROJECT_AGENT_FILE" ]] && PROJECT_AGENT_CONTENT="$(<"$PROJECT_AGENT_FILE")"
-sqlite3 "$DB_FILE" <<'SQL'
-CREATE TABLE IF NOT EXISTS nightly_jobs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  run_id TEXT, started_at DATETIME DEFAULT CURRENT_TIMESTAMP, finished_at DATETIME, host TEXT,
-  status TEXT NOT NULL CHECK(status IN ('running','ok','action_required','failed')),
-  sentry_unresolved INTEGER DEFAULT 0, github_open_issues INTEGER DEFAULT 0, processed_items INTEGER DEFAULT 0,
-  fixed_items INTEGER DEFAULT 0, branch_name TEXT, pr_url TEXT, summary TEXT, report_json TEXT,
-  log_stdout TEXT, log_file_path TEXT, duration_sec INTEGER DEFAULT 0, config_snapshot TEXT, exit_code INTEGER DEFAULT 0,
-  error_detail TEXT, trigger_source TEXT, parent_run_id TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_nightly_jobs_started ON nightly_jobs(started_at DESC);
-CREATE TABLE IF NOT EXISTS notifications (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL DEFAULT 'mirrorbuddy', type TEXT NOT NULL,
-  severity TEXT DEFAULT 'info', title TEXT NOT NULL, message TEXT, link TEXT, link_type TEXT, is_read INTEGER DEFAULT 0,
-  is_dismissed INTEGER DEFAULT 0, source_table TEXT, source_id TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, read_at DATETIME
-);
-CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(is_read, created_at DESC);
-SQL
-for column_def in "log_stdout TEXT" "log_file_path TEXT" "duration_sec INTEGER DEFAULT 0" "config_snapshot TEXT" "exit_code INTEGER DEFAULT 0" "error_detail TEXT" "trigger_source TEXT" "parent_run_id TEXT"; do ensure_nightly_jobs_column "$column_def"; done
+# Schema is managed by the daemon — tables are auto-created
 HOST_NAME="$(hostname -s 2>/dev/null || echo unknown)"
-RUN_ROW_ID="$(sqlite3 "$DB_FILE" "INSERT INTO nightly_jobs(run_id,host,status,trigger_source,parent_run_id) VALUES('$(sql_escape "$RUN_ID")','$(sql_escape "$HOST_NAME")','running','$(sql_escape "$TRIGGER_SOURCE")','$(sql_escape "$PARENT_RUN_ID")'); SELECT last_insert_rowid();")"
+# Register this nightly job run via daemon API
+_run_result="$(curl -sf -X POST "${DAEMON_API}/api/tracking/session-state" \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -nc --arg rid "$RUN_ID" --arg host "$HOST_NAME" --arg trigger "$TRIGGER_SOURCE" --arg parent "$PARENT_RUN_ID" \
+    '{run_id:$rid, host:$host, status:"running", trigger_source:$trigger, parent_run_id:$parent, type:"nightly_job"}')" 2>/dev/null || echo '{}')"
+RUN_ROW_ID="$(echo "$_run_result" | jq -r '.id // "0"' 2>/dev/null || echo "0")"
 LAST_FAILED_COMMAND=""
 STATUS="failed"; SUMMARY="Nightly guardian failed before completion."; SENTRY_UNRESOLVED=0; GH_OPEN_COUNT=0; GH_ACTIONABLE_COUNT=0; TOP_SENTRY_ISSUES='[]'; TOP_GITHUB_ISSUES='[]'; BRANCH_NAME=""; PR_URL=""; FIXED_ITEMS=0; PROCESSED_ITEMS=0; DEPLOY_JSON='{"status":"unknown"}'; REPORT_JSON=""; REPORT_PATH="$REPORT_DIR/${RUN_ID}.json"
 finalize_on_exit() {
-  local exit_code=$? duration_sec=$(( $(date +%s) - STARTED_EPOCH )) current_status log_content error_detail summary status_value
-  [[ -n "${RUN_ROW_ID:-}" ]] || return "$exit_code"
-  current_status="$(sqlite3 "$DB_FILE" "SELECT status FROM nightly_jobs WHERE id=${RUN_ROW_ID};" 2>/dev/null || echo "")"
-  [[ "$current_status" == "running" ]] || return "$exit_code"
-  log_content=$(head -c 65536 "$LOG_FILE" 2>/dev/null || echo "")
+  local exit_code=$? duration_sec=$(( $(date +%s) - STARTED_EPOCH )) error_detail summary status_value
+  [[ -n "${RUN_ROW_ID:-}" && "$RUN_ROW_ID" != "0" ]] || return "$exit_code"
   error_detail=""
   status_value="${STATUS:-ok}"
   summary="${SUMMARY:-}"
@@ -169,28 +110,18 @@ finalize_on_exit() {
   fi
   REPORT_JSON="$(build_report_json "$exit_code" "$error_detail")"
   write_report_files
-  sqlite3 "$DB_FILE" <<SQL >/dev/null 2>&1 || true
-UPDATE nightly_jobs
-SET finished_at = datetime('now'),
-    status = '$(sql_escape "$status_value")',
-    sentry_unresolved = ${SENTRY_UNRESOLVED},
-    github_open_issues = ${GH_OPEN_COUNT},
-    processed_items = ${PROCESSED_ITEMS},
-    fixed_items = ${FIXED_ITEMS:-0},
-    branch_name = '$(sql_escape "$BRANCH_NAME")',
-    pr_url = '$(sql_escape "$PR_URL")',
-    summary = '$(sql_escape "$summary")',
-    report_json = '$(sql_escape "$REPORT_JSON")',
-    log_stdout = '$(sql_escape "$log_content")',
-    log_file_path = '$(sql_escape "$LOG_FILE")',
-    duration_sec = ${duration_sec},
-    config_snapshot = '$(sql_escape "$CONFIG_SNAPSHOT")',
-    exit_code = ${exit_code},
-    error_detail = '$(sql_escape "$error_detail")',
-    trigger_source = '$(sql_escape "$TRIGGER_SOURCE")',
-    parent_run_id = '$(sql_escape "$PARENT_RUN_ID")'
-WHERE id = ${RUN_ROW_ID} AND status = 'running';
-SQL
+  # Update nightly job status via daemon API
+  curl -sf -X POST "${DAEMON_API}/api/tracking/session-state" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg rid "$RUN_ID" --arg status "$status_value" --arg summary "$summary" \
+      --argjson exit_code "$exit_code" --argjson duration "$duration_sec" \
+      --arg branch "$BRANCH_NAME" --arg pr "$PR_URL" --arg log_path "$LOG_FILE" \
+      --argjson sentry "${SENTRY_UNRESOLVED}" --argjson gh "${GH_OPEN_COUNT}" \
+      --argjson processed "${PROCESSED_ITEMS}" --argjson fixed "${FIXED_ITEMS:-0}" \
+      '{run_id:$rid, status:$status, summary:$summary, exit_code:$exit_code,
+       duration_sec:$duration, branch_name:$branch, pr_url:$pr, log_file_path:$log_path,
+       sentry_unresolved:$sentry, github_open_issues:$gh,
+       processed_items:$processed, fixed_items:$fixed, type:"nightly_job_update"}')" 2>/dev/null || true
   if [[ "$exit_code" -ne 0 ]]; then insert_dashboard_notification "error" "critical" "Nightly Guardian failed" "$summary" "$PR_URL"; log "FAILED: $summary"; fi
   return "$exit_code"
 }

@@ -4,16 +4,12 @@
 set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
-DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
-_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+command -v curl &>/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
 
-# Data sources:
-# - ipc_messages: from_agent, to_agent, channel, content, created_at (daemon core)
-# - ipc_agents: name, host, agent_type, last_seen (daemon core)
-# - agent_events: enriched events with type classification (local supplement)
-# - execution_runs: run metadata (goal, team, cost)
+_api_get() { curl -sf --connect-timeout 2 "${DAEMON_URL}${1}" 2>/dev/null; }
 
 # ─── Live Activity ──────────────────────────────────────────────────
 
@@ -24,15 +20,19 @@ cmd_live() {
   printf "  %-8s %-12s %-4s %-12s %s\n" "TIME" "FROM" "" "TO" "CONTENT"
   echo "  ──────── ──────────── ──── ──────────── ──────────────────────────────"
 
-  # Primary source: ipc_messages (daemon core)
-  _db "SELECT strftime('%H:%M:%S', created_at), from_agent, '→', channel, substr(content,1,50)
-       FROM ipc_messages ORDER BY created_at DESC LIMIT $limit;" 2>/dev/null | while IFS='|' read -r time from arrow to detail; do
+  # Primary source: ipc_messages via daemon API
+  local json
+  json=$(_api_get "/api/ipc/messages?limit=${limit}") || { echo "  (daemon not reachable)"; return 0; }
+
+  echo "$json" | jq -r '.messages[]? | [(.time // ""), (.from_agent // ""), "->", (.channel // ""), (.content // "" | .[0:50])] | @tsv' 2>/dev/null | while IFS=$'\t' read -r time from arrow to detail; do
     printf "  %-8s %-12s %-4s %-12s %s\n" "$time" "$from" "$arrow" "$to" "$detail"
   done
 
-  # Supplement: agent_events (if populated)
+  # Supplement: event count from events API
+  local events_json
+  events_json=$(_api_get "/api/events?count_only=true") || events_json=""
   local extra
-  extra=$(_db "SELECT count(*) FROM agent_events;" 2>/dev/null)
+  extra=$(echo "$events_json" | jq -r '.count // 0' 2>/dev/null || echo "0")
   if [ "${extra:-0}" -gt 0 ]; then
     echo ""
     echo "  + $extra enriched events in agent_events"
@@ -46,35 +46,37 @@ cmd_org() {
   echo "=== Organization Chart ==="
   echo ""
 
-  # Build hierarchy from spawn/delegate events
-  local where=""
-  [ -n "$run_id" ] && where="AND run_id = $run_id"
+  # Build hierarchy from events API
+  local url="/api/events?type=spawn,delegate"
+  [ -n "$run_id" ] && url="${url}&run_id=${run_id}"
+
+  local json
+  json=$(_api_get "$url") || { echo "  (daemon not reachable)"; return 0; }
 
   # Find root (agent that spawns but is never spawned)
   local root
-  root=$(_db "SELECT DISTINCT from_agent FROM agent_events
-              WHERE event_type IN ('spawn','delegate') $where
-              AND from_agent NOT IN (SELECT COALESCE(to_agent,'') FROM agent_events WHERE event_type = 'spawn' $where)
-              LIMIT 1;")
-  [ -z "$root" ] && root="ali"
+  root=$(echo "$json" | jq -r '
+    [.events[]? | select(.event_type == "spawn" or .event_type == "delegate") | .from_agent] -
+    [.events[]? | select(.event_type == "spawn") | .to_agent // empty] |
+    first // "ali"' 2>/dev/null || echo "ali")
 
   echo "  $root (orchestrator)"
 
   # Level 1: direct reports
-  _db "SELECT DISTINCT to_agent FROM agent_events
-       WHERE from_agent = '$root' AND event_type IN ('spawn','delegate') $where;" | while read -r l1; do
+  echo "$json" | jq -r "[.events[]? | select(.from_agent == \"${root}\" and (.event_type == \"spawn\" or .event_type == \"delegate\")) | .to_agent // empty] | unique[]" 2>/dev/null | while read -r l1; do
     [ -z "$l1" ] && continue
-    local msg_count
-    msg_count=$(_db "SELECT count(*) FROM agent_events WHERE (from_agent='$l1' OR to_agent='$l1') AND event_type='message' $where;")
-    local task_count
-    task_count=$(_db "SELECT count(*) FROM agent_events WHERE from_agent='$l1' AND event_type IN ('complete','validate') $where;")
-    echo "  ├── $l1 ($msg_count msgs, $task_count tasks)"
+    # Count messages and tasks for this agent
+    local agent_events
+    agent_events=$(_api_get "/api/events?agent=${l1}") || agent_events=""
+    local msg_count task_count
+    msg_count=$(echo "$agent_events" | jq -r '[.events[]? | select(.event_type == "message")] | length' 2>/dev/null || echo "0")
+    task_count=$(echo "$agent_events" | jq -r '[.events[]? | select(.event_type == "complete" or .event_type == "validate")] | length' 2>/dev/null || echo "0")
+    echo "  |-- $l1 ($msg_count msgs, $task_count tasks)"
 
     # Level 2: sub-delegates
-    _db "SELECT DISTINCT to_agent FROM agent_events
-         WHERE from_agent = '$l1' AND event_type IN ('spawn','delegate') $where;" | while read -r l2; do
+    echo "$json" | jq -r "[.events[]? | select(.from_agent == \"${l1}\" and (.event_type == \"spawn\" or .event_type == \"delegate\")) | .to_agent // empty] | unique[]" 2>/dev/null | while read -r l2; do
       [ -z "$l2" ] && continue
-      echo "  │   └── $l2"
+      echo "  |   +-- $l2"
     done
   done
 }
@@ -87,12 +89,11 @@ cmd_matrix() {
   printf "  %-14s %-14s %6s  %s\n" "FROM" "CHANNEL" "COUNT" "LATEST"
   echo "  ────────────── ────────────── ──────  ──────────────────"
 
-  # Primary: ipc_messages (daemon core — all agent communication)
-  _db "SELECT from_agent, channel, count(*), max(strftime('%H:%M', created_at))
-       FROM ipc_messages
-       GROUP BY from_agent, channel
-       ORDER BY count(*) DESC
-       LIMIT 30;" 2>/dev/null | while IFS='|' read -r from ch count latest; do
+  # Primary: ipc_messages via daemon API
+  local json
+  json=$(_api_get "/api/ipc/messages?grouped=true&limit=30") || { echo "  (daemon not reachable)"; return 0; }
+
+  echo "$json" | jq -r '.groups[]? | [(.from_agent // ""), (.channel // ""), (.count // 0), (.latest // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r from ch count latest; do
     printf "  %-14s %-14s %6s  %s\n" "$from" "$ch" "$count" "$latest"
   done
 }
@@ -104,26 +105,25 @@ cmd_teams() {
   echo "=== Active Teams ==="
   echo ""
 
-  local where=""
-  [ -n "$run_id" ] && where="AND run_id = $run_id"
+  local url="/api/events?grouped_by_run=true"
+  [ -n "$run_id" ] && url="/api/events?run_id=${run_id}&grouped_by_run=true"
 
-  # Group by run
-  _db "SELECT run_id, count(DISTINCT from_agent) as agents, count(*) as events,
-       min(created_at) as started, max(created_at) as latest
-       FROM agent_events
-       WHERE run_id IS NOT NULL $where
-       GROUP BY run_id
-       ORDER BY run_id DESC LIMIT 10;" | while IFS='|' read -r rid agents events started latest; do
+  local json
+  json=$(_api_get "$url") || { echo "  (daemon not reachable)"; return 0; }
+
+  echo "$json" | jq -r '.runs[]? | [(.run_id // ""), (.agent_count // 0), (.event_count // 0), (.started // ""), (.latest // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r rid agents events started latest; do
+    [[ -z "$rid" ]] && continue
+    # Get run goal
+    local run_json
+    run_json=$(_api_get "/api/metrics/run/${rid}") || run_json=""
     local goal
-    goal=$(_db "SELECT substr(goal,1,50) FROM execution_runs WHERE id=$rid;" 2>/dev/null)
-    echo "  Run #$rid: $agents agents, $events events ($started → $latest)"
+    goal=$(echo "$run_json" | jq -r '.goal // "" | .[0:50]' 2>/dev/null || echo "")
+    echo "  Run #$rid: $agents agents, $events events ($started -> $latest)"
     [ -n "$goal" ] && echo "    Goal: $goal"
 
     # List agents in this run
-    _db "SELECT DISTINCT from_agent FROM agent_events WHERE run_id=$rid;" | while read -r agent; do
-      local role
-      role=$(_db "SELECT category FROM agent_catalog WHERE name='$agent';")
-      echo "    ├── $agent ($role)"
+    echo "$json" | jq -r ".runs[]? | select(.run_id == ${rid}) | .agents[]? | [(.name // \"\"), (.category // \"\")] | @tsv" 2>/dev/null | while IFS=$'\t' read -r agent role; do
+      echo "    |-- $agent ($role)"
     done
     echo ""
   done
@@ -136,22 +136,27 @@ cmd_flow() {
   echo "=== Execution Flow — Run #$run_id ==="
   echo ""
 
+  # Get run goal
+  local run_json
+  run_json=$(_api_get "/api/metrics/run/${run_id}") || run_json=""
   local goal
-  goal=$(_db "SELECT goal FROM execution_runs WHERE id=$run_id;")
+  goal=$(echo "$run_json" | jq -r '.goal // ""' 2>/dev/null || echo "")
   [ -n "$goal" ] && echo "  Goal: $goal"
   echo ""
 
-  _db "SELECT strftime('%H:%M:%S', created_at), event_type, from_agent, COALESCE(to_agent,''), substr(COALESCE(payload,''),1,50)
-       FROM agent_events WHERE run_id=$run_id ORDER BY id;" | while IFS='|' read -r time type from to detail; do
+  local json
+  json=$(_api_get "/api/events?run_id=${run_id}") || { echo "  (daemon not reachable)"; return 0; }
+
+  echo "$json" | jq -r '.events[]? | [(.time // ""), (.event_type // ""), (.from_agent // ""), (.to_agent // ""), (.payload // "" | .[0:50])] | @tsv' 2>/dev/null | while IFS=$'\t' read -r time type from to detail; do
     case "$type" in
-      spawn)    echo "  $time  ⊕ $from spawned $to" ;;
-      delegate) echo "  $time  → $from delegated to $to: $detail" ;;
-      message)  echo "  $time  ✉ $from → $to: $detail" ;;
-      validate) echo "  $time  ✓ $from validated $to: $detail" ;;
-      complete) echo "  $time  ✔ $from completed: $detail" ;;
-      fail)     echo "  $time  ✗ $from failed: $detail" ;;
-      escalate) echo "  $time  ⚠ $from escalated to $to: $detail" ;;
-      *)        echo "  $time  · $from [$type] $detail" ;;
+      spawn)    echo "  $time  + $from spawned $to" ;;
+      delegate) echo "  $time  -> $from delegated to $to: $detail" ;;
+      message)  echo "  $time  @ $from -> $to: $detail" ;;
+      validate) echo "  $time  V $from validated $to: $detail" ;;
+      complete) echo "  $time  OK $from completed: $detail" ;;
+      fail)     echo "  $time  X $from failed: $detail" ;;
+      escalate) echo "  $time  ! $from escalated to $to: $detail" ;;
+      *)        echo "  $time  . $from [$type] $detail" ;;
     esac
   done
 }
@@ -161,23 +166,26 @@ cmd_flow() {
 cmd_stats() {
   echo "=== Organizational Stats ==="
   echo ""
-  echo "  Total events: $(_db "SELECT count(*) FROM agent_events;")"
-  echo "  Unique agents: $(_db "SELECT count(DISTINCT from_agent) FROM agent_events;")"
-  echo "  Runs tracked: $(_db "SELECT count(DISTINCT run_id) FROM agent_events WHERE run_id IS NOT NULL;")"
+
+  local json
+  json=$(_api_get "/api/events?stats=true") || { echo "  (daemon not reachable)"; return 0; }
+
+  echo "  Total events: $(echo "$json" | jq -r '.total_events // 0' 2>/dev/null)"
+  echo "  Unique agents: $(echo "$json" | jq -r '.unique_agents // 0' 2>/dev/null)"
+  echo "  Runs tracked: $(echo "$json" | jq -r '.runs_tracked // 0' 2>/dev/null)"
   echo ""
   echo "  Events by type:"
-  _db "SELECT event_type, count(*) FROM agent_events GROUP BY event_type ORDER BY count(*) DESC;" | while IFS='|' read -r type count; do
+  echo "$json" | jq -r '.by_type[]? | [(.event_type // ""), (.count // 0)] | @tsv' 2>/dev/null | while IFS=$'\t' read -r type count; do
     printf "    %-12s %s\n" "$type" "$count"
   done
   echo ""
   echo "  Most active agents:"
-  _db "SELECT from_agent, count(*) FROM agent_events GROUP BY from_agent ORDER BY count(*) DESC LIMIT 10;" | while IFS='|' read -r agent count; do
+  echo "$json" | jq -r '.top_agents[]? | [(.agent // ""), (.count // 0)] | @tsv' 2>/dev/null | while IFS=$'\t' read -r agent count; do
     printf "    %-14s %s events\n" "$agent" "$count"
   done
 }
 
 case "${1:-help}" in
-  log)      shift; cmd_log_event "$@" ;;
   live)     shift; cmd_live "${1:-20}" ;;
   org)      shift; cmd_org "${1:-}" ;;
   matrix)   shift; cmd_matrix "${1:-}" ;;
@@ -187,7 +195,6 @@ case "${1:-help}" in
   *)
     echo "convergio-org.sh — Organizational telemetry"
     echo ""
-    echo "  log <type> <from> [to] [payload] [run_id]  Record event"
     echo "  live [N]                                   Last N events"
     echo "  org [run_id]                               Org chart from flows"
     echo "  matrix [run_id]                            Communication matrix"

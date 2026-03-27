@@ -8,8 +8,10 @@ set -euo pipefail
 
 VAULT_CONFIG="config/orchestrator.yaml"
 LOG_TABLE="env_vault_log"
-DB_FILE="${ENV_VAULT_DB:-plan-db.sqlite}"
 SECRET_POLICY="${ENV_VAULT_SECRET_POLICY:-warn}"
+DAEMON_API="http://localhost:8420"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 usage() {
   echo "Usage: $0 {backup|restore|diff|audit|list} [options]"
@@ -23,12 +25,11 @@ log_metadata() {
   local project="${3:-}"
   local timestamp
   timestamp=$(date +%s)
-  sqlite3 "$DB_FILE" \
-    "INSERT INTO ${LOG_TABLE} (action, file, project, timestamp) VALUES (:action, :file, :project, :ts);" \
-    -cmd ".param set :action '$action'" \
-    -cmd ".param set :file '$file'" \
-    -cmd ".param set :project '$project'" \
-    -cmd ".param set :ts $timestamp"
+  # Log via daemon event API
+  curl -sf -X POST "${DAEMON_API}/api/events" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg a "$action" --arg f "$file" --arg p "$project" --argjson ts "$timestamp" \
+      '{type:"env_vault",action:$a,file:$f,project:$p,timestamp:$ts}')" 2>/dev/null || true
 }
 
 check_secret_policy() {
@@ -103,13 +104,13 @@ diff_env() {
 
 audit() {
   echo "Audit: projects with .env changes in last 7 days"
-  sqlite3 "$DB_FILE" "SELECT * FROM ${LOG_TABLE} WHERE timestamp > strftime('%s','now','-7 days');"
+  curl -sf "${DAEMON_API}/api/events?type=env_vault&since=7d" 2>/dev/null | jq -r '.[] | "\(.timestamp) \(.action) \(.file) \(.project)"' 2>/dev/null || echo "No recent events"
   log_metadata "audit" "" ""
 }
 
 list_env() {
   echo "Tracked .env files:"
-  sqlite3 "$DB_FILE" "SELECT DISTINCT file FROM ${LOG_TABLE};"
+  curl -sf "${DAEMON_API}/api/events?type=env_vault" 2>/dev/null | jq -r '[.[].file] | unique | .[]' 2>/dev/null || echo "No tracked files"
   log_metadata "list" "" ""
 }
 

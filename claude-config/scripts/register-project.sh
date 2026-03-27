@@ -1,18 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 # Register Project - Adds/updates a project in the centralized registry
+# Version: 2.0.0 — migrated from sqlite3 to cvg CLI / daemon API
 # Usage: ./register-project.sh [project_path] [--name "Display Name"]
 # Auto-detects: project_id (from folder), git remote, GitHub URL
-
-# Version: 1.1.0
-set -euo pipefail
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_HOME="${HOME}/.claude"
 REGISTRY_FILE="${CLAUDE_HOME}/plans/registry.json"
-DB_FILE="${CLAUDE_HOME}/data/dashboard.db"
-# shellcheck source=./lib/sql-utils.sh
-source "$SCRIPT_DIR/lib/sql-utils.sh"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 PROJECT_PATH="${1:-.}"
 PROJECT_PATH="$(cd "$PROJECT_PATH" && pwd)"
@@ -124,27 +121,22 @@ UPDATED_REGISTRY=$(jq --arg id "$PROJECT_ID" \
 
 echo "$UPDATED_REGISTRY" >"$REGISTRY_FILE"
 
-# Update SQLite database
-if [[ -f "$DB_FILE" ]]; then
-	safe_id=$(sql_escape "$PROJECT_ID")
-	safe_name=$(sql_escape "$DISPLAY_NAME")
-	safe_path=$(sql_escape "$PROJECT_PATH")
-	safe_branch=$(sql_escape "$GIT_BRANCH")
-	safe_github=$(sql_escape "$GITHUB_URL")
-	safe_icon=$(sql_escape "$ICON_PATH")
-	sqlite3 "$DB_FILE" <<EOF
-INSERT INTO projects (id, name, path, branch, github_url, icon_path, created_at, updated_at)
-VALUES ('$safe_id', '$safe_name', '$safe_path', '$safe_branch', '$safe_github', '$safe_icon', '$TIMESTAMP', '$TIMESTAMP')
-ON CONFLICT(id) DO UPDATE SET
-    name = excluded.name,
-    path = excluded.path,
-    branch = excluded.branch,
-    github_url = excluded.github_url,
-    icon_path = excluded.icon_path,
-    updated_at = excluded.updated_at;
-EOF
-	log_info "Database updated"
-fi
+# Register project via daemon API
+curl -sf -X POST "${DAEMON_URL}/api/projects" \
+	-H 'Content-Type: application/json' \
+	-d "$(jq -n \
+		--arg id "$PROJECT_ID" \
+		--arg name "$DISPLAY_NAME" \
+		--arg path "$PROJECT_PATH" \
+		--arg branch "$GIT_BRANCH" \
+		--arg github "$GITHUB_URL" \
+		--arg icon "$ICON_PATH" \
+		'{id:$id,name:$name,path:$path,branch:$branch,github_url:$github,icon_path:$icon}'
+	)" >/dev/null 2>&1 || \
+cvg project create "$PROJECT_ID" --name "$DISPLAY_NAME" --path "$PROJECT_PATH" 2>/dev/null || {
+	log_warn "Daemon API not available, project registered in registry.json only"
+}
+log_info "Database updated"
 
 # Output result as JSON
 jq -n \

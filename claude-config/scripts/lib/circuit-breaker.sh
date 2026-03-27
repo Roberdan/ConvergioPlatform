@@ -1,9 +1,12 @@
 #!/bin/bash
 # circuit-breaker.sh - Track consecutive Thor rejections, auto-block after threshold
-# Version: 1.0.0
+# Version: 2.0.0 — migrated from sqlite3 to cvg CLI / daemon API
 # Sourced by plan-db-safe.sh
 #
-# Requires: DB_FILE, DATA_DIR, AUDIT_LOG, REJECTION_COUNTER_DIR, MAX_REJECTIONS
+# Requires: DATA_DIR, AUDIT_LOG, REJECTION_COUNTER_DIR, MAX_REJECTIONS
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 circuit_breaker_track_rejection() {
 	local task_db_id="$1"
@@ -21,16 +24,28 @@ circuit_breaker_track_rejection() {
 
 	if [[ $count -ge $MAX_REJECTIONS ]]; then
 		local task_id_text
-		task_id_text=$(sqlite3 "$DB_FILE" "SELECT task_id FROM tasks WHERE id = $task_db_id;" 2>/dev/null || echo "unknown")
+		# Read task_id from plan JSON via daemon API
+		if [[ -n "$plan_id" ]]; then
+			task_id_text=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${plan_id}" | jq -r ".tasks[] | select(.id==${task_db_id} or .db_id==${task_db_id}) | .task_id // \"unknown\"" 2>/dev/null || echo "unknown")
+		else
+			task_id_text="unknown"
+		fi
 
 		echo "CIRCUIT BREAKER: Task $task_id_text rejected $count times - AUTO-BLOCKING" >&2
 
-		sqlite3 "$DB_FILE" "UPDATE tasks SET status = 'blocked', notes = 'AUTO-BLOCKED: $count consecutive Thor rejections (circuit breaker)' WHERE id = $task_db_id;"
+		# Update task status to blocked via daemon API
+		curl -sf -X POST "${DAEMON_URL}/api/plan-db/task/update" \
+			-H 'Content-Type: application/json' \
+			-d "{\"task_id\":${task_db_id},\"status\":\"blocked\",\"notes\":\"AUTO-BLOCKED: ${count} consecutive Thor rejections (circuit breaker)\"}" >/dev/null 2>&1 || \
+			cvg task update "$task_db_id" blocked "AUTO-BLOCKED: ${count} consecutive Thor rejections (circuit breaker)" 2>/dev/null || true
 
 		local timestamp
 		timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-		local wave_id
-		wave_id=$(sqlite3 "$DB_FILE" "SELECT wave_id FROM waves w JOIN tasks t ON t.wave_id_fk = w.id WHERE t.id = $task_db_id;" 2>/dev/null || echo "unknown")
+		# Get wave_id from plan JSON
+		local wave_id="unknown"
+		if [[ -n "$plan_id" ]]; then
+			wave_id=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${plan_id}" | jq -r ".tasks[] | select(.id==${task_db_id} or .db_id==${task_db_id}) | .wave_id // \"unknown\"" 2>/dev/null || echo "unknown")
+		fi
 
 		local audit_entry="{\"timestamp\":\"$timestamp\",\"event\":\"circuit_breaker_triggered\",\"task_db_id\":$task_db_id,\"task_id\":\"$task_id_text\",\"plan_id\":${plan_id:-null},\"wave_id\":\"$wave_id\",\"consecutive_rejections\":$count,\"max_rejections\":$MAX_REJECTIONS,\"action\":\"auto_blocked\"}"
 

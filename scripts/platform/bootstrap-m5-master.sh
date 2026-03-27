@@ -12,6 +12,7 @@ unset _SCRIPT_DIR
 M3_TS="${NODE_M3_HOST}"
 PLATFORM_DIR="$HOME/GitHub/ConvergioPlatform"
 CLAUDE_DIR="$HOME/.claude"
+DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
 echo "=== ConvergioPlatform M5 Master Bootstrap ==="
 echo "Target: $(hostname) ($(scutil --get ComputerName 2>/dev/null))"
@@ -47,7 +48,7 @@ mkdir -p "$CLAUDE_DIR/data" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/agents" "$CLAUDE_DI
 
 # Symlink DB into .claude for backward compat
 ln -sf "$PLATFORM_DIR/data/dashboard.db" "$CLAUDE_DIR/data/dashboard.db"
-echo "  Symlink: .claude/data/dashboard.db → ConvergioPlatform/data/"
+echo "  Symlink: .claude/data/dashboard.db -> ConvergioPlatform/data/"
 
 # Copy rules, agents, CLAUDE.md from M3
 echo "  Copying rules and agents from M3..."
@@ -92,20 +93,37 @@ export DASHBOARD_DB="$PLATFORM_DIR/data/dashboard.db"
 
 # ------ Step 6: Verify tools ------
 echo "[6/9] Verifying tools..."
-claude --version 2>/dev/null | head -1 && echo "  ✅ Claude CLI" || echo "  ❌ Claude CLI missing"
-gh --version 2>/dev/null | head -1 && echo "  ✅ gh" || echo "  ❌ gh missing"
-cargo --version 2>/dev/null && echo "  ✅ Rust" || echo "  ❌ Rust missing"
-node --version 2>/dev/null && echo "  ✅ Node" || echo "  ❌ Node missing"
-python3 --version 2>/dev/null && echo "  ✅ Python" || echo "  ❌ Python missing"
+claude --version 2>/dev/null | head -1 && echo "  OK Claude CLI" || echo "  MISSING Claude CLI"
+gh --version 2>/dev/null | head -1 && echo "  OK gh" || echo "  MISSING gh"
+cargo --version 2>/dev/null && echo "  OK Rust" || echo "  MISSING Rust"
+node --version 2>/dev/null && echo "  OK Node" || echo "  MISSING Node"
+python3 --version 2>/dev/null && echo "  OK Python" || echo "  MISSING Python"
 
-# ------ Step 7: Verify DB ------
+# ------ Step 7: Verify DB via daemon API ------
 echo "[7/9] Verifying database..."
-PLANS=$(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT count(*) FROM plans;" 2>/dev/null)
-TASKS=$(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT count(*) FROM tasks;" 2>/dev/null)
-echo "  Plans: $PLANS"
-echo "  Tasks: $TASKS"
-echo "  Plan 664: $(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT status FROM plans WHERE id=664;")"
-echo "  Plan 659: $(sqlite3 "$PLATFORM_DIR/data/dashboard.db" "SELECT status FROM plans WHERE id=659;")"
+echo "  Starting daemon for verification..."
+# Build and start daemon if not running
+if ! curl -sf --connect-timeout 2 "${DAEMON_URL}/api/health" > /dev/null 2>&1; then
+  echo "  Daemon not running — attempting to start..."
+  if [ -f "$PLATFORM_DIR/daemon/start.sh" ]; then
+    bash "$PLATFORM_DIR/daemon/start.sh" &
+    sleep 3
+  fi
+fi
+
+if curl -sf --connect-timeout 2 "${DAEMON_URL}/api/health" > /dev/null 2>&1; then
+  local_json=$(curl -sf "${DAEMON_URL}/api/overview" 2>/dev/null || echo "{}")
+  PLANS=$(echo "$local_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('total_plans', '?'))" 2>/dev/null || echo "?")
+  TASKS=$(echo "$local_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('total_tasks', '?'))" 2>/dev/null || echo "?")
+  echo "  Plans: $PLANS"
+  echo "  Tasks: $TASKS"
+  # Verify specific plans via cvg
+  echo "  Plan 664: $(cvg plan show 664 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo '?')"
+  echo "  Plan 659: $(cvg plan show 659 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo '?')"
+else
+  echo "  WARN: Daemon not reachable — skipping DB verification"
+  echo "  Start daemon manually: cd $PLATFORM_DIR/daemon && cargo build --release && ./start.sh"
+fi
 
 # ------ Step 8: Set up LLM infrastructure ------
 echo "[8/9] Setting up local LLM infrastructure..."
@@ -115,7 +133,7 @@ echo "  To install oMLX + LiteLLM: convergio-llm.sh setup"
 # ------ Step 9: Verify plan-db.sh works ------
 echo "[9/9] Verifying plan-db.sh..."
 export PATH="$CLAUDE_DIR/scripts:$PATH"
-plan-db.sh status convergio 2>/dev/null | head -10 || echo "  ⚠️ plan-db.sh needs setup"
+plan-db.sh status convergio 2>/dev/null | head -10 || echo "  plan-db.sh needs setup"
 
 echo ""
 echo "========================================="

@@ -6,12 +6,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
-DB="${CLAUDE_DB:-$CLAUDE_HOME/data/dashboard.db}"
 PID_FILE="$CLAUDE_HOME/data/mesh-heartbeat.pid"
 INTERVAL=30
 
 # shellcheck source=lib/peers.sh
 source "$SCRIPT_DIR/lib/peers.sh"
+
+DAEMON_API="http://localhost:8420"
 
 C='\033[0;36m' G='\033[0;32m' Y='\033[1;33m' R='\033[0;31m' N='\033[0m'
 info() { echo -e "${C}[heartbeat]${N} $*"; }
@@ -19,9 +20,7 @@ ok() { echo -e "${G}[heartbeat]${N} $*"; }
 warn() { echo -e "${Y}[heartbeat]${N} $*" >&2; }
 err() { echo -e "${R}[heartbeat]${N} $*" >&2; }
 
-# Helpers
-
-_db() { sqlite3 "$DB" ".timeout 5000" ".timeout 5000" "$@"; }
+command -v jq &>/dev/null || { err "jq required"; exit 1; }
 
 _load_json() {
 	local cpu tasks mem_total=0 mem_used=0
@@ -31,8 +30,8 @@ _load_json() {
 	fi
 	cpu="${cpu:-0}"
 
-	# count in_progress tasks from DB (non-fatal if DB unavailable)
-	tasks="$(_db "SELECT COUNT(*) FROM tasks WHERE status='in_progress';" 2>/dev/null || echo "0")"
+	# count in_progress tasks via daemon API (non-fatal)
+	tasks="$(curl -sf "${DAEMON_API}/api/overview" 2>/dev/null | jq -r '.tasks_in_progress // 0' 2>/dev/null || echo "0")"
 
 	# RAM: macOS -> sysctl/vm_stat | Linux -> /proc/meminfo
 	if [[ "$(uname)" == "Darwin" ]]; then
@@ -76,51 +75,61 @@ _write_heartbeat() {
 	load_json="$(_load_json)"
 	caps="$(_capabilities)"
 
-	_db "INSERT OR REPLACE INTO peer_heartbeats (peer_name, last_seen, load_json, capabilities)
-	     VALUES ('${peer_name}', unixepoch(), '${load_json}', '${caps}');" 2>/dev/null || {
-		warn "DB write failed (will retry)"
+	curl -sf -X POST "${DAEMON_API}/api/heartbeat" \
+		-H 'Content-Type: application/json' \
+		-d "$(jq -nc --arg pn "$peer_name" --argjson load "$load_json" --arg caps "$caps" \
+			'{peer_name:$pn, load_json:$load, capabilities:$caps}')" 2>/dev/null || {
+		warn "Heartbeat API write failed (will retry)"
 	}
 }
 
 # Event emission: check for completed plans/waves/tasks and emit events
 _emit_event() {
-	local event_type="$1" plan_id="$2" payload="${3:-}"
+	local event_type="$1" plan_id="$2" payload="${3:-{}}"
 	local peer_name
 	peer_name="$(peers_self 2>/dev/null || echo "$(hostname -s 2>/dev/null || hostname)")"
-	local exists
-	exists=$(_db "SELECT COUNT(*) FROM mesh_events WHERE event_type='${event_type}' AND plan_id=${plan_id} AND source_peer='${peer_name}' AND status='pending';" 2>/dev/null || echo "0")
-	if [[ "$exists" -eq 0 ]]; then
-		_db "INSERT INTO mesh_events (event_type, plan_id, source_peer, payload) VALUES ('${event_type}', ${plan_id}, '${peer_name}', '${payload}');" 2>/dev/null || true
-	fi
+	curl -sf -X POST "${DAEMON_API}/api/coordinator/emit" \
+		-H 'Content-Type: application/json' \
+		-d "$(jq -nc --arg et "$event_type" --argjson pid "$plan_id" --arg sp "$peer_name" --argjson pl "$payload" \
+			'{event_type:$et, plan_id:$pid, source_peer:$sp, payload:$pl}')" 2>/dev/null || true
 }
 
 _check_plan_events() {
 	local peer_name
 	peer_name="$(peers_self 2>/dev/null || echo "$(hostname -s 2>/dev/null || hostname)")"
-	while IFS='|' read -r plan_id plan_name tasks_done tasks_total; do
+	local plans_json
+	plans_json="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '[]')"
+
+	echo "$plans_json" | jq -r --arg pn "$peer_name" '
+		.[] | select(.status == "doing" and (.execution_host | tostring | contains($pn)))
+		| "\(.id)|\(.name)|\(.tasks_done)|\(.tasks_total)"
+	' 2>/dev/null | while IFS='|' read -r plan_id plan_name tasks_done tasks_total; do
 		[[ -z "$plan_id" ]] && continue
+		local pj
+		pj="$(cvg plan show "$plan_id" 2>/dev/null || echo '{}')"
 		local resolved
-		resolved=$(_db "SELECT COUNT(*) FROM tasks t JOIN waves w ON t.wave_id_fk=w.id WHERE w.plan_id=${plan_id} AND t.status IN ('done','skipped','cancelled');" 2>/dev/null || echo "0")
+		resolved="$(echo "$pj" | jq '[.tasks[]? | select(.status | IN("done","skipped","cancelled"))] | length' 2>/dev/null || echo 0)"
 		if [[ "$resolved" -ge "$tasks_total" && "$tasks_total" -gt 0 ]]; then
 			_emit_event "plan_completed" "$plan_id" "{\"name\":\"${plan_name}\",\"tasks\":${tasks_total}}"
 		fi
 		local blocked
-		blocked=$(_db "SELECT task_id FROM tasks t JOIN waves w ON t.wave_id_fk=w.id WHERE w.plan_id=${plan_id} AND t.status='blocked' LIMIT 1;" 2>/dev/null || echo "")
+		blocked="$(echo "$pj" | jq -r '[.tasks[]? | select(.status == "blocked")] | first | .task_id // empty' 2>/dev/null || echo '')"
 		if [[ -n "$blocked" ]]; then
 			_emit_event "human_needed" "$plan_id" "{\"action\":\"blocked\",\"task\":\"${blocked}\"}"
 		fi
-	done < <(_db "SELECT id, name, tasks_done, tasks_total FROM plans WHERE status='doing' AND (execution_host LIKE '%${peer_name}%' OR execution_host='${peer_name}');" 2>/dev/null || true)
-	while IFS='|' read -r wave_id wave_name plan_id wd wt; do
-		[[ -z "$wave_id" ]] && continue
-		local wave_resolved
-		wave_resolved=$(_db "SELECT COUNT(*) FROM tasks WHERE wave_id_fk=(SELECT id FROM waves WHERE wave_id='${wave_id}' AND plan_id=${plan_id}) AND status IN ('done','skipped','cancelled');" 2>/dev/null || echo "0")
-		if [[ "$wave_resolved" -ge "$wt" && "$wt" -gt 0 ]]; then
-			_emit_event "wave_completed" "$plan_id" "{\"wave\":\"${wave_id}\",\"name\":\"${wave_name}\"}"
-		fi
-	done < <(_db "SELECT w.wave_id, w.name, w.plan_id, w.tasks_done, w.tasks_total FROM waves w JOIN plans p ON w.plan_id=p.id WHERE p.status='doing' AND w.status='in_progress' AND (p.execution_host LIKE '%${peer_name}%' OR p.execution_host='${peer_name}');" 2>/dev/null || true)
+		# Check waves
+		echo "$pj" | jq -r '.waves[]? | select(.status == "in_progress") | "\(.wave_id)|\(.name)|\(.id)|\(.tasks_done)|\(.tasks_total)"' 2>/dev/null | while IFS='|' read -r wave_id wave_name _wid wd wt; do
+			[[ -z "$wave_id" ]] && continue
+			local wave_resolved
+			wave_resolved="$(echo "$pj" | jq --argjson wid "$_wid" '[.tasks[]? | select(.wave_id_fk == $wid and (.status | IN("done","skipped","cancelled")))] | length' 2>/dev/null || echo 0)"
+			if [[ "$wave_resolved" -ge "$wt" && "$wt" -gt 0 ]]; then
+				_emit_event "wave_completed" "$plan_id" "{\"wave\":\"${wave_id}\",\"name\":\"${wave_name}\"}"
+			fi
+		done
+	done
 }
 _poll_remote_peers() {
-	# Coordinator-only: SSH into remote peers, read their heartbeat, merge locally
+	# Coordinator-only: SSH into remote peers, read their heartbeat via API, merge locally
 	peers_load 2>/dev/null || return 0
 	local self
 	self="$(peers_self 2>/dev/null || echo "")"
@@ -133,19 +142,16 @@ _poll_remote_peers() {
 		local alias
 		alias="$(_peers_get_raw "$name" "ssh_alias")"
 		[[ -z "$alias" ]] && continue
-		# Async SSH: read remote heartbeat (timeout 5s, non-blocking)
+		# Async SSH: read remote heartbeat via their daemon API (timeout 5s, non-blocking)
 		(
-			local row
-			row="$(ssh -o ConnectTimeout=4 -o BatchMode=yes "$alias" \
-				"sqlite3 ~/.claude/data/dashboard.db \"SELECT peer_name, last_seen, load_json, capabilities FROM peer_heartbeats WHERE peer_name='$name' LIMIT 1;\"" 2>/dev/null || echo "")"
-			[[ -z "$row" ]] && return
-			local rp rl rj rc
-			IFS='|' read -r rp rl rj rc <<< "$row"
-			[[ -z "$rp" || -z "$rl" ]] && return
-			# Escape single quotes for SQL
-			rj="${rj//\'/\'\'}"
-			rc="${rc//\'/\'\'}"
-			_db "INSERT OR REPLACE INTO peer_heartbeats (peer_name, last_seen, load_json, capabilities) VALUES ('${rp}', ${rl}, '${rj}', '${rc}');" 2>/dev/null || true
+			local remote_hb
+			remote_hb="$(ssh -o ConnectTimeout=4 -o BatchMode=yes "$alias" \
+				"curl -sf http://localhost:8420/api/heartbeat/status 2>/dev/null" 2>/dev/null || echo "")"
+			[[ -z "$remote_hb" ]] && return
+			# Forward the remote heartbeat to local daemon
+			curl -sf -X POST "${DAEMON_API}/api/heartbeat" \
+				-H 'Content-Type: application/json' \
+				-d "$remote_hb" 2>/dev/null || true
 		) &
 	done
 	# Don't wait — background SSH calls clean up on their own
@@ -195,9 +201,9 @@ cmd_start() {
 		fi
 	fi
 
-	if [[ ! -f "$DB" ]]; then
-		err "Database not found: $DB"
-		err "Set CLAUDE_DB or ensure $CLAUDE_HOME/data/dashboard.db exists."
+	if ! curl -sf "${DAEMON_API}/api/health" >/dev/null 2>&1; then
+		err "Daemon not reachable at ${DAEMON_API}"
+		err "Start the daemon with: ./daemon/start.sh"
 		return 1
 	fi
 
@@ -252,9 +258,9 @@ cmd_status() {
 	fi
 
 	echo ""
-	# Show last_seen for all peers from DB
-	if [[ ! -f "$DB" ]]; then
-		warn "Database not found: $DB"
+	# Show last_seen for all peers via daemon API
+	if ! curl -sf "${DAEMON_API}/api/health" >/dev/null 2>&1; then
+		warn "Daemon not reachable at ${DAEMON_API}"
 		return 0
 	fi
 
@@ -264,7 +270,9 @@ cmd_status() {
 	local now
 	now="$(date +%s)"
 
-	while IFS='|' read -r peer_name last_seen load_json caps; do
+	local hb_status
+	hb_status="$(curl -sf "${DAEMON_API}/api/heartbeat/status" 2>/dev/null || echo '[]')"
+	echo "$hb_status" | jq -r '.[] | "\(.peer_name)|\(.last_seen)|\(.load_json // "{}")|\(.capabilities // "")"' 2>/dev/null | while IFS='|' read -r peer_name last_seen load_json caps; do
 		[[ -z "$peer_name" ]] && continue
 		local age_str="never"
 		if [[ -n "$last_seen" && "$last_seen" =~ ^[0-9]+$ ]]; then
@@ -279,8 +287,7 @@ cmd_status() {
 		fi
 		printf "  %-20s %-22s %-30s %s\n" \
 			"$peer_name" "$age_str" "${load_json:-{}}" "${caps:-}"
-	done < <(_db "SELECT peer_name, last_seen, load_json, capabilities
-	              FROM peer_heartbeats ORDER BY peer_name;" 2>/dev/null || true)
+	done
 
 	echo ""
 }
@@ -288,8 +295,8 @@ cmd_status() {
 cmd_daemon() {
 	# Foreground mode for service managers (launchd, systemd).
 	# Runs the heartbeat loop WITHOUT forking — the OS manages the process.
-	if [[ ! -f "$DB" ]]; then
-		err "Database not found: $DB"
+	if ! curl -sf "${DAEMON_API}/api/health" >/dev/null 2>&1; then
+		err "Daemon not reachable at ${DAEMON_API}"
 		return 1
 	fi
 	info "Running in foreground (service mode). PID=$$"

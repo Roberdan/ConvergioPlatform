@@ -8,7 +8,9 @@ set -euo pipefail
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="${HOME}/.claude/data/dashboard.db"
+DAEMON_API="http://localhost:8420"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -68,15 +70,12 @@ cleanup_worktree() {
 	local wt_path="$1"
 	local branch="$2"
 
-	# Safety: check for active sessions using this worktree
-	if [[ -f "$DB_FILE" ]]; then
-		local active_locks
-		active_locks=$(sqlite3 "$DB_FILE" \
-			"SELECT COUNT(*) FROM file_locks WHERE file_path LIKE '${wt_path}%';" 2>/dev/null || echo "0")
-		if [[ "$active_locks" -gt 0 ]]; then
-			echo -e "${RED}  BLOCK: $wt_path has $active_locks active file lock(s) — another agent is using it${NC}"
-			return 1
-		fi
+	# Safety: check for active sessions using this worktree via daemon API
+	local active_locks
+	active_locks="$(curl -sf "${DAEMON_API}/api/ipc/locks" 2>/dev/null | jq --arg wp "$wt_path" '[.[] | select(.file_path | startswith($wp))] | length' 2>/dev/null || echo "0")"
+	if [[ "$active_locks" -gt 0 ]]; then
+		echo -e "${RED}  BLOCK: $wt_path has $active_locks active file lock(s) — another agent is using it${NC}"
+		return 1
 	fi
 	# Safety: check for running processes in the worktree
 	if pgrep -f "$wt_path" >/dev/null 2>&1; then
@@ -132,16 +131,16 @@ cleanup_worktree() {
 	echo -e "${GREEN}  Deleting branch: $branch${NC}"
 	git branch -d "$branch" 2>/dev/null || true
 
-	# Update plan DB if worktree_path matches
-	if [[ -f "$DB_FILE" ]]; then
-		local plan_id
-		plan_id=$(sqlite3 "$DB_FILE" \
-			"SELECT id FROM plans WHERE worktree_path LIKE '%${wt_path##*/}' OR worktree_path='$wt_path' LIMIT 1;" 2>/dev/null || echo "")
-		if [[ -n "$plan_id" ]]; then
-			sqlite3 "$DB_FILE" \
-				"UPDATE plans SET worktree_path = NULL WHERE id = $plan_id;"
-			echo -e "${GREEN}  DB: Cleared worktree_path for plan $plan_id${NC}"
-		fi
+	# Update plan DB if worktree_path matches via daemon API
+	local plan_id
+	plan_id="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null | jq -r --arg wp "$wt_path" --arg wps "${wt_path##*/}" '
+		[.[] | select(.worktree_path != null and (.worktree_path == $wp or (.worktree_path | endswith($wps))))] | .[0].id // empty
+	' 2>/dev/null || echo "")"
+	if [[ -n "$plan_id" ]]; then
+		curl -sf -X POST "${DAEMON_API}/api/plan-db/task/update" \
+			-H 'Content-Type: application/json' \
+			-d "{\"plan_id\":${plan_id},\"worktree_path\":null}" 2>/dev/null || true
+		echo -e "${GREEN}  DB: Cleared worktree_path for plan $plan_id${NC}"
 	fi
 
 	return 0
@@ -151,10 +150,11 @@ cleanup_wave() {
 	local wave_db_id="$1"
 	local dry_run="${2:-0}"
 
+	# Find the wave info via plan-db list
 	local wave_info
-	wave_info=$(sqlite3 -separator '|' "$DB_FILE" \
-		"SELECT w.worktree_path, w.branch_name, w.plan_id
-         FROM waves w WHERE w.id = $wave_db_id;" 2>/dev/null)
+	wave_info="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null | jq -r --argjson wid "$wave_db_id" '
+		[.[] | .waves[]? | select(.id == $wid)] | .[0] | "\(.worktree_path // "")|\(.branch_name // "")|\(.plan_id // "")"
+	' 2>/dev/null || echo '')"
 
 	if [[ -z "$wave_info" ]]; then
 		echo "Wave $wave_db_id not found"
@@ -182,16 +182,17 @@ cleanup_wave() {
 		cleanup_worktree "$wt_path" "$branch"
 	fi
 
-	# Clear wave DB fields
-	sqlite3 "$DB_FILE" "UPDATE waves SET worktree_path = NULL, branch_name = NULL WHERE id = $wave_db_id;"
+	# Clear wave DB fields via daemon API
+	curl -sf -X POST "${DAEMON_API}/api/plan-db/task/update" \
+		-H 'Content-Type: application/json' \
+		-d "{\"wave_id\":${wave_db_id},\"worktree_path\":null,\"branch_name\":null}" 2>/dev/null || true
 	echo "Cleaned up wave $wave_db_id worktree"
 }
 
 case "$MODE" in
 plan)
 	echo -e "${BLUE}=== CLEANUP WORKTREE FOR PLAN $TARGET ===${NC}"
-	WT_PATH=$(sqlite3 "$DB_FILE" \
-		"SELECT worktree_path FROM plans WHERE id=$TARGET;" 2>/dev/null || echo "")
+	WT_PATH="$(cvg plan show "$TARGET" 2>/dev/null | jq -r '.worktree_path // ""' 2>/dev/null || echo "")"
 
 	if [[ -z "$WT_PATH" || ! -d "$WT_PATH" ]]; then
 		echo -e "${YELLOW}No worktree found for plan $TARGET${NC}"
@@ -207,8 +208,7 @@ plan)
 	cleanup_worktree "$WT_PATH" "$BRANCH"
 
 	# Also clean up wave-level worktrees for this plan
-	wave_ids=$(sqlite3 "$DB_FILE" \
-		"SELECT id FROM waves WHERE plan_id = $TARGET AND worktree_path IS NOT NULL AND worktree_path <> '';" 2>/dev/null || true)
+	wave_ids="$(cvg plan show "$TARGET" 2>/dev/null | jq -r '.waves[]? | select(.worktree_path != null and .worktree_path != "") | .id' 2>/dev/null || true)"
 	if [[ -n "$wave_ids" ]]; then
 		while IFS= read -r wid; do
 			[[ -z "$wid" ]] && continue

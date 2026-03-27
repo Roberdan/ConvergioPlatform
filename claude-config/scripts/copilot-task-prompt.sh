@@ -14,25 +14,27 @@ if [[ -z "$TASK_ID" ]]; then
 fi
 AGENT_ROLE="${2:-executor}"
 
-DB_FILE="${HOME}/.claude/data/dashboard.db"
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTEXT_LOADER="${SCRIPT_DIR}/lib/agent-context-loader.sh"
 
-# Fetch task + wave + plan info in one query
-TASK_JSON=$(sqlite3 "$DB_FILE" "
-	SELECT json_object(
-		'task_id', t.task_id, 'title', t.title,
-		'description', COALESCE(t.description,''),
-		'test_criteria', COALESCE(t.test_criteria,''),
-		'wave_id', w.wave_id, 'wave_name', w.name,
-		'plan_id', t.plan_id, 'plan_name', p.name,
-		'worktree_path', COALESCE(w.worktree_path, p.worktree_path, ''),
-		'db_task_id', t.id
-	) FROM tasks t
-	JOIN waves w ON t.wave_id_fk = w.id
-	JOIN plans p ON t.plan_id = p.id
-	WHERE t.id = $TASK_ID;
-")
+# Fetch task + wave + plan info via daemon API
+_plan_list="$(curl -sf http://localhost:8420/api/plan-db/list 2>/dev/null || echo '[]')"
+# Find the plan containing this task by DB id
+_plan_id="$(echo "$_plan_list" | jq -r --argjson tid "$TASK_ID" '[.[] | select(.tasks[]? | (.id // .db_task_id) == $tid)] | .[0].id // empty' 2>/dev/null || echo '')"
+if [[ -z "$_plan_id" ]]; then
+	echo "Task $TASK_ID not found in any plan" >&2
+	exit 1
+fi
+_plan_json="$(cvg plan show "$_plan_id" 2>/dev/null || echo '{}')"
+TASK_JSON="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '
+	.tasks[] | select((.id // .db_task_id) == $tid) |
+	{task_id: .task_id, title: .title, description: (.description // ""),
+	 test_criteria: (.test_criteria // ""), wave_id: .wave_id, wave_name: .wave_name,
+	 plan_id: '"$_plan_id"', plan_name: "'"$(echo "$_plan_json" | jq -r '.name // ""')"'",
+	 worktree_path: (.worktree_path // ""), db_task_id: (.id // .db_task_id)}
+' 2>/dev/null || echo '')"
 
 if [[ -z "$TASK_JSON" ]]; then
 	echo "Task $TASK_ID not found" >&2
@@ -52,34 +54,22 @@ PLAN_ID=$(echo "$TASK_JSON" | jq -r '.plan_id')
 WT="${WT_RAW/#\~/$HOME}"
 
 # Fetch completed tasks with output_data from same plan (inter-task context)
-PRIOR_OUTPUTS=$(sqlite3 "$DB_FILE" "
-	SELECT group_concat(
-		t.task_id || ': ' || COALESCE(t.output_data, ''),
-		char(10)
-	) FROM tasks t
-	JOIN waves w ON t.wave_id_fk = w.id
-	WHERE t.plan_id = $PLAN_ID
-	  AND t.status = 'done'
-	  AND t.output_data IS NOT NULL
-	  AND t.output_data <> ''
-	ORDER BY w.position, t.task_id;
-")
+PRIOR_OUTPUTS="$(echo "$_plan_json" | jq -r '
+	[.tasks[] | select(.status == "done" and .output_data != null and .output_data != "") |
+	 "\(.task_id): \(.output_data)"] | join("\n")
+' 2>/dev/null || echo '')"
 
 # Check for PR feedback from previous wave (overlapping wave protocol)
 PR_FEEDBACK=""
-PREV_WAVE_INFO=$(sqlite3 "$DB_FILE" "
-	SELECT pw.id, pw.pr_number, pw.merge_mode
-	FROM waves pw
-	WHERE pw.plan_id = $PLAN_ID
-	  AND pw.position < (SELECT cw.position FROM waves cw JOIN tasks ct ON ct.wave_id_fk = cw.id WHERE ct.id = $TASK_ID)
-	  AND pw.merge_mode = 'async'
-	ORDER BY pw.position DESC LIMIT 1;
-" 2>/dev/null || true)
-if [[ -n "$PREV_WAVE_INFO" ]]; then
-	PREV_WAVE_ID=$(echo "$PREV_WAVE_INFO" | cut -d'|' -f1)
-	FEEDBACK_FILE="${HOME}/.claude/data/pr-feedback-wave-${PREV_WAVE_ID}.txt"
+# Extract current task's wave position, then find previous async wave
+_cur_wave_pos="$(echo "$_plan_json" | jq -r --arg wid "$WAVE" '.waves[]? | select(.wave_id == $wid) | .position // 0' 2>/dev/null || echo 0)"
+PREV_WAVE_DB_ID="$(echo "$_plan_json" | jq -r --argjson pos "$_cur_wave_pos" '
+	[.waves[]? | select(.position < $pos and .merge_mode == "async")] | sort_by(.position) | last | .id // empty
+' 2>/dev/null || echo '')"
+if [[ -n "$PREV_WAVE_DB_ID" ]]; then
+	FEEDBACK_FILE="${HOME}/.claude/data/pr-feedback-wave-${PREV_WAVE_DB_ID}.txt"
 	if [[ -f "$FEEDBACK_FILE" ]]; then
-		PR_FEEDBACK=$(cat "$FEEDBACK_FILE" 2>/dev/null | head -50)
+		PR_FEEDBACK=$(head -50 "$FEEDBACK_FILE" 2>/dev/null || true)
 	fi
 fi
 

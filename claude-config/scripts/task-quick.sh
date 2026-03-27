@@ -2,6 +2,7 @@
 set -euo pipefail
 trap 'echo "ERROR at line $LINENO" >&2' ERR
 # Quick Task Operations - Reduces token usage for common operations
+# Version: 2.0.0 — migrated from sqlite3 to cvg CLI / daemon API
 # Usage: task-quick.sh <command> [args]
 #
 # Commands:
@@ -9,43 +10,57 @@ trap 'echo "ERROR at line $LINENO" >&2' ERR
 #   done <task_id>      - Mark task done
 #   status              - Show current task status
 #   next                - Show next pending task
-
-# Version: 1.0.0
-set -euo pipefail
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="${HOME}/.claude/data/dashboard.db"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 case "${1:-help}" in
     start)
         TASK_ID="${2:?task_id required}"
         "$SCRIPT_DIR/plan-db.sh" update-task "$TASK_ID" in_progress "Started via task-quick"
-        sqlite3 "$DB_FILE" "SELECT task_id, title FROM tasks WHERE id = $TASK_ID;"
+        # Show task info via daemon API
+        PLAN_LIST=$(curl -sf "${DAEMON_URL}/api/plan-db/list" 2>/dev/null | jq -r '.[].id' 2>/dev/null) || PLAN_LIST=""
+        for pid in $PLAN_LIST; do
+            TASK_JSON=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" | jq -c ".tasks[]? | select(.id==${TASK_ID} or .db_id==${TASK_ID})" 2>/dev/null)
+            if [[ -n "$TASK_JSON" ]]; then
+                echo "$TASK_JSON" | jq -r '"\(.task_id)|\(.title // "")"'
+                break
+            fi
+        done
         ;;
     done)
         TASK_ID="${2:?task_id required}"
         NOTES="${3:-Completed via task-quick}"
         "$SCRIPT_DIR/plan-db.sh" update-task "$TASK_ID" done "$NOTES"
-        sqlite3 "$DB_FILE" "SELECT task_id, title, status FROM tasks WHERE id = $TASK_ID;"
+        # Show task info via daemon API
+        PLAN_LIST=$(curl -sf "${DAEMON_URL}/api/plan-db/list" 2>/dev/null | jq -r '.[].id' 2>/dev/null) || PLAN_LIST=""
+        for pid in $PLAN_LIST; do
+            TASK_JSON=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" | jq -c ".tasks[]? | select(.id==${TASK_ID} or .db_id==${TASK_ID})" 2>/dev/null)
+            if [[ -n "$TASK_JSON" ]]; then
+                echo "$TASK_JSON" | jq -r '"\(.task_id)|\(.title // "")|\(.status // "")"'
+                break
+            fi
+        done
         ;;
     status)
         echo "=== In Progress ==="
-        sqlite3 -column "$DB_FILE" "
-            SELECT t.id, t.task_id, t.title, w.wave_id
-            FROM tasks t JOIN waves w ON t.wave_id_fk = w.id
-            WHERE t.status = 'in_progress' LIMIT 5;
-        "
+        # Get all active plans and find in_progress tasks
+        PLAN_LIST=$(curl -sf "${DAEMON_URL}/api/plan-db/list" 2>/dev/null | jq -r '.[] | select(.status == "doing") | .id' 2>/dev/null) || PLAN_LIST=""
+        for pid in $PLAN_LIST; do
+            curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" 2>/dev/null | \
+                jq -r '.tasks[]? | select(.status == "in_progress") | "\(.id // .db_id)\t\(.task_id)\t\(.title // "")\t\(.wave_id // "")"' 2>/dev/null || true
+        done | head -5
         ;;
     next)
         echo "=== Next Pending ==="
-        sqlite3 -column "$DB_FILE" "
-            SELECT t.id, t.task_id, t.title, w.wave_id, p.name as plan
-            FROM tasks t
-            JOIN waves w ON t.wave_id_fk = w.id
-            JOIN plans p ON w.plan_id = p.id
-            WHERE t.status = 'pending' AND p.status = 'doing'
-            ORDER BY w.position, t.id LIMIT 3;
-        "
+        # Get all active plans and find pending tasks
+        PLAN_LIST=$(curl -sf "${DAEMON_URL}/api/plan-db/list" 2>/dev/null | jq -r '.[] | select(.status == "doing") | .id' 2>/dev/null) || PLAN_LIST=""
+        for pid in $PLAN_LIST; do
+            PLAN_NAME=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" 2>/dev/null | jq -r '.name // ""')
+            curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" 2>/dev/null | \
+                jq -r --arg pname "$PLAN_NAME" '.tasks[]? | select(.status == "pending") | "\(.id // .db_id)\t\(.task_id)\t\(.title // "")\t\(.wave_id // "")\t\($pname)"' 2>/dev/null || true
+        done | head -3
         ;;
     *)
         echo "Usage: task-quick.sh <start|done|status|next> [args]"

@@ -8,64 +8,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/digest-cache.sh"
 source "$SCRIPT_DIR/lib/cost-calculator.sh"
 
-DB_FILE="${PLAN_DB_FILE:-$HOME/.claude/data/dashboard.db}"
+DAEMON_API="http://localhost:8420"
 CACHE_TTL=10
 NO_CACHE=0
 COMPACT=0
 
+command -v jq &>/dev/null || { echo '{"status":"error","msg":"jq required"}' >&2; exit 1; }
+
 digest_check_compact "$@"
 
-require_db() {
-	[[ -f "$DB_FILE" ]] || {
-		jq -n --arg db "$DB_FILE" '{status:"error",msg:"dashboard DB not found",db:$db}' >&2
+require_daemon() {
+	curl -sf "${DAEMON_API}/api/health" >/dev/null 2>&1 || {
+		jq -n '{status:"error",msg:"daemon not reachable at '"$DAEMON_API"'"}' >&2
 		exit 1
 	}
 }
 
-require_cols() {
-	local table="$1"
-	shift
-	local col missing=0
-	for col in "$@"; do
-		local exists
-		exists=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM pragma_table_info('$table') WHERE name='$col';")
-		if [[ "$exists" != "1" ]]; then
-			echo "missing:$col"
-			missing=1
-		fi
-	done
-	[[ "$missing" -eq 0 ]]
-}
-
-validate_or_die() {
-	local table="$1"
-	shift
-	local misses
-	misses=$(require_cols "$table" "$@" || true)
-	[[ -z "$misses" ]] && return 0
-	jq -n --arg table "$table" --arg miss "$misses" \
-		'{status:"error",msg:"schema validation failed",table:$table,missing:($miss | split("\n") | map(select(length>0) | sub("^missing:";"")))}' >&2
-	exit 1
-}
-
 cmd_plans() {
-	validate_or_die plans id project_id name status tasks_done tasks_total
-	sqlite3 -json "$DB_FILE" "
-    SELECT
-      id,
-      project_id,
-      name,
-      status,
-      tasks_done,
-      tasks_total,
-      CASE WHEN tasks_total > 0 THEN ROUND((tasks_done * 100.0) / tasks_total, 1) ELSE 0 END AS progress_pct
-    FROM plans
-    WHERE status IN ('todo','doing')
-    ORDER BY
-      CASE status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 ELSE 2 END,
-      updated_at DESC,
-      id DESC;
-  "
+	local all_plans
+	all_plans="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '[]')"
+	echo "$all_plans" | jq '[.[] | select(.status == "todo" or .status == "doing") |
+		{id, project_id, name, status, tasks_done, tasks_total,
+		 progress_pct: (if .tasks_total > 0 then ((.tasks_done * 100.0 / .tasks_total) * 10 | round / 10) else 0 end)}
+	] | sort_by(if .status == "doing" then 0 elif .status == "todo" then 1 else 2 end)'
 }
 
 cmd_tasks() {
@@ -74,25 +39,19 @@ cmd_tasks() {
 		echo '{"status":"error","msg":"plan_id required for tasks"}' >&2
 		exit 1
 	}
-	validate_or_die tasks id plan_id status
-	sqlite3 -json "$DB_FILE" "
-    WITH base AS (
-      SELECT status, COUNT(*) AS cnt
-      FROM tasks
-      WHERE plan_id = $plan_id
-      GROUP BY status
-    )
-    SELECT
-      $plan_id AS plan_id,
-      (SELECT COUNT(*) FROM tasks WHERE plan_id = $plan_id) AS total_tasks,
-      COALESCE((SELECT cnt FROM base WHERE status='pending'),0) AS pending,
-      COALESCE((SELECT cnt FROM base WHERE status='in_progress'),0) AS in_progress,
-      COALESCE((SELECT cnt FROM base WHERE status='submitted'),0) AS submitted,
-      COALESCE((SELECT cnt FROM base WHERE status='done'),0) AS done,
-      COALESCE((SELECT cnt FROM base WHERE status='blocked'),0) AS blocked,
-      COALESCE((SELECT cnt FROM base WHERE status='cancelled'),0) AS cancelled,
-      COALESCE((SELECT cnt FROM base WHERE status='skipped'),0) AS skipped;
-  " | jq '.[0]'
+	local plan_json
+	plan_json="$(cvg plan show "$plan_id" 2>/dev/null || echo '{}')"
+	echo "$plan_json" | jq --argjson pid "$plan_id" '{
+		plan_id: $pid,
+		total_tasks: ([.tasks[]] | length),
+		pending: ([.tasks[] | select(.status == "pending")] | length),
+		in_progress: ([.tasks[] | select(.status == "in_progress")] | length),
+		submitted: ([.tasks[] | select(.status == "submitted")] | length),
+		done: ([.tasks[] | select(.status == "done")] | length),
+		blocked: ([.tasks[] | select(.status == "blocked")] | length),
+		cancelled: ([.tasks[] | select(.status == "cancelled")] | length),
+		skipped: ([.tasks[] | select(.status == "skipped")] | length)
+	}'
 }
 
 cmd_waves() {
@@ -101,48 +60,37 @@ cmd_waves() {
 		echo '{"status":"error","msg":"plan_id required for waves"}' >&2
 		exit 1
 	}
-	validate_or_die waves id plan_id wave_id name status tasks_done tasks_total
-	sqlite3 -json "$DB_FILE" "
-    SELECT
-      id,
-      wave_id,
-      name,
-      status,
-      tasks_done,
-      tasks_total,
-      CASE WHEN tasks_total > 0 THEN ROUND((tasks_done * 100.0) / tasks_total, 1) ELSE 0 END AS progress_pct,
-      merge_mode,
-      theme
-    FROM waves
-    WHERE plan_id = $plan_id
-    ORDER BY position ASC, id ASC;
-  "
+	local plan_json
+	plan_json="$(cvg plan show "$plan_id" 2>/dev/null || echo '{}')"
+	echo "$plan_json" | jq '[.waves[]? |
+		{id, wave_id, name, status, tasks_done, tasks_total,
+		 progress_pct: (if .tasks_total > 0 then ((.tasks_done * 100.0 / .tasks_total) * 10 | round / 10) else 0 end),
+		 merge_mode, theme}
+	] | sort_by(.position // 0, .id)'
 }
 
 cmd_stats() {
-	validate_or_die plans id status
-	sqlite3 -json "$DB_FILE" "
-    SELECT
-      COUNT(*) AS total_plans,
-      SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done,
-      SUM(CASE WHEN status IN ('todo','doing') THEN 1 ELSE 0 END) AS active,
-      SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
-    FROM plans;
-  " | jq '.[0]'
+	local overview
+	overview="$(curl -sf "${DAEMON_API}/api/overview" 2>/dev/null || echo '{}')"
+	echo "$overview" | jq '{
+		total_plans: (.total_plans // 0),
+		done: (.plans_done // 0),
+		active: (.plans_active // 0),
+		cancelled: (.plans_cancelled // 0)
+	}'
 }
 
 cmd_token_stats() {
-	validate_or_die tasks id status tokens executor_agent
-	sqlite3 -json "$DB_FILE" "
-    SELECT
-      COUNT(*) AS tasks_done,
-      SUM(CASE WHEN tokens > 0 THEN 1 ELSE 0 END) AS tasks_tracked,
-      COALESCE(SUM(tokens), 0) AS total_tokens,
-      ROUND(COALESCE(AVG(CASE WHEN tokens > 0 THEN tokens END), 0)) AS avg_tokens_per_task,
-      SUM(CASE WHEN executor_agent = 'copilot' OR executor_agent IS NULL THEN 1 ELSE 0 END) AS copilot_tasks,
-      SUM(CASE WHEN executor_agent = 'claude' THEN 1 ELSE 0 END) AS claude_tasks
-    FROM tasks WHERE status = 'done';
-  " | jq '.[0]'
+	local metrics
+	metrics="$(curl -sf "${DAEMON_API}/api/metrics/summary" 2>/dev/null || echo '{}')"
+	echo "$metrics" | jq '{
+		tasks_done: (.tasks_done // 0),
+		tasks_tracked: (.tasks_tracked // 0),
+		total_tokens: (.total_tokens // 0),
+		avg_tokens_per_task: (.avg_tokens_per_task // 0),
+		copilot_tasks: (.copilot_tasks // 0),
+		claude_tasks: (.claude_tasks // 0)
+	}'
 }
 
 cmd_cost_report() {
@@ -154,19 +102,9 @@ cmd_cost_report() {
 }
 
 cmd_monthly() {
-	validate_or_die plans id status created_at
-	sqlite3 -json "$DB_FILE" "
-    SELECT
-      substr(created_at,1,7) AS month,
-      COUNT(*) AS plans,
-      SUM(tasks_done) AS tasks_done,
-      SUM(tasks_total) AS tasks_total
-    FROM plans
-    WHERE status != 'cancelled' AND created_at IS NOT NULL
-    GROUP BY month
-    ORDER BY month DESC
-    LIMIT 6;
-  "
+	local overview
+	overview="$(curl -sf "${DAEMON_API}/api/overview" 2>/dev/null || echo '{}')"
+	echo "$overview" | jq '.monthly // []'
 }
 
 print_help() {
@@ -199,7 +137,7 @@ done
 	exit 0
 }
 
-require_db
+require_daemon
 CACHE_KEY="db-${COMMAND}-${PLAN_ID:-none}"
 if [[ "$NO_CACHE" -eq 0 ]] && digest_cache_get "$CACHE_KEY" "$CACHE_TTL"; then
 	exit 0

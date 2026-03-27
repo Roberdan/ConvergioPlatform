@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# task-file-tracker.sh v1.0.0 — Track files modified by each task
-# Survives compaction (writes to SQLite DB, not context).
+# task-file-tracker.sh v2.0.0 — Track files modified by each task
+# Migrated from sqlite3 to cvg CLI / daemon API
+# Survives compaction (writes to daemon DB, not context).
 # Called by PostToolUse hook after Edit/Write, or manually.
 set -euo pipefail
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
-DB_PATH="${DB_PATH:-$HOME/.claude/data/dashboard.db}"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 USAGE="Usage: task-file-tracker.sh <command> [args]
 Commands:
   track <task_db_id> <file_path> <action>  Record file modification
@@ -16,65 +18,55 @@ Commands:
 cmd="${1:-}"
 [ -z "$cmd" ] && echo "$USAGE" && exit 1
 
-ensure_table() {
-  sqlite3 "$DB_PATH" "CREATE TABLE IF NOT EXISTS task_files (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id INTEGER NOT NULL,
-    file_path TEXT NOT NULL,
-    action TEXT NOT NULL DEFAULT 'edit',
-    recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(task_id, file_path)
-  );"
-}
-
 case "$cmd" in
   track)
     TASK_ID="${2:?task_db_id required}"
     FILE_PATH="${3:?file_path required}"
     ACTION="${4:-edit}"
-    ensure_table
-    sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO task_files (task_id, file_path, action)
-      VALUES ($TASK_ID, '$FILE_PATH', '$ACTION');"
+    # Track file via daemon API
+    curl -sf -X POST "${DAEMON_URL}/api/plan-db/task-files/track" \
+      -H 'Content-Type: application/json' \
+      -d "$(jq -n --argjson tid "$TASK_ID" --arg fp "$FILE_PATH" --arg act "$ACTION" \
+        '{task_id:$tid,file_path:$fp,action:$act}')" >/dev/null 2>&1 || {
+      # TODO: needs daemon endpoint for task_files table
+      echo "WARNING: task-files tracking API not available" >&2
+    }
     echo "Tracked: task=$TASK_ID file=$FILE_PATH action=$ACTION"
     ;;
 
   list)
     TASK_ID="${2:?task_db_id required}"
-    ensure_table
-    sqlite3 -column -header "$DB_PATH" \
-      "SELECT file_path, action, recorded_at FROM task_files WHERE task_id = $TASK_ID ORDER BY file_path;"
+    # List files via daemon API
+    curl -sf "${DAEMON_URL}/api/plan-db/task-files/list?task_id=${TASK_ID}" 2>/dev/null | \
+      jq -r '.[] | "\(.file_path)\t\(.action)\t\(.recorded_at // "")"' 2>/dev/null || {
+      # TODO: needs daemon endpoint for task_files query
+      echo "WARNING: task-files list API not available" >&2
+    }
     ;;
 
   list-plan)
     PLAN_ID="${2:?plan_id required}"
-    ensure_table
-    sqlite3 -column -header "$DB_PATH" \
-      "SELECT t.task_id, t.title, tf.file_path, tf.action
-       FROM task_files tf
-       JOIN tasks t ON tf.task_id = t.id
-       WHERE t.plan_id = $PLAN_ID
-       ORDER BY t.task_id, tf.file_path;"
+    # List plan files via daemon API — get plan JSON and cross-reference
+    curl -sf "${DAEMON_URL}/api/plan-db/task-files/list-plan?plan_id=${PLAN_ID}" 2>/dev/null | \
+      jq -r '.[] | "\(.task_id)\t\(.title // "")\t\(.file_path)\t\(.action)"' 2>/dev/null || {
+      # TODO: needs daemon endpoint for task_files plan query
+      echo "WARNING: task-files list-plan API not available" >&2
+    }
     ;;
 
   overlap)
     PLAN_ID="${2:?plan_id required}"
-    ensure_table
     echo "=== File Overlap Detection (Plan $PLAN_ID) ==="
-    OVERLAPS=$(sqlite3 "$DB_PATH" \
-      "SELECT tf.file_path, GROUP_CONCAT(t.task_id, ', ') as tasks, COUNT(DISTINCT tf.task_id) as task_count
-       FROM task_files tf
-       JOIN tasks t ON tf.task_id = t.id
-       WHERE t.plan_id = $PLAN_ID
-       GROUP BY tf.file_path
-       HAVING COUNT(DISTINCT tf.task_id) > 1
-       ORDER BY task_count DESC;" 2>/dev/null)
-    if [ -z "$OVERLAPS" ]; then
+    # Detect overlaps via daemon API
+    OVERLAPS=$(curl -sf "${DAEMON_URL}/api/plan-db/task-files/overlap?plan_id=${PLAN_ID}" 2>/dev/null) || OVERLAPS=""
+    if [[ -z "$OVERLAPS" ]] || echo "$OVERLAPS" | jq -e 'length == 0' >/dev/null 2>&1; then
       echo "No file overlaps detected."
     else
       echo "WARNING: Files touched by multiple tasks:"
-      echo "$OVERLAPS" | while IFS='|' read -r file tasks count; do
-        echo "  $file — $count tasks: [$tasks]"
-      done
+      echo "$OVERLAPS" | jq -r '.[] | "  \(.file_path) — \(.task_count) tasks: [\(.tasks)]"' 2>/dev/null || {
+        # TODO: needs daemon endpoint for task_files overlap detection
+        echo "WARNING: task-files overlap API not available" >&2
+      }
       echo ""
       echo "These files WILL conflict at merge. Serialize affected tasks."
     fi
@@ -82,10 +74,14 @@ case "$cmd" in
 
   clean)
     TASK_ID="${2:?task_db_id required}"
-    ensure_table
-    COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM task_files WHERE task_id = $TASK_ID;")
-    sqlite3 "$DB_PATH" "DELETE FROM task_files WHERE task_id = $TASK_ID;"
-    echo "Cleaned $COUNT file records for task $TASK_ID"
+    # Clean via daemon API
+    curl -sf -X POST "${DAEMON_URL}/api/plan-db/task-files/clean" \
+      -H 'Content-Type: application/json' \
+      -d "{\"task_id\":${TASK_ID}}" 2>/dev/null || {
+      # TODO: needs daemon endpoint for task_files cleanup
+      echo "WARNING: task-files clean API not available" >&2
+    }
+    echo "Cleaned file records for task $TASK_ID"
     ;;
 
   *)

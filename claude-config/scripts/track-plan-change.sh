@@ -8,10 +8,10 @@ set -euo pipefail
 set -euo pipefail
 
 CLAUDE_HOME="${HOME}/.claude"
-DB_FILE="${CLAUDE_HOME}/data/dashboard.db"
+DAEMON_API="http://localhost:8420"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./lib/sql-utils.sh
-source "$SCRIPT_DIR/lib/sql-utils.sh"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 # Required args
 PROJECT_ID="${1:-}"
@@ -64,12 +64,6 @@ done
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Get current version number
-PROJECT_ID_SQL=$(sql_quote "$PROJECT_ID")
-PLAN_NAME_SQL=$(sql_quote "$PLAN_NAME")
-CURRENT_VERSION=$(sqlite3 "$DB_FILE" "SELECT COALESCE(MAX(version), 0) FROM plan_versions WHERE project_id=$PROJECT_ID_SQL AND plan_name=$PLAN_NAME_SQL")
-NEW_VERSION=$((CURRENT_VERSION + 1))
-
 # Get git commit hash if in repo
 GIT_HASH=""
 PLAN_FOLDER="${CLAUDE_HOME}/plans/${PROJECT_ID}"
@@ -78,60 +72,30 @@ if [[ -d "${CLAUDE_HOME}/.git" ]]; then
 	GIT_HASH=$(git rev-parse HEAD 2>/dev/null || echo "")
 fi
 
-# Build SQL values
-TASKS_BEFORE_SQL="${TASKS_BEFORE:-NULL}"
-TASKS_AFTER_SQL="${TASKS_AFTER:-NULL}"
+# Track plan change via daemon API
+_result="$(curl -sf -X POST "${DAEMON_API}/api/events" \
+	-H 'Content-Type: application/json' \
+	-d "$(jq -nc \
+		--arg pid "$PROJECT_ID" --arg pname "$PLAN_NAME" --arg ct "$CHANGE_TYPE" \
+		--arg reason "$REASON" --arg diff "$DIFF_SUMMARY" --arg git "$GIT_HASH" \
+		--arg ts "$TIMESTAMP" --arg tb "${TASKS_BEFORE:-}" --arg ta "${TASKS_AFTER:-}" \
+		'{type:"plan_version", project_id:$pid, plan_name:$pname, change_type:$ct,
+		 change_reason:$reason, diff_summary:$diff, git_commit_hash:$git,
+		 tasks_before:($tb | if . == "" then null else tonumber end),
+		 tasks_after:($ta | if . == "" then null else tonumber end),
+		 created_at:$ts}')" 2>/dev/null || echo '{}')"
 
-# Quote string values for SQL
-CHANGE_TYPE_SQL=$(sql_quote "$CHANGE_TYPE")
-REASON_SQL=$(sql_quote_or_null "$REASON")
-DIFF_SQL=$(sql_quote_or_null "$DIFF_SUMMARY")
-GIT_HASH_SQL=$(sql_quote_or_null "$GIT_HASH")
-TIMESTAMP_SQL=$(sql_quote "$TIMESTAMP")
+NEW_VERSION="$(echo "$_result" | jq -r '.version // 1' 2>/dev/null || echo 1)"
 
-# Insert version record
-sqlite3 "$DB_FILE" <<EOF
-INSERT INTO plan_versions (
-    project_id,
-    plan_name,
-    version,
-    change_type,
-    change_reason,
-    tasks_before,
-    tasks_after,
-    diff_summary,
-    git_commit_hash,
-    created_at
-) VALUES (
-    $PROJECT_ID_SQL,
-    $PLAN_NAME_SQL,
-    $NEW_VERSION,
-    $CHANGE_TYPE_SQL,
-    $REASON_SQL,
-    $TASKS_BEFORE_SQL,
-    $TASKS_AFTER_SQL,
-    $DIFF_SQL,
-    $GIT_HASH_SQL,
-    $TIMESTAMP_SQL
-);
-EOF
-
-# Also update plans table status if needed
+# Also update plans table status if needed via cvg CLI
 if [[ "$CHANGE_TYPE" == "created" ]]; then
-	PLAN_FILE="${PLAN_FOLDER}/${PLAN_NAME}.md"
-	PLAN_FILE_SQL=$(sql_quote "$PLAN_FILE")
-	sqlite3 "$DB_FILE" <<EOF
-INSERT INTO plans (project_id, plan_name, plan_file, status, tasks_total, created_at)
-VALUES ($PROJECT_ID_SQL, $PLAN_NAME_SQL, $PLAN_FILE_SQL, 'active', ${TASKS_AFTER:-0}, $TIMESTAMP_SQL)
-ON CONFLICT(project_id, plan_name) DO UPDATE SET
-    status = 'active',
-    tasks_total = ${TASKS_AFTER:-tasks_total};
-EOF
+	# Plan creation is handled by cvg plan create
+	true
 elif [[ "$CHANGE_TYPE" == "completed" ]]; then
-	sqlite3 "$DB_FILE" <<EOF
-UPDATE plans SET status = 'completed', completed_at = $TIMESTAMP_SQL, tasks_done = tasks_total
-WHERE project_id = $PROJECT_ID_SQL AND plan_name = $PLAN_NAME_SQL;
-EOF
+	# Mark plan as completed via API
+	curl -sf -X POST "${DAEMON_API}/api/plan-status" \
+		-H 'Content-Type: application/json' \
+		-d "$(jq -nc --arg pid "$PROJECT_ID" --arg pname "$PLAN_NAME" '{project_id:$pid, plan_name:$pname, status:"completed"}')" 2>/dev/null || true
 fi
 
 # Auto-commit to git if configured
@@ -141,10 +105,7 @@ if [[ -d "${CLAUDE_HOME}/.git" && -n "$GIT_HASH" ]]; then
 		git add "plans/${PROJECT_ID}/" 2>/dev/null || true
 		git commit -m "plan(${PROJECT_ID}): ${CHANGE_TYPE} - ${PLAN_NAME} v${NEW_VERSION}" \
 			-m "${REASON:-No reason provided}" \
-			-m "🤖 Generated with [Claude Code](https://claude.com/claude-code)" 2>/dev/null || true
-		NEW_GIT_HASH=$(git rev-parse HEAD)
-		NEW_GIT_HASH_SQL=$(sql_quote "$NEW_GIT_HASH")
-		sqlite3 "$DB_FILE" "UPDATE plan_versions SET git_commit_hash=$NEW_GIT_HASH_SQL WHERE project_id=$PROJECT_ID_SQL AND plan_name=$PLAN_NAME_SQL AND version=$NEW_VERSION"
+			-m "Generated with [Claude Code](https://claude.com/claude-code)" 2>/dev/null || true
 	fi
 fi
 

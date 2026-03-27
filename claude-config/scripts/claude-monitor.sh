@@ -59,13 +59,11 @@ while true; do
 		echo ""
 	done < <(kitty @ ls 2>/dev/null | grep -oE '"title": "(Claude|Copilot)-[0-9]+"' | grep -oE '(Claude|Copilot)-[0-9]+')
 
-	# DB-backed progress if available
-	DB="$HOME/.claude/data/dashboard.db"
-	if [[ -f "$DB" ]]; then
-		active=0
-		done_t=0
-		active=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE status='in_progress';" 2>/dev/null || echo 0)
-		done_t=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE status='done' AND completed_at > datetime('now','-1 hour');" 2>/dev/null || echo 0)
+	# DB-backed progress if available (via daemon API)
+	_overview="$(curl -sf http://localhost:8420/api/overview 2>/dev/null || echo '')"
+	if [[ -n "$_overview" ]] && command -v jq &>/dev/null; then
+		active=$(echo "$_overview" | jq -r '.tasks_in_progress // 0' 2>/dev/null || echo 0)
+		done_t=$(echo "$_overview" | jq -r '.tasks_done_1h // 0' 2>/dev/null || echo 0)
 		[[ "$active" -gt 0 || "$done_t" -gt 0 ]] && echo -e "  ${YELLOW}DB: ${active} active, ${done_t} done (1h)${NC}"
 	fi
 

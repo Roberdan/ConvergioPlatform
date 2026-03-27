@@ -4,7 +4,7 @@
 # Usage: source this file, then call calc_cost_from_token_usage <plan_id>
 # Pricing (USD per 1M tokens): haiku=0.80/4.00, sonnet=3.00/15.00, opus=15.00/75.00, batch=1.50/7.50
 
-DB_FILE="${PLAN_DB_FILE:-$HOME/.claude/data/dashboard.db}"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 # get_model_pricing <model_name>
 # Outputs: <input_usd_per_1m> <output_usd_per_1m> <tier>
@@ -32,17 +32,17 @@ calc_cost_from_token_usage() {
 		echo '{"error":"plan_id must be numeric"}' >&2
 		return 1
 	}
-	[[ -f "$DB_FILE" ]] || {
-		echo '{"error":"dashboard DB not found"}' >&2
+	command -v jq &>/dev/null || {
+		echo '{"error":"jq required"}' >&2
 		return 1
 	}
 
-	# Build per-tier aggregates via awk (bash 3.2 compatible — no declare -A)
-	local rows
-	rows=$(sqlite3 -separator '|' "$DB_FILE" \
-		"SELECT model, SUM(input_tokens), SUM(output_tokens) \
-		 FROM token_usage WHERE plan_id=$plan_id \
-		 GROUP BY model;")
+	# Fetch token usage from daemon API, transform to pipe-separated rows for awk
+	local api_response rows
+	api_response=$(curl -sf "${DAEMON_URL}/api/tokens/usage?plan_id=${plan_id}" 2>/dev/null || echo '[]')
+	rows=$(echo "$api_response" | jq -r '
+		group_by(.model) | .[] |
+		"\(.[0].model)|\(map(.input_tokens) | add)|\(map(.output_tokens) | add)"' 2>/dev/null || echo "")
 
 	# Use awk to accumulate per-tier tokens and cost
 	echo "$rows" | awk -F'|' '

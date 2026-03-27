@@ -8,7 +8,9 @@ _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_SCRIPT_DIR/../../config/load-config.sh" 2>/dev/null || true
 unset _SCRIPT_DIR
 
-DB="${HOME}/.claude/data/dashboard.db"
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
+DAEMON_API="http://localhost:8420"
 IFS=',' read -ra HOSTS <<< "${MESH_WORKERS:-worker-1,worker-2,worker-3}"
 MODELS=("gpt-5-mini")
 
@@ -16,13 +18,20 @@ log() { echo "[$(date +%H:%M:%S)] $*"; }
 rand() { echo $(( RANDOM % ($2 - $1 + 1) + $1 )); }
 pick() { local arr=("$@"); echo "${arr[RANDOM % ${#arr[@]}]}"; }
 
-# SQLite with WAL mode and retry to avoid locking
-sq() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null || true; }
+# Use daemon API for task updates
+_api_task_update() {
+  local task_id="$1" status="$2"
+  shift 2
+  curl -sf -X POST "${DAEMON_API}/api/plan-db/task/update" \
+    -H 'Content-Type: application/json' \
+    -d "{\"task_id\":${task_id},\"status\":\"${status}\"$([ $# -gt 0 ] && echo ",\"extra\":$*" || echo '')}" 2>/dev/null || true
+}
 
-update_plan_counters() {
-  sq "UPDATE plans SET
-    tasks_done = (SELECT COUNT(*) FROM tasks WHERE plan_id=$1 AND status='done')
-  WHERE id=$1;"
+_api_plan_update() {
+  local plan_id="$1" status="$2"
+  curl -sf -X POST "${DAEMON_API}/api/plan-status" \
+    -H 'Content-Type: application/json' \
+    -d "{\"plan_id\":${plan_id},\"status\":\"${status}\"}" 2>/dev/null || true
 }
 
 TASK_CTR=0
@@ -37,35 +46,23 @@ complete_task() {
   TASK_CTR=$((TASK_CTR + 1))
 
   log "  Task $task_id → in_progress ($host/$model)"
-  sq "UPDATE tasks SET status='in_progress', started_at=datetime('now'),
-    executor_host='$host', model='$model'
-    WHERE id=$task_id;"
-
-  # Also update the plan's execution host to match the current task's host
-  sq "UPDATE plans SET execution_host='$host' WHERE id=$plan_id;"
+  cvg task update "$task_id" in_progress "Started by hyperworker on $host" 2>/dev/null || true
 
   sleep $(rand 4 10)
 
   log "  Task $task_id → submitted (${lines}L, ${tokens}tok)"
-  sq "UPDATE tasks SET status='submitted',
-    tokens=$tokens,
-    output_data=json_object('summary','Done','lines_added',$lines,'lines_removed',$(rand 0 50),'files_changed',$(rand 1 8),'duration_s',$duration)
-    WHERE id=$task_id;"
+  cvg task update "$task_id" submitted "Done: ${lines}L, ${tokens}tok" 2>/dev/null || true
 
   sleep $(rand 2 5)
 
-  log "  Task $task_id → done ✓"
-  sq "UPDATE tasks SET status='done', completed_at=datetime('now'),
-    validated_at=datetime('now'), validated_by='thor'
-    WHERE id=$task_id;"
-
-  update_plan_counters "$plan_id"
+  log "  Task $task_id → done"
+  cvg task update "$task_id" done "Validated by thor" 2>/dev/null || true
 }
 
 process_wave() {
   local plan_id=$1 wave=$2
   local tasks
-  tasks=$(sq "SELECT id FROM tasks WHERE plan_id=$plan_id AND wave_id='$wave' AND status IN ('pending','in_progress') ORDER BY RANDOM();")
+  tasks="$(cvg plan show "$plan_id" 2>/dev/null | jq -r --arg w "$wave" '.tasks[] | select(.wave_id == $w and (.status == "pending" or .status == "in_progress")) | .id' 2>/dev/null || echo '')"
   [ -z "$tasks" ] && return
   log "Plan $plan_id / $wave — $(echo "$tasks" | wc -l | tr -d ' ') tasks"
   for tid in $tasks; do
@@ -75,13 +72,10 @@ process_wave() {
 }
 
 main() {
-  log "🚀 HyperDemo Worker starting..."
-
-  # Enable WAL mode for concurrent access
-  sq "PRAGMA journal_mode=WAL;"
+  log "HyperDemo Worker starting..."
 
   local plan_ids
-  plan_ids=$(sq "SELECT id FROM plans WHERE project_id='hyperDemo' AND status='doing' ORDER BY id;")
+  plan_ids="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null | jq -r '.[] | select(.project_id == "hyperDemo" and .status == "doing") | .id' 2>/dev/null || echo '')"
   [ -z "$plan_ids" ] && { log "No active plans"; exit 0; }
 
   # Process in staggered batches of 5 plans — more realistic pacing
@@ -108,15 +102,16 @@ main() {
 
   # Complete plans one by one with small delay
   for pid in $plan_ids; do
-    local rem=$(sq "SELECT COUNT(*) FROM tasks WHERE plan_id=$pid AND status!='done';")
+    local rem
+    rem="$(cvg plan show "$pid" 2>/dev/null | jq '[.tasks[] | select(.status != "done")] | length' 2>/dev/null || echo 1)"
     if [ "${rem:-0}" -eq 0 ]; then
-      sq "UPDATE plans SET status='done', completed_at=datetime('now'), updated_at=datetime('now') WHERE id=$pid;"
-      log "✓ Plan $pid COMPLETE"
+      _api_plan_update "$pid" "done"
+      log "Plan $pid COMPLETE"
       sleep 1
     fi
   done
 
-  log "🏁 Done!"
+  log "Done!"
 }
 
 main "$@"

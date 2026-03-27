@@ -1,6 +1,10 @@
 #!/bin/bash
 # DEPRECATED — use daemon API endpoints for task validation instead
 # Task-level validation functions
+# Version: 2.0.0 — migrated from sqlite3 to cvg CLI / daemon API
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 # Validate a single task by DB id or task_id within a plan
 # Usage: validate-task <task_db_id_or_task_id> [plan_id] [validated_by] [--force] [--report 'JSON']
@@ -32,21 +36,32 @@ cmd_validate_task() {
 		prev="$arg"
 	done
 
-	local task_db_id=""
-	if [[ "$identifier" =~ ^[0-9]+$ ]]; then
-		task_db_id=$(sqlite3 "$DB_FILE" "SELECT id FROM tasks WHERE id = $identifier;" 2>/dev/null || echo "")
-	fi
-	if [[ -z "$task_db_id" && -n "$plan_id" ]]; then
-		task_db_id=$(sqlite3 "$DB_FILE" "SELECT id FROM tasks WHERE task_id = '$(sql_lit "$identifier")' AND plan_id = $plan_id;" 2>/dev/null || echo "")
+	# Resolve task via daemon API
+	local task_db_id="" task_json="" plan_json=""
+	if [[ -n "$plan_id" ]]; then
+		plan_json=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${plan_id}" 2>/dev/null) || plan_json=$(cvg plan show "$plan_id" 2>/dev/null) || plan_json='{}'
 	fi
 
-	if [[ -z "$task_db_id" ]]; then
+	if [[ "$identifier" =~ ^[0-9]+$ ]]; then
+		# Try as db id first
+		if [[ -n "$plan_json" ]]; then
+			task_json=$(echo "$plan_json" | jq -c ".tasks[]? | select(.id==${identifier} or .db_id==${identifier})" 2>/dev/null)
+			[[ -n "$task_json" ]] && task_db_id="$identifier"
+		fi
+	fi
+	if [[ -z "$task_db_id" && -n "$plan_id" && -n "$plan_json" ]]; then
+		# Try as task_id string
+		task_json=$(echo "$plan_json" | jq -c --arg tid "$identifier" '.tasks[]? | select(.task_id == $tid)' 2>/dev/null)
+		[[ -n "$task_json" ]] && task_db_id=$(echo "$task_json" | jq -r '.id // .db_id // ""')
+	fi
+
+	if [[ -z "$task_db_id" || -z "$task_json" ]]; then
 		log_error "Task not found: $identifier (plan: ${plan_id:-any})"
 		return 1
 	fi
 
 	local task_status
-	task_status=$(sqlite3 "$DB_FILE" "SELECT status FROM tasks WHERE id = $task_db_id;")
+	task_status=$(echo "$task_json" | jq -r '.status // ""')
 	if [[ "$task_status" != "submitted" && "$task_status" != "done" ]]; then
 		log_error "Task $identifier status is '$task_status' — only 'submitted' or 'done' tasks can be validated"
 		log_error "Flow: in_progress → submitted (plan-db-safe.sh) → done (Thor validate-task)"
@@ -55,8 +70,8 @@ cmd_validate_task() {
 
 	if [[ "$task_status" == "done" ]]; then
 		local already_validated
-		already_validated=$(sqlite3 "$DB_FILE" "SELECT validated_at FROM tasks WHERE id = $task_db_id;")
-		if [[ -n "$already_validated" ]]; then
+		already_validated=$(echo "$task_json" | jq -r '.validated_at // ""')
+		if [[ -n "$already_validated" && "$already_validated" != "null" ]]; then
 			echo -e "${YELLOW}Task $identifier already validated at $already_validated${NC}"
 			return 0
 		fi
@@ -82,35 +97,22 @@ cmd_validate_task() {
 		fi
 	fi
 
-	local report_clause=""
-	if [[ -n "$report" ]]; then
-		report_clause=", validation_report = '$(sql_lit "$report")'"
-	fi
-
 	local task_id_text
-	task_id_text=$(sqlite3 "$DB_FILE" "SELECT task_id FROM tasks WHERE id = $task_db_id;")
+	task_id_text=$(echo "$task_json" | jq -r '.task_id // ""')
 
 	if [[ "$task_status" == "submitted" ]]; then
-		sqlite3 "$DB_FILE" "UPDATE tasks SET status = 'done', completed_at = COALESCE(completed_at, datetime('now')), validated_at = datetime('now'), validated_by = '$(sql_lit "$effective_validator")'${report_clause} WHERE id = $task_db_id AND status = 'submitted';"
-
-		local wave_fk_id plan_fk_id
-		IFS='|' read -r wave_fk_id plan_fk_id < <(sqlite3 "$DB_FILE" "SELECT wave_id_fk, plan_id FROM tasks WHERE id = $task_db_id;")
-		if [[ -n "$wave_fk_id" ]]; then
-			sqlite3 "$DB_FILE" "
-				UPDATE waves SET tasks_done = (SELECT COUNT(*) FROM tasks WHERE wave_id_fk = $wave_fk_id AND status = 'done') WHERE id = $wave_fk_id;
-				UPDATE plans SET tasks_done = (SELECT COALESCE(SUM(tasks_done),0) FROM waves WHERE plan_id = $plan_fk_id) WHERE id = $plan_fk_id;
-			"
-			local wave_all_done
-			wave_all_done=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM tasks WHERE wave_id_fk = $wave_fk_id AND status NOT IN ('done', 'cancelled', 'skipped');")
-			if [[ "$wave_all_done" -eq 0 ]]; then
-				log_info "Wave fully validated — all tasks done"
-			fi
-		fi
+		# Validate task via daemon API: submitted -> done
+		cvg task validate "$task_db_id" "$plan_id" 2>/dev/null || \
+		curl -sf -X POST "${DAEMON_URL}/api/plan-db/task/validate" \
+			-H 'Content-Type: application/json' \
+			-d "{\"task_id\":${task_db_id},\"validated_by\":\"${effective_validator}\"${report:+,\"validation_report\":$(jq -n --arg r "$report" '$r')}}" >/dev/null 2>&1 || true
 
 		echo -e "${GREEN}Task $task_id_text: submitted → done (validated by $effective_validator)${NC}"
 	else
-		# Task already done — still set validated_at if not already set (prevents NULL timestamp bug)
-		sqlite3 "$DB_FILE" "UPDATE tasks SET validated_at = COALESCE(validated_at, datetime('now')), validated_by = '$(sql_lit "$effective_validator")'${report_clause} WHERE id = $task_db_id;"
+		# Task already done — set validated_at if not already set
+		curl -sf -X POST "${DAEMON_URL}/api/plan-db/task/validate" \
+			-H 'Content-Type: application/json' \
+			-d "{\"task_id\":${task_db_id},\"validated_by\":\"${effective_validator}\"${report:+,\"validation_report\":$(jq -n --arg r "$report" '$r')}}" >/dev/null 2>&1 || true
 		echo -e "${GREEN}Task $task_id_text validated by $effective_validator (legacy re-validation)${NC}"
 	fi
 

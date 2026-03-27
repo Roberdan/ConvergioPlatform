@@ -1,5 +1,9 @@
 #!/bin/bash
 # F-xx requirement validation functions
+# Version: 2.0.0 — migrated from sqlite3 to cvg CLI / daemon API
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 # Validate F-xx requirements from plan markdown
 cmd_validate_fxx() {
@@ -10,13 +14,14 @@ cmd_validate_fxx() {
 	echo -e "${BLUE}======= F-xx VALIDATION - Plan $plan_id =======${NC}"
 	echo ""
 
-	local plan_file plan_name
-	plan_file=$(sqlite3 "$DB_FILE" "SELECT markdown_path FROM plans WHERE id = $plan_id;")
-	plan_name=$(sqlite3 "$DB_FILE" "SELECT name FROM plans WHERE id = $plan_id;")
+	local plan_json plan_file plan_name
+	plan_json=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${plan_id}" 2>/dev/null) || plan_json=$(cvg plan show "$plan_id" 2>/dev/null) || plan_json='{}'
+	plan_file=$(echo "$plan_json" | jq -r '.markdown_path // ""' 2>/dev/null)
+	plan_name=$(echo "$plan_json" | jq -r '.name // ""' 2>/dev/null)
 
 	if [[ -z "$plan_file" || ! -f "$plan_file" ]]; then
 		local markdown_dir
-		markdown_dir=$(sqlite3 "$DB_FILE" "SELECT markdown_dir FROM plans WHERE id = $plan_id;")
+		markdown_dir=$(echo "$plan_json" | jq -r '.markdown_dir // ""' 2>/dev/null)
 		[[ -z "$markdown_dir" ]] && markdown_dir="$HOME/.claude/plans/active/${plan_name}"
 		plan_file=""
 		for f in "$markdown_dir/plan.md" "$markdown_dir/${plan_name}.md" "$markdown_dir"/*.md; do

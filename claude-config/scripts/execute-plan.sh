@@ -19,8 +19,9 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:$HOME/.claude/scripts:$PATH"
 
 EXECUTE_PLAN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="${HOME}/.claude/data/dashboard.db"
 LOG_DIR="${HOME}/.claude/logs/execute-plan"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 # Track child processes for cleanup on exit/signal
 _EXEC_CHILD_PIDS=()
@@ -134,20 +135,16 @@ if [[ -z "$PLAN_ID" ]]; then
 	exit 1
 fi
 
-if [[ ! -f "$DB_FILE" ]]; then
-	error "Database not found: $DB_FILE"
-	exit 1
-fi
-
-# Verify plan exists
-PLAN_NAME=$(sqlite3 "$DB_FILE" "SELECT name FROM plans WHERE id=$PLAN_ID;" 2>/dev/null || echo "")
+# Verify plan exists via cvg CLI
+_plan_json="$(cvg plan show "$PLAN_ID" 2>/dev/null || echo '{}')"
+PLAN_NAME="$(echo "$_plan_json" | jq -r '.name // ""' 2>/dev/null || echo '')"
 if [[ -z "$PLAN_NAME" ]]; then
-	error "Plan $PLAN_ID not found in DB"
+	error "Plan $PLAN_ID not found"
 	exit 1
 fi
 
 # Enforce execution_host: one plan = one machine
-PLAN_HOST=$(sqlite3 "$DB_FILE" "SELECT execution_host FROM plans WHERE id=$PLAN_ID;" 2>/dev/null || echo "")
+PLAN_HOST="$(echo "$_plan_json" | jq -r '.execution_host // ""' 2>/dev/null || echo '')"
 if [[ -n "$PLAN_HOST" && "$PLAN_HOST" != "$(hostname -s)" ]]; then
 	# Check peer name from peers.conf
 	local_peer=""
@@ -231,7 +228,7 @@ check_engine
 # ============================================================================
 _preflight_check() {
 	local missing=() fixed=()
-	for cmd in git sqlite3 node; do
+	for cmd in git node; do
 		command -v "$cmd" &>/dev/null || missing+=("$cmd")
 	done
 	if ! command -v pnpm &>/dev/null; then

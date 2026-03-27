@@ -4,27 +4,23 @@ set -euo pipefail
 # Writes to agent_activity table for brain visualization as "consciousness nodes"
 # Usage: session-scanner.sh [scan|list]
 
-DB="${PLAN_DB:-$HOME/.claude/data/dashboard.db}"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 HOST="$(hostname -s 2>/dev/null || echo local)"
 
-# CRR tables need crsqlite loaded for trigger functions
-CRSQL=""
-for p in "$HOME/.claude/lib/crsqlite/crsqlite" "/opt/homebrew/lib/crsqlite/crsqlite" "/usr/local/lib/crsqlite/crsqlite"; do
-  [ -f "$p.dylib" ] || [ -f "$p.so" ] || [ -f "$p" ] && { CRSQL="$p"; break; }
-done
-LOAD_EXT=""
-[ -n "$CRSQL" ] && LOAD_EXT=".load $CRSQL"
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 2; }
 
-# macOS system sqlite3 has .load disabled; prefer homebrew
-SQLITE3="sqlite3"
-[ -x /opt/homebrew/opt/sqlite/bin/sqlite3 ] && SQLITE3="/opt/homebrew/opt/sqlite/bin/sqlite3"
+_api() {
+  local endpoint="${1:?endpoint required}"
+  shift
+  curl -sf "${DAEMON_URL}/${endpoint}" "$@"
+}
 
-_sql() {
-  if [ -n "$CRSQL" ]; then
-    "$SQLITE3" -cmd ".load $CRSQL" "$DB" "$@"
-  else
-    "$SQLITE3" "$DB" "$@"
-  fi
+_api_post() {
+  local endpoint="${1:?endpoint required}"
+  local data="${2:?data required}"
+  curl -sf -X POST "${DAEMON_URL}/${endpoint}" \
+    -H 'Content-Type: application/json' \
+    -d "$data"
 }
 
 sanitize() { echo "$1" | tr "'" "_" | cut -c1-200; }
@@ -103,26 +99,31 @@ scan_sessions() {
     SAFE_DESC=$(sanitize "${DESC:-$SAFE_CMD}")
     SAFE_MODEL=$(sanitize "$MODEL")
 
-    _sql <<-SQL 2>/dev/null || true
-INSERT INTO agent_activity (agent_id, agent_type, description, model, host, status, region, metadata)
-VALUES ('${SESSION_ID}', '${TYPE}', '${SAFE_DESC}', '${SAFE_MODEL}', '${HOST}', 'running', 'prefrontal',
-  '{"pid":${PID},"tty":"${SAFE_TTY}","cpu":${CPU},"mem":${MEM},"cwd":"${SAFE_CWD}"}')
-ON CONFLICT(agent_id) DO UPDATE SET
-  description=CASE WHEN '${SAFE_DESC}' <> '' AND '${SAFE_DESC}' <> excluded.agent_type THEN '${SAFE_DESC}' ELSE agent_activity.description END,
-  model=CASE WHEN '${SAFE_MODEL}' <> '' AND '${SAFE_MODEL}' <> excluded.agent_type THEN '${SAFE_MODEL}' ELSE agent_activity.model END,
-  metadata='{"pid":${PID},"tty":"${SAFE_TTY}","cpu":${CPU},"mem":${MEM},"cwd":"${SAFE_CWD}"}',
-  status='running';
-SQL
+    _api_post "api/agents/activity" "$(jq -n \
+      --arg id "$SESSION_ID" \
+      --arg type "$TYPE" \
+      --arg desc "$SAFE_DESC" \
+      --arg model "$SAFE_MODEL" \
+      --arg host "$HOST" \
+      --argjson pid "$PID" \
+      --arg tty "$SAFE_TTY" \
+      --arg cpu "$CPU" \
+      --arg mem "$MEM" \
+      --arg cwd "$SAFE_CWD" \
+      '{agent_id: $id, agent_type: $type, description: $desc, model: $model,
+        host: $host, status: "running", region: "prefrontal",
+        metadata: {pid: $pid, tty: $tty, cpu: ($cpu | tonumber), mem: ($mem | tonumber), cwd: $cwd}}')" 2>/dev/null || true
     echo "$SESSION_ID"
   done
 }
 
 cleanup_stale() {
-  _sql "SELECT agent_id FROM agent_activity WHERE agent_id LIKE 'session-%' AND status='running';" 2>/dev/null | while read -r sid; do
+  local agents
+  agents=$(_api "api/agents/activity" 2>/dev/null || echo '[]')
+  echo "$agents" | jq -r '.[]? | select(.agent_id | startswith("session-")) | select(.status == "running") | .agent_id' 2>/dev/null | while read -r sid; do
     PID="${sid##*-}"
     if ! ps -p "$PID" > /dev/null 2>&1; then
-      _sql "UPDATE agent_activity SET status='completed', completed_at=datetime('now'), \
-        duration_s=CAST((julianday('now')-julianday(started_at))*86400 AS REAL) WHERE agent_id='${sid}';" 2>/dev/null || true
+      _api_post "api/agents/activity/complete" "$(jq -n --arg id "$sid" '{agent_id: $id}')" 2>/dev/null || true
     fi
   done
 }
@@ -130,10 +131,7 @@ cleanup_stale() {
 case "${1:-scan}" in
   scan) scan_sessions; cleanup_stale ;;
   list)
-    if [ -n "$CRSQL" ]; then
-      "$SQLITE3" -json -cmd ".load $CRSQL" "$DB" "SELECT agent_id, agent_type AS type, description, status, metadata FROM agent_activity WHERE agent_id LIKE 'session-%' AND status='running';" 2>/dev/null || echo '[]'
-    else
-      "$SQLITE3" -json "$DB" "SELECT agent_id, agent_type AS type, description, status, metadata FROM agent_activity WHERE agent_id LIKE 'session-%' AND status='running';" 2>/dev/null || echo '[]'
-    fi ;;
+    _api "api/agents/activity" 2>/dev/null | jq '[.[]? | select(.agent_id | startswith("session-")) | select(.status == "running") | {agent_id, type: .agent_type, description, status, metadata}]' 2>/dev/null || echo '[]'
+    ;;
   *) echo "Usage: session-scanner.sh [scan|list]"; exit 2 ;;
 esac

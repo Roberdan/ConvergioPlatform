@@ -4,13 +4,15 @@ set -euo pipefail
 # Reduces tokens by running via bash instead of inline agent work
 # Usage: thor-validate.sh <plan_id> [--full]
 
-# Version: 2.0.0 - Handles submitted status, per-task validation, SQLite trigger compatible
+# Version: 3.0.0 - Uses daemon API instead of direct sqlite3 calls
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAN_ID="${1:?Usage: thor-validate.sh <plan_id> [--full]}"
 FULL_CHECK="${2:-}"
-DB_FILE="$HOME/.claude/data/dashboard.db"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -25,8 +27,8 @@ echo ""
 ERRORS=0
 
 # 0. Validate submitted tasks → done (per-task Thor)
-SUBMITTED_TASKS=$(sqlite3 -cmd ".timeout 5000" "$DB_FILE" \
-	"SELECT id, task_id FROM tasks WHERE plan_id = $PLAN_ID AND status = 'submitted';")
+PLAN_JSON=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${PLAN_ID}" || echo '{}')
+SUBMITTED_TASKS=$(echo "$PLAN_JSON" | jq -r '.tasks[]? | select(.status=="submitted") | "\(.id)|\(.task_id)"')
 if [[ -n "$SUBMITTED_TASKS" ]]; then
 	SUBMITTED_COUNT=$(echo "$SUBMITTED_TASKS" | wc -l | tr -d ' ')
 	echo "[0/5] Per-task validation ($SUBMITTED_COUNT submitted tasks)..."
@@ -104,8 +106,9 @@ fi
 
 # 5. Remaining submitted check (should be 0 after step 0)
 echo "[5/5] No tasks stuck in submitted..."
-STILL_SUBMITTED=$(sqlite3 -cmd ".timeout 5000" "$DB_FILE" \
-	"SELECT COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID AND status = 'submitted';")
+# Re-fetch plan data to check for remaining submitted tasks after validation
+PLAN_JSON_REFRESH=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${PLAN_ID}" || echo '{}')
+STILL_SUBMITTED=$(echo "$PLAN_JSON_REFRESH" | jq '[.tasks[]? | select(.status=="submitted")] | length')
 if [[ "${STILL_SUBMITTED:-0}" -eq 0 ]]; then
 	echo -e "${GREEN}  PASS${NC}"
 else

@@ -6,8 +6,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_FILE="$HOME/.claude/data/dashboard.db"
 REPORT_DIR="$HOME/.claude/data/cross-reviews"
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
 if [[ $# -lt 2 ]]; then
 	echo "Usage: cross-review.sh <plan_id> <wave_db_id> [--provider copilot|claude]" >&2
@@ -29,15 +30,10 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-WAVE_ID=$(sqlite3 "$DB_FILE" \
-	"SELECT wave_id FROM waves WHERE id = $WAVE_DB_ID;" 2>/dev/null || echo "unknown")
+_plan_json="$(cvg plan show "$PLAN_ID" 2>/dev/null || echo '{}')"
+WAVE_ID="$(echo "$_plan_json" | jq -r --argjson wid "$WAVE_DB_ID" '.waves[]? | select(.id == $wid) | .wave_id // "unknown"' 2>/dev/null || echo "unknown")"
 
-WORKTREE=$(sqlite3 "$DB_FILE" \
-	"SELECT worktree_path FROM waves WHERE id = $WAVE_DB_ID;" 2>/dev/null || echo "")
-if [[ -z "$WORKTREE" ]]; then
-	WORKTREE=$(sqlite3 "$DB_FILE" \
-		"SELECT worktree_path FROM plans WHERE id = $PLAN_ID;" 2>/dev/null || echo "")
-fi
+WORKTREE="$(echo "$_plan_json" | jq -r --argjson wid "$WAVE_DB_ID" '(.waves[]? | select(.id == $wid) | .worktree_path // "") // .worktree_path // ""' 2>/dev/null || echo "")"
 if [[ -z "$WORKTREE" || ! -d "$WORKTREE" ]]; then
 	echo "ERROR: No worktree for plan $PLAN_ID wave $WAVE_DB_ID" >&2
 	exit 1
@@ -50,8 +46,7 @@ if [[ -z "$CHANGED_FILES" ]]; then
 	exit 0
 fi
 
-TASK_CONTEXT=$(sqlite3 "$DB_FILE" \
-	"SELECT task_id || ': ' || title FROM tasks WHERE wave_id_fk = $WAVE_DB_ID;" 2>/dev/null || echo "")
+TASK_CONTEXT="$(echo "$_plan_json" | jq -r --argjson wid "$WAVE_DB_ID" '[.tasks[] | select(.wave_id_fk == $wid) | "\(.task_id): \(.title)"] | join("\n")' 2>/dev/null || echo "")"
 
 PROMPT="You are a CRITICAL REVIEWER. Find problems, not confirm success.
 

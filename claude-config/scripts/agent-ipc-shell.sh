@@ -87,18 +87,18 @@ cpa() {
 # Source instructions
 # Add to .zshrc:  source ~/.claude/scripts/agent-ipc-shell.sh
 
-# _emit_lifecycle() — emit agent lifecycle events to mesh_events table
+# _emit_lifecycle() — emit agent lifecycle events via daemon API
 _emit_lifecycle() {
   local event_type="${1:?event_type required}" # agent_started | agent_finished
   local agent_name="${2:-${AGENT_IPC_NAME:-unknown}}"
   local payload="${3:-{}}"
-  local db="${CLAUDE_HOME}/data/dashboard.db"
-  [[ -f "$db" ]] || return 0
+  local daemon_url="${DAEMON_URL:-http://localhost:8420}"
   local host
   host="$(hostname -s 2>/dev/null || echo 'unknown')"
-  sqlite3 -cmd ".timeout 3000" "$db" \
-    "INSERT INTO mesh_events (event_type, source_peer, plan_id, payload, status, created_at)
-     VALUES ('${event_type}', '${host}', 0,
-       '{\"agent\":\"${agent_name}\",\"host\":\"${host}\",\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"detail\":${payload}}',
-       'pending', unixepoch());" 2>/dev/null || true
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  curl -sf -X POST "${daemon_url}/api/mesh/events" \
+    -H 'Content-Type: application/json' \
+    -d "{\"event_type\":\"${event_type}\",\"source_peer\":\"${host}\",\"plan_id\":0,\"payload\":{\"agent\":\"${agent_name}\",\"host\":\"${host}\",\"ts\":\"${ts}\",\"detail\":${payload}},\"status\":\"pending\"}" 2>/dev/null || true
 }

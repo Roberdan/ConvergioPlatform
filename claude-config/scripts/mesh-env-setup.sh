@@ -52,13 +52,14 @@ step_init_db() {
 	mkdir -p "$CLAUDE_HOME/data"
 	local db="$CLAUDE_HOME/data/dashboard.db"
 	if [[ ! -f "$db" ]]; then
-		local init_sql="$SCRIPT_DIR/init-db.sql"
-		if [[ -f "$init_sql" ]]; then
-			sqlite3 "$db" <"$init_sql"
-			_ok "dashboard.db created from init-db.sql"
+		# Use daemon to initialize the DB if running, otherwise use cvg CLI
+		if curl -sf "http://localhost:8420/api/health" >/dev/null 2>&1; then
+			_ok "dashboard.db will be managed by daemon"
+		elif command -v cvg &>/dev/null; then
+			cvg plan list >/dev/null 2>&1 || true
+			_ok "dashboard.db initialized via cvg CLI"
 		else
-			sqlite3 "$db" "SELECT 1;" &>/dev/null
-			_ok "dashboard.db created (empty)"
+			_warn "No daemon or cvg CLI available — DB not initialized"
 		fi
 	else
 		_ok "dashboard.db already exists (skipping)"

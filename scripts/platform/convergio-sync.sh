@@ -5,14 +5,14 @@
 set -euo pipefail
 
 PLATFORM_DIR="${CONVERGIO_PLATFORM_DIR:-$HOME/GitHub/ConvergioPlatform}"
-DB="${DASHBOARD_DB:-$PLATFORM_DIR/data/dashboard.db}"
 BUS="$PLATFORM_DIR/scripts/platform/convergio-bus.sh"
 DAEMON_URL="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
-_db() { sqlite3 "$DB" ".timeout 5000" "$1" 2>/dev/null; }
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+command -v curl &>/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
 
-# Escape single quotes for safe SQL string interpolation
-sql_escape() { printf '%s' "${1//\'/\'\'}"; }
+_api_get() { curl -sf --connect-timeout 2 "${DAEMON_URL}${1}" 2>/dev/null; }
+_api_post() { curl -sf -X POST "${DAEMON_URL}${1}" -H 'Content-Type: application/json' -d "$2" 2>/dev/null; }
 
 # ─── Repo Registry ──────────────────────────────────────────────────
 
@@ -20,32 +20,29 @@ cmd_register_repo() {
   local name="${1:?Usage: register-repo <name> <path>}"
   local path="${2:?Usage: register-repo <name> <path>}"
 
-  _db "CREATE TABLE IF NOT EXISTS repo_registry (
-    name TEXT PRIMARY KEY,
-    path TEXT NOT NULL,
-    has_claude_config INTEGER DEFAULT 0,
-    has_github_agents INTEGER DEFAULT 0,
-    registered_at TEXT DEFAULT (datetime('now'))
-  );"
-
   local has_claude=0 has_github=0
   [ -d "$path/.claude" ] && has_claude=1
   [ -d "$path/.github/agents" ] && has_github=1
 
-  local safe_name safe_path
-  safe_name="$(sql_escape "$name")"
-  safe_path="$(sql_escape "$path")"
-  _db "INSERT OR REPLACE INTO repo_registry (name, path, has_claude_config, has_github_agents)
-       VALUES ('${safe_name}', '${safe_path}', $has_claude, $has_github);"
+  # Use cvg repo add for registration
+  cvg repo add "$name" --path "$path" 2>/dev/null || {
+    # Fallback: daemon API for repo_registry table
+    # TODO: needs daemon endpoint for repo_registry CRUD
+    _api_post "/api/plan-db/repo-register" \
+      "{\"name\":\"${name}\",\"path\":\"${path}\",\"has_claude_config\":${has_claude},\"has_github_agents\":${has_github}}" || {
+      echo "ERROR: failed to register repo" >&2
+      return 1
+    }
+  }
 
   echo "Registered: $name -> $path (claude:$has_claude, copilot:$has_github)"
 }
 
 cmd_list_repos() {
   echo "Registered repos:"
-  _db "SELECT name, path, has_claude_config, has_github_agents FROM repo_registry ORDER BY name;" \
-    | while IFS='|' read -r name path cc ga; do
-    printf "  %-20s %s (claude:%s copilot:%s)\n" "$name" "$path" "$cc" "$ga"
+  # Use cvg repo list
+  cvg repo list 2>/dev/null | while IFS= read -r line; do
+    echo "  $line"
   done
 }
 
@@ -57,48 +54,37 @@ cmd_request() {
   shift 2
   local description="$*"
 
-  _db "CREATE TABLE IF NOT EXISTS cross_repo_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_repo TEXT NOT NULL,
-    to_repo TEXT NOT NULL,
-    description TEXT NOT NULL,
-    status TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','in_progress','done','rejected')),
-    assigned_agent TEXT,
-    result TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    completed_at TEXT
-  );"
-
-  local safe_from safe_to safe_desc
-  safe_from="$(sql_escape "$from_repo")"
-  safe_to="$(sql_escape "$to_repo")"
-  safe_desc="$(sql_escape "$description")"
-  _db "INSERT INTO cross_repo_requests (from_repo, to_repo, description)
-       VALUES ('${safe_from}', '${safe_to}', '${safe_desc}');"
+  local result
+  # TODO: needs daemon endpoint for cross_repo_requests CRUD
+  result=$(_api_post "/api/plan-db/cross-repo-request" \
+    "{\"from_repo\":\"${from_repo}\",\"to_repo\":\"${to_repo}\",\"description\":\"${description}\"}") || {
+    echo "ERROR: failed to create cross-repo request" >&2
+    return 1
+  }
 
   local req_id
-  req_id=$(_db "SELECT last_insert_rowid();")
+  req_id=$(echo "$result" | jq -r '.id // empty' 2>/dev/null || echo "")
 
   # Notify via bus
   "$BUS" broadcast "sync" "CROSS-REPO REQUEST #$req_id: $from_repo needs $to_repo: $description" 2>/dev/null || true
 
-  echo "Request #$req_id created: $from_repo → $to_repo"
+  echo "Request #${req_id:-?} created: $from_repo -> $to_repo"
   echo "  $description"
 }
 
 cmd_pending() {
   local repo="${1:-}"
   echo "Pending cross-repo requests:"
-  local query="SELECT id, from_repo, to_repo, description, status FROM cross_repo_requests WHERE status IN ('pending','accepted','in_progress')"
-  if [ -n "$repo" ]; then
-    local safe_repo
-    safe_repo="$(sql_escape "$repo")"
-    query="$query AND to_repo = '${safe_repo}'"
-  fi
-  query="$query ORDER BY created_at DESC LIMIT 20;"
 
-  _db "$query" | while IFS='|' read -r id from to desc status; do
-    printf "  #%-4s %-12s → %-12s [%s] %s\n" "$id" "$from" "$to" "$status" "$desc"
+  local url="/api/plan-db/cross-repo-requests?status=pending,accepted,in_progress"
+  [ -n "$repo" ] && url="${url}&to_repo=${repo}"
+
+  # TODO: needs daemon endpoint for cross_repo_requests listing
+  local json
+  json=$(_api_get "$url") || { echo "  (no data or daemon unavailable)" ; return 0; }
+
+  echo "$json" | jq -r '.requests[]? | [(.id // ""), (.from_repo // ""), (.to_repo // ""), (.status // ""), (.description // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r id from to status desc; do
+    printf "  #%-4s %-12s -> %-12s [%s] %s\n" "$id" "$from" "$to" "$status" "$desc"
   done
 }
 
@@ -106,15 +92,19 @@ cmd_accept() {
   local req_id="${1:?Usage: accept <request-id> [agent-name]}"
   local agent="${2:-ali}"
 
-  local safe_agent
-  safe_agent="$(sql_escape "$agent")"
-  # req_id is a user-supplied integer; validate it is numeric
   [[ "$req_id" =~ ^[0-9]+$ ]] || { echo "error: request id must be numeric" >&2; exit 1; }
-  _db "UPDATE cross_repo_requests SET status='accepted', assigned_agent='${safe_agent}' WHERE id=${req_id};"
-  local desc
-  desc=$(_db "SELECT description FROM cross_repo_requests WHERE id=$req_id;")
+
+  # TODO: needs daemon endpoint for cross_repo_requests update
+  _api_post "/api/plan-db/cross-repo-request/update" \
+    "{\"id\":${req_id},\"status\":\"accepted\",\"assigned_agent\":\"${agent}\"}" || {
+    echo "ERROR: failed to accept request" >&2
+    return 1
+  }
 
   echo "Request #$req_id accepted, assigned to $agent"
+
+  local desc
+  desc=$(_api_get "/api/plan-db/cross-repo-request/${req_id}" | jq -r '.description // ""' 2>/dev/null || echo "")
   "$BUS" send "sync" "$agent" "ACCEPTED cross-repo request #$req_id: $desc" 2>/dev/null || true
 }
 
@@ -123,14 +113,17 @@ cmd_complete() {
   shift
   local result="$*"
 
-  # req_id is a user-supplied integer; validate it is numeric
   [[ "$req_id" =~ ^[0-9]+$ ]] || { echo "error: request id must be numeric" >&2; exit 1; }
-  local safe_result
-  safe_result="$(sql_escape "$result")"
-  _db "UPDATE cross_repo_requests SET status='done', result='${safe_result}', completed_at=datetime('now') WHERE id=${req_id};"
+
+  # TODO: needs daemon endpoint for cross_repo_requests update
+  _api_post "/api/plan-db/cross-repo-request/update" \
+    "{\"id\":${req_id},\"status\":\"done\",\"result\":\"${result}\"}" || {
+    echo "ERROR: failed to complete request" >&2
+    return 1
+  }
 
   local from_repo
-  from_repo=$(_db "SELECT from_repo FROM cross_repo_requests WHERE id=$req_id;")
+  from_repo=$(_api_get "/api/plan-db/cross-repo-request/${req_id}" | jq -r '.from_repo // ""' 2>/dev/null || echo "")
 
   echo "Request #$req_id completed"
   "$BUS" broadcast "sync" "CROSS-REPO DONE #$req_id for $from_repo: $result" 2>/dev/null || true
@@ -141,17 +134,17 @@ cmd_complete() {
 cmd_auto_dispatch() {
   echo "=== Cross-Repo Auto-Dispatch ==="
 
-  _db "SELECT id, from_repo, to_repo, description
-       FROM cross_repo_requests
-       WHERE status = 'pending'
-       ORDER BY created_at ASC;" | while IFS='|' read -r id from to desc; do
+  # TODO: needs daemon endpoint for cross_repo_requests listing
+  local json
+  json=$(_api_get "/api/plan-db/cross-repo-requests?status=pending") || { echo "  No pending requests"; return 0; }
 
-    echo "  Processing #$id: $from → $to: $desc"
+  echo "$json" | jq -r '.requests[]? | [(.id // ""), (.from_repo // ""), (.to_repo // ""), (.description // "")] | @tsv' 2>/dev/null | while IFS=$'\t' read -r id from to desc; do
+    [[ -z "$id" ]] && continue
+    echo "  Processing #$id: $from -> $to: $desc"
 
-    # Find repo path
-    local safe_to_name repo_path
-    safe_to_name="$(sql_escape "$to")"
-    repo_path=$(_db "SELECT path FROM repo_registry WHERE name='${safe_to_name}';")
+    # Find repo path via cvg repo show
+    local repo_path
+    repo_path=$(cvg repo show "$to" 2>/dev/null | jq -r '.path // empty' 2>/dev/null || echo "")
 
     if [ -z "$repo_path" ]; then
       echo "    SKIP: repo '$to' not registered"
@@ -159,7 +152,8 @@ cmd_auto_dispatch() {
     fi
 
     # Auto-accept and dispatch Ali in target repo
-    _db "UPDATE cross_repo_requests SET status='in_progress', assigned_agent='ali' WHERE id=$id;"
+    _api_post "/api/plan-db/cross-repo-request/update" \
+      "{\"id\":${id},\"status\":\"in_progress\",\"assigned_agent\":\"ali\"}" 2>/dev/null || true
 
     echo "    Dispatching Ali in $repo_path..."
     if command -v claude &>/dev/null; then

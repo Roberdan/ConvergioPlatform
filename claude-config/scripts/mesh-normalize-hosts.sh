@@ -3,8 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
-DB_PATH="${CLAUDE_DB:-${PLAN_DB_FILE:-$CLAUDE_HOME/data/dashboard.db}}"
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 DRY_RUN=false
+
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 2; }
 
 usage() {
   cat <<'USAGE'
@@ -27,8 +29,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ! -f "$DB_PATH" ]]; then
-  echo "ERROR: Database not found: $DB_PATH" >&2
+if ! curl -sf "${DAEMON_URL}/api/health" &>/dev/null; then
+  echo "ERROR: Daemon not reachable at ${DAEMON_URL}" >&2
   exit 1
 fi
 
@@ -136,55 +138,80 @@ if [[ -n "$SELF_PEER" ]]; then
 fi
 
 # Fuzzy pass: map historical DB host variants to canonical peers when match is unique.
+# Fetch distinct hosts from plans and tasks via daemon API
+ALL_PLANS_DATA=$(curl -sf "${DAEMON_URL}/api/plan-db/plans" 2>/dev/null || echo '[]')
+HOST_VARIANTS=$(echo "$ALL_PLANS_DATA" | jq -r '
+  [.[].execution_host // empty] | unique | .[]' 2>/dev/null || echo "")
+
+# Also gather task executor_host from active plans
+ACTIVE_IDS=$(echo "$ALL_PLANS_DATA" | jq -r '.[].id' 2>/dev/null || echo "")
+for pid in $ACTIVE_IDS; do
+  PLAN_DETAIL=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" 2>/dev/null || echo '{}')
+  TASK_HOSTS=$(echo "$PLAN_DETAIL" | jq -r '[.tasks[]?.executor_host // empty] | unique | .[]' 2>/dev/null || echo "")
+  [[ -n "$TASK_HOSTS" ]] && HOST_VARIANTS=$(printf '%s\n%s' "$HOST_VARIANTS" "$TASK_HOSTS")
+done
+HOST_VARIANTS=$(echo "$HOST_VARIANTS" | sort -u)
+
 while IFS= read -r host_variant; do
   host_variant="$(trim "$host_variant")"
   [[ -z "$host_variant" ]] && continue
   canonical="$(resolve_peer_for_variant "$host_variant" || true)"
   [[ -z "$canonical" ]] && continue
   add_variant "$canonical" "$host_variant"
-done < <(sqlite3 -- "$DB_PATH" "
-  SELECT DISTINCT execution_host
-  FROM plans
-  WHERE execution_host IS NOT NULL AND TRIM(execution_host) != ''
-  UNION
-  SELECT DISTINCT executor_host
-  FROM tasks
-  WHERE executor_host IS NOT NULL AND TRIM(executor_host) != '';
-")
+done <<<"$HOST_VARIANTS"
 
-cat >>"$SQL_FILE" <<'SQL'
-CREATE TEMP TABLE _counts(name TEXT PRIMARY KEY, value INTEGER);
-
-UPDATE plans
-SET execution_host = (SELECT m.canonical FROM host_map m WHERE m.variant = plans.execution_host)
-WHERE execution_host IN (SELECT variant FROM host_map)
-  AND status != 'doing'
-  AND execution_host <> (SELECT m.canonical FROM host_map m WHERE m.variant = plans.execution_host);
-INSERT INTO _counts(name, value) VALUES ('plans', changes());
-
-UPDATE tasks
-SET executor_host = (SELECT m.canonical FROM host_map m WHERE m.variant = tasks.executor_host)
-WHERE executor_host IN (SELECT variant FROM host_map)
-  AND executor_host <> (SELECT m.canonical FROM host_map m WHERE m.variant = tasks.executor_host);
-INSERT INTO _counts(name, value) VALUES ('tasks', changes());
-
-DELETE FROM peer_heartbeats
-WHERE peer_name LIKE 'test-%';
-INSERT INTO _counts(name, value) VALUES ('heartbeats', changes());
-
-SELECT
-  COALESCE((SELECT value FROM _counts WHERE name='plans'), 0) || '|' ||
-  COALESCE((SELECT value FROM _counts WHERE name='tasks'), 0) || '|' ||
-  COALESCE((SELECT value FROM _counts WHERE name='heartbeats'), 0);
-COMMIT;
-SQL
+# Build variant->canonical mapping from SQL_FILE for use in API calls
+# Parse the INSERT statements we wrote to SQL_FILE to build a jq-friendly map
+VARIANT_MAP=$(grep "INSERT OR IGNORE INTO host_map" "$SQL_FILE" | \
+  sed "s/.*VALUES ('\(.*\)', '\(.*\)');/\1|\2/" | sort -u)
 
 if $DRY_RUN; then
-  cat "$SQL_FILE"
+  echo "--- Host mapping (variant -> canonical) ---"
+  echo "$VARIANT_MAP" | while IFS='|' read -r variant canonical; do
+    echo "  $variant -> $canonical"
+  done
+  echo "--- Would normalize plans, tasks, and clean test heartbeats ---"
   exit 0
 fi
 
-result="$(sqlite3 -batch -- "$DB_PATH" <"$SQL_FILE")"
-IFS='|' read -r plans_count tasks_count heartbeats_count <<<"$result"
+plans_count=0
+tasks_count=0
 
-echo "Normalized ${plans_count:-0} plans, ${tasks_count:-0} tasks. Cleaned ${heartbeats_count:-0} test heartbeats."
+# Normalize plan execution_host via API
+while IFS='|' read -r variant canonical; do
+  [[ -z "$variant" || -z "$canonical" || "$variant" == "$canonical" ]] && continue
+  # Find plans with this variant and update them
+  MATCHING_PLANS=$(echo "$ALL_PLANS_DATA" | jq -r --arg v "$variant" \
+    '[.[] | select(.execution_host == $v and .status != "doing")] | .[].id' 2>/dev/null || echo "")
+  for pid in $MATCHING_PLANS; do
+    [[ -z "$pid" ]] && continue
+    curl -sf -X POST "${DAEMON_URL}/api/plan-db/plan/update-host" \
+      -H 'Content-Type: application/json' \
+      -d "{\"plan_id\":${pid},\"execution_host\":\"${canonical}\"}" 2>/dev/null && \
+      plans_count=$((plans_count + 1)) || true
+  done
+done <<<"$VARIANT_MAP"
+
+# Normalize task executor_host via API
+for pid in $ACTIVE_IDS; do
+  PLAN_DETAIL=$(curl -sf "${DAEMON_URL}/api/plan-db/json/${pid}" 2>/dev/null || echo '{}')
+  while IFS='|' read -r variant canonical; do
+    [[ -z "$variant" || -z "$canonical" || "$variant" == "$canonical" ]] && continue
+    MATCHING_TASKS=$(echo "$PLAN_DETAIL" | jq -r --arg v "$variant" \
+      '[.tasks[]? | select(.executor_host == $v)] | .[].id' 2>/dev/null || echo "")
+    for tid in $MATCHING_TASKS; do
+      [[ -z "$tid" ]] && continue
+      curl -sf -X POST "${DAEMON_URL}/api/plan-db/task/update-host" \
+        -H 'Content-Type: application/json' \
+        -d "{\"task_id\":${tid},\"executor_host\":\"${canonical}\"}" 2>/dev/null && \
+        tasks_count=$((tasks_count + 1)) || true
+    done
+  done <<<"$VARIANT_MAP"
+done
+
+# Clean test heartbeats via API
+heartbeats_count=0
+curl -sf -X POST "${DAEMON_URL}/api/heartbeat/cleanup-test" \
+  -H 'Content-Type: application/json' 2>/dev/null && heartbeats_count=1 || true
+
+echo "Normalized ${plans_count} plans, ${tasks_count} tasks. Cleaned test heartbeats (${heartbeats_count} batch ops)."

@@ -5,19 +5,21 @@
 set -euo pipefail
 trap 'echo "ERROR at line $LINENO" >&2' ERR
 
+command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
+
 PLAN_ID="$1"
-DB="$HOME/.claude/data/dashboard.db"
 MAX_RETRIES=50
 RETRY=0
 
 plan_done() {
-	local pending
-	pending=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID AND status NOT IN ('done','validated','skipped','cancelled');")
+	local plan_json pending
+	plan_json="$(cvg plan show "$PLAN_ID" 2>/dev/null || echo '{}')"
+	pending="$(echo "$plan_json" | jq '[.tasks[] | select(.status | IN("done","validated","skipped","cancelled") | not)] | length' 2>/dev/null || echo 1)"
 	[ "$pending" -eq 0 ]
 }
 
 plan_summary() {
-	sqlite3 "$DB" ".timeout 5000" "SELECT status, COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID GROUP BY status;"
+	cvg plan show "$PLAN_ID" 2>/dev/null | jq -r '[.tasks[] | .status] | group_by(.) | map("\(.[0])|\(length)") | .[]' 2>/dev/null || echo "unknown|0"
 }
 
 echo "=== Plan #$PLAN_ID Runner (auto-restart) ==="
@@ -30,14 +32,18 @@ while ! plan_done; do
 		exit 1
 	fi
 
-	REMAINING=$(sqlite3 "$DB" ".timeout 5000" "SELECT COUNT(*) FROM tasks WHERE plan_id = $PLAN_ID AND status NOT IN ('done','validated','skipped','cancelled');")
+	_plan_json="$(cvg plan show "$PLAN_ID" 2>/dev/null || echo '{}')"
+	REMAINING="$(echo "$_plan_json" | jq '[.tasks[] | select(.status | IN("done","validated","skipped","cancelled") | not)] | length' 2>/dev/null || echo '?')"
 	echo ""
 	echo "[Run $RETRY/$MAX_RETRIES] $REMAINING tasks remaining..."
 	plan_summary
 	echo ""
 
 	# Reset any stuck in_progress tasks from previous crashed run
-	sqlite3 "$DB" ".timeout 5000" "UPDATE tasks SET status='pending' WHERE plan_id = $PLAN_ID AND status='in_progress';"
+	_stuck_ids="$(echo "$_plan_json" | jq -r '.tasks[] | select(.status == "in_progress") | .id' 2>/dev/null || true)"
+	for _sid in $_stuck_ids; do
+		cvg task update "$_sid" pending "Reset stuck task from crashed run" 2>/dev/null || true
+	done
 
 	copilot --yolo -p "@execute $PLAN_ID" 2>&1
 	EXIT_CODE=$?
