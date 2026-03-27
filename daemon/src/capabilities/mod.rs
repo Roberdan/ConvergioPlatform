@@ -1,3 +1,4 @@
+pub mod checklist_integration;
 pub mod mcp;
 pub mod permissions;
 pub mod proxy;

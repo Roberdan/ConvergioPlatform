@@ -6,6 +6,7 @@ use super::api_agent_catalog;
 use super::api_agent_triage;
 use super::api_agents;
 use super::api_audit;
+use super::api_capabilities;
 use super::api_delegation;
 use super::api_chat;
 use super::api_coordinator;
@@ -121,6 +122,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_domain::router())
         .merge(api_openclaw::router())
         .merge(api_crdt::router())
+        .merge(api_capabilities::router())
         .merge(api_memory::router())
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())

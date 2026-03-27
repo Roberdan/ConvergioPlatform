@@ -3,6 +3,7 @@ mod api_agent_catalog_parse;
 pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_audit;
+pub mod api_capabilities;
 pub mod api_delegation;
 pub mod api_chat;
 pub mod api_coordinator;

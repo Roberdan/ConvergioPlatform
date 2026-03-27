@@ -4,6 +4,7 @@
 
 use crate::cli_agent;
 use crate::cli_bus;
+use crate::cli_capability;
 use crate::cli_checkpoint;
 use crate::cli_delegation;
 use crate::cli_reap;
@@ -106,6 +107,11 @@ pub enum Commands {
     Kb {
         #[command(subcommand)]
         command: cli_kb::KbCommands,
+    },
+    /// Capability system commands (cvg capability list/invoke/register/permissions)
+    Capability {
+        #[command(subcommand)]
+        command: cli_capability::CapabilityCommands,
     },
     /// Agent memory commands (cvg memory remember/recall/forget/share/attest)
     Memory {

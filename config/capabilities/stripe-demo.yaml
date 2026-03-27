@@ -1,0 +1,53 @@
+# Stripe MCP Demo — Ring 2 (Community) capability definitions.
+# Reference implementation for MCP tool integration.
+# Use mock_mode: true for testing without live API key.
+
+- name: stripe-create-customer
+  description: Create a new Stripe customer with email and name
+  ring: 2
+  mcp_server: "stdio://stripe-mcp-server"
+  input_schema:
+    type: object
+    properties:
+      email:
+        type: string
+        format: email
+      name:
+        type: string
+    required: [email, name]
+  permissions_required:
+    - stripe:customer:write
+
+- name: stripe-create-payment-intent
+  description: Create a Stripe payment intent for a given amount and currency
+  ring: 2
+  mcp_server: "stdio://stripe-mcp-server"
+  input_schema:
+    type: object
+    properties:
+      amount:
+        type: integer
+        minimum: 50
+      currency:
+        type: string
+        enum: [usd, eur, gbp]
+      customer_id:
+        type: string
+    required: [amount, currency]
+  permissions_required:
+    - stripe:payment:write
+
+- name: stripe-list-charges
+  description: List recent Stripe charges with optional customer filter
+  ring: 2
+  mcp_server: "stdio://stripe-mcp-server"
+  input_schema:
+    type: object
+    properties:
+      limit:
+        type: integer
+        default: 10
+      customer_id:
+        type: string
+  permissions_required:
+    - stripe:charge:read
