@@ -50,6 +50,8 @@ END;
 
 pub struct SqliteMemoryStore {
     conn: Mutex<Connection>,
+    /// Optional path for Markdown export on remember().
+    export_dir: Option<std::path::PathBuf>,
 }
 
 impl SqliteMemoryStore {
@@ -58,7 +60,13 @@ impl SqliteMemoryStore {
             .map_err(|e| MemoryError::StorageError(e.to_string()))?;
         conn.execute_batch(SCHEMA_SQL)
             .map_err(|e| MemoryError::StorageError(e.to_string()))?;
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self { conn: Mutex::new(conn), export_dir: None })
+    }
+
+    /// Enable Markdown export on every remember() call.
+    pub fn with_export_dir(mut self, dir: impl Into<std::path::PathBuf>) -> Self {
+        self.export_dir = Some(dir.into());
+        self
     }
 
     /// Hard-delete memories whose expires_at has passed.
@@ -85,6 +93,14 @@ impl MemoryStore for SqliteMemoryStore {
             .map_err(|e| MemoryError::StorageError(e.to_string()))?;
         let attestations_json = serde_json::to_string(&memory.attestations)
             .map_err(|e| MemoryError::StorageError(e.to_string()))?;
+
+        // Clone for Markdown export before INSERT consumes values.
+        let export_mem = if self.export_dir.is_some() {
+            Some(Memory { id: id.clone(), ..memory.clone() })
+        } else {
+            None
+        };
+
         let conn = self.conn.lock().map_err(|e| MemoryError::StorageError(e.to_string()))?;
         conn.execute(
             "INSERT INTO agent_memories
@@ -104,6 +120,15 @@ impl MemoryStore for SqliteMemoryStore {
             ],
         )
         .map_err(|e| MemoryError::StorageError(e.to_string()))?;
+        drop(conn);
+
+        // Markdown export (best-effort — don't fail remember on export error).
+        if let (Some(ref dir), Some(mem)) = (&self.export_dir, export_mem) {
+            if let Err(e) = super::markdown_export::export_memory(&mem, dir) {
+                tracing::warn!("markdown export failed for {}: {e}", id);
+            }
+        }
+
         Ok(id)
     }
 

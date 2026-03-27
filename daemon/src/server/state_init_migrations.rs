@@ -120,4 +120,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
          updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
      )",
     "CREATE INDEX IF NOT EXISTS idx_delegation_progress_id ON delegation_progress(delegation_id)",
+    // Plan 716 — add spec_file to plan_reviews for pre-plan review support
+    "ALTER TABLE plan_reviews ADD COLUMN spec_file TEXT",
 ];
