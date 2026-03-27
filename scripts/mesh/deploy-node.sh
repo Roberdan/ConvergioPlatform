@@ -82,18 +82,17 @@ info "[3/9] Stopping daemon on node..."
 _ssh "pkill -f '${DAEMON_PROCESS}' 2>/dev/null && echo 'daemon stopped' || echo 'daemon was not running'"
 sleep 3
 
-# Step 4: Sync DB from this Mac to node
+# Step 4: Sync DB from this Mac to node (direct rsync, no sync-db.sh dependency)
 info "[4/9] Syncing DB to node..."
-LOCAL_SELF="$(peers_self 2>/dev/null || echo "")"
-if [[ -n "$LOCAL_SELF" ]]; then
-  SYNC_SCRIPT="${SCRIPT_DIR}/../kernel/sync-db.sh"
-  if [[ -f "$SYNC_SCRIPT" ]]; then
-    bash "$SYNC_SCRIPT" "$LOCAL_SELF" "${PEER_NAME:-$PEER_ARG}" && ok "DB sync via sync-db.sh complete" || warn "DB sync via sync-db.sh failed — skipping"
-  else
-    warn "sync-db.sh not found at ${SYNC_SCRIPT} — skipping DB sync"
-  fi
+LOCAL_DB="$(readlink -f "${HOME}/${DB_REL_PATH}" 2>/dev/null || echo "${HOME}/${DB_REL_PATH}")"
+if [[ -f "$LOCAL_DB" ]]; then
+  REMOTE_HOME="$(_ssh 'echo $HOME' 2>/dev/null | tr -d '[:space:]')"
+  REMOTE_DB="${REMOTE_HOME}/${DB_REL_PATH}"
+  rsync -aLz "$LOCAL_DB" "${TARGET}:${REMOTE_DB}" 2>/dev/null && ok "DB synced" || warn "DB rsync failed"
+  rsync -aLz "${LOCAL_DB}-wal" "${TARGET}:${REMOTE_DB}-wal" 2>/dev/null || true
+  rsync -aLz "${LOCAL_DB}-shm" "${TARGET}:${REMOTE_DB}-shm" 2>/dev/null || true
 else
-  warn "Could not identify local peer — skipping DB sync"
+  warn "Local DB not found at ${LOCAL_DB} — skipping sync"
 fi
 
 # Step 5: Replicate secrets from this Mac's keychain to node
@@ -104,28 +103,21 @@ TG_TOKEN="$(security find-generic-password -a telegram-bot -s convergio-platform
 TG_CHAT_ID="$(security find-generic-password -a telegram-chat-id -s convergio-platform -w 2>/dev/null || true)"
 
 if [[ -n "$TG_TOKEN" ]]; then
-  ssh -n "$SSH_TARGET" "security add-generic-password -U -a telegram-bot -s convergio-platform -w '${TG_TOKEN}'" \
-    && ok "Telegram token synced" || warn "Telegram token sync failed (non-fatal)"
+  # Write token to env file on remote node (keychain may be locked over SSH)
+  _ssh "mkdir -p ~/.convergio && echo 'CONVERGIO_TELEGRAM_TOKEN=${TG_TOKEN}' > ~/.convergio/env && echo 'CONVERGIO_TELEGRAM_CHAT_ID=${TG_CHAT_ID}' >> ~/.convergio/env && chmod 600 ~/.convergio/env" \
+    && ok "Telegram secrets written to ~/.convergio/env" || warn "Secret write failed (non-fatal)"
 else
   warn "Telegram token not found in local keychain — skipping"
-fi
-if [[ -n "$TG_CHAT_ID" ]]; then
-  ssh -n "$SSH_TARGET" "security add-generic-password -U -a telegram-chat-id -s convergio-platform -w '${TG_CHAT_ID}'" \
-    && ok "Telegram chat ID synced" || warn "Telegram chat ID sync failed (non-fatal)"
-else
-  warn "Telegram chat ID not found in local keychain — skipping"
 fi
 
 # Step 6: Start daemon on node (reads secrets from its own keychain)
 info "[6/9] Starting daemon on node..."
 _ssh "bash -lc '
+  # Source secrets from env file (written by deploy step 5)
+  [[ -f ~/.convergio/env ]] && source ~/.convergio/env
   plist=\"\${HOME}/Library/LaunchAgents/com.convergio.kernel.plist\"
-  token=\"\$(security find-generic-password -a telegram-bot -s convergio-platform -w 2>/dev/null || echo \"\")\"
-  chat_id=\"\$(security find-generic-password -a telegram-chat-id -s convergio-platform -w 2>/dev/null || echo \"\")\"
   if [[ -f \"\$plist\" ]]; then
     launchctl unload \"\$plist\" 2>/dev/null || true
-    [[ -n \"\$token\" ]] && export CONVERGIO_TELEGRAM_TOKEN=\"\$token\"
-    [[ -n \"\$chat_id\" ]] && export CONVERGIO_TELEGRAM_CHAT_ID=\"\$chat_id\"
     launchctl load \"\$plist\" && echo \"launchd agent loaded\"
   else
     echo \"WARNING: plist not found — starting daemon directly\" >&2
