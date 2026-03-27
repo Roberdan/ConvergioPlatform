@@ -88,9 +88,9 @@ LOCAL_DB="$(readlink -f "${HOME}/${DB_REL_PATH}" 2>/dev/null || echo "${HOME}/${
 if [[ -f "$LOCAL_DB" ]]; then
   REMOTE_HOME="$(_ssh 'echo $HOME' 2>/dev/null | tr -d '[:space:]')"
   REMOTE_DB="${REMOTE_HOME}/${DB_REL_PATH}"
-  rsync -aLz "$LOCAL_DB" "${TARGET}:${REMOTE_DB}" 2>/dev/null && ok "DB synced" || warn "DB rsync failed"
-  rsync -aLz "${LOCAL_DB}-wal" "${TARGET}:${REMOTE_DB}-wal" 2>/dev/null || true
-  rsync -aLz "${LOCAL_DB}-shm" "${TARGET}:${REMOTE_DB}-shm" 2>/dev/null || true
+  rsync -aLz "$LOCAL_DB" "${SSH_TARGET}:${REMOTE_DB}" 2>/dev/null && ok "DB synced" || warn "DB rsync failed"
+  rsync -aLz "${LOCAL_DB}-wal" "${SSH_TARGET}:${REMOTE_DB}-wal" 2>/dev/null || true
+  rsync -aLz "${LOCAL_DB}-shm" "${SSH_TARGET}:${REMOTE_DB}-shm" 2>/dev/null || true
 else
   warn "Local DB not found at ${LOCAL_DB} — skipping sync"
 fi
