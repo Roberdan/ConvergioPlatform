@@ -108,9 +108,13 @@ waves:
         do: |
           Create daemon/src/kernel/mod.rs with conditional compilation (#[cfg(feature = "kernel")]).
           Add "kernel" feature to daemon/Cargo.toml (default = off). Add sysinfo crate dep.
-          Implement MLX model loading: spawn mlx_lm subprocess with lifecycle management:
-          - Startup timeout (30s), restart on crash (3 retries), graceful SIGTERM shutdown.
-          - Memory monitoring via sysinfo: warn if RSS > 6GB.
+          Reuse existing AppleFmBridge (daemon/src/ipc/models/apple_fm.rs) for MLX inference.
+          Do NOT create a new subprocess spawner — apple_fm.rs already handles mlx_lm lifecycle:
+          timeout, SIGTERM, health check, Apple Silicon detection.
+          Extend AppleFmBridge with:
+          - Model preloading (keep subprocess warm between calls)
+          - Memory monitoring via sysinfo crate: warn if RSS > 6GB
+          - Restart on crash (3 retries with backoff)
           POST /api/kernel/classify — input: situation JSON, output: {severity, action, reason}.
           GET /api/kernel/status — {models_loaded, ram_gb, uptime_secs, active_node, last_check}.
           Wire into daemon/src/server/routes/mod.rs (behind #[cfg(feature = "kernel")] gate).
