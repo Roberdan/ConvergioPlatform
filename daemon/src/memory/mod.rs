@@ -1,12 +1,15 @@
 pub mod attestation;
 pub mod blob_store;
 pub mod embeddings;
+pub mod markdown_export;
+pub mod reindex;
 pub mod sharing;
 pub mod sqlite_store;
 pub mod types;
 pub mod vector_store;
 
 pub use blob_store::BlobStore;
+pub use reindex::Reindexer;
 pub use types::{AccessLevel, Attestation, Memory, MemoryError, MemoryType, RecallQuery};
 pub use vector_store::{VectorMatch, VectorStore};
 

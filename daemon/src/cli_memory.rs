@@ -58,6 +58,21 @@ pub enum MemoryCommands {
         #[arg(long, default_value = DEFAULT_API)]
         api_url: String,
     },
+    /// Export all memories as Markdown files (cvg memory export --dir <path>)
+    Export {
+        #[arg(long)]
+        dir: String,
+        #[arg(long, default_value = DEFAULT_API)]
+        api_url: String,
+    },
+    /// Rebuild indexes: Markdown → SQLite → VectorStore (cvg memory reindex)
+    Reindex {
+        /// Directory with Markdown memory files
+        #[arg(long)]
+        dir: Option<String>,
+        #[arg(long, default_value = DEFAULT_API)]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: MemoryCommands) -> Result<(), CliError> {
@@ -107,6 +122,16 @@ pub async fn handle(cmd: MemoryCommands) -> Result<(), CliError> {
                 "confidence": confidence
             });
             let url = format!("{api_url}/api/memory/attest");
+            crate::cli_http::post_and_print(&url, &body, false).await
+        }
+        MemoryCommands::Export { dir, api_url } => {
+            let body = serde_json::json!({"dir": dir});
+            let url = format!("{api_url}/api/memory/export");
+            crate::cli_http::post_and_print(&url, &body, false).await
+        }
+        MemoryCommands::Reindex { dir, api_url } => {
+            let body = serde_json::json!({"dir": dir});
+            let url = format!("{api_url}/api/memory/reindex");
             crate::cli_http::post_and_print(&url, &body, false).await
         }
     }
