@@ -14,6 +14,7 @@ mod tests {
             channels: vec![NotifyChannel::Ntfy],
             // disable external side-effects in tests
             dry_run: true,
+            db_path: None,
         }
     }
 

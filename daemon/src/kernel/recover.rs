@@ -4,6 +4,7 @@
 // WARN threshold: >= 3 consecutive cycles (≈90 s at 30 s/cycle).
 
 use std::fmt;
+use std::path::PathBuf;
 use std::process::Command;
 use tracing::{info, warn};
 
@@ -47,6 +48,9 @@ pub struct RecoveryConfig {
     /// When true, external commands (checkpoint/reap/SSH/ntfy POST) are skipped.
     /// Enabled automatically in tests.
     pub dry_run: bool,
+    /// DB path for active-node resolution in the Local audio channel.
+    /// Defaults to ~/.claude/data/dashboard.db.
+    pub db_path: Option<PathBuf>,
 }
 
 impl RecoveryConfig {
@@ -57,7 +61,15 @@ impl RecoveryConfig {
         let channels = parse_channels(
             &std::env::var("KERNEL_NOTIFY_CHANNELS").unwrap_or_else(|_| "ntfy".to_string()),
         );
-        Self { ntfy_topic, channels, dry_run: false }
+        let db_path = std::env::var("DASHBOARD_DB")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME").ok().map(|h| {
+                    PathBuf::from(h).join(".claude/data/dashboard.db")
+                })
+            });
+        Self { ntfy_topic, channels, dry_run: false, db_path }
     }
 }
 
@@ -97,7 +109,9 @@ pub async fn recover(
 
 /// Dispatch a notification to all configured channels.
 ///
-/// ntfy.sh is the only live channel; Local and Telegram are stubs (W2/W3).
+/// Ntfy: HTTP POST to ntfy.sh.
+/// Local: synthesise message via TTS → route to active mesh node via audio::play_on_active_node.
+/// Telegram: stub (W3).
 pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig) {
     for channel in &cfg.channels {
         match channel {
@@ -112,8 +126,17 @@ pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig
                 }
             }
             NotifyChannel::Local => {
-                // W2 stub — local audio notification
-                info!("kernel.recover: [local] audio stub — severity={severity} msg={message}");
+                if cfg.dry_run {
+                    info!(
+                        "kernel.recover: [dry_run] audio skipped — severity={severity} msg={message}"
+                    );
+                } else {
+                    // TTS speak + play on active node
+                    let mut tts = super::tts::TtsEngine::new();
+                    if let Ok(audio) = tts.speak(message, "it-IT") {
+                        super::audio::play_local(&audio).await;
+                    }
+                }
             }
             NotifyChannel::Telegram => {
                 // W3 stub — Telegram bot notification

@@ -1,11 +1,17 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Kernel API endpoints — gated behind the "kernel" feature flag.
-// POST /api/kernel/classify and GET /api/kernel/status.
+// POST /api/kernel/classify, GET /api/kernel/status, POST /api/kernel/speak,
+// POST /api/kernel/transcribe, POST /api/kernel/listen.
 
 #[cfg(feature = "kernel")]
 pub mod handlers {
     use crate::kernel::engine::{KernelConfig, KernelEngine, KernelStatus};
+    use crate::kernel::stt::{SttEngine, TranscribeResponse};
+    use crate::kernel::tts::TtsEngine;
+    use axum::body::Bytes;
     use axum::extract::State;
+    use axum::http::{header, StatusCode};
+    use axum::response::IntoResponse;
     use axum::routing::{get, post};
     use axum::{Json, Router};
     use serde::{Deserialize, Serialize};
@@ -16,6 +22,8 @@ pub mod handlers {
     #[derive(Clone)]
     pub struct KernelState {
         pub engine: Arc<Mutex<KernelEngine>>,
+        pub tts: Arc<Mutex<TtsEngine>>,
+        pub stt: Arc<Mutex<SttEngine>>,
     }
 
     impl KernelState {
@@ -23,8 +31,15 @@ pub mod handlers {
             let mut engine = KernelEngine::new(config.clone());
             // Pre-load the default model on startup.
             engine.load_model(&config.default_model);
+            let mut stt = SttEngine::new();
+            // Mark loaded if a CLI is available; degrades gracefully otherwise.
+            if stt.is_available() {
+                stt.load();
+            }
             Self {
                 engine: Arc::new(Mutex::new(engine)),
+                tts: Arc::new(Mutex::new(TtsEngine::new())),
+                stt: Arc::new(Mutex::new(stt)),
             }
         }
     }
@@ -62,10 +77,20 @@ pub mod handlers {
         }
     }
 
+    #[derive(Debug, Deserialize)]
+    pub struct SpeakRequest {
+        pub text: String,
+        /// BCP-47 locale, e.g. "it-IT" or "en-US".
+        pub locale: String,
+    }
+
     pub fn router() -> Router<KernelState> {
         Router::new()
             .route("/api/kernel/classify", post(handle_classify))
             .route("/api/kernel/status", get(handle_status))
+            .route("/api/kernel/speak", post(handle_speak))
+            .route("/api/kernel/transcribe", post(handle_transcribe))
+            .route("/api/kernel/listen", post(handle_listen))
     }
 
     async fn handle_classify(
@@ -89,6 +114,122 @@ pub mod handlers {
             engine.status()
         };
         Json(StatusResponse::from(status))
+    }
+
+    /// POST /api/kernel/speak — synthesise text and return WAV audio bytes.
+    ///
+    /// Input JSON: `{"text": "...", "locale": "it-IT"}`
+    /// Output: `audio/wav` bytes (or 500 on synthesis failure).
+    async fn handle_speak(
+        State(state): State<KernelState>,
+        Json(body): Json<SpeakRequest>,
+    ) -> impl IntoResponse {
+        let result = {
+            let mut tts = state.tts.lock().unwrap_or_else(|p| p.into_inner());
+            tts.speak(&body.text, &body.locale)
+        };
+        match result {
+            Ok(wav) => (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "audio/wav")],
+                wav,
+            )
+                .into_response(),
+            Err(e) => {
+                tracing::warn!(error = %e, text = %body.text, "tts synthesis failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    format!(r#"{{"error":"tts failed: {e}"}}"#).into_bytes(),
+                )
+                    .into_response()
+            }
+        }
+    }
+
+    /// POST /api/kernel/transcribe — transcribe raw audio bytes uploaded as body.
+    ///
+    /// Input: raw audio bytes (WAV/FLAC/MP3) as request body.
+    /// Output: `{"text":"...","locale":"en","confidence":0.9}`
+    /// Privacy: audio bytes never stored; only the transcription text is returned.
+    async fn handle_transcribe(
+        State(state): State<KernelState>,
+        body: Bytes,
+    ) -> impl IntoResponse {
+        let result = {
+            let stt = state.stt.lock().unwrap_or_else(|p| p.into_inner());
+            stt.transcribe(&body)
+        };
+        match result {
+            Ok(t) => (StatusCode::OK, Json(TranscribeResponse::from(t))).into_response(),
+            Err(e) => {
+                tracing::warn!(error = %e, "stt transcription failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    format!(r#"{{"error":"stt failed: {e}"}}"#).into_bytes(),
+                )
+                    .into_response()
+            }
+        }
+    }
+
+    /// POST /api/kernel/listen — record microphone on kernel node, transcribe, return text.
+    ///
+    /// Recording uses SoX `rec` command: mono 16kHz WAV, stops after 1.5s silence.
+    /// Privacy: WAV file is deleted immediately after transcription.
+    /// For remote recording: caller records locally and POSTs audio to /transcribe instead.
+    async fn handle_listen(State(state): State<KernelState>) -> impl IntoResponse {
+        // Shell out to `rec` (SoX) to capture microphone input.
+        let wav_path = "/tmp/cvg_listen.wav";
+        let rec_result = std::process::Command::new("rec")
+            .args([
+                "-q", "-r", "16000", "-c", "1", wav_path,
+                "silence", "1", "0.1", "1%", "1", "1.5", "1%",
+            ])
+            .status();
+
+        match rec_result {
+            Ok(s) if s.success() => {}
+            Ok(s) => {
+                tracing::warn!(code = ?s.code(), "rec exited non-zero");
+                let _ = std::fs::remove_file(wav_path);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    br#"{"error":"mic recording failed"}"#.to_vec(),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "rec (SoX) not available");
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    format!(r#"{{"error":"rec not available: {e}"}}"#).into_bytes(),
+                )
+                    .into_response();
+            }
+        }
+
+        let audio = std::fs::read(wav_path).unwrap_or_default();
+        let _ = std::fs::remove_file(wav_path); // privacy: delete immediately
+        let result = {
+            let stt = state.stt.lock().unwrap_or_else(|p| p.into_inner());
+            stt.transcribe(&audio)
+        };
+        match result {
+            Ok(t) => (StatusCode::OK, Json(TranscribeResponse::from(t))).into_response(),
+            Err(e) => {
+                tracing::warn!(error = %e, "stt transcription after listen failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    format!(r#"{{"error":"stt failed: {e}"}}"#).into_bytes(),
+                )
+                    .into_response()
+            }
+        }
     }
 
     /// Timestamp helper — ISO 8601 UTC.
