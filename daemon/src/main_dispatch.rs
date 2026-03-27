@@ -3,7 +3,7 @@ use crate::{
     cli_agent_format, cli_audit, cli_audit_project, cli_bus, cli_checkpoint, cli_delegation,
     cli_domain,
     cli_error::CliError,
-    cli_capability, cli_channel, cli_kb, cli_lock, cli_memory, cli_ops, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
+    cli_capability, cli_channel, cli_chat, cli_kb, cli_lock, cli_memory, cli_ops, cli_status, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
     cli_skill, cli_task, cli_wave, cli_who, cli_workspace,
     ipc_handler::{self, DaemonCommands},
 };
@@ -163,6 +163,8 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         Commands::Wave { command } => exit_on_err(cli_wave::handle(command).await),
         Commands::Agent { command } => exit_on_err(cli_agent_format::dispatch(command).await),
         Commands::Kb { command } => exit_on_err(cli_kb::handle(command).await),
+        Commands::Status { api_url } => exit_on_err(cli_status::handle(&api_url).await),
+        Commands::Chat { message, api_url } => exit_on_err(cli_chat::handle(&api_url, message).await),
         Commands::Channel { command } => exit_on_err(cli_channel::handle(command).await),
         Commands::Capability { command } => exit_on_err(cli_capability::handle(command).await),
         Commands::Voice { command } => exit_on_err(cli_voice::handle(command).await),

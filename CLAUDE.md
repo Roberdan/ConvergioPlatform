@@ -60,7 +60,7 @@ cvg agent complete "<type>-$(hostname -s)-$$"  # before /exit
 | `cvg reap [--dry-run]` | Run zombie reaper |
 | `cvg checkpoint save <plan_id>` | Snapshot plan state |
 | `cvg checkpoint restore <plan_id>` | Restore from snapshot |
-| `cvg watchdog start\|stop\|status` | Manage local LLM watchdog |
+| `cvg kernel start\|stop\|status` | Manage kernel health monitor (replaces watchdog) |
 | `cvg notify send <title> <msg> [--severity ...]` | Send notification |
 | `cvg decision log [--plan-id <id>]` | Query decision audit trail |
 

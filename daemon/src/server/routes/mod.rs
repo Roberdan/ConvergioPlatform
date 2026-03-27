@@ -2,6 +2,9 @@ pub mod api_routes;
 
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
+#[cfg(feature = "kernel")]
+use crate::kernel::api::handlers::KernelState;
+
 use super::api_agent_catalog;
 use super::api_agent_triage;
 use super::api_agents;
@@ -126,6 +129,20 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_memory::router())
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())
+        // Kernel inference routes (feature-gated; uses own KernelState)
+        .merge({
+            #[cfg(feature = "kernel")]
+            {
+                use crate::kernel::api::handlers::KernelState;
+                use crate::kernel::engine::KernelConfig;
+                let ks = KernelState::new(KernelConfig::default());
+                crate::kernel::api::handlers::router().with_state(ks)
+            }
+            #[cfg(not(feature = "kernel"))]
+            {
+                Router::new()
+            }
+        })
         .route("/api/chat/stream/:sid", get(sse::chat_stream_sse))
         .route("/api/mesh/action/stream", get(sse::mesh_action_sse))
         .route("/api/mesh/fullsync", get(sse::mesh_action_sse))

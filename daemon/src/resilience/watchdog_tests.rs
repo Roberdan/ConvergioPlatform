@@ -1,7 +1,9 @@
 // TDD tests for watchdog — written BEFORE implementation (RED phase).
 // F-26: Local LLM kernel watchdog.
+// Watchdog is deprecated; use kernel module (cvg kernel) for new code.
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::super::notify::ChannelConfig;
     use super::super::watchdog::{

@@ -2,6 +2,11 @@
 // F-26: Local LLM kernel watchdog — monitors daemon health, agent progress,
 // orphan worktrees and stale locks. Uses Ollama for decision summarisation;
 // falls back to hard-coded rules when Ollama is unavailable.
+//
+// DEPRECATED: This entire module is superseded by daemon/src/kernel/monitor.rs.
+// Public symbols carry #[deprecated] annotations. Use `cvg kernel` for new code.
+// Deletion planned after W4 integration tests pass.
+#![allow(deprecated)]
 
 use crate::resilience::notify::{ChannelConfig, NotifyMessage, NotifySeverity};
 use reqwest::Client;
@@ -10,6 +15,7 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 /// Watchdog configuration — loaded from notifications.conf at startup.
+#[deprecated(note = "Use kernel module: cvg kernel (daemon/src/kernel/monitor.rs)")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatchdogConfig {
     /// How often (seconds) to run all health checks. Default: 30.
@@ -26,6 +32,7 @@ pub struct WatchdogConfig {
     pub notification_channels: Vec<ChannelConfig>,
 }
 
+#[allow(deprecated)]
 impl Default for WatchdogConfig {
     fn default() -> Self {
         Self {
@@ -66,6 +73,7 @@ pub struct WatchdogStatus {
 }
 
 /// Run one full health-check cycle.
+#[deprecated(note = "Use kernel module: cvg kernel (daemon/src/kernel/monitor.rs)")]
 pub async fn run_checks(config: &WatchdogConfig) -> Vec<CheckResult> {
     let client = Client::builder().timeout(Duration::from_secs(5)).build().unwrap_or_default();
     vec![
@@ -125,6 +133,7 @@ async fn check_orphan_worktrees() -> CheckResult {
 }
 
 /// Ask Ollama to summarise; falls back to plain text on error (no LLM needed).
+#[deprecated(note = "Use kernel module: cvg kernel (daemon/src/kernel/monitor.rs)")]
 pub async fn ollama_summarise(config: &WatchdogConfig, context: &str) -> String {
     let client = Client::builder().timeout(Duration::from_secs(10)).build().unwrap_or_default();
     let url = format!("{}/api/generate", config.ollama_url);
@@ -145,6 +154,7 @@ pub async fn ollama_summarise(config: &WatchdogConfig, context: &str) -> String 
 }
 
 /// Hard-coded restart vs escalate rule (no LLM needed for basic decisions).
+#[deprecated(note = "Use kernel module: cvg kernel (daemon/src/kernel/monitor.rs)")]
 pub fn decide_action(failures: &[CheckResult]) -> WatchdogAction {
     if failures.iter().any(|r| r.check_name == "daemon_health") {
         WatchdogAction::Restart
@@ -156,6 +166,7 @@ pub fn decide_action(failures: &[CheckResult]) -> WatchdogAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WatchdogAction { Restart, Notify, NoOp }
 
+#[deprecated(note = "Use kernel module: cvg kernel (daemon/src/kernel/monitor.rs)")]
 pub async fn build_notification(config: &WatchdogConfig, failures: &[CheckResult]) -> NotifyMessage {
     let raw = failures.iter().filter_map(|r| r.details.as_deref()).collect::<Vec<_>>().join("; ");
     let summary = ollama_summarise(config, &raw).await;
@@ -169,6 +180,7 @@ pub async fn build_notification(config: &WatchdogConfig, failures: &[CheckResult
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

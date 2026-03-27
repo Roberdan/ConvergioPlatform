@@ -8,6 +8,7 @@ use crate::cli_capability;
 use crate::cli_channel;
 use crate::cli_checkpoint;
 use crate::cli_delegation;
+use crate::cli_kernel;
 use crate::cli_reap;
 use crate::cli_repo;
 use crate::cli_domain;
@@ -109,6 +110,18 @@ pub enum Commands {
     Kb {
         #[command(subcommand)]
         command: cli_kb::KbCommands,
+    },
+    /// Platform status overview (cvg status)
+    Status {
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Chat with Ali orchestrator (cvg chat ["message"])
+    Chat {
+        /// Single message (non-interactive). Omit for REPL mode.
+        message: Option<String>,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
     },
     /// Channel commands (cvg channel list/status/test/send)
     Channel {
@@ -233,5 +246,10 @@ pub enum Commands {
     Repo {
         #[command(subcommand)]
         command: cli_repo::RepoCommands,
+    },
+    /// Kernel health monitor commands (cvg kernel start/stop/status)
+    Kernel {
+        #[command(subcommand)]
+        command: cli_kernel::KernelCommands,
     },
 }

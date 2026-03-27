@@ -1,6 +1,7 @@
 pub mod background;
 pub mod background_sync;
 pub mod artifacts;
+pub mod kernel;
 pub mod capabilities;
 pub mod channels;
 pub mod checklist;

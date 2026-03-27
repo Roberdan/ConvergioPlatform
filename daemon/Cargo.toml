@@ -18,6 +18,7 @@ harness = false
 [features]
 default = ["crsqlite"]
 crsqlite = []
+kernel = []
 
 [dependencies]
 thiserror = "1"

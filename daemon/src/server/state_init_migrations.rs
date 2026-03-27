@@ -122,4 +122,30 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_delegation_progress_id ON delegation_progress(delegation_id)",
     // Plan 716 — add spec_file to plan_reviews for pre-plan review support
     "ALTER TABLE plan_reviews ADD COLUMN spec_file TEXT",
+    // Plan 729 — kernel module tables
+    "CREATE TABLE IF NOT EXISTS kernel_events (
+         id          INTEGER PRIMARY KEY AUTOINCREMENT,
+         timestamp   TEXT NOT NULL DEFAULT (datetime('now')),
+         severity    TEXT NOT NULL DEFAULT 'ok'
+             CHECK(severity IN ('ok','warn','critical')),
+         source      TEXT NOT NULL DEFAULT '',
+         message     TEXT NOT NULL DEFAULT '',
+         action_taken TEXT NOT NULL DEFAULT ''
+     )",
+    "CREATE INDEX IF NOT EXISTS idx_kernel_events_severity ON kernel_events(severity)",
+    "CREATE INDEX IF NOT EXISTS idx_kernel_events_ts ON kernel_events(timestamp DESC)",
+    "CREATE TABLE IF NOT EXISTS kernel_verifications (
+         id             INTEGER PRIMARY KEY AUTOINCREMENT,
+         task_id        INTEGER,
+         timestamp      TEXT NOT NULL DEFAULT (datetime('now')),
+         checks_json    TEXT NOT NULL DEFAULT '[]',
+         passed         INTEGER NOT NULL DEFAULT 1,
+         blocked_reason TEXT
+     )",
+    "CREATE INDEX IF NOT EXISTS idx_kernel_verifications_task ON kernel_verifications(task_id)",
+    "CREATE TABLE IF NOT EXISTS kernel_config (
+         key        TEXT PRIMARY KEY NOT NULL,
+         value      TEXT NOT NULL DEFAULT '',
+         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )",
 ];

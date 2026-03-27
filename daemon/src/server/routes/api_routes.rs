@@ -90,6 +90,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/project/:id/tree",
     "/api/delegation/:id/progress",
     "/api/memory/recall",
+    "/api/kernel/status",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -163,6 +164,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/memory/remember",
     "/api/memory/share",
     "/api/memory/attest",
+    "/api/kernel/classify",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",
