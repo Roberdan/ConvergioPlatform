@@ -64,11 +64,15 @@ fn init_inner(with_stderr: bool) -> WorkerGuard {
 
     install_panic_hook(&dir);
 
-    tracing::info!(
-        version = env!("CARGO_PKG_VERSION"),
-        pid = std::process::id(),
-        "daemon starting"
-    );
+    // Only log startup for serve/tui commands, not CLI subcommands.
+    let is_serve = std::env::args().any(|a| a == "serve" || a == "start" || a == "tui");
+    if is_serve {
+        tracing::info!(
+            version = env!("CARGO_PKG_VERSION"),
+            pid = std::process::id(),
+            "daemon starting"
+        );
+    }
 
     guard
 }
