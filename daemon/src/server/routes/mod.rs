@@ -2,8 +2,6 @@ pub mod api_routes;
 
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
-#[cfg(feature = "kernel")]
-use crate::kernel::api::handlers::KernelState;
 
 use super::api_agent_catalog;
 use super::api_agent_triage;
@@ -23,6 +21,7 @@ use super::api_heartbeat;
 use super::api_ideas;
 use super::api_ingest;
 use super::api_ipc;
+use super::api_kernel_audio;
 use super::api_memory;
 use super::api_mesh;
 use super::api_metrics;
@@ -126,6 +125,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_openclaw::router())
         .merge(api_crdt::router())
         .merge(api_capabilities::router())
+        .merge(api_kernel_audio::router())
         .merge(api_memory::router())
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())

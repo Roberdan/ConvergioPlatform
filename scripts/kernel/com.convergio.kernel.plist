@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.convergio.kernel</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/Roberdan/GitHub/ConvergioPlatform/daemon/target/release/convergio-platform-daemon</string>
+        <string>serve</string>
+        <string>--dev-mode</string>
+        <string>--kernel</string>
+    </array>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/Roberdan/Library/Logs/convergio-kernel.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/Roberdan/Library/Logs/convergio-kernel.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>CONVERGIO_TELEGRAM_TOKEN</key>
+        <string>__CONVERGIO_TELEGRAM_TOKEN__</string>
+        <key>CONVERGIO_TELEGRAM_CHAT_ID</key>
+        <string>__CONVERGIO_TELEGRAM_CHAT_ID__</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>

@@ -1,5 +1,10 @@
 # Changelog
 
+## [18.3.1] - 27 Marzo 2026
+
+### Added
+- Plan 729 (Q) Convergio Kernel: always-on local LLM kernel watchdog on M1 Pro, Mistral 3 8B via MLX (20-30% faster than Ollama on Apple Silicon), deterministic recovery (LLM classifies, rules act), Telegram Bot API notifications (OGG voice native), audio mesh routing to active user node, macOS say TTS fallback, ADR-0116
+
 ## [18.3.0] - 27 Marzo 2026
 
 ### Added

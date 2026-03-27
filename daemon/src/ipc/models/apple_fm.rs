@@ -90,12 +90,17 @@ impl AppleFmBridge {
             return vec![];
         }
         // mlx_lm does not expose a list-models subcommand; we return a static set
-        // of well-known model identifiers that ship with the framework.
+        // of well-known model identifiers managed by scripts/kernel/setup-models.sh.
         vec![
-            "mlx-community/Llama-3.2-1B-Instruct-4bit".to_string(),
-            "mlx-community/Llama-3.2-3B-Instruct-4bit".to_string(),
+            // Core inference models (required)
             "mlx-community/Mistral-7B-Instruct-v0.3-4bit".to_string(),
-            "mlx-community/Phi-3.5-mini-instruct-4bit".to_string(),
+            "mlx-community/Qwen2.5-7B-Instruct-4bit".to_string(),
+            "mlx-community/Codestral-22B-v0.1-4bit".to_string(),
+            // Speech-to-text
+            "mlx-community/whisper-small".to_string(),
+            // Optional — may not be present on all installs
+            "mlx-community/Mistral-Small-3.1-24B-Instruct-2503-4bit".to_string(),
+            "mlx-community/Voxtral-Mini-3B-2507-4bit".to_string(),
         ]
     }
 

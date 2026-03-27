@@ -152,6 +152,27 @@ cvg repo sync           # checks each repo path exists + health endpoint respond
 - Cause: daemon not running, or repo path missing.
 - Fix: verify path exists, start daemon, re-run `cvg repo sync`.
 
+## Kernel (Plan 729)
+
+**Kernel model won't load**
+- Symptom: `cvg kernel start` exits immediately or prints "model load failed".
+- Cause: `mlx_lm` Python package not installed, or insufficient disk space for model (~5 GB).
+- Fix: `pip install mlx-lm` → verify `python3 -c "import mlx_lm"` succeeds.
+  Check disk: `df -h ~/.cache/huggingface` → need ≥ 6 GB free.
+
+**Telegram not responding**
+- Symptom: kernel starts but no Telegram messages arrive.
+- Cause: `CONVERGIO_TELEGRAM_TOKEN` env var not set in daemon environment.
+- Fix: `echo $CONVERGIO_TELEGRAM_TOKEN` → if empty, add to `.env` and restart daemon:
+  `./daemon/start.sh`
+
+**Audio not playing on active node**
+- Symptom: voice alerts play on M1 Pro (kernel node) instead of current working node.
+- Cause: `cvg kernel here` not run on the active node, or mesh partition.
+- Fix: On the node where you are working, run `cvg kernel here` to register it as audio target.
+  Verify: `cvg kernel status` shows correct `audio_target` node.
+  Fallback: `afplay` must be available (`which afplay`) for local audio output.
+
 ## macOS / App
 
 **Menu bar icon missing**

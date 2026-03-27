@@ -165,6 +165,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/memory/share",
     "/api/memory/attest",
     "/api/kernel/classify",
+    "/api/kernel/play",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",

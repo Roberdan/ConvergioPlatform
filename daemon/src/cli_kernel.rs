@@ -60,6 +60,12 @@ pub enum KernelCommands {
         #[arg(long, default_value = "it-IT")]
         locale: String,
     },
+    /// Download all MLX models required by the kernel (runs scripts/kernel/setup-models.sh)
+    Setup {
+        /// Path to setup-models.sh; defaults to scripts/kernel/setup-models.sh relative to cwd
+        #[arg(long)]
+        script: Option<String>,
+    },
 }
 
 /// Dispatch kernel subcommands. Returns an exit code (0 = success).
@@ -139,6 +145,22 @@ async fn dispatch_inner(cmd: KernelCommands) -> Result<(), CliError> {
             let body = serde_json::json!({ "text": text, "locale": locale });
             crate::cli_http::post_and_print(&format!("{api_url}/api/kernel/speak"), &body, false)
                 .await
+        }
+        KernelCommands::Setup { script } => {
+            let script_path = script.unwrap_or_else(|| {
+                "scripts/kernel/setup-models.sh".to_string()
+            });
+            let status = std::process::Command::new("bash")
+                .arg(&script_path)
+                .status()
+                .map_err(|e| CliError::ApiCallFailed(format!("failed to launch {script_path}: {e}")))?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err(CliError::ApiCallFailed(format!(
+                    "setup-models.sh exited with status {status}"
+                )))
+            }
         }
     }
 }
