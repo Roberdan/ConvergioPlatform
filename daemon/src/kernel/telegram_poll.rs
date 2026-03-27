@@ -123,7 +123,7 @@ async fn run_poll_loop(
                         if elapsed < Duration::from_secs(1) {
                             sleep(Duration::from_secs(1) - elapsed).await;
                         }
-                        let reply = process_text(text, daemon_url, engine);
+                        let reply = process_text(text, daemon_url, engine).await;
                         if let Err(e) = send_message(&client, &base, chat_id, &reply).await {
                             warn!("telegram_poll: send_message failed: {e}");
                         } else {
@@ -141,10 +141,20 @@ async fn run_poll_loop(
     }
 }
 
-fn process_text(text: &str, daemon_url: &str, engine: &KernelEngine) -> String {
+async fn process_text(text: &str, daemon_url: &str, engine: &KernelEngine) -> String {
     let intent = classify_intent(text, engine);
     debug!(?intent, text, "telegram_poll: classified intent");
-    route_intent(intent, daemon_url)
+    // route_intent uses reqwest::blocking which deadlocks inside tokio runtime.
+    // Wrap in spawn_blocking to run on a dedicated thread pool.
+    let daemon = daemon_url.to_string();
+    let intent_clone = intent.clone();
+    match tokio::task::spawn_blocking(move || route_intent(intent_clone, &daemon)).await {
+        Ok(response) => response,
+        Err(e) => {
+            warn!("telegram_poll: spawn_blocking failed: {e}");
+            "Errore interno del kernel.".to_string()
+        }
+    }
 }
 
 async fn fetch_updates(
