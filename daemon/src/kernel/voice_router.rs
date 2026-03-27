@@ -209,13 +209,12 @@ fn route_ask_ali(question: &str, daemon_url: &str) -> String {
         }
     };
 
-    // Step 2: send message
+    // Step 2: send message (field is "content", not "message")
     let msg_res = client
         .post(format!("{daemon_url}/api/chat/message"))
         .json(&serde_json::json!({
             "session_id": session_id,
-            "message": question,
-            "model": "claude-opus-4-6"
+            "content": question
         }))
         .send();
 

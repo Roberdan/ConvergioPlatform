@@ -13,4 +13,8 @@ alias ccore='claude-core'
 alias cserve='claude-core serve'
 alias cdaemon='claude-core daemon'
 
+# === Convergio shortcuts ===
+alias convergiostatus='cvg status'
+alias convergiochat='cvg chat'
+
 [[ -f "$HOME/.claude/shell-aliases.sh" ]] && source "$HOME/.claude/shell-aliases.sh"
