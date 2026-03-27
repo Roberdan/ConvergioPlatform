@@ -1,0 +1,155 @@
+# Plan T — Kernel MCP Intelligence
+# Wire Mistral locale al daemon via MCP tools.
+# Il kernel diventa un agente intelligente, non un router stupido.
+
+name: "Plan T — Kernel MCP Intelligence"
+project_id: convergio
+priority: P1
+execution_mode: serial
+tags: [kernel, mcp, local-llm, intelligence, function-calling]
+
+description: >
+  Wire Mistral 3 8B locale ai tool MCP del daemon.
+  Il kernel usa function calling per interrogare piani, task, costi, nodi.
+  Ragiona sulle risposte e risponde intelligentemente in italiano.
+  Percorso verso il chief of staff locale (zero costi, zero latenza).
+
+requirements:
+  - F-01: "Mistral chiama tool MCP del daemon per ottenere dati reali"
+  - F-02: "Risposte basate su dati reali, mai allucinazioni"
+  - F-03: "Function calling in formato ChatML funzionante"
+  - F-04: "Almeno 5 tool disponibili: plans, tasks, costs, nodes, kernel"
+  - F-05: "Risposta in italiano, concisa, con dati precisi"
+  - F-06: "Strip automatico di debug output mlx_lm"
+
+waves:
+  - id: W1
+    name: "MCP Tool Bridge — daemon tools per Mistral"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01, F-04]
+        do: |
+          Create daemon/src/kernel/tools.rs — define MCP-like tools for the kernel.
+          NOT using the full MCP protocol (too heavy for local model).
+          Instead: simple function definitions that Mistral can call via ChatML.
+
+          Define tool functions (each calls daemon API and returns structured data):
+          1. get_plans() → list of {id, name, status, tasks_done, tasks_total}
+          2. get_plan(id) → plan detail with tasks and waves
+          3. get_costs() → {total_cost, today_cost, active_plans}
+          4. get_node_status() → readiness checks, hostname, role
+          5. get_kernel_status() → models loaded, uptime, active node
+          6. get_agents() → list of running agents
+          7. restart_node(target) → trigger recovery
+
+          Each tool is a plain Rust function: fn tool_name(daemon_url) → String (JSON).
+          Register tools in a HashMap<&str, fn(&str) -> String>.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f daemon/src/kernel/tools.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "grep -q 'get_plans' daemon/src/kernel/tools.rs"
+
+      - id: T1-02
+        ref: [F-03, F-05]
+        do: |
+          Update daemon/src/kernel/engine.rs ask() to use ChatML function calling.
+          Mistral 3 Instruct supports tool_use in ChatML format:
+
+          Prompt format:
+          [INST] You are Convergio assistant. You have these tools:
+          - get_plans(): returns active plans
+          - get_costs(): returns cost summary
+          - get_node_status(): returns node health
+          ...
+          User question: {question}
+
+          If you need data, call a tool: <tool_call>{"name":"get_plans","arguments":{}}</tool_call>
+          Otherwise answer directly. Always answer in Italian. [/INST]
+
+          Parse response:
+          - If contains <tool_call>: extract tool name + args, call tool, re-prompt with result
+          - If plain text: return as answer (strip mlx debug)
+          - Max 2 tool call rounds (prevent loops)
+
+          Update engine.ask() to implement this loop.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "grep -q 'tool_call' daemon/src/kernel/engine.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+      - id: T1-03
+        ref: [F-02, F-06]
+        do: |
+          Update voice_router.rs route_ask_ali to use the new intelligent engine.ask().
+          Remove the hardcoded keyword matching in route_ask_ali.
+          Simply call /api/kernel/ask which now uses tool-augmented Mistral.
+          The response is already data-driven (tools fetch real data).
+
+          Also ensure strip_mlx_debug catches all debug formats.
+          Test with real Telegram messages on M1 Pro.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+  - id: W2
+    name: "Test + Deploy + Verify"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-01, F-02, F-03, F-04, F-05]
+        do: |
+          Integration tests for kernel MCP tools.
+          Test each tool function returns valid JSON with real data.
+          Test engine.ask() with tool calling:
+          - "quanti piani ho" → calls get_plans → returns count
+          - "quanto ho speso" → calls get_costs → returns cost
+          - "come sta il nodo" → calls get_node_status → returns health
+          Test strip_mlx_debug removes all debug lines.
+          Test max 2 rounds prevents infinite tool loops.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel --manifest-path daemon/Cargo.toml --lib"
+
+      - id: T2-02
+        ref: [F-01, F-02, F-05]
+        do: |
+          Deploy to M1 Pro and test via Telegram end-to-end.
+          Use deploy-node.sh or manual deploy.
+          Send real Telegram messages and verify intelligent responses.
+          Document results.
+          Update CHANGELOG, version bump.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q ok"
