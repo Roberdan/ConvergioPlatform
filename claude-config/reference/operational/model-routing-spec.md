@@ -92,6 +92,32 @@ Canonical model fields used in `copilot-agents/`:
 | `code-reviewer.agent.md` | `claude-haiku-4.5` |
 | `check.agent.md` | `gpt-5.1-codex-mini` |
 
+## Local Model Registry (MLX on M1 Pro, zero cost)
+
+| Alias | Model ID | Params | RAM (Q4) | Strength |
+|-------|----------|--------|----------|----------|
+| `mistral-local` | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 8B | ~5GB | Kernel brain, function calling, classify |
+| `qwen-local` | `mlx-community/Qwen-3.5-7B-Instruct-4bit` | 7B | ~5GB | Best open coding <8B (SWE-bench 76.4%) |
+| `codestral-local` | `mlx-community/Codestral-*-4bit` | 8B | ~5GB | Pure code gen (HumanEval 86.6%) |
+| `mistral-sm4-local` | `mlx-community/Mistral-Small-4-*-4bit` | 119B MoE (6.5B active) | ~8GB | Heavy local reasoning |
+| `voxtral-local` | Voxtral TTS 4B | 4B | ~3GB | TTS, 9 languages incl. Italian |
+| `whisper-local` | `mlx-community/whisper-small` | 244M | ~1GB | STT |
+
+## Local Routing (kernel module, --kernel flag)
+
+| Task type | Local model | Fallback (cloud) |
+|-----------|-------------|------------------|
+| Kernel watchdog (classify) | `mistral-local` (always loaded) | — |
+| Docs, CHANGELOG, ADR, config edits | `mistral-local` | `haiku` |
+| Code refactor, TDD (simple) | `qwen-local` | `codex` |
+| Pure code generation | `codestral-local` | `codex` |
+| Heavy local reasoning | `mistral-sm4-local` | `opus` |
+| TTS (speak) | `voxtral-local` | — |
+| STT (listen) | `whisper-local` | — |
+
+> Only 1 inference model loaded at a time (+ whisper). AppleFmBridge swaps via mlx_lm.
+> Cloud fallback when: local quality insufficient, task critical (planning/Thor), or rate limit detected.
+
 ## Rules
 
 1. **Aliases are shortcuts** — always resolve to canonical IDs before DB storage or frontmatter.

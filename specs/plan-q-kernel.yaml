@@ -26,6 +26,17 @@ architecture: |
   Telegram: Bot API (reqwest, no SDK) → text + OGG voice notes → bidirezionale
   Principle: kernel classifies (LLM), kernel acts (deterministic rules). Never LLM-decided actions.
 
+  Local model pool (all downloaded on M1 Pro, loaded on demand):
+    - mistral-3-8b-q4 (~5GB) — kernel brain, always loaded, function calling
+    - voxtral-tts-4b (~3GB) — TTS, loaded on speak events
+    - whisper-small (~1GB) — STT, loaded on listen events
+    - qwen-3.5-7b-q4 (~5GB) — best open coding <8B (SWE-bench 76.4%)
+    - codestral-8b-q4 (~5GB) — pure code generation (HumanEval 86.6%)
+    - mistral-small-4-q4 (~8GB) — heavy local reasoning (119B MoE, 6.5B active)
+
+  Local router: task type → best local model. Only 1 inference model loaded at a time
+  (+ whisper for STT which is tiny). AppleFmBridge handles model swap via mlx_lm.
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 requirements:
@@ -484,12 +495,17 @@ waves:
         ref: [F-01]
         do: |
           Create scripts/kernel/setup-models.sh — downloads all 3 MLX models.
+          Downloads all MLX models to ~/.cache/mlx-models/:
           1. Mistral 3 8B Q4: huggingface-cli download mlx-community/Mistral-7B-Instruct-v0.3-4bit
-          2. Voxtral TTS 4B: huggingface-cli download (verify exact MLX model name)
-          3. Whisper small: huggingface-cli download mlx-community/whisper-small
-          Progress bar, size check, checksum verify.
+          2. Qwen 3.5 7B Q4: huggingface-cli download mlx-community/Qwen-3.5-7B-Instruct-4bit
+          3. Codestral 8B Q4: huggingface-cli download mlx-community/Codestral-22B-v0.1-4bit (or latest)
+          4. Mistral Small 4 Q4: huggingface-cli download mlx-community/Mistral-Small-4-119B-2603-4bit
+          5. Voxtral TTS 4B: huggingface-cli download (verify exact MLX model name)
+          6. Whisper small: huggingface-cli download mlx-community/whisper-small
+          Progress bar, size check, disk space pre-check (~30GB total).
           If Voxtral MLX not available: download Piper TTS as fallback, log warning.
           First-run UX: `cvg kernel setup` calls this script.
+          Also update AppleFmBridge::list_models() with all 6 models.
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
         output_type: pr
