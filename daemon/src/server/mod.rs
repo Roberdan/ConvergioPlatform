@@ -20,6 +20,7 @@ pub mod api_ideas;
 pub mod api_ideas_handlers;
 pub mod api_ingest;
 pub mod api_ipc;
+pub mod api_memory;
 pub mod api_mesh;
 pub mod api_metrics;
 pub mod api_metrics_queries;

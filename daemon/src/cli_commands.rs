@@ -11,6 +11,7 @@ use crate::cli_repo;
 use crate::cli_domain;
 use crate::cli_kb;
 use crate::cli_lock;
+use crate::cli_memory;
 use crate::cli_ops;
 use crate::cli_plan;
 use crate::cli_project;
@@ -105,6 +106,11 @@ pub enum Commands {
     Kb {
         #[command(subcommand)]
         command: cli_kb::KbCommands,
+    },
+    /// Agent memory commands (cvg memory remember/recall/forget/share/attest)
+    Memory {
+        #[command(subcommand)]
+        command: cli_memory::MemoryCommands,
     },
     /// Execution run commands (cvg run create/list/pause/resume)
     Run {

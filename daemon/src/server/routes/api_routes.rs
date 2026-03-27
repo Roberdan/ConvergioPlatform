@@ -89,6 +89,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/workspace/deliverables",
     "/api/project/:id/tree",
     "/api/delegation/:id/progress",
+    "/api/memory/recall",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -159,6 +160,9 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/workspace/quality-gate",
     "/api/workspace/release",
     "/api/delegation/:id/progress",
+    "/api/memory/remember",
+    "/api/memory/share",
+    "/api/memory/attest",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",
@@ -167,7 +171,7 @@ pub const PUT_ROUTES: &[&str] = &[
     "/api/nightly/config/:project_id",
     "/api/runs/:id",
 ];
-pub const DELETE_ROUTES: &[&str] = &["/api/ideas/:id", "/api/chat/session", "/api/peers/:name"];
+pub const DELETE_ROUTES: &[&str] = &["/api/ideas/:id", "/api/chat/session", "/api/peers/:name", "/api/memory/forget/:id"];
 pub const SSE_ROUTES: &[&str] = &[
     "/api/chat/stream/:sid",
     "/api/mesh/action/stream",

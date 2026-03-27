@@ -14,6 +14,7 @@ mod cli_error;
 mod cli_http;
 mod cli_kb;
 mod cli_lock;
+mod cli_memory;
 mod cli_ops;
 mod cli_plan;
 mod cli_plan_handlers;

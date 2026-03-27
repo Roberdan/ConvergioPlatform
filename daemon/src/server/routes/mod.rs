@@ -19,6 +19,7 @@ use super::api_heartbeat;
 use super::api_ideas;
 use super::api_ingest;
 use super::api_ipc;
+use super::api_memory;
 use super::api_mesh;
 use super::api_metrics;
 use super::api_notify;
@@ -120,6 +121,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_domain::router())
         .merge(api_openclaw::router())
         .merge(api_crdt::router())
+        .merge(api_memory::router())
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())
         .route("/api/chat/stream/:sid", get(sse::chat_stream_sse))
