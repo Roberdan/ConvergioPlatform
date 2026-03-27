@@ -55,7 +55,8 @@ hmac = "0.12.1"
 sha2 = "0.10.9"
 rand = "0.10.0"
 constant_time_eq = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream", "blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls", "stream", "blocking"] }
+tempfile = "3.10"
 serde_yaml = "0.9"
 chacha20poly1305 = "0.10"
 hkdf = "0.12"

@@ -6,7 +6,11 @@ pub mod audio;
 pub mod engine;
 pub mod monitor;
 pub mod recover;
+pub mod reports;
 pub mod stt;
+pub mod telegram;
+pub mod telegram_poll;
+pub mod telegram_voice;
 pub mod tts;
 pub mod verify;
 pub mod voice_router;
@@ -24,3 +28,5 @@ mod recover_tests;
 mod stt_tests;
 #[cfg(test)]
 mod voice_router_tests;
+#[cfg(test)]
+mod telegram_poll_tests;

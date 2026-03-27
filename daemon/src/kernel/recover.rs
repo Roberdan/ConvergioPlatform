@@ -139,10 +139,9 @@ pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig
                 }
             }
             NotifyChannel::Telegram => {
-                // W3 stub — Telegram bot notification
-                info!(
-                    "kernel.recover: [telegram] stub — severity={severity} msg={message}"
-                );
+                // Why: replaced W3 stub with real Telegram send_text (Plan 729 T3-01).
+                super::telegram::communicate(message, severity.clone(), cfg.dry_run).await
+                    .unwrap_or_else(|e| warn!("kernel.recover: telegram communicate failed: {e}"));
             }
         }
     }
