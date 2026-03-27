@@ -1,0 +1,74 @@
+name: "Plan R — SwiftUI Xcode Project + CLI Chat Polish"
+version: "1.0.0"
+project: convergio
+description: >
+  Fix SwiftUI Command Center to run as proper macOS MenuBarExtra app
+  (requires Xcode project with Info.plist). Polish cvg chat with
+  branded Convergio experience. Fix cvg status completed plans display.
+
+waves:
+  - id: W1
+    name: "SwiftUI App Bundle"
+    tasks:
+      - id: T1-01
+        title: >
+          Create Xcode project for ConvergioMissionControl.
+          Generate .xcodeproj with SPM dependencies resolved.
+          Info.plist: LSUIElement=true (no Dock icon), LSMinimumSystemVersion=14.0.
+          Signing: automatic with team. Build target: macOS 14+.
+        type: feature
+        effort: 2
+        verify:
+          - "xcodebuild -project gui/ConvergioMissionControl/ConvergioMissionControl.xcodeproj -scheme ConvergioMissionControl build"
+
+      - id: T1-02
+        title: >
+          App icon and branding. Create AppIcon.appiconset with
+          Convergio diamond logo at 16/32/128/256/512px.
+          Menu bar icon: SF Symbol brain.head.profile or custom 18x18.
+        type: feature
+        effort: 1
+        verify:
+          - "test -d gui/ConvergioMissionControl/Assets.xcassets/AppIcon.appiconset"
+
+      - id: T1-03
+        title: >
+          Test app launches from Finder. Verify: appears in menu bar,
+          click opens window, Plans/Agents/Mesh tabs work with daemon,
+          notifications fire on agent start. No crash on daemon offline.
+        type: test
+        effort: 1
+        verify:
+          - "open gui/ConvergioMissionControl/build/ConvergioMissionControl.app"
+
+  - id: W2
+    name: "CLI Polish"
+    tasks:
+      - id: T2-01
+        title: >
+          cvg status: show recently completed plans (last 5), fix progress
+          bar for total tasks across all plans, add Telegram bot status.
+        type: feature
+        effort: 1
+        verify:
+          - "cvg status | grep -q 'Convergio'"
+
+      - id: T2-02
+        title: >
+          cvg chat: branded REPL with Convergio ASCII logo, colored
+          prompt, /status inline, /plans shortcut. Single-shot mode
+          for scripting: cvg chat "question" prints answer and exits.
+        type: feature
+        effort: 2
+        verify:
+          - "cvg chat 'test' 2>&1 | grep -q 'Ali'"
+
+      - id: T2-03
+        title: >
+          Shell integration: convergiostatus and convergiochat aliases.
+          Zsh completion for cvg subcommands. Update CLAUDE.md with
+          new commands table.
+        type: chore
+        effort: 1
+        verify:
+          - "grep -q convergiostatus ~/.claude/scripts/shell-aliases.sh"
