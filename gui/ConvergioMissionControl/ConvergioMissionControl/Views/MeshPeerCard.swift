@@ -55,8 +55,8 @@ struct MeshPeerCard: View {
                 if let role = peer.role {
                     roleBadge(role)
                 }
-                if let lastSeen = peer.lastSeen, !peer.isOnline {
-                    Text("Last seen: \(lastSeen)")
+                if let lastSeen = peer.lastSeenDisplay, !peer.isOnline {
+                    Text(lastSeen)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }

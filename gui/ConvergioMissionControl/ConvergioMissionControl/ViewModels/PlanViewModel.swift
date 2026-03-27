@@ -97,7 +97,7 @@ final class PlanViewModel {
     // MARK: - Private
 
     private func loadPlans() async throws -> [[String: Any]] {
-        let url = baseURL.appendingPathComponent("/api/plans")
+        let url = baseURL.appendingPathComponent("/api/plan-db/list")
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse,
               (200...299).contains(http.statusCode) else {

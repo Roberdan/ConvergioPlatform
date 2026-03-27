@@ -146,15 +146,33 @@ struct AliChatView: View {
     }
 
     private func postChat(_ text: String) async throws -> String {
+        // Create session if needed
+        let sessionURL = baseURL.appendingPathComponent("api/chat/session")
+        var sessionReq = URLRequest(url: sessionURL)
+        sessionReq.httpMethod = "POST"
+        sessionReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        sessionReq.httpBody = "{}".data(using: .utf8)
+        let (sessionData, _) = try await URLSession.shared.data(for: sessionReq)
+        let sessionJson = try JSONSerialization.jsonObject(with: sessionData) as? [String: Any]
+        let sessionId = (sessionJson?["session"] as? [String: Any])?["id"] as? String ?? "default"
+
+        // Send message
         let url = baseURL.appendingPathComponent("api/chat/message")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = ["message": text, "agent": "ali"]
-        request.httpBody = try JSONEncoder().encode(body)
+        let body: [String: String] = [
+            "session_id": sessionId,
+            "content": text,
+            "role": "user"
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        return json?["reply"] as? String ?? json?["message"] as? String ?? "No response"
+        if json?["ok"] as? Bool == true {
+            return "Message saved (Ali backend not connected — use Telegram @ConvergioBot for live responses)"
+        }
+        return json?["error"] as? String ?? "Message delivery failed"
     }
 }
 
