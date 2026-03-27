@@ -5,7 +5,8 @@
 mod tests {
     use crate::kernel::monitor::{
         check_daemon_reachable, check_mesh_peers, check_disk_ram, classify_and_store,
-        detect_compaction_risk, detect_stale_locks, KernelCheckResult, MonitorConfig,
+        detect_compaction_risk, detect_stale_locks, peer_name_from_url,
+        classify_readiness_results, KernelCheckResult, MonitorConfig,
     };
 
     // --- KernelCheckResult construction ---
@@ -161,6 +162,201 @@ mod tests {
         let results = vec![KernelCheckResult::fail("ram_pressure", "85% RAM used")];
         let critical = classify_and_store(&pool, &results);
         assert!(!critical, "ram_pressure should be WARN, not CRITICAL");
+    }
+
+    // --- peer_name_from_url ---
+
+    #[test]
+    fn peer_name_from_url_extracts_hostname() {
+        assert_eq!(peer_name_from_url("http://mac-worker-2:8420"), "mac-worker-2");
+        assert_eq!(peer_name_from_url("http://192.168.1.10:8420"), "192.168.1.10");
+        assert_eq!(peer_name_from_url("http://127.0.0.1:8420"), "127.0.0.1");
+    }
+
+    #[test]
+    fn peer_name_from_url_fallback_for_bare_url() {
+        // No port in URL — should still return the host portion.
+        assert_eq!(peer_name_from_url("http://mynode/"), "mynode");
+    }
+
+    // --- classify_readiness_results ---
+
+    #[test]
+    fn classify_readiness_critical_on_db_integrity_failure() {
+        use r2d2::Pool;
+        use r2d2_sqlite::SqliteConnectionManager;
+
+        let mgr = SqliteConnectionManager::memory();
+        let pool = Pool::new(mgr).expect("pool");
+        let conn = pool.get().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS kernel_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                severity TEXT NOT NULL DEFAULT 'ok',
+                source TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                action_taken TEXT NOT NULL DEFAULT ''
+            )",
+        ).unwrap();
+        drop(conn);
+
+        // Simulate a readiness response with db_integrity failure.
+        let checks = serde_json::json!([
+            {"name": "db_integrity", "passed": false, "detail": "PRAGMA integrity_check failed"},
+            {"name": "mlx_lm", "passed": true, "detail": "available"}
+        ]);
+        let critical = classify_readiness_results(&pool, "node-alpha", &checks);
+        assert!(critical, "db_integrity failure must produce CRITICAL event");
+
+        let conn = pool.get().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM kernel_events WHERE severity='critical' AND source LIKE 'readiness:%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn classify_readiness_warn_on_mlx_lm_failure() {
+        use r2d2::Pool;
+        use r2d2_sqlite::SqliteConnectionManager;
+
+        let mgr = SqliteConnectionManager::memory();
+        let pool = Pool::new(mgr).expect("pool");
+        let conn = pool.get().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS kernel_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                severity TEXT NOT NULL DEFAULT 'ok',
+                source TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                action_taken TEXT NOT NULL DEFAULT ''
+            )",
+        ).unwrap();
+        drop(conn);
+
+        let checks = serde_json::json!([
+            {"name": "mlx_lm", "passed": false, "detail": "not found"},
+            {"name": "daemon_version", "passed": true, "detail": "1.0.0"}
+        ]);
+        let critical = classify_readiness_results(&pool, "node-beta", &checks);
+        assert!(!critical, "mlx_lm failure is WARN, not CRITICAL");
+
+        let conn = pool.get().unwrap();
+        let row: (i64, String) = conn
+            .query_row(
+                "SELECT COUNT(*), COALESCE(MIN(severity),'') FROM kernel_events WHERE source='readiness:node-beta'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, 1, "exactly one event inserted");
+        assert_eq!(row.1, "warn");
+    }
+
+    #[test]
+    fn classify_readiness_critical_on_daemon_version_failure() {
+        use r2d2::Pool;
+        use r2d2_sqlite::SqliteConnectionManager;
+
+        let mgr = SqliteConnectionManager::memory();
+        let pool = Pool::new(mgr).expect("pool");
+        let conn = pool.get().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS kernel_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                severity TEXT NOT NULL DEFAULT 'ok',
+                source TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                action_taken TEXT NOT NULL DEFAULT ''
+            )",
+        ).unwrap();
+        drop(conn);
+
+        let checks = serde_json::json!([
+            {"name": "daemon_version", "passed": false, "detail": "mismatch: Cargo=1.0.0 VERSION.md=0.9.0"},
+            {"name": "telegram", "passed": true, "detail": "ok"}
+        ]);
+        let critical = classify_readiness_results(&pool, "node-gamma", &checks);
+        assert!(critical, "daemon_version failure must produce CRITICAL event");
+    }
+
+    #[test]
+    fn classify_readiness_no_events_when_all_pass() {
+        use r2d2::Pool;
+        use r2d2_sqlite::SqliteConnectionManager;
+
+        let mgr = SqliteConnectionManager::memory();
+        let pool = Pool::new(mgr).expect("pool");
+        let conn = pool.get().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS kernel_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                severity TEXT NOT NULL DEFAULT 'ok',
+                source TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                action_taken TEXT NOT NULL DEFAULT ''
+            )",
+        ).unwrap();
+        drop(conn);
+
+        let checks = serde_json::json!([
+            {"name": "db_integrity", "passed": true, "detail": "ok"},
+            {"name": "daemon_version", "passed": true, "detail": "1.0.0"}
+        ]);
+        let critical = classify_readiness_results(&pool, "node-delta", &checks);
+        assert!(!critical);
+
+        let conn = pool.get().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM kernel_events", [], |r| r.get(0))
+            .unwrap_or(0);
+        assert_eq!(count, 0, "no events when all checks pass");
+    }
+
+    // --- check_peer_readiness (unreachable peer) ---
+
+    #[tokio::test]
+    async fn check_peer_readiness_unreachable_fails_gracefully() {
+        use r2d2::Pool;
+        use r2d2_sqlite::SqliteConnectionManager;
+        use crate::kernel::monitor::check_peer_readiness;
+
+        let mgr = SqliteConnectionManager::memory();
+        let pool = Pool::new(mgr).expect("pool");
+        let conn = pool.get().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS kernel_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                severity TEXT NOT NULL DEFAULT 'ok',
+                source TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                action_taken TEXT NOT NULL DEFAULT ''
+            )",
+        ).unwrap();
+        drop(conn);
+
+        // Port 19997 is not listening — should log a warn event, not panic.
+        check_peer_readiness(&pool, "http://127.0.0.1:19997").await;
+
+        // A warn event should have been stored for the unreachable peer.
+        let conn = pool.get().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM kernel_events WHERE source LIKE 'readiness:%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        assert_eq!(count, 1, "unreachable peer must produce a warn event");
     }
 
     // --- deprecated watchdog compat ---

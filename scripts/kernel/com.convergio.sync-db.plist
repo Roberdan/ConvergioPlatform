@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- com.convergio.sync-db.plist — launchd agent that syncs dashboard.db from this Mac to m1Pro every 30 min -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.convergio.sync-db</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/Roberdan/GitHub/ConvergioPlatform/scripts/kernel/sync-db.sh</string>
+        <string>__SOURCE_SSH__</string>
+        <string>__TARGET_SSH__</string>
+    </array>
+
+    <!-- Run every 30 minutes (1800 seconds) -->
+    <key>StartInterval</key>
+    <integer>1800</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/Roberdan/Library/Logs/convergio-sync-db.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/Roberdan/Library/Logs/convergio-sync-db.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>DASHBOARD_DB</key>
+        <string>__DASHBOARD_DB__</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
+
+    <!-- Do not restart on failure — wait for next interval -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

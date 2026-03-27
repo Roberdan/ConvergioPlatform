@@ -91,6 +91,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/delegation/:id/progress",
     "/api/memory/recall",
     "/api/kernel/status",
+    "/api/node/readiness",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
