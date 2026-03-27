@@ -117,6 +117,8 @@ Canonical model fields used in `copilot-agents/`:
 
 > Only 1 inference model loaded at a time (+ whisper). AppleFmBridge swaps via mlx_lm.
 > Cloud fallback when: local quality insufficient, task critical (planning/Thor), or rate limit detected.
+>
+> **Tool-augmented routing (Plan 734)**: Kernel brain (`mistral-local`) uses MCP tool calling (ChatML `<tool_call>` format) to query the daemon API directly — 7 registered functions covering plans, costs, nodes, and agents. Keyword routing (`route_ask_ali`) now delegates to `/api/kernel/ask` instead of hardcoded classifiers. EscalateToAli triggers cloud handoff ("ali", "opus", "cloud") before any other keyword match. See ADR-0118 for fork reconciliation: `ConvergioPlatform/daemon/` is sole source of truth.
 
 ## Rules
 

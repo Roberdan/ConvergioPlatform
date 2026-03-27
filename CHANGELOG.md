@@ -1,5 +1,24 @@
 # Changelog
 
+## [18.4.0] - 2026-03-27
+
+### Added
+- Kernel MCP tools: 7 functions for intelligent data retrieval (plans, costs, nodes, agents)
+- ChatML function calling: Mistral uses <tool_call> to query daemon API
+- EscalateToAli: explicit escalation to Opus via Telegram ("ali", "opus", "cloud")
+- crsqlite installed on M1 Pro (CRDT sync capability)
+- Role-based node provisioning checks in mesh-provision-node.sh
+- POST /api/kernel/active-node for audio routing
+- Telegram voice: ffmpeg path resolution for launchd
+
+### Fixed
+- Hardcoded paths in sync-db plist replaced with placeholders
+- EscalateToAli keyword priority (checked before stato/costi)
+
+### Changed
+- route_ask_ali uses /api/kernel/ask with MCP tools (not hardcoded keywords)
+- Fork reconciliation: ConvergioPlatform/daemon/ is sole source of truth (ADR-0118)
+
 ## [18.3.2] - 2026-03-27
 
 ### Fixed
