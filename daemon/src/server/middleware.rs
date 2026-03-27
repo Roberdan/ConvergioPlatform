@@ -24,6 +24,8 @@ pub fn cors_layer() -> CorsLayer {
             vec![
                 axum::http::HeaderValue::from_static("http://localhost:8420"),
                 axum::http::HeaderValue::from_static("http://127.0.0.1:8420"),
+                axum::http::HeaderValue::from_static("http://localhost:3000"),
+                axum::http::HeaderValue::from_static("tauri://localhost"),
             ]
         });
 
