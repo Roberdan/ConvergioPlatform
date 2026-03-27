@@ -5,7 +5,7 @@ import Foundation
 
 /// A plan task as returned by /api/plan-db/execution-tree/:plan_id.
 /// Named DaemonTask to avoid collision with Swift Concurrency's Task.
-struct DaemonTask: Codable, Identifiable {
+struct DaemonTask: Codable, Identifiable, Equatable {
     let id: Int
     let taskId: String
     let title: String
@@ -28,4 +28,23 @@ struct DaemonTask: Codable, Identifiable {
         case startedAt = "started_at"
         case completedAt = "completed_at"
     }
+
+    /// Alias for waveId, used by kanban card.
+    var waveCode: String? { waveId }
+
+    /// Kanban column derived from task status string.
+    var kanbanColumn: KanbanColumn {
+        switch status {
+        case "pending": return .pending
+        case "in_progress", "submitted": return .inProgress
+        case "done": return .done
+        default: return .done
+        }
+    }
+}
+
+enum KanbanColumn: String, CaseIterable {
+    case pending = "Pending"
+    case inProgress = "In Progress"
+    case done = "Done"
 }
