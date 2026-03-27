@@ -5,6 +5,7 @@
 use crate::cli_agent;
 use crate::cli_bus;
 use crate::cli_capability;
+use crate::cli_channel;
 use crate::cli_checkpoint;
 use crate::cli_delegation;
 use crate::cli_reap;
@@ -108,6 +109,11 @@ pub enum Commands {
     Kb {
         #[command(subcommand)]
         command: cli_kb::KbCommands,
+    },
+    /// Channel commands (cvg channel list/status/test/send)
+    Channel {
+        #[command(subcommand)]
+        command: cli_channel::ChannelCommands,
     },
     /// Capability system commands (cvg capability list/invoke/register/permissions)
     Capability {

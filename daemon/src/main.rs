@@ -3,6 +3,7 @@ mod daemon_logging;
 mod cli_agent;
 mod cli_agent_format;
 mod cli_capability;
+mod cli_channel;
 mod cli_agents;
 mod cli_audit;
 mod cli_audit_project;
