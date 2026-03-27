@@ -29,18 +29,35 @@ pub mod handlers {
     impl KernelState {
         pub fn new(config: KernelConfig) -> Self {
             let mut engine = KernelEngine::new(config.clone());
-            // Pre-load the default model on startup.
             engine.load_model(&config.default_model);
             let mut stt = SttEngine::new();
-            // Mark loaded if a CLI is available; degrades gracefully otherwise.
             if stt.is_available() {
                 stt.load();
             }
-            Self {
+            let state = Self {
                 engine: Arc::new(Mutex::new(engine)),
                 tts: Arc::new(Mutex::new(TtsEngine::new())),
                 stt: Arc::new(Mutex::new(stt)),
+            };
+
+            // Spawn Telegram polling loop if token is configured
+            if let (Ok(token), Ok(chat_id_str)) = (
+                std::env::var("CONVERGIO_TELEGRAM_TOKEN"),
+                std::env::var("CONVERGIO_TELEGRAM_CHAT_ID"),
+            ) {
+                let chat_id: i64 = chat_id_str.parse().unwrap_or(0);
+                let engine_clone = Arc::new(KernelEngine::new(config.clone()));
+                let daemon_url = std::env::var("DAEMON_URL")
+                    .unwrap_or_else(|_| "http://localhost:8420".to_string());
+                tracing::info!("kernel: spawning Telegram poll loop for chat_id={chat_id}");
+                crate::kernel::telegram_poll::spawn_telegram_poll(
+                    token, chat_id, daemon_url, engine_clone,
+                );
+            } else {
+                tracing::info!("kernel: Telegram not configured (no CONVERGIO_TELEGRAM_TOKEN)");
             }
+
+            state
         }
     }
 
