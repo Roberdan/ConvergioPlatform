@@ -1,3 +1,4 @@
+pub mod mcp;
 pub mod registry;
 pub mod ring;
 pub mod types;
