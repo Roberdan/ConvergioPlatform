@@ -17,7 +17,11 @@ pub mod voice_router;
 
 #[cfg(feature = "kernel")]
 pub mod api;
+#[cfg(feature = "kernel")]
+pub mod api_ask;
 
+#[cfg(test)]
+mod api_ask_tests;
 #[cfg(test)]
 mod engine_tests;
 #[cfg(test)]

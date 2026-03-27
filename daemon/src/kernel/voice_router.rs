@@ -135,26 +135,58 @@ fn keyword_classify(text: &str) -> VoiceIntent {
 // --- Route handlers ----------------------------------------------------------
 
 fn route_status_check(daemon_url: &str) -> String {
-    match get_json(&format!("{daemon_url}/api/overview")) {
-        Ok(v) => format!(
-            "Hai {} piani attivi, {} task in coda, mesh {}.",
-            v.get("active_plans").and_then(|x| x.as_u64()).unwrap_or(0),
-            v.get("queued_tasks").and_then(|x| x.as_u64()).unwrap_or(0),
-            v.get("mesh_status").and_then(|x| x.as_str()).unwrap_or("unknown"),
-        ),
+    match get_json(&format!("{daemon_url}/api/plan-db/list")) {
+        Ok(v) => {
+            let (active, tasks_left) = parse_status_from_plan_list(&v);
+            format!("Hai {active} piani attivi, {tasks_left} task rimasti.")
+        }
         Err(e) => { warn!("voice_router: status_check: {e}"); "Non riesco a contattare il daemon.".to_string() }
     }
 }
 
 fn route_cost_query(daemon_url: &str) -> String {
-    match get_json(&format!("{daemon_url}/api/metrics/summary")) {
-        Ok(v) => format!(
-            "Oggi hai speso {:.0} dollari su {} piani.",
-            v.get("total_cost_usd").and_then(|x| x.as_f64()).unwrap_or(0.0),
-            v.get("active_plans").and_then(|x| x.as_u64()).unwrap_or(0),
-        ),
+    match get_json(&format!("{daemon_url}/api/plan-db/list")) {
+        Ok(v) => {
+            let (cost, plan_count) = parse_cost_from_plan_list(&v);
+            format!("Costo totale: {cost:.2} dollari su {plan_count} piani.")
+        }
         Err(e) => { warn!("voice_router: cost_query: {e}"); "Non riesco a recuperare i costi.".to_string() }
     }
+}
+
+/// Parses /api/plan-db/list response: returns (doing_plan_count, remaining_tasks).
+/// Plans with status=="doing" are active; remaining = sum of (tasks_total - tasks_done).
+fn parse_status_from_plan_list(v: &Value) -> (u64, u64) {
+    let plans = match v.get("plans").and_then(|p| p.as_array()) {
+        Some(arr) => arr,
+        None => return (0, 0),
+    };
+    let mut active: u64 = 0;
+    let mut tasks_left: u64 = 0;
+    for plan in plans {
+        let status = plan.get("status").and_then(|s| s.as_str()).unwrap_or("");
+        if status == "doing" {
+            active += 1;
+            let total = plan.get("tasks_total").and_then(|x| x.as_u64()).unwrap_or(0);
+            let done = plan.get("tasks_done").and_then(|x| x.as_u64()).unwrap_or(0);
+            tasks_left += total.saturating_sub(done);
+        }
+    }
+    (active, tasks_left)
+}
+
+/// Parses /api/plan-db/list response: returns (total_cost, plan_count).
+/// Sums total_cost across all plans (any status).
+fn parse_cost_from_plan_list(v: &Value) -> (f64, usize) {
+    let plans = match v.get("plans").and_then(|p| p.as_array()) {
+        Some(arr) => arr,
+        None => return (0.0, 0),
+    };
+    let mut total_cost: f64 = 0.0;
+    for plan in plans {
+        total_cost += plan.get("total_cost").and_then(|x| x.as_f64()).unwrap_or(0.0);
+    }
+    (total_cost, plans.len())
 }
 
 fn route_plan_query(plan_id: u32, daemon_url: &str) -> String {
@@ -187,24 +219,22 @@ fn route_mute() -> String {
 }
 
 fn route_ask_ali(question: &str, daemon_url: &str) -> String {
-    // First: try to answer with local Mistral model (fast, free, always available)
-    // The KernelEngine is not accessible here (no &self), so we call the kernel API
+    // Forward to /api/kernel/ask — uses local Mistral model for free-form answers.
+    // Avoids classify endpoint misuse: /ask returns plain text in `answer` field.
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()
         .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
     let res = client
-        .post(format!("{daemon_url}/api/kernel/classify"))
-        .json(&serde_json::json!({"situation": question}))
+        .post(format!("{daemon_url}/api/kernel/ask"))
+        .json(&serde_json::json!({"question": question}))
         .send();
 
-    // Use the classify endpoint as a proxy for free-form answers
-    // The kernel will use the local Mistral model
     match res {
         Ok(r) => {
             let body = r.json::<Value>().unwrap_or_default();
-            body.get("reason")
+            body.get("answer")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Non ho una risposta per questa domanda.")
                 .to_string()
@@ -231,4 +261,110 @@ fn is_muted() -> bool {
         .and_then(|g| *g)
         .map(|exp| Instant::now() < exp)
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // --- parse_status_from_plan_list ---
+
+    #[test]
+    fn status_counts_only_doing_plans() {
+        let payload = json!({
+            "ok": true,
+            "plans": [
+                {"status": "doing", "tasks_total": 10, "tasks_done": 4},
+                {"status": "doing", "tasks_total": 5,  "tasks_done": 5},
+                {"status": "done",  "tasks_total": 8,  "tasks_done": 8},
+                {"status": "todo",  "tasks_total": 3,  "tasks_done": 0},
+            ]
+        });
+        let (active, left) = parse_status_from_plan_list(&payload);
+        // Only the 2 "doing" plans count; second plan contributes 0 remaining tasks.
+        assert_eq!(active, 2, "expected 2 doing plans");
+        assert_eq!(left, 6, "expected 10-4 = 6 remaining tasks");
+    }
+
+    #[test]
+    fn status_empty_plans_array() {
+        let payload = json!({"ok": true, "plans": []});
+        let (active, left) = parse_status_from_plan_list(&payload);
+        assert_eq!(active, 0);
+        assert_eq!(left, 0);
+    }
+
+    #[test]
+    fn status_missing_plans_key() {
+        let payload = json!({"ok": true});
+        let (active, left) = parse_status_from_plan_list(&payload);
+        assert_eq!(active, 0);
+        assert_eq!(left, 0);
+    }
+
+    #[test]
+    fn status_tasks_done_exceeds_total_saturates_at_zero() {
+        // tasks_done > tasks_total should not underflow — saturating_sub guards this.
+        let payload = json!({
+            "ok": true,
+            "plans": [
+                {"status": "doing", "tasks_total": 2, "tasks_done": 5}
+            ]
+        });
+        let (active, left) = parse_status_from_plan_list(&payload);
+        assert_eq!(active, 1);
+        assert_eq!(left, 0);
+    }
+
+    // --- parse_cost_from_plan_list ---
+
+    #[test]
+    fn cost_sums_all_plans() {
+        let payload = json!({
+            "ok": true,
+            "plans": [
+                {"status": "doing", "total_cost": 1.50},
+                {"status": "done",  "total_cost": 2.25},
+                {"status": "todo",  "total_cost": 0.75},
+            ]
+        });
+        let (cost, count) = parse_cost_from_plan_list(&payload);
+        assert!((cost - 4.50).abs() < 0.001, "expected 4.50, got {cost}");
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn cost_missing_total_cost_field_defaults_to_zero() {
+        let payload = json!({
+            "ok": true,
+            "plans": [
+                {"status": "doing"},
+                {"status": "done", "total_cost": 1.0},
+            ]
+        });
+        let (cost, count) = parse_cost_from_plan_list(&payload);
+        assert!((cost - 1.0).abs() < 0.001);
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn cost_empty_plans() {
+        let payload = json!({"ok": true, "plans": []});
+        let (cost, count) = parse_cost_from_plan_list(&payload);
+        assert_eq!(cost, 0.0);
+        assert_eq!(count, 0);
+    }
+
+    // --- keyword_classify sanity ---
+
+    #[test]
+    fn keyword_status_check_triggers_on_stato() {
+        assert_eq!(keyword_classify("qual è lo stato"), VoiceIntent::StatusCheck);
+    }
+
+    #[test]
+    fn keyword_cost_query_triggers_on_costo() {
+        assert_eq!(keyword_classify("mostrami la spesa"), VoiceIntent::CostQuery);
+    }
 }

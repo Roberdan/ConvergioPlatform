@@ -108,6 +108,7 @@ pub mod handlers {
             .route("/api/kernel/speak", post(handle_speak))
             .route("/api/kernel/transcribe", post(handle_transcribe))
             .route("/api/kernel/listen", post(handle_listen))
+            .route("/api/kernel/ask", post(crate::kernel::api_ask::handle_ask))
     }
 
     async fn handle_classify(
