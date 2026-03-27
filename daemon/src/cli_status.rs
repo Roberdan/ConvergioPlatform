@@ -23,13 +23,11 @@ pub async fn handle(api_url: &str) -> Result<(), CliError> {
     let uptime = health.get("uptime_secs").and_then(|v| v.as_i64()).unwrap_or(0);
 
     let dot = if ok { format!("{GR}●{R}") } else { format!("{RD}●{R}") };
-
-    // Get terminal width, default to 80
-    let cols = term_width();
+    let line = format!("{D}──────────────────────────────────────{R}");
 
     println!();
     println!("{B}{CY}◆ Convergio{R} {D}v{version}{R} {dot} {D}{}{R} {BL}{peers}{R} peers", fmt_up(uptime));
-    println!("{D}{}{R}", "─".repeat(cols.min(60)));
+    println!("{line}");
 
     let plan_list = plans.get("plans").and_then(|v| v.as_array());
     let Some(all) = plan_list else {
@@ -51,37 +49,32 @@ pub async fn handle(api_url: &str) -> Result<(), CliError> {
 
     if !active.is_empty() {
         println!("{B}{YL}▶ In Progress{R}");
-        for p in &active { print_plan(p, YL, "◉", cols); }
+        for p in &active { print_plan(p, YL, "◉"); }
     } else {
         println!("{GR}✓ No active plans{R}");
     }
-
     if !queued.is_empty() {
         println!("{B}{BL}◇ Queued{R}");
-        for p in &queued { print_plan(p, D, "○", cols); }
+        for p in &queued { print_plan(p, D, "○"); }
     }
 
-    // Summary
     let t_done = if proj_done > 0 { proj_done } else { 0 };
     let t_total = if proj_total > 0 { proj_total } else { 0 };
     let pct = if t_total > 0 { t_done * 100 / t_total } else { 0 };
     let bar = progress_bar(pct as usize, 16);
-    println!("{D}{}{R}", "─".repeat(cols.min(60)));
+    println!("{line}");
     println!("{B}{t_done}{R}/{t_total} tasks {bar} {B}{pct}%{R} {D}({proj_plans} plans){R}");
     println!();
-
     Ok(())
 }
 
-fn print_plan(p: &serde_json::Value, color: &str, icon: &str, cols: usize) {
+fn print_plan(p: &serde_json::Value, color: &str, icon: &str) {
     let id = p.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
     let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("?");
     let done = p.get("tasks_done").and_then(|v| v.as_i64()).unwrap_or(0);
     let total = p.get("tasks_total").and_then(|v| v.as_i64()).unwrap_or(0);
-    // Truncate name to fit: icon(2) + # + id(4) + space + name + space + [d/t](8) < cols
-    let max_name = cols.saturating_sub(22).min(35);
-    let short: String = name.chars().take(max_name).collect();
-    println!("{color}{icon}{R} #{id:<4} {short} {D}[{done}/{total}]{R}");
+    let short: String = name.chars().take(30).collect();
+    println!("  {color}{icon}{R} #{id} {short} {D}[{done}/{total}]{R}");
 }
 
 fn progress_bar(pct: usize, w: usize) -> String {
@@ -95,14 +88,6 @@ fn fmt_up(secs: i64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
     if h > 0 { format!("{h}h{m}m") } else { format!("{m}m") }
-}
-
-fn term_width() -> usize {
-    // Try COLUMNS env, fallback to 80
-    std::env::var("COLUMNS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(80)
 }
 
 async fn fetch_json(url: &str) -> serde_json::Value {
