@@ -3,7 +3,7 @@ use crate::{
     cli_agent_format, cli_audit, cli_audit_project, cli_bus, cli_checkpoint, cli_delegation,
     cli_domain,
     cli_error::CliError,
-    cli_capability, cli_kb, cli_lock, cli_memory, cli_ops, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
+    cli_capability, cli_kb, cli_lock, cli_memory, cli_ops, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
     cli_skill, cli_task, cli_wave, cli_who, cli_workspace,
     ipc_handler::{self, DaemonCommands},
 };
@@ -164,6 +164,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         Commands::Agent { command } => exit_on_err(cli_agent_format::dispatch(command).await),
         Commands::Kb { command } => exit_on_err(cli_kb::handle(command).await),
         Commands::Capability { command } => exit_on_err(cli_capability::handle(command).await),
+        Commands::Voice { command } => exit_on_err(cli_voice::handle(command).await),
         Commands::Memory { command } => exit_on_err(cli_memory::handle(command).await),
         Commands::Run { command } => exit_on_err(cli_run::handle(command).await),
         Commands::Mesh { command } => {

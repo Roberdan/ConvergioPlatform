@@ -19,6 +19,7 @@ pub mod resilience;
 pub mod server;
 pub mod tui;
 pub mod validation;
+pub mod voice;
 pub mod workspace;
 
 /// Resolve the dashboard DB path from the DASHBOARD_DB env var, falling back

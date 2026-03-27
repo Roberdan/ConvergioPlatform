@@ -19,6 +19,7 @@ use crate::cli_project;
 use crate::cli_review;
 use crate::cli_run;
 use crate::cli_skill;
+use crate::cli_voice;
 use crate::cli_task;
 use crate::cli_wave;
 use crate::cli_who;
@@ -117,6 +118,11 @@ pub enum Commands {
     Memory {
         #[command(subcommand)]
         command: cli_memory::MemoryCommands,
+    },
+    /// Voice pipeline commands (cvg voice start/stop/status/test)
+    Voice {
+        #[command(subcommand)]
+        command: cli_voice::VoiceCommands,
     },
     /// Execution run commands (cvg run create/list/pause/resume)
     Run {
