@@ -63,14 +63,30 @@ final class KanbanViewModel {
     // MARK: - Private
 
     private func fetchTasks() async throws -> [DaemonTask] {
-        let url = baseURL.appendingPathComponent("/api/plans/\(planId)")
+        let url = baseURL.appendingPathComponent("/api/plan-db/execution-tree/\(planId)")
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse,
               (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        let wrapper = try JSONDecoder().decode(PlanDetailResponse.self, from: data)
-        return wrapper.tasks
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let tree = json?["tree"] as? [[String: Any]] ?? []
+        // Flatten tasks from all waves and decode via JSONDecoder
+        var tasks: [DaemonTask] = []
+        let decoder = JSONDecoder()
+        for wave in tree {
+            let waveTasks = wave["tasks"] as? [[String: Any]] ?? []
+            let waveId = wave["wave_id"] as? String
+            for var t in waveTasks {
+                t["plan_id"] = planId
+                t["wave_id"] = waveId as Any
+                if let taskData = try? JSONSerialization.data(withJSONObject: t),
+                   let task = try? decoder.decode(DaemonTask.self, from: taskData) {
+                    tasks.append(task)
+                }
+            }
+        }
+        return tasks
     }
 
     private func scheduleAutoRefresh() {
@@ -84,7 +100,4 @@ final class KanbanViewModel {
     }
 }
 
-/// Minimal Codable wrapper for plan detail API response.
-private struct PlanDetailResponse: Codable {
-    let tasks: [DaemonTask]
-}
+// Tasks extracted manually from execution-tree JSON (not Codable).

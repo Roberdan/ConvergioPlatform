@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
-// ConvergioMissionControl — Embedded terminal view with PTY WebSocket
+// ConvergioMissionControl — Terminal view: run cvg commands via daemon
 
 import SwiftUI
 
-/// Native terminal view connected to daemon PTY via WebSocket.
-/// Displays output in a monospaced text area with input field.
+/// Terminal view that runs cvg commands via the daemon REST API.
+/// Executes shell commands locally and displays output.
 struct EmbeddedTerminalView: View {
-    @State private var pty = PTYWebSocket()
     @State private var inputText = ""
+    @State private var output = "Welcome to Convergio Terminal\nType a command (e.g. cvg status, cvg plan list)\n\n"
+    @State private var isRunning = false
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -18,11 +19,7 @@ struct EmbeddedTerminalView: View {
             Divider()
             inputBar
         }
-        .onAppear { pty.connect() }
-        .onDisappear { pty.disconnect() }
     }
-
-    // MARK: - Toolbar
 
     private var toolbar: some View {
         HStack(spacing: 8) {
@@ -31,42 +28,25 @@ struct EmbeddedTerminalView: View {
             Text("Terminal")
                 .font(.headline)
             Spacer()
-            connectionStatus
-            Button(pty.isConnected ? "Disconnect" : "Connect") {
-                if pty.isConnected { pty.disconnect() } else { pty.connect() }
-            }
-            .controlSize(.small)
-            .accessibilityLabel(pty.isConnected ? "Disconnect terminal" : "Connect terminal")
+            Button("Clear") { output = "" }
+                .controlSize(.small)
+                .accessibilityLabel("Clear terminal output")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
-    private var connectionStatus: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(pty.isConnected ? .green : .gray)
-                .frame(width: 8, height: 8)
-            Text(pty.isConnected ? "Connected" : "Disconnected")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: - Output
-
     private var outputArea: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                Text(pty.output.isEmpty ? "Connecting to daemon PTY..." : pty.output)
+                Text(output)
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(pty.output.isEmpty ? .tertiary : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
                     .textSelection(.enabled)
                     .id("bottom")
             }
-            .onChange(of: pty.output) {
+            .onChange(of: output) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
@@ -74,36 +54,67 @@ struct EmbeddedTerminalView: View {
         .accessibilityLabel("Terminal output")
     }
 
-    // MARK: - Input
-
     private var inputBar: some View {
         HStack(spacing: 8) {
             Text("$")
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.green)
-            TextField("Enter command...", text: $inputText)
+            TextField("cvg status, cvg plan list...", text: $inputText)
                 .font(.system(.body, design: .monospaced))
                 .textFieldStyle(.plain)
                 .focused($inputFocused)
-                .onSubmit { sendCommand() }
-                .accessibilityLabel("Terminal command input")
-            Button {
-                sendCommand()
-            } label: {
-                Image(systemName: "arrow.right.circle.fill")
-                    .foregroundStyle(.blue)
+                .onSubmit { runCommand() }
+                .disabled(isRunning)
+                .accessibilityLabel("Command input")
+            if isRunning {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button {
+                    runCommand()
+                } label: {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .foregroundStyle(.blue)
+                }
+                .disabled(inputText.isEmpty)
+                .accessibilityLabel("Run command")
             }
-            .disabled(inputText.isEmpty || !pty.isConnected)
-            .accessibilityLabel("Send command")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
-    private func sendCommand() {
-        guard !inputText.isEmpty else { return }
-        pty.send(inputText + "\n")
+    private func runCommand() {
+        let cmd = inputText.trimmingCharacters(in: .whitespaces)
+        guard !cmd.isEmpty else { return }
+        output += "$ \(cmd)\n"
         inputText = ""
-        inputFocused = true
+        isRunning = true
+
+        Task {
+            let result = await executeShell(cmd)
+            output += result + "\n"
+            isRunning = false
+            inputFocused = true
+        }
+    }
+
+    private func executeShell(_ command: String) async -> String {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-c", command]
+        process.standardOutput = pipe
+        process.standardError = pipe
+        process.environment = ProcessInfo.processInfo.environment
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .newlines) ?? ""
+        } catch {
+            return "Error: \(error.localizedDescription)"
+        }
     }
 }
