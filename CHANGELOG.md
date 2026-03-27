@@ -1,5 +1,19 @@
 # Changelog
 
+## [18.3.0] - 27 Marzo 2026
+
+### Added
+- Plan 715 (K) Agentic Memory: SQLite+FTS5 store, vector embeddings with cosine similarity, hybrid search, blob store, Markdown export, recovery chain (Markdown→SQLite→VectorStore), REST API + CLI (cvg memory remember/recall/forget/share/attest/export/reindex), 93 tests
+- Plan 721 (F2) SwiftUI Command Center: kanban board, agent catalog with live sessions, mesh topology, embedded terminal (PTY via WS), chat with Ali, menu bar indicator with notifications, 30 accessibility labels
+- Plan 714 (J) MCP Client: Capability trait with 4-ring security model (Core/Trusted/Community/Sandboxed), MCP JSON-RPC stdio connector, YAML capability registry, proxy with rate limiting + circuit breaking, per-agent permissions (deny-by-default), security gate for registration, REST API + CLI (cvg capability list/invoke/register/permissions), Stripe demo, 43 tests
+- Plan 718 (N) Voice: VAD (energy-based, 50ms onset), wake word detection, Whisper ASR engine (local/API), intent extraction (Command/Query/Control/Navigation), TTS via macOS say, full pipeline state machine, CLI (cvg voice start/stop/status), 18 tests
+- Plan 716 (L) Security Perimeters: per-agent ACL (deny-by-default, glob patterns), sandbox enforcer, macOS Keychain integration, SHA-256 audit chain with tamper detection, SecurityGuard middleware, egress firewall, budget enforcer (soft/hard limits), kill switch (Agent/Type/All × Graceful/Emergency), 18 tests
+- Plan 726 (P) Artifact Registry: in-memory registry with idempotent upsert, scanner (agents/skills/rules with frontmatter), 4 renderers (Report/VsCode/OpenClaw/API), .github/instructions/ for Rust/Swift/TypeScript, accelerator manifest ADR, convergio-blueprint.yaml format, 9 tests
+
+### Fixed
+- plan_reviews table missing spec_file column (broke review registration)
+- remember() now exports Markdown backup via with_export_dir()
+
 ## [18.2.0] - 26 Marzo 2026
 
 ### Added
