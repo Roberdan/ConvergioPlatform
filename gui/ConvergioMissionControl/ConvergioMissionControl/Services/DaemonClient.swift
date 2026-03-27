@@ -105,10 +105,10 @@ final class DaemonClient {
         return response.tree.flatMap { $0.tasks }
     }
 
-    func agents() async throws -> [DaemonAgent] {
-        let response: AgentsResponse = try await getDecoded(path: "/api/agents")
+    func agents() async throws -> DaemonAgentResponse {
+        let response: DaemonAgentResponse = try await getDecoded(path: "/api/agents")
         isConnected = true
-        return response.running
+        return response
     }
 
     func meshPeers() async throws -> [MeshPeer] {
