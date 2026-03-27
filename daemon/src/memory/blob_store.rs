@@ -2,7 +2,7 @@ use super::types::MemoryError;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Content-addressed blob store for large memory artifacts.
 /// Files stored as `data/blobs/<sha256-hex>` with dedup via hash.

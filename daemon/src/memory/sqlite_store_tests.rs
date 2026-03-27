@@ -1,6 +1,6 @@
 // When included from sqlite_store.rs via #[path], super = sqlite_store module.
 use super::SqliteMemoryStore;
-use super::super::types::{AccessLevel, Attestation, Memory, MemoryError, MemoryType, RecallQuery};
+use super::super::types::{AccessLevel, Memory, MemoryType, RecallQuery};
 use super::super::MemoryStore;
 use chrono::{Duration, Utc};
 use tempfile::NamedTempFile;
