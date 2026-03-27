@@ -1,5 +1,6 @@
 pub mod background;
 pub mod background_sync;
+pub mod artifacts;
 pub mod capabilities;
 pub mod channels;
 pub mod checklist;
@@ -16,6 +17,7 @@ pub mod message_error;
 pub mod orchestrator;
 pub mod platform_paths;
 pub mod resilience;
+pub mod security;
 pub mod server;
 pub mod tui;
 pub mod validation;
