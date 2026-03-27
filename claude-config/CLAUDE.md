@@ -52,6 +52,10 @@ After agent completes: `SubagentStop` hook auto-commits uncommitted work. Verify
 Cherry-picks: ALWAYS delegate to an agent. Never resolve conflicts inline in coordinator context.
 Auth failures: `SubagentStop` hook blocks and requests retry. If persistent, `/login` then re-launch.
 
+## Copilot Delegation (NON-NEGOTIABLE)
+
+@rules/copilot-delegation.md
+
 ## Workflow (HOOK-ENFORCED)
 
 `/solve` → `/planner` (Opus) → review (Sonnet) → DB → `/execute` (Codex) → thor (Opus) → merge → done

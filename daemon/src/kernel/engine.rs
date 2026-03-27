@@ -51,7 +51,7 @@ impl Default for KernelConfig {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned(),
-            default_model: "mlx-community/Llama-3.2-1B-Instruct-4bit".to_string(),
+            default_model: "mlx-community/Qwen2.5-7B-Instruct-4bit".to_string(),
         }
     }
 }
@@ -103,12 +103,11 @@ impl KernelEngine {
         heuristic_classify(situation)
     }
 
-    /// Ask the local model a question using tool-augmented inference.
+    /// Ask the local model a question with context stuffing.
     ///
-    /// Flow: build prompt with tool descriptions → call Mistral → parse <tool_call> tags →
-    /// execute tool via daemon API → feed result back → return final answer.
-    /// Max 2 tool-call rounds to prevent runaway loops.
-    /// Strips mlx_lm debug output (=====, Prompt:, Generation:, Peak memory:).
+    /// The KERNEL (Rust) decides which APIs to call based on keywords,
+    /// gathers real data, and injects it into the prompt.
+    /// Qwen 7B then summarizes and reasons on real data — no hallucination.
     pub fn ask(&self, question: &str) -> String {
         if !self.bridge.is_available() || self.loaded_model.is_none() {
             return "Il modello locale non e' disponibile. Riprova piu' tardi.".to_string();
@@ -116,63 +115,27 @@ impl KernelEngine {
         let model = self.loaded_model.as_ref().unwrap();
         let daemon_url = "http://localhost:8420";
 
-        // Build tool descriptions block for prompt injection.
-        let tool_list: String = tools::tool_definitions()
-            .iter()
-            .map(|t| format!("- {}: {}", t.name, t.description))
-            .collect::<Vec<_>>()
-            .join("\n");
+        // Step 1: Kernel gathers relevant data based on question keywords
+        let context = smart_context_gather(question, daemon_url);
 
-        let initial_prompt = format!(
-            "[INST] Sei l'assistente Convergio, una piattaforma di orchestrazione AI.\n\
-             Hai questi strumenti per ottenere dati reali:\n\
-             {tool_list}\n\n\
-             Per usare uno strumento scrivi: \
-             <tool_call>{{\"name\":\"get_plans\",\"arguments\":{{}}}}</tool_call>\n\
-             Per strumenti con parametri: \
-             <tool_call>{{\"name\":\"get_plan_detail\",\"arguments\":{{\"plan_id\":729}}}}</tool_call>\n\n\
-             Domanda dell'utente: {question}\n\n\
-             Rispondi SEMPRE in italiano. Usa gli strumenti per ottenere dati reali prima di rispondere.\n\
-             Non inventare dati. Se non sai qualcosa, dillo. [/INST]"
+        // Step 2: Build prompt with real data — Qwen just needs to reason and summarize
+        let prompt = format!(
+            "<|im_start|>system\n\
+             Sei l'assistente Convergio, una piattaforma di orchestrazione AI.\n\
+             Rispondi SEMPRE in italiano, in modo conciso e preciso.\n\
+             Usa SOLO i dati forniti nel contesto. Non inventare nulla.\n\
+             Se i dati non contengono la risposta, dillo.\n\
+             <|im_end|>\n\
+             <|im_start|>user\n\
+             Ecco i dati attuali del sistema:\n\n\
+             {context}\n\n\
+             Domanda: {question}\n\
+             <|im_end|>\n\
+             <|im_start|>assistant\n"
         );
 
-        let mut current_prompt = initial_prompt;
-        // Max 2 tool-call rounds.
-        for _round in 0..2 {
-            let req = InferenceRequest {
-                prompt: current_prompt.clone(),
-                model: Some(model.to_string()),
-                timeout_secs: 60,
-            };
-            let raw = match self.bridge.infer(&req) {
-                Ok(resp) => resp.text,
-                Err(e) => return format!("Errore dal modello locale: {e}"),
-            };
-
-            // Check for tool call in response.
-            if let Some((tool_name, tool_args)) = extract_tool_call(&raw) {
-                let args: serde_json::Value = serde_json::from_str(&tool_args)
-                    .unwrap_or(serde_json::Value::Object(Default::default()));
-                let tool_result = tools::call_tool(&tool_name, daemon_url, &args)
-                    .unwrap_or_else(|| format!("{{\"error\":\"unknown tool: {tool_name}\"}}"));
-
-                // Build follow-up prompt with tool result.
-                current_prompt = format!(
-                    "[INST] Risultato dello strumento {tool_name}:\n\
-                     {tool_result}\n\n\
-                     Basandoti su questi dati reali, rispondi alla domanda: {question}\n\
-                     Rispondi in italiano, in modo conciso. [/INST]"
-                );
-                // Continue to next round with enriched prompt.
-            } else {
-                // No tool call — return cleaned final answer.
-                return strip_mlx_debug(&raw);
-            }
-        }
-
-        // Final inference after max rounds.
         let req = InferenceRequest {
-            prompt: current_prompt,
+            prompt,
             model: Some(model.to_string()),
             timeout_secs: 60,
         };
@@ -269,6 +232,70 @@ fn heuristic_classify(situation: &str) -> KernelAction {
         severity: KernelSeverity::Ok,
         action: "none".to_string(),
         reason: "heuristic: no concerning keywords".to_string(),
+    }
+}
+
+/// Smart context gathering: picks APIs based on question keywords.
+/// The kernel (Rust, deterministic) does the retrieval; the LLM just reasons.
+fn smart_context_gather(question: &str, daemon_url: &str) -> String {
+    let q = question.to_lowercase();
+    let mut ctx = String::new();
+
+    // Always include plan summary (fast, small)
+    if let Some(plans) = tools::call_tool("get_plans", daemon_url, &serde_json::json!({})) {
+        ctx += &format!("Piani:\n{plans}\n\n");
+    }
+
+    // Cost data if money-related
+    if q.contains("cost") || q.contains("spes") || q.contains("soldi") || q.contains("dollari") || q.contains("budget") {
+        if let Some(costs) = tools::call_tool("get_costs", daemon_url, &serde_json::json!({})) {
+            ctx += &format!("Costi:\n{costs}\n\n");
+        }
+    }
+
+    // Node/kernel if infra-related
+    if q.contains("nod") || q.contains("kernel") || q.contains("m1") || q.contains("m5") || q.contains("mesh") || q.contains("macchina") {
+        if let Some(node) = tools::call_tool("get_node_status", daemon_url, &serde_json::json!({})) {
+            ctx += &format!("Nodo:\n{node}\n\n");
+        }
+        if let Some(kernel) = tools::call_tool("get_kernel_status", daemon_url, &serde_json::json!({})) {
+            ctx += &format!("Kernel:\n{kernel}\n\n");
+        }
+    }
+
+    // Agents if team-related
+    if q.contains("agent") || q.contains("chi") || q.contains("team") || q.contains("ali") {
+        if let Some(agents) = tools::call_tool("get_agents", daemon_url, &serde_json::json!({})) {
+            ctx += &format!("Agenti:\n{agents}\n\n");
+        }
+    }
+
+    // Plan detail if specific plan mentioned
+    if q.contains("piano") || q.contains("plan") {
+        // Try to extract a plan ID
+        let id: Option<u32> = q.split_whitespace().filter_map(|w| w.parse().ok()).next();
+        if let Some(plan_id) = id {
+            let args = serde_json::json!({"plan_id": plan_id});
+            if let Some(detail) = tools::call_tool("get_plan_detail", daemon_url, &args) {
+                ctx += &format!("Dettaglio piano {plan_id}:\n{detail}\n\n");
+            }
+        }
+    }
+
+    // For generic questions, add costs + kernel status too
+    if ctx.len() < 200 {
+        if let Some(costs) = tools::call_tool("get_costs", daemon_url, &serde_json::json!({})) {
+            ctx += &format!("Costi:\n{costs}\n\n");
+        }
+        if let Some(kernel) = tools::call_tool("get_kernel_status", daemon_url, &serde_json::json!({})) {
+            ctx += &format!("Kernel:\n{kernel}\n\n");
+        }
+    }
+
+    if ctx.is_empty() {
+        "Nessun dato disponibile dal daemon.".to_string()
+    } else {
+        ctx
     }
 }
 
