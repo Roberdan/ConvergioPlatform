@@ -13,7 +13,7 @@ use crate::tui::widgets::{selected_style, ACCENT, FAIL, MUTED, OK, TEXT_PRIMARY,
 
 fn status_color(status: &str) -> ratatui::style::Color {
     match status {
-        "done" => OK,
+        "done" | "completed" => OK,
         "doing" => WARN,
         "blocked" => FAIL,
         "cancelled" => MUTED,
@@ -23,7 +23,7 @@ fn status_color(status: &str) -> ratatui::style::Color {
 
 fn status_icon(status: &str) -> &'static str {
     match status {
-        "done" => "\u{2713}",     // ✓
+        "done" | "completed" => "\u{2713}",     // ✓
         "doing" => "\u{25c9}",    // ◉
         "blocked" => "\u{2715}",  // ✕
         "cancelled" => "\u{2012}",// ‒
