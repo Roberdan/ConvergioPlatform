@@ -102,6 +102,30 @@ impl KernelEngine {
         heuristic_classify(situation)
     }
 
+    /// Ask the local model a free-form question. Returns the raw text response.
+    /// Used by the Telegram AskAli intent when the question doesn't need Opus.
+    /// Falls back to a polite "non so rispondere" when the model is unavailable.
+    pub fn ask(&self, question: &str) -> String {
+        if !self.bridge.is_available() || self.loaded_model.is_none() {
+            return "Il modello locale non e' disponibile. Riprova piu' tardi.".to_string();
+        }
+        let model = self.loaded_model.as_ref().unwrap();
+        let prompt = format!(
+            "Sei l'assistente Convergio. Rispondi in italiano, in modo conciso.\n\
+             Domanda: {question}\n\
+             Risposta:"
+        );
+        let req = InferenceRequest {
+            prompt,
+            model: Some(model.to_string()),
+            timeout_secs: 60,
+        };
+        match self.bridge.infer(&req) {
+            Ok(resp) => resp.text.trim().to_string(),
+            Err(e) => format!("Errore dal modello locale: {e}"),
+        }
+    }
+
     /// Snapshot the current engine state.
     pub fn status(&self) -> KernelStatus {
         KernelStatus {

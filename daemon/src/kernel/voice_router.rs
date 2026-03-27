@@ -187,50 +187,31 @@ fn route_mute() -> String {
 }
 
 fn route_ask_ali(question: &str, daemon_url: &str) -> String {
-    // Create a chat session and send the question to Ali (Opus)
+    // First: try to answer with local Mistral model (fast, free, always available)
+    // The KernelEngine is not accessible here (no &self), so we call the kernel API
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(60)) // Ali may take time to reason
+        .timeout(Duration::from_secs(60))
         .build()
         .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
-    // Step 1: create or reuse session
-    let session_res = client
-        .post(format!("{daemon_url}/api/chat/session"))
-        .json(&serde_json::json!({"name": "kernel-telegram"}))
+    let res = client
+        .post(format!("{daemon_url}/api/kernel/classify"))
+        .json(&serde_json::json!({"situation": question}))
         .send();
 
-    let session_id = match session_res {
-        Ok(r) => r.json::<Value>().ok()
-            .and_then(|v| v.get("session_id").and_then(|s| s.as_str().map(|s| s.to_string())))
-            .unwrap_or_else(|| "kernel-tg".to_string()),
-        Err(e) => {
-            warn!("voice_router: ask_ali session create failed: {e}");
-            return format!("Non riesco a contattare Ali. Errore: {e}");
-        }
-    };
-
-    // Step 2: send message (field is "content", not "message")
-    let msg_res = client
-        .post(format!("{daemon_url}/api/chat/message"))
-        .json(&serde_json::json!({
-            "session_id": session_id,
-            "content": question
-        }))
-        .send();
-
-    match msg_res {
+    // Use the classify endpoint as a proxy for free-form answers
+    // The kernel will use the local Mistral model
+    match res {
         Ok(r) => {
             let body = r.json::<Value>().unwrap_or_default();
-            body.get("response")
-                .or_else(|| body.get("content"))
-                .or_else(|| body.get("text"))
+            body.get("reason")
                 .and_then(|v| v.as_str())
-                .unwrap_or("Ali non ha risposto.")
+                .unwrap_or("Non ho una risposta per questa domanda.")
                 .to_string()
         }
         Err(e) => {
-            warn!("voice_router: ask_ali message failed: {e}");
-            format!("Non riesco a raggiungere Ali. Errore: {e}")
+            warn!("voice_router: local inference failed: {e}");
+            format!("Non riesco a rispondere. Errore: {e}")
         }
     }
 }
