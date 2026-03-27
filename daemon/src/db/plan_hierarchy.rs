@@ -49,7 +49,7 @@ pub fn project_plan_tree(conn: &Connection, project_id: &str) -> rusqlite::Resul
     let mut stmt = conn.prepare(
         "SELECT id, name, status, tasks_done, tasks_total, \
          depends_on, execution_mode, is_master, parent_plan_id \
-         FROM plans WHERE project_id = ?1 \
+         FROM plans WHERE project_id = ?1 AND status != 'cancelled' \
          ORDER BY is_master DESC, id ASC",
     )?;
 
