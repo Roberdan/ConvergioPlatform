@@ -179,6 +179,48 @@ else
   warn "Claude NOT authenticated — run on node: claude auth login"
 fi
 
+# 7b. Role-based checks
+info "Step 7b/8: Role-based checks (role=${ROLE})"
+case "${ROLE}" in
+  kernel)
+    # Check mlx_lm is available (Apple Silicon LLM inference)
+    _ssh "python3 -c 'import mlx_lm' 2>/dev/null" \
+      && ok "mlx_lm: available" \
+      || warn "mlx_lm not installed — run: pip install mlx-lm (required for on-device inference)"
+
+    # Check Python venv exists and is activatable
+    _ssh "[ -d \"\$HOME/.venv\" ] || [ -d \"\$HOME/venv\" ]" \
+      && ok "Python venv: found" \
+      || warn "No Python venv at ~/venv or ~/.venv — create with: python3 -m venv ~/.venv"
+
+    # Check at least one model file is present under ~/.cache/huggingface or ~/models
+    _ssh "find \"\$HOME/.cache/huggingface\" \"\$HOME/models\" -name '*.safetensors' -maxdepth 4 2>/dev/null | grep -q ." \
+      && ok "Model files: found" \
+      || warn "No .safetensors model files detected under ~/.cache/huggingface or ~/models"
+
+    # Check Telegram bot token is set (required for kernel→user notifications)
+    _ssh "[ -n \"\${TELEGRAM_BOT_TOKEN:-}\" ] || grep -qr 'TELEGRAM_BOT_TOKEN' \"\$HOME/.zshenv\" \"\$HOME/.zprofile\" \"\$HOME/.profile\" 2>/dev/null" \
+      && ok "TELEGRAM_BOT_TOKEN: configured" \
+      || warn "TELEGRAM_BOT_TOKEN not set — kernel notifications via Telegram will be unavailable"
+    ;;
+
+  executor)
+    # Check claude CLI is available
+    _ssh "command -v claude >/dev/null 2>&1" \
+      && ok "claude CLI: available" \
+      || warn "claude not found — install from https://claude.ai/download or via npm"
+
+    # Check copilot CLI is available
+    _ssh "command -v copilot >/dev/null 2>&1 || command -v gh >/dev/null 2>&1" \
+      && ok "AI tool (copilot/gh): available" \
+      || warn "Neither copilot nor gh CLI found — at least one AI tool required for executor role"
+    ;;
+
+  *)
+    info "No role-specific checks defined for role '${ROLE}'"
+    ;;
+esac
+
 # 8. Verify
 info "Step 8/8: Verification"
 sleep 3

@@ -168,6 +168,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/kernel/classify",
     "/api/kernel/play",
     "/api/kernel/ask",
+    "/api/kernel/active-node",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",

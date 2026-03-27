@@ -18,7 +18,7 @@ TOTAL_COST=$(echo "$METRICS" | python3 -c "import json,sys; d=json.loads(sys.std
 ACTIVE_PLANS=$(echo "$PLANS" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(len([p for p in d.get('plans',[]) if p.get('status')=='doing']))" 2>/dev/null || echo "0")
 TOTAL_PLANS=$(echo "$PLANS" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(len(d.get('plans',[])))" 2>/dev/null || echo "0")
 
-log "Total cost: $${TOTAL_COST}, Active plans: ${ACTIVE_PLANS}, Total plans: ${TOTAL_PLANS}"
+log "Total cost: \$${TOTAL_COST}, Active plans: ${ACTIVE_PLANS}, Total plans: ${TOTAL_PLANS}"
 
 # 2. Check kernel status
 KERNEL=$(curl -sf "${DAEMON_URL}/api/kernel/status" 2>/dev/null || echo '{}')

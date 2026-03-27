@@ -8,7 +8,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/Roberdan/GitHub/ConvergioPlatform/scripts/kernel/sync-db.sh</string>
+        <string>__REPO_ROOT__/scripts/kernel/sync-db.sh</string>
         <string>__SOURCE_SSH__</string>
         <string>__TARGET_SSH__</string>
     </array>
@@ -21,10 +21,10 @@
     <false/>
 
     <key>StandardOutPath</key>
-    <string>/Users/Roberdan/Library/Logs/convergio-sync-db.log</string>
+    <string>__HOME__/Library/Logs/convergio-sync-db.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/Roberdan/Library/Logs/convergio-sync-db.log</string>
+    <string>__HOME__/Library/Logs/convergio-sync-db.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -35,7 +35,7 @@
     </dict>
 
     <key>WorkingDirectory</key>
-    <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
+    <string>__REPO_ROOT__</string>
 
     <!-- Do not restart on failure — wait for next interval -->
     <key>KeepAlive</key>

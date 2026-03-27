@@ -4,6 +4,7 @@
 
 pub mod audio;
 pub mod engine;
+pub mod tools;
 pub mod monitor;
 pub mod recover;
 pub mod reports;

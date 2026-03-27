@@ -68,6 +68,8 @@ install_plist() {
   trap 'rm -f "${tmp_plist}"' RETURN
 
   sed \
+    -e "s|__HOME__|${HOME}|g" \
+    -e "s|__REPO_ROOT__|${REPO_ROOT}|g" \
     -e "s|__SOURCE_SSH__|${SOURCE_SSH}|g" \
     -e "s|__TARGET_SSH__|${TARGET_SSH}|g" \
     -e "s|__DASHBOARD_DB__|${DB_PATH}|g" \

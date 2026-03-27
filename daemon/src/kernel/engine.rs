@@ -3,6 +3,7 @@
 // Extend AppleFmBridge; do not spawn a parallel subprocess.
 
 use crate::ipc::models::apple_fm::{AppleFmBridge, InferenceRequest};
+use crate::kernel::tools;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -102,28 +103,76 @@ impl KernelEngine {
         heuristic_classify(situation)
     }
 
-    /// Ask the local model a question with real system context.
-    /// Fetches live data from daemon API, injects into prompt, then asks Mistral.
+    /// Ask the local model a question using tool-augmented inference.
+    ///
+    /// Flow: build prompt with tool descriptions → call Mistral → parse <tool_call> tags →
+    /// execute tool via daemon API → feed result back → return final answer.
+    /// Max 2 tool-call rounds to prevent runaway loops.
     /// Strips mlx_lm debug output (=====, Prompt:, Generation:, Peak memory:).
     pub fn ask(&self, question: &str) -> String {
         if !self.bridge.is_available() || self.loaded_model.is_none() {
             return "Il modello locale non e' disponibile. Riprova piu' tardi.".to_string();
         }
         let model = self.loaded_model.as_ref().unwrap();
-        // Gather real context from daemon API
-        let context = gather_system_context();
-        let prompt = format!(
-            "Sei l'assistente del sistema Convergio, una piattaforma di orchestrazione AI.\n\
-             Rispondi in italiano, in modo conciso e preciso.\n\
-             Usa SOLO i dati di contesto forniti. Non inventare informazioni.\n\n\
-             === Stato attuale del sistema ===\n\
-             {context}\n\n\
-             === Domanda dell'utente ===\n\
-             {question}\n\n\
-             === Risposta (basata solo sui dati sopra) ==="
+        let daemon_url = "http://localhost:8420";
+
+        // Build tool descriptions block for prompt injection.
+        let tool_list: String = tools::tool_definitions()
+            .iter()
+            .map(|t| format!("- {}: {}", t.name, t.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let initial_prompt = format!(
+            "[INST] Sei l'assistente Convergio, una piattaforma di orchestrazione AI.\n\
+             Hai questi strumenti per ottenere dati reali:\n\
+             {tool_list}\n\n\
+             Per usare uno strumento scrivi: \
+             <tool_call>{{\"name\":\"get_plans\",\"arguments\":{{}}}}</tool_call>\n\
+             Per strumenti con parametri: \
+             <tool_call>{{\"name\":\"get_plan_detail\",\"arguments\":{{\"plan_id\":729}}}}</tool_call>\n\n\
+             Domanda dell'utente: {question}\n\n\
+             Rispondi SEMPRE in italiano. Usa gli strumenti per ottenere dati reali prima di rispondere.\n\
+             Non inventare dati. Se non sai qualcosa, dillo. [/INST]"
         );
+
+        let mut current_prompt = initial_prompt;
+        // Max 2 tool-call rounds.
+        for _round in 0..2 {
+            let req = InferenceRequest {
+                prompt: current_prompt.clone(),
+                model: Some(model.to_string()),
+                timeout_secs: 60,
+            };
+            let raw = match self.bridge.infer(&req) {
+                Ok(resp) => resp.text,
+                Err(e) => return format!("Errore dal modello locale: {e}"),
+            };
+
+            // Check for tool call in response.
+            if let Some((tool_name, tool_args)) = extract_tool_call(&raw) {
+                let args: serde_json::Value = serde_json::from_str(&tool_args)
+                    .unwrap_or(serde_json::Value::Object(Default::default()));
+                let tool_result = tools::call_tool(&tool_name, daemon_url, &args)
+                    .unwrap_or_else(|| format!("{{\"error\":\"unknown tool: {tool_name}\"}}"));
+
+                // Build follow-up prompt with tool result.
+                current_prompt = format!(
+                    "[INST] Risultato dello strumento {tool_name}:\n\
+                     {tool_result}\n\n\
+                     Basandoti su questi dati reali, rispondi alla domanda: {question}\n\
+                     Rispondi in italiano, in modo conciso. [/INST]"
+                );
+                // Continue to next round with enriched prompt.
+            } else {
+                // No tool call — return cleaned final answer.
+                return strip_mlx_debug(&raw);
+            }
+        }
+
+        // Final inference after max rounds.
         let req = InferenceRequest {
-            prompt,
+            prompt: current_prompt,
             model: Some(model.to_string()),
             timeout_secs: 60,
         };
@@ -230,57 +279,21 @@ fn query_ram_gb() -> f64 {
     sys.total_memory() as f64 / 1_073_741_824.0 // bytes → GB
 }
 
-/// Fetch live system state from daemon API for context injection.
-fn gather_system_context() -> String {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .unwrap_or_else(|_| reqwest::blocking::Client::new());
-    let base = "http://localhost:8420";
-    let mut ctx = String::new();
-
-    // Plans
-    if let Ok(r) = client.get(format!("{base}/api/plan-db/list")).send() {
-        if let Ok(v) = r.json::<serde_json::Value>() {
-            if let Some(plans) = v.get("plans").and_then(|p| p.as_array()) {
-                let doing: Vec<_> = plans.iter()
-                    .filter(|p| p.get("status").and_then(|s| s.as_str()) == Some("doing"))
-                    .collect();
-                ctx += &format!("Piani attivi: {}\n", doing.len());
-                for p in &doing {
-                    let name = p.get("name").and_then(|n| n.as_str()).unwrap_or("?");
-                    let done = p.get("tasks_done").and_then(|n| n.as_u64()).unwrap_or(0);
-                    let total = p.get("tasks_total").and_then(|n| n.as_u64()).unwrap_or(0);
-                    let id = p.get("id").and_then(|n| n.as_u64()).unwrap_or(0);
-                    ctx += &format!("  - Piano {id}: {name} ({done}/{total} task)\n");
-                }
-                ctx += &format!("Piani totali nel DB: {}\n", plans.len());
-            }
-        }
-    }
-
-    // Kernel status
-    if let Ok(r) = client.get(format!("{base}/api/kernel/status")).send() {
-        if let Ok(v) = r.json::<serde_json::Value>() {
-            let models = v.get("models_loaded").and_then(|n| n.as_u64()).unwrap_or(0);
-            let uptime = v.get("uptime_secs").and_then(|n| n.as_u64()).unwrap_or(0);
-            ctx += &format!("Kernel: {models} modello caricato, uptime {uptime}s\n");
-        }
-    }
-
-    // Node readiness
-    if let Ok(r) = client.get(format!("{base}/api/node/readiness")).send() {
-        if let Ok(v) = r.json::<serde_json::Value>() {
-            let ok = v.get("ok").and_then(|b| b.as_bool()).unwrap_or(false);
-            let node = v.get("node").and_then(|s| s.as_str()).unwrap_or("?");
-            ctx += &format!("Nodo: {node}, readiness: {}\n", if ok { "tutto OK" } else { "problemi rilevati" });
-        }
-    }
-
-    if ctx.is_empty() {
-        ctx = "Nessun dato disponibile dal daemon.".to_string();
-    }
-    ctx
+/// Parse the first <tool_call>...</tool_call> block from model output.
+/// Returns (tool_name, arguments_json_string) or None if no call found.
+fn extract_tool_call(text: &str) -> Option<(String, String)> {
+    let start_tag = "<tool_call>";
+    let end_tag = "</tool_call>";
+    let start = text.find(start_tag)?;
+    let end = text.find(end_tag)?;
+    let json_str = text[start + start_tag.len()..end].trim();
+    let v: serde_json::Value = serde_json::from_str(json_str).ok()?;
+    let name = v.get("name")?.as_str()?.to_string();
+    let args = v
+        .get("arguments")
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "{}".to_string());
+    Some((name, args))
 }
 
 /// Strip mlx_lm debug output from model response.
@@ -300,4 +313,58 @@ fn strip_mlx_debug(text: &str) -> String {
         .join("\n")
         .trim()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_tool_call_parses_no_args() {
+        let text = r#"Sure! <tool_call>{"name":"get_plans","arguments":{}}</tool_call>"#;
+        let result = extract_tool_call(text);
+        assert!(result.is_some());
+        let (name, args) = result.unwrap();
+        assert_eq!(name, "get_plans");
+        assert_eq!(args, "{}");
+    }
+
+    #[test]
+    fn extract_tool_call_parses_with_args() {
+        let text =
+            r#"<tool_call>{"name":"get_plan_detail","arguments":{"plan_id":729}}</tool_call>"#;
+        let result = extract_tool_call(text);
+        assert!(result.is_some());
+        let (name, args) = result.unwrap();
+        assert_eq!(name, "get_plan_detail");
+        // arguments JSON must contain plan_id 729
+        let v: serde_json::Value = serde_json::from_str(&args).unwrap();
+        assert_eq!(v.get("plan_id").and_then(|v| v.as_u64()), Some(729));
+    }
+
+    #[test]
+    fn extract_tool_call_returns_none_when_absent() {
+        let text = "Ecco la risposta senza tool call.";
+        assert!(extract_tool_call(text).is_none());
+    }
+
+    #[test]
+    fn extract_tool_call_returns_none_on_malformed_json() {
+        let text = "<tool_call>not json at all</tool_call>";
+        assert!(extract_tool_call(text).is_none());
+    }
+
+    #[test]
+    fn strip_mlx_debug_removes_debug_lines() {
+        let raw = "=====\nPrompt: 10\nGeneration: 5\nPeak memory: 1.2 GB\nRisposta utile";
+        let cleaned = strip_mlx_debug(raw);
+        assert_eq!(cleaned, "Risposta utile");
+    }
+
+    #[test]
+    fn strip_mlx_debug_keeps_normal_lines() {
+        let raw = "Ci sono 3 piani attivi.\nIl piano 734 e' in corso.";
+        let cleaned = strip_mlx_debug(raw);
+        assert_eq!(cleaned, raw);
+    }
 }

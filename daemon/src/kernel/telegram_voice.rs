@@ -167,9 +167,40 @@ async fn download_file(token: &str, file_path: &str, api_base: &str) -> Result<V
     Ok(bytes.to_vec())
 }
 
+/// Resolve the absolute path to ffmpeg.
+/// On macOS/Homebrew the daemon may run under launchd with a minimal PATH that
+/// omits /opt/homebrew/bin, so we probe known locations before falling back to
+/// whatever is in PATH.
+// pub(crate) so telegram_voice_tests.rs (included via #[path]) can call it.
+pub(crate) fn resolve_ffmpeg() -> Result<std::path::PathBuf, String> {
+    // Ordered by preference: Homebrew ARM, Homebrew Intel, typical system paths.
+    let candidates = [
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+        "ffmpeg", // last-resort: rely on inherited PATH
+    ];
+    for candidate in &candidates {
+        let path = std::path::Path::new(candidate);
+        if path.is_absolute() {
+            if path.exists() {
+                return Ok(path.to_path_buf());
+            }
+        } else {
+            // Relative name — assume available on PATH
+            return Ok(path.to_path_buf());
+        }
+    }
+    Err("ffmpeg not found; install via: brew install ffmpeg".to_string())
+}
+
 /// Convert OGG Opus bytes → WAV bytes via ffmpeg subprocess.
 /// Uses `tempfile::NamedTempFile` for both input and output — RAII auto-cleanup.
+/// Resolves ffmpeg path at runtime to handle launchd environments where
+/// /opt/homebrew/bin may be absent from PATH.
 async fn convert_ogg_to_wav(ogg_bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let ffmpeg = resolve_ffmpeg()?;
+
     // Write OGG to a named temp file (auto-deleted on drop).
     let mut ogg_tmp =
         tempfile::NamedTempFile::new().map_err(|e| format!("tempfile ogg: {e}"))?;
@@ -180,7 +211,7 @@ async fn convert_ogg_to_wav(ogg_bytes: &[u8]) -> Result<Vec<u8>, String> {
         tempfile::NamedTempFile::new().map_err(|e| format!("tempfile wav: {e}"))?;
     let wav_path = wav_tmp.path().to_path_buf();
 
-    let status = Command::new("ffmpeg")
+    let status = Command::new(&ffmpeg)
         .args([
             "-y",
             "-i",
@@ -194,10 +225,10 @@ async fn convert_ogg_to_wav(ogg_bytes: &[u8]) -> Result<Vec<u8>, String> {
         .stderr(std::process::Stdio::null())
         .status()
         .await
-        .map_err(|e| format!("ffmpeg spawn: {e}"))?;
+        .map_err(|e| format!("ffmpeg spawn ({}): {e}", ffmpeg.display()))?;
 
     if !status.success() {
-        return Err(format!("ffmpeg exited with {status}"));
+        return Err(format!("ffmpeg exited with {status} ({})", ffmpeg.display()));
     }
 
     let wav_bytes = tokio::fs::read(&wav_path)

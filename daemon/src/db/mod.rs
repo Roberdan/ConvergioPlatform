@@ -14,6 +14,32 @@ pub use models::{
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
+/// Resolve the crsqlite extension path by searching standard locations.
+///
+/// Search order (first existing file wins):
+///   1. Caller-supplied explicit path (when `hint` is `Some`)
+///   2. `~/lib/crsqlite.{dylib|so}` — user-local install (e.g. M1 Pro)
+///   3. `~/.claude/lib/crsqlite/crsqlite.{dylib|so}` — mesh-provisioned location
+///   4. Bare name `"crsqlite"` — fall back to OS dynamic-linker search path
+pub fn resolve_crsqlite_path(hint: Option<String>) -> String {
+    if let Some(p) = hint {
+        return p;
+    }
+    let ext = if cfg!(target_os = "macos") { "dylib" } else { "so" };
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let candidates = [
+        format!("{home}/lib/crsqlite.{ext}"),
+        format!("{home}/.claude/lib/crsqlite/crsqlite.{ext}"),
+    ];
+    for candidate in &candidates {
+        if std::path::Path::new(candidate).exists() {
+            return candidate.clone();
+        }
+    }
+    // Fall back to bare name; OS linker (DYLD_LIBRARY_PATH / LD_LIBRARY_PATH) will resolve.
+    "crsqlite".to_string()
+}
+
 pub struct PlanDb {
     conn: Connection,
     db_path: Option<PathBuf>,
@@ -72,7 +98,7 @@ impl PlanDb {
 
     pub fn open_path(path: &Path, crsqlite_extension: Option<String>) -> rusqlite::Result<Self> {
         let conn = Connection::open(path)?;
-        let extension = crsqlite_extension.unwrap_or_else(|| "crsqlite".to_string());
+        let extension = resolve_crsqlite_path(crsqlite_extension);
         let mut loaded_ext = None;
         match crdt::load_crsqlite(&conn, &extension) {
             Ok(()) => match crdt::mark_required_tables(&conn) {

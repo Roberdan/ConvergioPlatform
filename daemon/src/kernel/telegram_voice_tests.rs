@@ -8,8 +8,52 @@
 
 use super::{
     build_download_url, build_get_file_url, extract_voice_file_id,
-    extract_voice_file_id_for_chat, VoiceMessage,
+    extract_voice_file_id_for_chat, resolve_ffmpeg, VoiceMessage,
 };
+
+// ----- ffmpeg resolution -------------------------------------------------------
+
+/// On M1 Pro (or any machine with Homebrew) the daemon may run under launchd
+/// without /opt/homebrew/bin in PATH.  resolve_ffmpeg must return a valid path.
+#[test]
+fn test_resolve_ffmpeg_returns_a_path() {
+    // resolve_ffmpeg returns Ok on any machine that has ffmpeg somewhere — if it
+    // returns Err the binary is genuinely absent, which is also a valid outcome
+    // (the error message instructs the user to install it).
+    match resolve_ffmpeg() {
+        Ok(p) => {
+            let display = p.display().to_string();
+            assert!(
+                display.contains("ffmpeg"),
+                "resolved path should contain 'ffmpeg', got: {display}"
+            );
+        }
+        Err(e) => {
+            // ffmpeg absent on this CI machine — verify the error is helpful.
+            assert!(
+                e.contains("brew install ffmpeg") || e.contains("not found"),
+                "error should guide installation, got: {e}"
+            );
+        }
+    }
+}
+
+/// Absolute candidate paths must be probed before the bare "ffmpeg" fallback.
+/// On Homebrew ARM the function must return /opt/homebrew/bin/ffmpeg when it exists.
+#[test]
+#[cfg(target_os = "macos")]
+fn test_resolve_ffmpeg_prefers_homebrew_arm_path() {
+    let result = resolve_ffmpeg();
+    // If the Homebrew ARM path exists it must be chosen first.
+    let homebrew_arm = std::path::Path::new("/opt/homebrew/bin/ffmpeg");
+    if homebrew_arm.exists() {
+        assert_eq!(result.unwrap(), homebrew_arm);
+    } else {
+        // Path absent on this machine — result is either another absolute path or Err.
+        // Either is acceptable; we just verify resolve_ffmpeg doesn't panic.
+        drop(result);
+    }
+}
 
 // ----- URL construction -------------------------------------------------------
 

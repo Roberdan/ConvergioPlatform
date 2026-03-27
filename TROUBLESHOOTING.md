@@ -173,6 +173,24 @@ cvg repo sync           # checks each repo path exists + health endpoint respond
   Verify: `cvg kernel status` shows correct `audio_target` node.
   Fallback: `afplay` must be available (`which afplay`) for local audio output.
 
+## Nightly Calibration (Plan 734)
+
+**calibrate-models.sh not found on M1 Pro**
+- Symptom: `bash: scripts/kernel/calibrate-models.sh: No such file or directory`
+- Cause: M1 Pro repo is behind main (script added in Plan T commit `3bba32f`).
+- Fix: `ssh m1Pro "cd ~/GitHub/ConvergioPlatform && git pull --rebase origin main"`
+
+**Telegram notification skipped**
+- Symptom: `[calibrate-models] Telegram not configured — skipping notification`
+- Cause: `CONVERGIO_TELEGRAM_TOKEN` or `CONVERGIO_TELEGRAM_CHAT_ID` not set in `~/.convergio/env`.
+- Fix: add both vars to `~/.convergio/env` on M1 Pro and reload: `source ~/.convergio/env`.
+
+**Evolution proposal submission fails (non-fatal)**
+- Symptom: `[calibrate-models] Evolution proposal submission failed (non-fatal)`
+- Cause: daemon not running or `/api/evolution/proposals` endpoint unavailable.
+- Fix: verify daemon is running on M1 Pro: `ssh m1Pro "curl -sf http://localhost:8420/api/health"`.
+  If down: `ssh m1Pro "cd ~/GitHub/ConvergioPlatform && ./daemon/start.sh"`.
+
 ## Node Deployment (Plan 732)
 
 **deploy-node.sh fails on DB sync**
