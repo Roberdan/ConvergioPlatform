@@ -38,15 +38,12 @@ async fn api_peer_list(State(state): State<ServerState>) -> Result<Json<Value>, 
             let seen = row.get("last_seen").and_then(Value::as_f64).unwrap_or(0.0);
             let obj = row.as_object_mut()?; // skip malformed rows — query_rows always returns objects
             obj.insert("is_online".to_string(), json!(now - seen < 3600.0));
-            obj.insert(
-                "is_local".to_string(),
-                json!(name.contains("mac-worker-2") || name.contains("local")),
-            );
-            let role = if name.contains("mac-worker-2") || name.contains("local") {
-                "coordinator"
-            } else {
-                "worker"
-            };
+            let local_host = hostname::get()
+                .map(|h| h.to_string_lossy().replace(".local", ""))
+                .unwrap_or_default();
+            let is_self = name == local_host;
+            obj.insert("is_local".to_string(), json!(is_self));
+            let role = if is_self { "coordinator" } else { "worker" };
             obj.insert("role".to_string(), json!(role));
             Some(row)
         })
