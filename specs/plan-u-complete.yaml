@@ -1,0 +1,456 @@
+# Plan U — Convergio Complete
+# EVERYTHING that remains. No deferral. No "prossimo piano".
+# Kernel MCP, Node Lifecycle, Ali Telegram, Voice E2E, Fork, Docs, Deploy, Test.
+
+name: "Plan U — Convergio Complete"
+project_id: convergio
+priority: P0
+execution_mode: serial
+tags: [kernel, mcp, node-lifecycle, telegram, ali, voice, fork, complete]
+
+description: >
+  Single plan covering ALL remaining work from the 27 March session.
+  Kernel MCP intelligence, node lifecycle, Ali via Telegram,
+  voice E2E, audio routing, fork reconciliation, nightly calibration,
+  full deploy and end-to-end test on M1 Pro.
+
+requirements:
+  - F-01: "Mistral calls daemon tools via function calling for real data"
+  - F-02: "At least 7 kernel tools: plans, plan_detail, costs, node, kernel, agents, restart"
+  - F-03: "engine.ask() uses ChatML tool_call with max 2 rounds"
+  - F-04: "All mlx_lm debug output stripped from responses"
+  - F-05: "crsqlite installed on M1 Pro, CRDT sync working"
+  - F-06: "Node provisioning script verifies ALL deps for role"
+  - F-07: "No hardcoded paths — all use $HOME or runtime resolution"
+  - F-08: "Ali answers complex questions via Telegram (async poll)"
+  - F-09: "Telegram voice inbound works on M1 Pro (OGG → Whisper → reply)"
+  - F-10: "Telegram voice outbound works (TTS → OGG → sendVoice)"
+  - F-11: "cvg kernel here sets audio target, kernel routes automatically"
+  - F-12: "Fork reconciliation documented in ADR"
+  - F-13: "Nightly calibration runs and sends Telegram report"
+  - F-14: "Full E2E test on M1 Pro via Telegram passes"
+  - F-15: "CHANGELOG, VERSION, TROUBLESHOOTING, ADR all updated"
+
+acceptance_invariants:
+  - description: "Mistral returns data-driven answer via tool calling"
+    verify: "cargo test --features kernel kernel::tools --manifest-path daemon/Cargo.toml --lib"
+    defined_by: user
+  - description: "crsqlite loaded on M1 Pro daemon"
+    verify: "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q ok"
+    defined_by: user
+  - description: "No hardcoded /Users/Roberdan in scripts"
+    verify: "! grep -rn '/Users/Roberdan' scripts/kernel/ scripts/mesh/deploy-node.sh | grep -v '# '"
+    defined_by: user
+  - description: "Ali responds via Telegram within 60s"
+    verify: "cargo test --features kernel kernel::telegram --manifest-path daemon/Cargo.toml --lib"
+    defined_by: user
+  - description: "E2E Telegram test passes on M1 Pro"
+    verify: "ssh m1Pro 'curl -sf http://localhost:8420/api/kernel/status' | grep -q models_loaded"
+    defined_by: user
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAVE 1: Kernel MCP Intelligence
+# ─────────────────────────────────────────────────────────────────────────────
+
+waves:
+  - id: W1
+    name: "Kernel MCP — tools + function calling"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01, F-02]
+        do: |
+          Create daemon/src/kernel/tools.rs — kernel tool functions.
+          Each tool calls daemon API and returns structured JSON string.
+          NOT using full MCP protocol — simple Rust functions callable by engine.
+
+          Tools:
+          1. get_plans(url) → JSON: [{id, name, status, tasks_done, tasks_total}]
+          2. get_plan_detail(url, id) → JSON: {plan with tasks and waves}
+          3. get_costs(url) → JSON: {total_cost, today_cost, active_plans}
+          4. get_node_status(url) → JSON: readiness checks
+          5. get_kernel_status(url) → JSON: models, uptime, active_node
+          6. get_agents(url) → JSON: running agents list
+          7. restart_node(url, target) → triggers recovery, returns result
+
+          Register in TOOL_REGISTRY: HashMap<&str, ToolFn>.
+          Each function uses reqwest::blocking (called from spawn_blocking).
+          Add pub mod tools to kernel/mod.rs.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f daemon/src/kernel/tools.rs"
+          - "grep -q 'get_plans' daemon/src/kernel/tools.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+      - id: T1-02
+        ref: [F-03, F-04]
+        do: |
+          Update daemon/src/kernel/engine.rs ask() for tool-augmented inference.
+          Mistral 3 Instruct supports tool calling in ChatML [INST] format.
+
+          New ask() flow:
+          1. Build prompt with tool descriptions + user question
+          2. Call Mistral via bridge.infer()
+          3. Parse response: if contains <tool_call>{"name":"X","arguments":{}} extract it
+          4. Call the tool from tools.rs TOOL_REGISTRY
+          5. Re-prompt Mistral with tool result
+          6. Parse final answer, strip mlx_lm debug, return
+          7. Max 2 tool call rounds (prevent loops)
+
+          Remove gather_system_context() — replaced by tools.
+          Keep strip_mlx_debug().
+
+          Prompt template:
+          [INST] Sei l'assistente Convergio. Hai questi strumenti:
+          {tool_descriptions}
+          Per usare uno strumento: <tool_call>{"name":"get_plans","arguments":{}}</tool_call>
+          Domanda: {question}
+          Rispondi in italiano con dati precisi. [/INST]
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "grep -q 'tool_call' daemon/src/kernel/engine.rs"
+          - "! grep -q 'gather_system_context' daemon/src/kernel/engine.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+      - id: T1-03
+        ref: [F-01, F-02]
+        do: |
+          Update voice_router.rs route_ask_ali — back to /api/kernel/ask.
+          Remove the hardcoded keyword matching in route_ask_ali.
+          engine.ask() now uses tools, so /api/kernel/ask returns intelligent answers.
+          route_ask_ali simply POSTs to /api/kernel/ask and returns the answer.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '/api/kernel/ask' daemon/src/kernel/voice_router.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 2: Node Lifecycle + Path Portability
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W2
+    name: "Node Lifecycle — crsqlite, provisioning, paths"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-05]
+        do: |
+          Install crsqlite on M1 Pro. Steps:
+          1. Download crsqlite.dylib for macOS arm64 from GitHub releases
+             (https://github.com/nicktimko/crsqlite or official vlcn.io releases)
+          2. SSH to M1 Pro: place in a discoverable path
+          3. Update daemon to look for crsqlite in multiple paths:
+             ./crsqlite.dylib, /usr/local/lib/crsqlite.dylib, ~/lib/crsqlite.dylib
+          4. Verify: daemon log should NOT show "crsqlite extension failed to load"
+          5. Verify CRDT sync works between M5 Max and M1 Pro
+
+          If crsqlite binaries are not available for arm64:
+          - Build from source: git clone, cargo build --release
+          - Or document in ADR why we keep rsync as fallback
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "ssh m1Pro 'ls ~/lib/crsqlite.dylib 2>/dev/null || ls /usr/local/lib/crsqlite.dylib 2>/dev/null || echo MISSING'"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+      - id: T2-02
+        ref: [F-06, F-07]
+        do: |
+          Create scripts/mesh/provision-node.sh — full node provisioning.
+          Verifies ALL dependencies based on node role.
+          Usage: provision-node.sh <ssh-alias> [--role kernel|executor|coordinator]
+
+          For ALL roles:
+          - git, cargo/rustc, python3
+          - DB symlink correct ($HOME path)
+          - peers.conf has this node
+          - daemon builds and starts
+
+          For kernel role additionally:
+          - mlx_lm installed (Python venv)
+          - Models downloaded (at least Mistral 3 8B)
+          - Telegram token configured (~/.convergio/env)
+          - crsqlite available
+          - SoX (rec) for voice recording
+
+          For executor role:
+          - Claude Code or Copilot CLI available
+          - SSH keys for mesh
+
+          Fix ALL hardcoded paths in:
+          - scripts/kernel/com.convergio.kernel.plist (uses __REPO_PATH__ placeholders — verify substitution)
+          - scripts/kernel/com.convergio.sync-db.plist (4 hardcoded /Users/Roberdan — replace with __HOME__)
+          - scripts/kernel/install-db-sync.sh (substitute placeholders at install time)
+          Use $HOME, $(whoami), runtime resolution. NEVER /Users/Roberdan.
+          Do NOT create a new provision script — extend existing scripts/mesh/mesh-provision-node.sh
+          with role-based dependency checks.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f scripts/mesh/mesh-provision-node.sh"
+          - "bash -n scripts/mesh/mesh-provision-node.sh"
+          - "! grep -rn '/Users/Roberdan' scripts/kernel/com.convergio.sync-db.plist scripts/kernel/install-db-sync.sh | grep -v '__'"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 3: Ali + Voice + Audio Routing
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W3
+    name: "Ali Telegram + Voice E2E + Audio Routing"
+    merge_mode: sync
+    tasks:
+      - id: T3-01
+        ref: [F-08]
+        do: |
+          Implement Ali (Opus) via Telegram — async polling pattern.
+          In daemon/src/kernel/voice_router.rs or a new ali_bridge.rs:
+
+          When a question is too complex for local Mistral (engine.ask returns
+          low-confidence or user explicitly says "chiedi ad ali"):
+          1. POST /api/chat/session → get session_id
+          2. POST /api/chat/message {session_id, content: question}
+          3. Poll GET /api/chat/sessions/{session_id}/messages every 2s (max 30 rounds = 60s)
+          4. When new AI message appears → extract text → return to caller
+          5. On timeout → return "Ali non ha risposto in tempo. Riprova."
+
+          Add VoiceIntent::EscalateToAli — triggered by keywords "chiedi ad ali",
+          "ali", "opus", "cloud". This bypasses Mistral entirely.
+
+          Regular AskAli still tries Mistral first (with MCP tools from W1).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "grep -q 'EscalateToAli\\|ali_bridge\\|chat/session' daemon/src/kernel/voice_router.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+      - id: T3-02
+        ref: [F-09, F-10]
+        do: |
+          Test and fix Telegram voice on M1 Pro end-to-end.
+          telegram_voice.rs already exists. Verify it works:
+
+          Inbound voice:
+          1. User sends voice note to bot
+          2. Bot downloads OGG → tempfile
+          3. Convert OGG → WAV (check if ffmpeg or sox available on M1 Pro)
+          4. POST /api/kernel/transcribe → text
+          5. Process text → reply with text + voice
+
+          Outbound voice:
+          1. Generate TTS (macOS say → WAV)
+          2. Convert WAV → OGG for Telegram (ffmpeg or opusenc)
+          3. POST sendVoice with OGG file
+
+          If ffmpeg not installed on M1 Pro: install via brew or use sox.
+          Test: send actual voice note to @ConvergioBot, verify transcription + reply.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "ssh m1Pro 'which ffmpeg || which sox || echo MISSING'"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+      - id: T3-03
+        ref: [F-11]
+        do: |
+          Fix cvg kernel here for automatic audio routing.
+          Current: POST /api/kernel/active-node may not work (404 in earlier test).
+
+          Fix:
+          1. Add POST /api/kernel/active-node handler in api.rs (or api_ask.rs)
+             Body: {node: "hostname"} → writes to kernel_config table
+          2. Wire into server routes
+          3. cvg kernel here calls this endpoint
+          4. Audio routing in audio.rs reads active_node from kernel_config
+          5. Test: cvg kernel here on this Mac → kernel speaks from M1 Pro → audio plays HERE
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '/api/kernel/active-node' daemon/src/server/routes/api_routes.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 4: Fork + Nightly + Cleanup
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W4
+    name: "Fork reconciliation + nightly + cleanup"
+    merge_mode: sync
+    tasks:
+      - id: T4-01
+        ref: [F-12]
+        do: |
+          Fork reconciliation analysis + ADR.
+          The daemon exists in two places:
+          - ConvergioPlatform/daemon/ (92k LOC, 554 .rs files)
+          - Standalone convergio-daemon repo (68k LOC, +200 file difference)
+
+          Analysis:
+          1. Diff the two repos: find files only in one or the other
+          2. Determine which is ahead (more recent commits, more features)
+          3. Document in ADR: which is source of truth, what to do with the other
+          4. Recommendation: likely ConvergioPlatform is SoT (has kernel, MCP, etc.)
+             and standalone should be archived or synced from Platform.
+
+          Create docs/adr/ADR-0118-fork-reconciliation.md with decision.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: doc
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "ls docs/adr/ADR-*fork*.md 2>/dev/null | grep -q ."
+
+      - id: T4-02
+        ref: [F-13]
+        do: |
+          Test nightly calibration on M1 Pro.
+          1. SSH to M1 Pro: run calibrate-models.sh manually
+          2. Verify it collects metrics, sends Telegram summary
+          3. Verify nightly job definition in DB (curl /api/nightly/jobs)
+          4. If cron not triggering: verify launchd or crontab on M1 Pro
+          5. Document any issues in TROUBLESHOOTING.md
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "test -f scripts/kernel/calibrate-models.sh"
+          - "bash -n scripts/kernel/calibrate-models.sh"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 5: Full E2E Deploy + Test + Docs + Closure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W5
+    name: "E2E deploy, test, docs, closure"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        ref: [F-01, F-02, F-03, F-08, F-09, F-14]
+        do: |
+          Full integration test suite for all new features.
+          daemon/tests/kernel_mcp_test.rs:
+          - test_tool_get_plans_returns_json
+          - test_tool_get_costs_returns_numbers
+          - test_engine_ask_calls_tool
+          - test_engine_ask_strips_debug
+          - test_engine_ask_max_2_rounds
+
+          daemon/tests/kernel_ali_test.rs:
+          - test_escalate_to_ali_creates_session
+          - test_ali_timeout_returns_graceful_message
+
+          daemon/tests/kernel_audio_routing_test.rs:
+          - test_active_node_persists
+          - test_audio_routes_to_active_node
+
+          All behind #[cfg(feature = "kernel")]. Max 250 lines each.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel kernel --manifest-path daemon/Cargo.toml --lib"
+
+      - id: TF-doc
+        ref: [F-15]
+        do: |
+          Update ALL docs:
+          - CHANGELOG.md: new version with all Plan U entries
+          - VERSION.md: bump to 18.4.0
+          - daemon/Cargo.toml: bump version to 18.4.0 (must match VERSION.md per merge gate #6)
+          - TROUBLESHOOTING.md: kernel MCP, crsqlite, voice, Ali async sections
+          - ADR-0116: add MCP intelligence, audio routing, Ali async decisions
+          - CLAUDE.md: update kernel commands table if needed
+          - model-routing-spec.md: update with tool-augmented local routing
+          - convergio-next-session.md: full current state for next session
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "grep -q '18.4.0' VERSION.md"
+          - "grep -q 'MCP\\|tool.*call\\|function.*call' CHANGELOG.md"
+
+      - id: TF-deploy-verify
+        ref: [F-14]
+        do: |
+          Full deploy to M1 Pro and E2E verification.
+          1. Push all code to GitHub
+          2. Deploy via deploy-node.sh m1Pro --kernel (or manual if needed)
+          3. Verify /api/health, /api/kernel/status, /api/node/readiness
+          4. Test Telegram text: "stato" → real plan data
+          5. Test Telegram text: "quanti piani ho" → tool-augmented Mistral answer
+          6. Test Telegram text: "chiedi ad ali che succede" → Ali (Opus) answers
+          7. Test Telegram voice: send voice note → verify transcription + reply
+          8. Test audio routing: cvg kernel here → speak plays on this Mac
+          9. Test nightly: run calibrate-models.sh → Telegram report received
+          10. Verify crsqlite sync (if installed) or rsync fallback works
+          11. All results documented. Send final Telegram: "Piano U completato."
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q ok"
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/kernel/status' | grep -q models_loaded"
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/node/readiness' | grep -q ok"
