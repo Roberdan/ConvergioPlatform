@@ -71,6 +71,9 @@ pub struct RecallQuery {
     pub time_range: Option<(DateTime<Utc>, DateTime<Utc>)>,
     /// Full-text search against memory content.
     pub text_search: Option<String>,
+    /// Semantic similarity search query. When set, results include vector
+    /// similarity scores and are ranked by a hybrid FTS5+vector score.
+    pub semantic_query: Option<String>,
     /// Restrict to memories owned by a specific agent.
     pub agent_id: Option<String>,
     /// Maximum number of results to return.
@@ -78,6 +81,8 @@ pub struct RecallQuery {
     /// Agent performing the query — used for access control.
     /// `None` skips access filtering (internal/admin queries only).
     pub querying_agent_id: Option<String>,
+    /// Weight for FTS5 score in hybrid ranking (0.0-1.0). Default 0.5.
+    pub fts_weight: f32,
 }
 
 impl Default for RecallQuery {
@@ -87,9 +92,11 @@ impl Default for RecallQuery {
             tags: None,
             time_range: None,
             text_search: None,
+            semantic_query: None,
             agent_id: None,
             limit: 100,
             querying_agent_id: None,
+            fts_weight: 0.5,
         }
     }
 }

@@ -190,8 +190,11 @@ mod tests {
             tags: Some(vec!["tag1".to_string()]),
             time_range: Some((now, now + chrono::Duration::hours(1))),
             text_search: Some("search term".to_string()),
+            semantic_query: Some("find similar".to_string()),
             agent_id: Some("agent-x".to_string()),
             limit: 50,
+            querying_agent_id: Some("agent-y".to_string()),
+            fts_weight: 0.7,
         };
         assert_eq!(q.memory_type, Some(MemoryType::Fact));
         assert_eq!(q.limit, 50);

@@ -1,9 +1,12 @@
 pub mod attestation;
+pub mod embeddings;
 pub mod sharing;
 pub mod sqlite_store;
 pub mod types;
+pub mod vector_store;
 
 pub use types::{AccessLevel, Attestation, Memory, MemoryError, MemoryType, RecallQuery};
+pub use vector_store::{VectorMatch, VectorStore};
 
 pub trait MemoryStore: Send + Sync {
     fn remember(&self, memory: Memory) -> Result<String, MemoryError>;
