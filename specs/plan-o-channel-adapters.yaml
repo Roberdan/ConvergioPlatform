@@ -1,0 +1,199 @@
+# Plan O — Channel Adapters
+# Bidirectional external communication channels for human-in-the-loop.
+# Runtime adapters in daemon, config presets in convergio-community.
+# Sources: convergio-autonomous-channels-complete.md, channel-strategy-where.md,
+#          convergio-vs-openclaw-strategic.md
+
+name: "Plan O — Channel Adapters"
+version: "25.0.0"
+project: convergio
+depends_on: [Phase-0-W2]  # needs notify infra (F-28)
+description: >
+  Bidirectional external communication channels. Agent blocked → notification
+  fans out to active channels → first response wins → agent resumes.
+  Channel interactions feed evolution engine for progressive autonomy.
+  Telegram first (simplest API), then Slack (enterprise value), then Email (async).
+
+requirements:
+  - id: F-01
+    title: ChannelAdapter trait
+    description: "Generic async trait: connect, send, receive, disconnect, health"
+  - id: F-02
+    title: Telegram adapter
+    description: "Long-polling + sendMessage. Commands: /status, /approve, /reject, /ask"
+  - id: F-03
+    title: Slack adapter
+    description: "Socket Mode WebSocket. Slash commands + app manifest"
+  - id: F-04
+    title: Email adapter
+    description: "IMAP polling + SMTP send. Structured subjects for routing"
+  - id: F-05
+    title: Channel routing
+    description: "Per-event-type channel selection in notifications.conf. Fan-out, first-reply"
+  - id: F-06
+    title: Channel API + CLI
+    description: "REST API + cvg channel list|status|test|send"
+  - id: F-07
+    title: Channel dashboard view
+    description: "Active channels, message volume, response times"
+  - id: F-08
+    title: Evolution feedback
+    description: "Escalation metrics per agent feed evolution proposals"
+  - id: F-09
+    title: ntfy.sh quick win
+    description: "Fix notify route mismatch + enable ntfy.sh push"
+  - id: F-10
+    title: TUI notification inbox
+    description: "Consumer for notification_queue in TUI status bar"
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cargo clippy --manifest-path daemon/Cargo.toml -- -D warnings"
+  - "cvg channel list shows at least 2 active channels"
+  - "cvg channel test telegram returns ok"
+
+waves:
+  - id: W1
+    name: "Foundation + ntfy.sh Quick Win"
+    theme: "Fix notify route, enable ntfy.sh, define ChannelAdapter trait, TUI inbox"
+    tasks:
+      - id: T1-01
+        title: >
+          Fix notify route mismatch + enable ntfy.sh channel.
+          1. Fix orchestrator reactor.rs: /api/notify/send → /api/notify
+          2. Enable ntfy.sh in notifications.conf (single POST to ntfy.sh topic)
+          3. Test: emit need_human → verify ntfy.sh receives push
+          ~1 hour. P0 quick win.
+        type: fix
+        effort: 1
+        verify:
+          - "cd daemon && cargo test notify"
+          - "grep -q 'ntfy' claude-config/config/notifications.conf"
+
+      - id: T1-02
+        title: >
+          Define ChannelAdapter trait in daemon/src/channels/mod.rs.
+          Trait: connect() → Result, send(msg) → Result, receive() → Stream<Message>,
+          disconnect(), health() → ChannelHealth.
+          ChannelMessage struct: id, source_channel, content, reply_to, metadata.
+          ChannelHealth: connected, last_message_at, error_count.
+          No implementations yet — trait only + types.
+        type: feature
+        effort: 2
+        verify:
+          - "test -f daemon/src/channels/mod.rs"
+          - "cd daemon && cargo check"
+
+      - id: T1-03
+        title: >
+          TUI notification inbox. Consumer for notification_queue table.
+          Status bar: "[3 unread]". Drill into list. Mark read on select.
+          Wire to existing daemon/src/tui/ view system.
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test tui"
+
+  - id: W2
+    name: "Telegram + Channel Routing"
+    theme: "First real external channel + routing engine"
+    precondition: "W1 complete"
+    tasks:
+      - id: T2-01
+        title: >
+          Telegram adapter in daemon/src/channels/telegram.rs.
+          Long-polling getUpdates via reqwest. sendMessage for replies.
+          Inbound flow: message → IPC bus send_message() → skill executor
+          create_skill_request() → agent → response → sendMessage.
+          Commands: /status (agent list), /approve <id>, /reject <id>,
+          /ask <query> (route to Ali orchestrator).
+          Bot token from CONVERGIO_TELEGRAM_TOKEN env var.
+          ~80 lines core + ~40 lines command handlers.
+        type: feature
+        effort: 3
+        verify:
+          - "test -f daemon/src/channels/telegram.rs"
+          - "cd daemon && cargo test telegram"
+
+      - id: T2-02
+        title: >
+          Channel routing engine. Extend notifications.conf:
+          [routing]
+          need_human = ntfy,telegram,macos
+          plan_complete = email,slack
+          wave_merged = telegram
+          Evolution hook: auto-approve if approval_rate > 95% for agent+event.
+          Fan-out: send to all configured channels, first reply wins.
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test routing"
+
+      - id: T2-03
+        title: >
+          Channel API + CLI.
+          GET /api/channels — list channels + health.
+          POST /api/channels/:id/send — manual message.
+          GET /api/channels/:id/history — recent messages.
+          CLI: cvg channel list, cvg channel status, cvg channel test <id>,
+          cvg channel send <id> "message".
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test api_channels"
+
+  - id: W3
+    name: "Slack + Email + Evolution Feedback"
+    theme: "Enterprise channels + learning from interactions"
+    precondition: "W2 complete"
+    tasks:
+      - id: T3-01
+        title: >
+          Slack adapter in daemon/src/channels/slack.rs.
+          Socket Mode (WebSocket) for events. Slash commands via
+          Slack app manifest. /convergio-status, /convergio-approve.
+          Higher setup but more enterprise value than Telegram.
+        type: feature
+        effort: 3
+        verify:
+          - "test -f daemon/src/channels/slack.rs"
+          - "cd daemon && cargo test slack"
+
+      - id: T3-02
+        title: >
+          Email adapter in daemon/src/channels/email.rs.
+          IMAP polling (async-imap or lettre) for inbound.
+          SMTP (lettre) for outbound.
+          Subject routing: [CONVERGIO-APPROVE-{id}] → approve action.
+          Good for async, non-real-time escalations.
+        type: feature
+        effort: 3
+        verify:
+          - "test -f daemon/src/channels/email.rs"
+          - "cd daemon && cargo test email"
+
+      - id: T3-03
+        title: >
+          Evolution feedback from channel interactions.
+          New EscalationMetricCollector: count escalations per agent,
+          human response time, approval rate.
+          Wire to evolution engine proposal pipeline.
+          Enables: "Agent X escalates too much → increase autonomy"
+          and "Decision Y always approved → auto-approve".
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test escalation_metric"
+
+      - id: T3-04
+        title: >
+          Channel dashboard view in dashboard/channels/ (or convergio-web).
+          Active channels with health indicator.
+          Message volume chart (last 24h).
+          Per-channel response time.
+          Escalation heatmap (which agents escalate most).
+        type: feature
+        effort: 2
+        verify:
+          - "test -d dashboard/channels || test -d convergio-web/channels"

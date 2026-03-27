@@ -1,343 +1,490 @@
+# Plan Q — Convergio Kernel
+# Local LLM watchdog module in daemon. M1 Pro always-on.
+# Mistral 3 8B + Voxtral TTS 4B + Whisper small. All MLX, ~9GB.
+# Monitor + Verify + Recover + Voice + Telegram bidirezionale.
+
 name: "Plan Q — Convergio Kernel"
-description: |
-  New daemon module: daemon/src/kernel/
-  Activated with --kernel flag. Loads 3 local models via MLX on M1 Pro.
-  Same daemon binary, same API. Zero cloud for inference.
-  Four capabilities: Monitor, Verify, Recover, Communicate.
-  Three models: Mistral 3 8B (brain), Voxtral TTS 4B (voice out), Whisper (voice in).
-  Two channels: local audio (plays on active mesh node) + Telegram (text + voice).
-  Bidirezionale: kernel parla E ascolta, sia localmente che via Telegram.
-project: ConvergioPlatform
+project_id: convergio
 plan_id: 729
 priority: P1
-tags: [kernel, local-llm, watchdog, voice, tts, stt, telegram, daemon-module]
-model_strategy: local-only
+execution_mode: serial
+tags: [kernel, local-llm, watchdog, voice, tts, stt, telegram]
+
+description: >
+  New daemon module (daemon/src/kernel/) activated with --kernel flag.
+  Loads 3 local models via MLX on M1 Pro (always-on, ~9GB RAM).
+  Same binary, same API, conditional compilation.
+  Four capabilities: Monitor, Verify, Recover, Communicate.
+  Two output channels: local audio (routed to active mesh node) + Telegram (text + voice).
+  Bidirezionale: kernel speaks AND listens, locally and via Telegram.
 
 architecture: |
-  The kernel is a daemon module, NOT a separate process.
-  daemon/src/kernel/ — loaded when --kernel flag is passed.
+  daemon/src/kernel/ — #[cfg(feature = "kernel")]
+  M1 Pro (--kernel): Mistral 3 8B Q4 (~5GB) + Voxtral TTS 4B (~3GB) + Whisper small (~1GB)
+  M5 Max (no --kernel): unchanged, exposes /api/kernel/play for audio routing
+  Audio: generated on M1 Pro → streamed to active node via mesh → local playback
+  Telegram: Bot API (reqwest, no SDK) → text + OGG voice notes → bidirezionale
+  Principle: kernel classifies (LLM), kernel acts (deterministic rules). Never LLM-decided actions.
 
-  ┌─────────────────────────────────────────────────────────┐
-  │ M1 Pro daemon (--kernel, always-on, ~9GB)               │
-  │                                                         │
-  │  Mistral 3 8B Q4 (~5GB) — classify, function calling    │
-  │  Voxtral TTS 4B  (~3GB) — generate speech (italiano)    │
-  │  Whisper small    (~1GB) — transcribe speech             │
-  │                                                         │
-  │  Monitor → Verify → Recover → Communicate               │
-  └──────────┬──────────────────────┬───────────────────────┘
-             │ mesh (Tailscale)     │ HTTPS
-             ▼                     ▼
-  ┌──────────────────┐   ┌─────────────────────┐
-  │ M5 Max daemon    │   │ Telegram Bot API     │
-  │ (no --kernel)    │   │                     │
-  │                  │   │ Send: text + voice  │
-  │ /api/kernel/play │   │ Recv: text + voice  │
-  │ → afplay locale  │   │ Webhook → daemon    │
-  └──────────────────┘   └─────────────────────┘
+# ─────────────────────────────────────────────────────────────────────────────
 
-  Audio routing: kernel genera audio → invia al nodo attivo via mesh → play locale.
-  Nodo attivo = ultimo nodo con heartbeat + TTY attivo, o esplicito `cvg kernel here`.
+acceptance_invariants:
+  - description: "Kernel module loads 3 models in <10GB on M1 Pro 16GB"
+    verify: "curl -sf http://localhost:8420/api/kernel/status | jq '.models_loaded == 3 and .ram_gb < 10'"
+    defined_by: user
+  - description: "Monitor detects peer failure within 60s"
+    verify: "cargo test --features kernel kernel::monitor::test_detect_peer_failure"
+    defined_by: collaborative
+  - description: "Verify blocks task without evidence"
+    verify: "cargo test --features kernel kernel::verify::test_block_without_evidence"
+    defined_by: user
+  - description: "Recover restarts daemon and sends notification"
+    verify: "cargo test --features kernel kernel::recover::test_restart_and_notify"
+    defined_by: collaborative
+  - description: "TTS speaks Italian phrase in <2s"
+    verify: "cargo test --features kernel kernel::tts::test_speak_latency"
+    defined_by: collaborative
+  - description: "Audio plays on active mesh node (not just kernel node)"
+    verify: "cargo test --features kernel kernel::audio::test_mesh_routing"
+    defined_by: user
+  - description: "Telegram text command gets correct response"
+    verify: "cargo test --features kernel kernel::telegram::test_text_command"
+    defined_by: collaborative
+  - description: "Telegram voice note transcribed and answered"
+    verify: "cargo test --features kernel kernel::telegram::test_voice_roundtrip"
+    defined_by: user
+  - description: "Auto-start via launchd works after reboot"
+    verify: "test -f ~/Library/LaunchAgents/com.convergio.kernel.plist && launchctl list | grep -q convergio.kernel"
+    defined_by: collaborative
 
-  Telegram: il canale "fuori casa". Stessi comandi, stesse risposte.
-  Vocali Telegram in ingresso → download → Whisper → intent → risposta testo + vocale.
+# ─────────────────────────────────────────────────────────────────────────────
+# WAVE 1: Foundation — MLX + Mistral 3 8B watchdog
+# ─────────────────────────────────────────────────────────────────────────────
 
 waves:
   - id: W1
-    name: "Foundation — MLX + Mistral 3 8B watchdog"
+    name: "Foundation — MLX + watchdog"
     tasks:
       - id: T1-01
-        title: "MLX inference engine in daemon"
+        do: |
+          Create daemon/src/kernel/mod.rs with conditional compilation (#[cfg(feature = "kernel")]).
+          Add "kernel" feature to daemon/Cargo.toml (default = off).
+          Implement MLX model loading: spawn mlx_lm subprocess, health check, classify endpoint.
+          POST /api/kernel/classify — input: situation JSON, output: {severity, action, reason}.
+          GET /api/kernel/status — {models_loaded, ram_gb, uptime_secs, active_node, last_check}.
+          Wire into daemon/src/server/routes/mod.rs (behind feature gate).
+          Config env: KERNEL_MODEL, KERNEL_ENABLED.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Add daemon/src/kernel/mod.rs module.
-          Load Mistral 3 8B Q4 via mlx-rs or subprocess (mlx_lm.generate).
-          Expose: POST /api/kernel/classify — takes situation JSON, returns action.
-          Health: GET /api/kernel/status — model loaded, RAM usage, uptime, active_node.
-          Config: KERNEL_MODEL=mistral-3-8b-q4, KERNEL_ENABLED=true.
-          Must start in <10s, use <5GB RAM.
-          Conditional compilation: #[cfg(feature = "kernel")] — no overhead when disabled.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "cargo test --features kernel kernel::tests --manifest-path daemon/Cargo.toml"
+          - "grep -q 'cfg.*feature.*kernel' daemon/src/kernel/mod.rs"
+          - "grep -q '/api/kernel/status' daemon/src/server/routes/api_routes.rs"
 
       - id: T1-02
-        title: "Monitor loop — daemon + mesh health"
+        do: |
+          Create daemon/src/kernel/monitor.rs.
+          Background tokio::spawn loop every 30s:
+          1. Poll all mesh peers /api/health (from peers.conf Tailscale IPs)
+          2. Check local daemon /api/health
+          3. Detect stalled agents: /api/ipc/agents — idle >5min with assigned task
+          4. Detect rate limits: /api/ipc/route-history — 429 count in last 5min
+          5. Check disk space + RAM pressure (sysinfo crate)
+          6. Detect compaction risk: context window near limit → auto checkpoint
+          Classify each via Mistral function calling → OK/WARN/CRITICAL.
+          Store in kernel_events table (CREATE TABLE in migration).
+          On state change → trigger communicate (T1-04 wiring point).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Background task (tokio::spawn) every 30s:
-          1. Poll all mesh peers /api/health (via Tailscale IPs from peers.conf)
-          2. Poll local daemon /api/health
-          3. Check process count (ps aux | grep convergio)
-          4. Check disk space, RAM pressure
-          5. Detect stalled agents: /api/ipc/agents — any agent idle >5min with task assigned?
-          6. Detect rate limits: /api/ipc/route-history — 429 responses in last 5min?
-          7. Detect compaction: context window near limit → auto checkpoint
-          Classify each check as OK/WARN/CRITICAL via Mistral function calling.
-          Store results in kernel_events table.
-          On state change (OK→WARN, WARN→CRITICAL): trigger communicate().
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel kernel::monitor --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/monitor.rs"
+          - "grep -q 'kernel_events' daemon/src/kernel/monitor.rs"
 
       - id: T1-03
-        title: "Verify gate — task completion evidence"
+        do: |
+          Create daemon/src/kernel/verify.rs.
+          Hook into POST /api/plan-db/task/update — before marking "done":
+          1. Check declared output files exist (glob on execution host via mesh /api/mesh/exec)
+          2. Check tests pass (cargo test exit 0, via mesh exec if remote)
+          3. Check build succeeds (cargo check exit 0)
+          4. Check git status --porcelain is empty in worktree
+          If ANY check fails → block update, log in kernel_verifications table, notify.
+          Mistral classifies failure: {action: "retry"|"escalate"|"block", reason: "..."}.
+          Evidence stored: timestamp, task_id, checks[], pass/fail per check.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Hook into task update flow (POST /api/plan-db/task/update).
-          Before marking task "done", kernel verifies:
-          1. Declared output files exist (glob check on execution host via mesh)
-          2. Tests pass (cargo test / npm test — exit code 0, run on execution host)
-          3. Build succeeds (cargo check — exit code 0)
-          4. No uncommitted changes in worktree (git status --porcelain)
-          If any check fails, block task completion + communicate failure.
-          Mistral classifies failure severity: retry vs escalate vs block.
-          Evidence logged in kernel_verifications table with timestamp + check results.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel kernel::verify --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/verify.rs"
+          - "grep -q 'kernel_verifications' daemon/src/kernel/verify.rs"
 
       - id: T1-04
-        title: "Recover actions — restart + checkpoint + notify"
+        do: |
+          Create daemon/src/kernel/recover.rs.
+          Deterministic recovery chain (if/else, NOT LLM-decided):
+          CRITICAL: checkpoint save → SSH restart peer daemon → reap zombies → notify
+          WARN (>3 cycles): log + notify
+          OK: log only
+          SSH restart: use existing mesh SSH infrastructure (daemon/src/mesh/ssh.rs).
+          Notify channels (ordered): local audio (T2-02 stub) → Telegram (T3-01 stub) → ntfy.sh fallback.
+          ntfy.sh: curl -d "{message}" ntfy.sh/{topic} (simple HTTP, no dependency).
+          Config: KERNEL_NTFY_TOPIC, KERNEL_NOTIFY_CHANNELS=local,telegram,ntfy
+          Wire recover into monitor loop (on state change callback).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          On CRITICAL events, deterministic recovery chain:
-          1. cvg checkpoint save <plan_id> (preserve state before any action)
-          2. If daemon down on peer: SSH restart via mesh (bash daemon/start.sh serve --dev-mode &)
-          3. If agent stalled: cvg reap (clean zombies)
-          4. If worktree dirty: git stash + checkpoint
-          5. Communicate via active channel (local audio or Telegram)
-          On WARN events:
-          1. Log to kernel_events
-          2. Communicate only if WARN persists >3 cycles (90s)
-          Recovery is DETERMINISTIC (if/else rules), not LLM-decided.
-          The LLM only classifies the situation; the action is hardcoded.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel::recover --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/recover.rs"
+          - "grep -q 'ntfy' daemon/src/kernel/recover.rs"
 
       - id: T1-05
-        title: "CLI: cvg kernel status/start/stop/logs/here"
+        do: |
+          Add kernel CLI subcommands to daemon/src/cli_kernel.rs:
+          cvg kernel status — query GET /api/kernel/status, format table output
+          cvg kernel start — POST /api/kernel/start (load models, begin monitor loop)
+          cvg kernel stop — POST /api/kernel/stop (unload models, stop loop)
+          cvg kernel logs [--level WARN] [--limit 50] — query kernel_events table
+          cvg kernel test — run all monitor checks once, report results table
+          cvg kernel here — POST /api/kernel/active-node (set THIS node as audio target)
+          cvg kernel say "text" — POST /api/kernel/speak (debug TTS, plays on active node)
+          Wire into daemon/src/main.rs CLI dispatch (Commands enum).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          cvg kernel status — model loaded, uptime, last check, event counts, active_node
-          cvg kernel start — load model, start monitor loop
-          cvg kernel stop — unload model, stop loop
-          cvg kernel logs [--level WARN] — tail kernel_events table
-          cvg kernel test — run all checks once, report results
-          cvg kernel here — mark THIS node as active audio target
-          cvg kernel say "testo" — force TTS, play on active node (debug/demo)
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/cli_kernel.rs"
+          - "grep -q 'kernel' daemon/src/main.rs"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 2: Voice — TTS + STT + Audio Routing
+  # ─────────────────────────────────────────────────────────────────────────
 
   - id: W2
-    name: "Voice — TTS + STT + Audio Routing"
+    name: "Voice — TTS + STT + mesh audio routing"
     tasks:
       - id: T2-01
-        title: "Voxtral TTS integration"
+        do: |
+          Create daemon/src/kernel/tts.rs.
+          Load Voxtral TTS 4B via MLX subprocess (mlx-voxtral or equivalent).
+          POST /api/kernel/speak — input: {text, locale:"it-IT"}, output: audio bytes (OGG Opus + WAV).
+          OGG Opus for Telegram compatibility, WAV for local playback.
+          Cache common phrases in memory (HashMap<String, Vec<u8>>) to avoid re-synthesis.
+          Template system: "Piano {name} completato. Costo {cost} dollari."
+          Latency target: <2s for 20 words. Measure and log.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Load Voxtral TTS 4B via MLX on kernel node (M1 Pro).
-          POST /api/kernel/speak — takes {text, locale}, returns audio bytes (OGG/WAV).
-          Default locale: it-IT.
-          Caches common phrases (plan complete, daemon crash, etc.) to avoid re-synthesis.
-          Latency target: <2s for a 20-word sentence.
-          Audio format: OGG Opus (for Telegram compat) + WAV (for local playback).
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel kernel::tts --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/tts.rs"
 
       - id: T2-02
-        title: "Audio routing — play on active mesh node"
+        do: |
+          Create daemon/src/kernel/audio.rs — mesh audio routing.
+          Problem: Voxtral runs on M1 Pro, user may be at M5 Max.
+          Every daemon (even without --kernel) exposes POST /api/kernel/play.
+          /api/kernel/play receives audio bytes → plays via macOS afplay (Command::new).
+
+          Active node detection (priority):
+          1. Explicit: cvg kernel here → writes active_node in kernel_config table (valid 8h)
+          2. Last CLI interaction: which peer last ran a cvg command? (kernel_events)
+          3. Fallback: kernel node itself
+
+          Flow: kernel generates audio → POST /api/kernel/play on active node via mesh HTTP → afplay.
+          Wire /api/kernel/play into ALL daemon builds (not behind kernel feature gate).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Problem: Voxtral runs on M1 Pro, but user may be at M5 Max.
-          Solution: kernel determines active node and streams audio there.
-
-          Active node detection (priority order):
-          1. Explicit: cvg kernel here — sets active_node in DB, valid 8h or until changed
-          2. TTY detection: which peer has an active terminal session? (check /api/ipc/agents for agent with tty)
-          3. Last interaction: which peer last received a cvg command? (from kernel_events)
-          4. Fallback: kernel node itself (M1 Pro)
-
-          Audio delivery:
-          POST /api/kernel/play on target node — receives audio bytes, plays via:
-          - macOS: afplay (WAV) or system `say` as ultimate fallback
-          - Configurable: KERNEL_AUDIO_PLAYER=afplay
-
-          Every daemon exposes /api/kernel/play (even without --kernel flag).
-          Kernel node generates audio → POST to active node → local playback.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test kernel::audio --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/audio.rs"
+          - "grep -q '/api/kernel/play' daemon/src/server/routes/api_routes.rs"
 
       - id: T2-03
-        title: "Whisper STT integration"
+        do: |
+          Create daemon/src/kernel/stt.rs.
+          Load Whisper small via MLX subprocess.
+          POST /api/kernel/transcribe — input: audio bytes, output: {text, locale, confidence}.
+          POST /api/kernel/listen — record from microphone (cpal crate or Command::new("rec")),
+            stop on 1.5s silence, transcribe, return text.
+
+          Remote listening: cvg kernel listen on M5 Max records LOCALLY,
+            POSTs audio to M1 Pro /api/kernel/transcribe, gets text back.
+          Thin client: daemon/src/kernel/audio.rs::record_and_send() (all builds, no model needed).
+
+          Privacy: audio never stored on disk, never sent to cloud. Only transcription text logged.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Load Whisper small via MLX on kernel node.
-          POST /api/kernel/transcribe — takes audio bytes, returns {text, locale, confidence}.
-          POST /api/kernel/listen — start microphone recording on kernel node,
-            stop on silence (>1.5s), transcribe, return text.
-
-          For remote listening (user at M5 Max):
-          cvg kernel listen — records audio LOCALLY (on the node where command is run),
-            sends audio to kernel node /api/kernel/transcribe, gets text back.
-          This means every node has a thin "record + send" client, but inference is on M1 Pro.
-
-          Privacy: audio processed locally (M1 Pro), never sent to cloud, never stored on disk.
-          Only the transcription text is logged (in kernel_events).
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel kernel::stt --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/stt.rs"
 
       - id: T2-04
-        title: "Voice command router"
+        do: |
+          Create daemon/src/kernel/voice_router.rs.
+          Mistral 3 8B classifies transcribed text into structured intent:
+          {intent: "status_check"|"cost_query"|"plan_query"|"restart"|"mute"|"unknown", params: {}}
+
+          Router maps intent → daemon API call → format text → speak via TTS:
+          - status_check → GET /api/overview → "Hai 2 piani attivi, 5 task in coda, mesh healthy."
+          - cost_query → GET /api/metrics/cost → "Oggi hai speso 42 dollari su 3 piani."
+          - plan_query → GET /api/plan-db/json/{id} → "Piano 729, 3 su 16 task completati."
+          - restart → recover::restart_peer() → "M5 riavviato, daemon risponde."
+          - mute → stop audio for 1h → "Silenzio attivato per un'ora."
+          - unknown → "Non ho capito. Prova: stato, costi, piano, riavvia."
+
+          NOT conversational. No memory. Strictly command-response.
+          Wire into cvg kernel listen pipeline and Telegram inbound (T3-02/T3-03).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Mistral 3 8B classifies transcribed text into intent + params:
-          {intent: "status_check", params: {scope: "all"}}
-          {intent: "cost_query", params: {period: "today"}}
-          {intent: "plan_query", params: {plan_id: 729}}
-          {intent: "restart", params: {target: "m5"}}
-          {intent: "unknown", params: {}}
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel::voice_router --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/voice_router.rs"
 
-          Supported intents:
-          - status_check → cvg plan list + kernel status → speak summary
-          - cost_query → cvg metrics cost → speak "Oggi hai speso 42 dollari"
-          - plan_query → cvg plan show <id> → speak progress
-          - restart → recover action on target node
-          - silence / mute → stop speaking, ack
-          - unknown → "Non ho capito. Prova con: stato, costi, piano, riavvia."
-
-          Router: intent → daemon API call → format response text → Voxtral speaks → play on active node.
-          NOT conversational. Strictly command-response. No memory of previous commands.
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 3: Telegram — Bidirezionale testo + voce
+  # ─────────────────────────────────────────────────────────────────────────
 
   - id: W3
-    name: "Telegram — Bidirezionale testo + voce"
+    name: "Telegram — bidirezionale text + voice"
     tasks:
       - id: T3-01
-        title: "Telegram Bot setup + outbound messages"
+        do: |
+          Create daemon/src/kernel/telegram.rs — outbound messages.
+          Telegram Bot API via reqwest (no SDK, just HTTP).
+          Config: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in env or config/telegram.yaml.
+
+          send_text(text) → POST sendMessage {chat_id, text, parse_mode:"Markdown"}
+          send_voice(audio_bytes) → POST sendVoice multipart {chat_id, voice: OGG file}
+
+          Channel selection logic in communicate():
+          - active_node reachable + cvg kernel here recent → local audio
+          - no active_node OR unreachable → Telegram
+          - CRITICAL events → BOTH
+          - Config override: KERNEL_NOTIFY=telegram|local|both
+          - Quiet hours: KERNEL_QUIET_HOURS=23:00-07:00 → text Telegram only (no audio anywhere)
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Telegram Bot via Bot API (HTTPS, no library dependency — just reqwest).
-          Config: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID in env or config/telegram.yaml.
-          chat_id = the user's personal chat (1:1 with bot, not a group).
-
-          Outbound text:
-          POST https://api.telegram.org/bot<token>/sendMessage
-          {chat_id, text, parse_mode: "Markdown"}
-
-          Outbound voice:
-          1. Voxtral generates audio (OGG Opus format, required by Telegram)
-          2. POST https://api.telegram.org/bot<token>/sendVoice
-             multipart: chat_id + voice file (OGG)
-          3. User receives voice note in Telegram — can listen with one tap.
-
-          Notify rules (when to send Telegram vs local audio):
-          - If active_node is reachable AND user set `cvg kernel here` recently → local audio
-          - If no active_node OR active_node unreachable → Telegram
-          - CRITICAL events → BOTH (local audio + Telegram)
-          - User can override: KERNEL_NOTIFY=telegram|local|both
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel::telegram::test_send --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/telegram.rs"
+          - "grep -q 'sendMessage\\|sendVoice' daemon/src/kernel/telegram.rs"
 
       - id: T3-02
-        title: "Telegram inbound — text commands"
+        do: |
+          Add Telegram inbound text in daemon/src/kernel/telegram.rs.
+          Long polling loop (getUpdates every 5s). Why not webhook: M1 Pro behind NAT.
+          tokio::spawn background task, runs alongside monitor loop.
+
+          On text message from TELEGRAM_CHAT_ID:
+          1. Classify intent via voice_router (same Mistral classification)
+          2. Execute daemon API call
+          3. Reply with Markdown-formatted text
+          Ignore messages from any other chat_id (security).
+
+          Example: user sends "stato" → reply:
+          *Convergio Status*
+          Piani attivi: 2
+          Task in coda: 5
+          Mesh: 2/2 nodi online
+          Costo oggi: $42
+
+          Rate limit: max 1 response/second.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          Receive messages via long polling (getUpdates, every 5s).
-          Why polling over webhook: M1 Pro is behind NAT/Tailscale, no public IP.
-
-          Inbound text → same intent classification as voice commands:
-          User sends "stato" → kernel classifies → runs API → replies with text.
-          User sends "costi oggi" → "Oggi hai speso 42 dollari su 3 piani."
-          User sends "riavvia m5" → restart + confirm "M5 riavviato, daemon healthy."
-
-          Markdown formatting in responses (Telegram supports it):
-          *Piano 729* — Convergio Kernel
-          Status: `doing` | 3/11 task done
-          Prossimo: T2-01 Voxtral TTS
-
-          Rate limit: max 1 response per second (Telegram API limit: 30 msg/s per bot).
-          Auth: only respond to TELEGRAM_CHAT_ID. Ignore all other senders.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel::telegram::test_inbound_text --manifest-path daemon/Cargo.toml"
+          - "grep -q 'getUpdates' daemon/src/kernel/telegram.rs"
 
       - id: T3-03
-        title: "Telegram inbound — voice messages"
+        do: |
+          Add Telegram inbound voice in daemon/src/kernel/telegram.rs.
+          On voice message from TELEGRAM_CHAT_ID:
+          1. Download OGG: GET getFile → file_path → download
+          2. Convert OGG → WAV if needed (rodio or ffmpeg subprocess)
+          3. POST /api/kernel/transcribe → text
+          4. Classify intent → execute → format response
+          5. Reply with text message + voice note (send_text + send_voice)
+
+          Full loop: user speaks Telegram vocale → kernel transcribes → acts → replies voice + text.
+          Same experience as local, works anywhere in the world.
+
+          Privacy: OGG downloaded to /tmp, transcribed, deleted. No voice stored.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          User sends voice note in Telegram.
-          1. Bot receives update with voice/audio message
-          2. Download OGG file: GET https://api.telegram.org/bot<token>/getFile?file_id=...
-          3. Convert OGG → WAV if needed (ffmpeg or native decoder)
-          4. Send to Whisper: POST /api/kernel/transcribe
-          5. Classify intent (same router as local voice commands)
-          6. Execute command
-          7. Reply with text + voice note (both)
-
-          Full loop: user speaks into Telegram → kernel transcribes → acts → replies with voice.
-          Same experience as local, but works anywhere in the world.
-
-          Privacy: voice file downloaded, transcribed, then deleted. Only text logged.
-          No voice stored on disk or in DB.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel::telegram::test_voice_inbound --manifest-path daemon/Cargo.toml"
+          - "grep -q 'getFile\\|sendVoice' daemon/src/kernel/telegram.rs"
 
       - id: T3-04
-        title: "Proactive Telegram reports"
-        type: feature
-        description: |
-          Kernel sends periodic status without being asked:
-          - Daily summary at 09:00: plans active, cost yesterday, agents used, events
-          - On plan completion: "Piano X completato. Costo: Y. Durata: Z."
-          - On CRITICAL: immediate alert with context
-          - On wave merge: "Wave W1 del piano X mergiata. Prossima: W2."
-          - Weekly digest (Sunday 20:00): cost breakdown, plans completed, learnings
+        do: |
+          Add proactive reports in daemon/src/kernel/reports.rs.
+          Scheduled messages (tokio cron-like via tokio::time::interval):
 
-          Format: text message + optional voice note (user configurable).
-          Config: KERNEL_TELEGRAM_REPORTS=daily,critical,completion
-          Quiet hours: KERNEL_QUIET_HOURS=23:00-07:00 (no audio, only text Telegram)
+          Daily 09:00: plans active, cost yesterday, agents used, notable events
+          On plan completion: "Piano X completato. Costo Y, durata Z."
+          On CRITICAL: immediate alert with context
+          On wave merge: "Wave W1 del piano X mergiata. Prossima: W2."
+          Weekly Sunday 20:00: cost breakdown, plans completed, learnings summary
+
+          Format: text + optional voice note (configurable).
+          Config: KERNEL_REPORTS=daily,critical,completion,weekly
+          Quiet hours respected. Wire into telegram.rs send functions.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel::reports --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/src/kernel/reports.rs"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 4: Hardening — launchd, tests, docs
+  # ─────────────────────────────────────────────────────────────────────────
 
   - id: W4
-    name: "Hardening + Integration Tests"
+    name: "Hardening — auto-start, tests, docs"
     tasks:
       - id: T4-01
-        title: "Auto-start on M1 Pro boot"
+        do: |
+          Create scripts/kernel/com.convergio.kernel.plist (launchd).
+          KeepAlive=true, RunAtLoad=true.
+          ProgramArguments: daemon binary path + serve + --dev-mode + --kernel.
+          StandardOutPath/StandardErrorPath: ~/Library/Logs/convergio-kernel.log
+          Install script: scripts/kernel/install-launchd.sh
+            - cp plist to ~/Library/LaunchAgents/
+            - launchctl load
+            - wait for /api/kernel/status healthy
+            - send Telegram "Kernel avviato"
+          Uninstall: scripts/kernel/uninstall-launchd.sh
+          Log rotation: 7 days, 50MB max (newsyslog.conf entry).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
-        description: |
-          launchd plist: com.convergio.kernel.plist
-          Starts on login, restarts on crash (KeepAlive=true).
-          Loads models sequentially: Mistral (10s) → Voxtral (5s) → Whisper (3s).
-          Health check: wait for /api/kernel/status before declaring ready.
-          Log to ~/Library/Logs/convergio-kernel.log (logrotate: 7 days, 50MB max).
-          Telegram: send "Kernel avviato" on successful start.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "test -f scripts/kernel/com.convergio.kernel.plist"
+          - "test -f scripts/kernel/install-launchd.sh"
+          - "bash -n scripts/kernel/install-launchd.sh"
+          - "plutil -lint scripts/kernel/com.convergio.kernel.plist"
 
       - id: T4-02
-        title: "Integration tests — full cycle"
+        do: |
+          Integration tests in daemon/tests/kernel_integration.rs.
+          All tests behind #[cfg(feature = "kernel")].
+
+          test_monitor_detect_failure: mock peer /api/health returning 500 → CRITICAL event logged
+          test_verify_block_no_evidence: POST task update done without files → 403 blocked
+          test_recover_restart_notify: simulate crash → verify checkpoint + ntfy call
+          test_tts_latency: speak 20-word phrase → assert <2s
+          test_stt_accuracy: transcribe known audio → assert text matches
+          test_voice_command_stato: "stato" → correct API call sequence
+          test_audio_routing: generate on node A → verify POST to node B /api/kernel/play
+          test_telegram_text: mock getUpdates with "stato" → verify sendMessage called
+          test_telegram_voice: mock voice note → verify transcribe + reply
+          test_report_daily: trigger daily report → verify Telegram message sent
+
+          Performance assertions: monitor <1s, TTS <2s, STT <3s, Telegram roundtrip <5s.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: test
-        description: |
-          Test monitor: simulate peer health failure → verify CRITICAL event + notification.
-          Test verify: submit task "done" without output → verify blocked.
-          Test recover: simulate crash → verify restart + checkpoint + Telegram alert.
-          Test TTS: speak phrase → verify audio file valid (>0 bytes, correct format).
-          Test STT: play audio → verify transcription matches expected.
-          Test voice command: "stato" → verify API call + spoken response.
-          Test audio routing: generate on M1 Pro → verify played on M5 Max (mock afplay).
-          Test Telegram outbound: send text + voice → verify Bot API called correctly.
-          Test Telegram inbound text: simulate "stato" message → verify response.
-          Test Telegram inbound voice: simulate voice note → verify transcribe + respond.
-          Performance: monitor loop <1s, TTS <2s, STT <3s, Telegram roundtrip <5s.
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel kernel_integration --manifest-path daemon/Cargo.toml"
+          - "test -f daemon/tests/kernel_integration.rs"
 
       - id: T4-03
-        title: "ADR + docs + CHANGELOG"
+        do: |
+          ADR: docs/adr/ADR-NNN-convergio-kernel.md
+          Decisions: Mistral 3 8B (function calling, Apache 2.0), MLX (20-30% faster on Apple Silicon),
+          M1 Pro (always-on, low power), deterministic recovery (no hallucination risk),
+          Telegram (simple HTTP Bot API, OGG native), audio mesh routing (user mobility),
+          Voxtral (same family, Italian, 4B fits alongside 8B).
+
+          Update TROUBLESHOOTING.md: kernel section (model load fail, Telegram auth, audio routing).
+          Update CHANGELOG.md: ## [vX.Y.Z] kernel entries.
+          Update CLAUDE.md: add kernel commands to Commands table.
+          Update convergio-next-session.md: kernel status section.
+          Version bump: patch (kernel is behind feature flag, non-breaking).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: chore
-        description: |
-          ADR: "Convergio Kernel — local LLM watchdog with voice + Telegram"
-          Decisions documented:
-          - Why Mistral 3 8B: function calling, Apache 2.0, 5GB fits M1 Pro
-          - Why MLX over Ollama: 20-30% faster on Apple Silicon
-          - Why M1 Pro: always-on, low power, dedicated watchdog role
-          - Why deterministic recovery: LLM classifies, rules act (no hallucination risk)
-          - Why Telegram over other messengers: Bot API is simple HTTP, no SDK, OGG voice native
-          - Why audio routing via mesh: user may be at any node, kernel is fixed on M1 Pro
-          - Why Voxtral: same Mistral family, Italian support, 4B fits alongside 8B
-          Update TROUBLESHOOTING.md: kernel section (model won't load, Telegram auth, audio routing).
-          Update CHANGELOG.md.
-          Update CLAUDE.md with kernel commands.
-
-acceptance_invariants:
-  - "cvg kernel status returns healthy on M1 Pro with all 3 models loaded"
-  - "Monitor detects simulated peer failure within 60s"
-  - "Verify blocks task without evidence"
-  - "Recover restarts daemon via SSH and sends Telegram alert"
-  - "TTS speaks Italian phrase in <2s"
-  - "STT transcribes Italian command in <3s"
-  - "Audio plays on active mesh node (not just kernel node)"
-  - "cvg kernel here switches audio target"
-  - "Telegram text command 'stato' gets correct response"
-  - "Telegram voice note transcribed and answered with text + voice"
-  - "All 3 models fit in <10GB RAM on M1 Pro 16GB"
-  - "Auto-start via launchd works after reboot"
-  - "Daily summary sent to Telegram at 09:00"
-  - "CRITICAL events sent to BOTH local audio and Telegram"
-  - "Quiet hours respected (no audio, text-only Telegram)"
-
-estimates:
-  W1_foundation: "2 days"
-  W2_voice: "2 days"
-  W3_telegram: "1.5 days"
-  W4_hardening: "1 day"
-  total: "~6.5 days"
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "test -f docs/adr/ADR-*kernel*.md"
+          - "grep -q 'kernel' CHANGELOG.md"
+          - "grep -q 'kernel' CLAUDE.md"
+          - "grep -q 'kernel' TROUBLESHOOTING.md"

@@ -1,0 +1,199 @@
+# Plan P — Artifact Registry & Channel Renderers
+# Unified registry for all platform artifacts + multi-format output generation.
+# Sources: convergio-hve-core-strategic-report.md, convergio-accelerator-factory-report.md
+
+name: "Plan P — Artifact Registry & Channel Renderers"
+version: "26.0.0"
+project: convergio
+depends_on: [plan-i-checklist-engine, plan-o-channel-adapters]
+description: >
+  Unified catalog of all platform artifacts (agents, skills, rules, standards,
+  templates) with structured metadata (constraints, maturity, domain).
+  Channel renderers transform registry contents into output formats:
+  reports, VS Code extensions, websites, API responses, OpenClaw skills.
+  This is what makes Convergio produce finished outputs — HVE-Core equivalents
+  and beyond — from its own engine.
+
+requirements:
+  - id: F-01
+    title: Artifacts DB table + API
+    description: "Centralized registry with metadata, scanned from filesystem"
+  - id: F-02
+    title: Renderer trait
+    description: "Generic render(registry, format, options) → output files"
+  - id: F-03
+    title: Report renderer
+    description: "Markdown/PDF output: agent catalog, metrics, compliance"
+  - id: F-04
+    title: VS Code extension renderer
+    description: ".vsix generation equivalent to HVE-Core"
+  - id: F-05
+    title: OpenClaw renderer
+    description: "SKILL.md + index.json, supersedes static script"
+  - id: F-06
+    title: API renderer
+    description: "Filtered artifact data via REST with format negotiation"
+  - id: F-07
+    title: Instructions extraction
+    description: "Refactor CLAUDE.md rules into .github/instructions/ format"
+  - id: F-08
+    title: Accelerator manifest ADR
+    description: "Define accelerator.yaml schema (ADR only, no implementation)"
+  - id: F-09
+    title: Blueprint format
+    description: "convergio-blueprint.yaml for declarative deployment"
+
+acceptance_invariants:
+  - "cargo check --manifest-path daemon/Cargo.toml"
+  - "cargo test --manifest-path daemon/Cargo.toml"
+  - "cvg artifact list shows at least 50 artifacts"
+  - "cvg artifact render report produces output"
+
+waves:
+  - id: W1
+    name: "Registry Foundation"
+    theme: "Artifacts table, scanner, API, CLI"
+    tasks:
+      - id: T1-01
+        title: >
+          Create artifacts table in daemon DB + migration.
+          Schema: id (auto), type (agent|skill|rule|standard|template),
+          name, domain, maturity (draft|experimental|preview|stable|deprecated),
+          constraints_json, metadata_json, source_path, file_hash,
+          created_at, updated_at.
+          Index on (type, domain, maturity).
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test artifacts"
+
+      - id: T1-02
+        title: >
+          Artifact scanner: reads claude-config/agents/*.agent.md,
+          claude-config/skills/, claude-config/rules/, and populates
+          artifacts table. Extracts frontmatter (name, description,
+          model, constraints, maturity) into structured fields.
+          Idempotent: re-scan updates, doesn't duplicate.
+          CLI: cvg artifact scan. API: POST /api/artifacts/scan.
+        type: feature
+        effort: 3
+        verify:
+          - "cd daemon && cargo test artifact_scan"
+
+      - id: T1-03
+        title: >
+          Artifact API + CLI.
+          GET /api/artifacts — list with filters (?type=agent&domain=security&maturity=stable).
+          GET /api/artifacts/:id — single artifact with full metadata.
+          CLI: cvg artifact list [--type agent] [--domain security] [--maturity stable]
+          CLI: cvg artifact show <id>
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test api_artifacts"
+
+  - id: W2
+    name: "Renderers"
+    theme: "Transform registry into output formats"
+    precondition: "W1 complete"
+    tasks:
+      - id: T2-01
+        title: >
+          Define Renderer trait in daemon/src/artifacts/renderer.rs.
+          Trait: render(registry: &ArtifactRegistry, format: OutputFormat,
+          options: RenderOptions) → Result<Vec<OutputFile>>.
+          OutputFile: relative_path, content: Vec<u8>, content_type: String.
+          OutputFormat enum: Report, VsCodeExtension, OpenClaw, Api.
+        type: feature
+        effort: 1
+        verify:
+          - "test -f daemon/src/artifacts/renderer.rs"
+          - "cd daemon && cargo check"
+
+      - id: T2-02
+        title: >
+          Report renderer: render-to-report.
+          Generates markdown with: platform overview, agent catalog table
+          (name, domain, maturity, model), skill inventory, rule summary,
+          metrics snapshot (if Diana data available), compliance checklist.
+          CLI: cvg artifact render report [--output path]
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test render_report"
+
+      - id: T2-03
+        title: >
+          VS Code extension renderer: render-to-vscode-extension.
+          Generates directory with: agents/*.agent.md (with Copilot-compatible
+          frontmatter), instructions/*.instructions.md (with applyTo globs),
+          package.json (VS Code extension manifest), README.md.
+          This is the Convergio-generated equivalent of HVE-Core.
+          CLI: cvg artifact render vscode [--output path]
+        type: feature
+        effort: 3
+        verify:
+          - "cd daemon && cargo test render_vscode"
+
+      - id: T2-04
+        title: >
+          OpenClaw renderer: render-to-openclaw.
+          Generates SKILL.md files + index.json from skill artifacts.
+          Supersedes scripts/platform/convergio-openclaw-skills.sh.
+          CLI: cvg artifact render openclaw [--output path]
+        type: feature
+        effort: 2
+        verify:
+          - "cd daemon && cargo test render_openclaw"
+
+  - id: W3
+    name: "Instructions + Strategic ADRs"
+    theme: "Extract instructions, define blueprint and accelerator schemas"
+    precondition: "W2 complete"
+    tasks:
+      - id: T3-01
+        title: >
+          Extract coding standards into .github/instructions/ format.
+          Create: rust.instructions.md (applyTo: "**/*.rs"),
+          typescript.instructions.md (applyTo: "**/*.ts"),
+          bash.instructions.md (applyTo: "**/*.sh"),
+          python.instructions.md (applyTo: "**/*.py").
+          Content already exists in claude-config/rules/code-standards.md —
+          this is a format refactoring, not content creation.
+          Compatible with both Copilot native instructions and Claude.
+        type: refactor
+        effort: 2
+        verify:
+          - "test -f .github/instructions/rust.instructions.md"
+          - "test -f .github/instructions/typescript.instructions.md"
+
+      - id: T3-02
+        title: >
+          ADR: Accelerator manifest schema.
+          Define accelerator.yaml format in docs/adr/:
+          - domain (banking, healthcare, retail, ...)
+          - agents[] (references to artifact registry)
+          - workflows[] (orchestration rules)
+          - eval_scenarios[] (test cases)
+          - data_schemas[] (for synthetic data)
+          - deploy_target (local, azure, aws)
+          ADR only — establishes vocabulary for future Plan Q (2027).
+        type: doc
+        effort: 1
+        verify:
+          - "ls docs/adr/*accelerator* | grep -q accelerator"
+
+      - id: T3-03
+        title: >
+          convergio-blueprint.yaml format + cvg deploy stubs.
+          Blueprint declares: daemon config, active channels, inference
+          providers, security policies, ports, data paths.
+          cvg deploy plan — shows what would be deployed.
+          cvg deploy apply — applies blueprint (start.sh + plist + config).
+          cvg deploy rollback — reverts to previous.
+          Inspired by NemoClaw blueprint.yaml but richer.
+        type: feature
+        effort: 3
+        verify:
+          - "cd daemon && cargo test blueprint"
+          - "cd daemon && cargo test deploy"

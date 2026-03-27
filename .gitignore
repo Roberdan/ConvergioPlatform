@@ -142,6 +142,10 @@ vite.config.ts.timestamp-*
 config/local.env
 data/dashboard.db
 data/dashboard.db-*
+data/convergio.db
+data/ipc.sock
+data/blobs/
+data/logs/
 data/*.jsonl
 data/*.json
 daemon/target/

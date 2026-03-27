@@ -1,0 +1,564 @@
+# Convergio Vision — Master Plan v2.0
+# Updated 25 Marzo 2026 incorporating:
+#   - HVE-Core strategic analysis (declarative constraints, maturity lifecycle, context matching)
+#   - Accelerator Factory research (artifact registry, channel layer, industry profiles)
+#   - Autonomous channels research (human-in-the-loop, notification loop, channel adapters)
+#   - OpenClaw/NemoClaw gap analysis (egress policy, onboarding, blueprints)
+#
+# Phase 0 (Plan 724) is the prerequisite. Plans H0/H0b are pre-H foundation.
+# Plans O and P are NEW — derived from cross-session strategic research.
+# Plan I and K get additional requirements from HVE-Core analysis.
+# Plan F2 gets extended scope for actionable notifications + Live Activities.
+# Plan L gets channel egress rules.
+
+name: "Convergio Vision — Business OS"
+version: "2.0.0"
+project_id: convergio
+execution_mode: mixed
+prerequisite: "Plan 724 (Phase 0 — Foundation & Resilient Ecosystem)"
+
+description: >
+  Master plan orchestrating Convergio from control plane to end-to-end Business OS.
+  Twelve plans (H0, H0b, H-N, O, P) covering: TUI hierarchy, mesh delegation,
+  NASA hardening, checklist engine, MCP client, agentic memory, SwiftUI rebuild,
+  security perimeters, inference routing, voice, channel adapters, and artifact registry.
+
+  Strategic thesis: Convergio is a platform that orchestrates agents AND distributes
+  their output in any format — reports, websites, VS Code extensions, API responses,
+  Telegram messages. The channel layer + artifact registry transform it from
+  "dev tool" to "Business OS that produces finished outputs for any domain."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION PHASES (sequential gates, parallel within phases)
+# ─────────────────────────────────────────────────────────────────────────────
+
+phases:
+  - id: phase-1
+    name: "Core Capabilities"
+    description: "Harden the engine, add checklists, memory, MCP, SwiftUI"
+    plans: [H0, H0b, H, I, K, F2]
+    gate: "All plans merged, all tests green, all worktrees clean"
+
+  - id: phase-2
+    name: "Open Platform"
+    description: "External channels, artifact registry, security perimeters"
+    plans: [J, O, P, L]
+    gate: "Channel adapters functional, artifact registry populated, egress enforced"
+
+  - id: phase-3
+    name: "Intelligence Layer"
+    description: "Smart inference, voice, evolution feedback from channels"
+    plans: [M, N]
+    gate: "Local inference routing, voice prototype, evolution learning from channel data"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLAN CATALOG
+# ─────────────────────────────────────────────────────────────────────────────
+
+plans:
+  # ── PHASE 1: Core Capabilities ──────────────────────────────────────────
+
+  - id: H0
+    name: "Plan H0 — TUI Project Hierarchy"
+    db_id: 719
+    spec: specs/plan-h0-tui-hierarchy.yaml
+    waves: 2
+    tasks: 8
+    depends_on: [Phase-0-W1]
+    status: draft
+    phase: 1
+
+  - id: H0b
+    name: "Plan H0b — Mesh Delegation Robusta"
+    db_id: 720
+    spec: specs/plan-h0b-mesh-delegation.yaml
+    waves: 2
+    tasks: 8
+    depends_on: [Phase-0-W1]
+    note: "Parallel with H0"
+    status: draft
+    phase: 1
+
+  - id: H
+    name: "Plan H — Hardening NASA"
+    db_id: 712
+    spec: specs/plan-h-hardening-nasa.yaml
+    waves: 2
+    tasks: 7
+    depends_on: [H0]
+    status: draft
+    phase: 1
+
+  - id: I
+    name: "Plan I — Checklist Engine"
+    db_id: 713
+    spec: specs/plan-i-checklist-engine.yaml
+    waves: 3
+    tasks: 9
+    depends_on: [H]
+    status: draft
+    phase: 1
+    # v2 additions from HVE-Core analysis:
+    additions:
+      - id: F-10
+        title: "Declarative agent constraints"
+        description: >
+          Add constraints field to agent frontmatter: can, cannot, must, isolation.
+          Daemon enforces constraints at runtime via hooks (PreToolUse blocks
+          forbidden actions). Thor validates constraint compliance.
+        source: "convergio-hve-core-strategic-report.md §4.1"
+        effort: 2
+      - id: F-11
+        title: "Agent maturity lifecycle"
+        description: >
+          Add maturity field to agent frontmatter: draft, experimental, preview,
+          stable, deprecated. Daemon loads only stable in production, experimental
+          in worktrees. Evolution engine auto-promotes based on metrics
+          (task success rate, Thor pass rate, cost/token ratio).
+        source: "convergio-hve-core-strategic-report.md §4.2"
+        effort: 2
+
+  - id: K
+    name: "Plan K — Agentic Memory"
+    db_id: 715
+    spec: specs/plan-k-agentic-memory.yaml
+    waves: 3
+    tasks: 8  # +1 from v2
+    depends_on: [I]
+    note: "Parallel with J"
+    status: draft
+    phase: 1
+    # v2 addition from HVE-Core analysis:
+    additions:
+      - id: F-09
+        title: "Context matching automatico"
+        description: >
+          Task tags auto-resolve to context files. task.tags=["mesh","security"]
+          → inject mesh-networking.md + auth-patterns.md + rust.instructions.md.
+          Daemon resolves context via tag→document mapping in KB.
+          Generalization of HVE-Core's applyTo at task level, not file level.
+        source: "convergio-hve-core-strategic-report.md §4.3"
+        effort: 3
+
+  - id: F2
+    name: "Plan F2 — SwiftUI Command Center (Rebuild)"
+    db_id: 721
+    spec: specs/plan-f2-swiftui-rebuild.yaml
+    waves: 3
+    tasks: 10  # +3 from v2
+    depends_on: [I, H0]
+    status: draft
+    phase: 1
+    # v2 additions from channels research:
+    additions:
+      - id: F-11
+        title: "Actionable notifications with inline reply"
+        description: >
+          UNTextInputNotificationAction + UNNotificationAction in NotificationManager.
+          Categories: AGENT_ESCALATION (approve+reply), PLAN_APPROVAL (approve+reject),
+          EVOLUTION_PROPOSAL (approve+reject+details).
+          Handler didReceive → WS → daemon → IPC bus → agent resumes.
+          Closes the human-in-the-loop for macOS.
+        source: "convergio-autonomous-channels-complete.md §3 Layer 1"
+        effort: 3
+      - id: F-12
+        title: "Live Activities menu bar (macOS Tahoe)"
+        description: >
+          Menu bar widget: "3 agents active, 1 awaiting approval".
+          Tap to expand → agent detail → quick action.
+          Uses WidgetKit Live Activities API (Tahoe+).
+        source: "convergio-autonomous-channels-complete.md §3 Layer 2"
+        effort: 3
+        note: "Requires macOS Tahoe. Can be deferred if Tahoe not available."
+      - id: F-13
+        title: "Spotlight Actions"
+        description: >
+          Expose actions to Spotlight: "Convergio approve plan X",
+          "Convergio agent status". Zero context switch for quick commands.
+        source: "convergio-autonomous-channels-complete.md §7"
+        effort: 2
+
+  # ── PHASE 2: Open Platform ──────────────────────────────────────────────
+
+  - id: J
+    name: "Plan J — MCP Client"
+    db_id: 714
+    spec: specs/plan-j-mcp-client.yaml
+    waves: 3
+    tasks: 10
+    depends_on: [I]
+    note: "MARKET TURNING POINT. Parallel with K."
+    status: draft
+    phase: 2
+
+  - id: O
+    name: "Plan O — Channel Adapters"
+    db_id: null  # to be created
+    spec: specs/plan-o-channel-adapters.yaml
+    waves: 3
+    tasks: 10
+    depends_on: [Phase-0-W2]  # needs notify infra from F-28
+    note: >
+      NEW PLAN. Bidirectional external channels. Runtime adapters in
+      daemon/src/channels/. Config presets in convergio-community.
+      First channel: Telegram (simple API, ~80 lines Rust).
+      Does NOT wait for Plan L — Telegram egress is safe.
+      L adds egress policy on top later.
+    status: new
+    phase: 2
+    requirements:
+      - id: F-01
+        title: "ChannelAdapter trait"
+        description: >
+          Generic trait: connect(), send(), receive(), disconnect(), health().
+          Async, tokio-compatible. Error types for rate limit, auth, network.
+          Trait in daemon/src/channels/mod.rs.
+      - id: F-02
+        title: "Telegram adapter"
+        description: >
+          Long-polling getUpdates + sendMessage via reqwest.
+          Inbound: message → IPC bus → skill executor → response → sendMessage.
+          Commands: /status, /approve <id>, /reject <id>, /ask <query>.
+          ~80 lines of Rust. Bot token from env var.
+      - id: F-03
+        title: "Slack adapter"
+        description: >
+          Socket Mode (WebSocket) for real-time events. Slash commands:
+          /convergio-status, /convergio-approve. App manifest for OAuth.
+          Higher enterprise value than Telegram.
+      - id: F-04
+        title: "Email adapter"
+        description: >
+          IMAP polling for inbound, SMTP for outbound. Structured subject
+          for routing: [CONVERGIO-APPROVE-{id}], [CONVERGIO-STATUS].
+          Useful for async, non-real-time human-in-the-loop.
+      - id: F-05
+        title: "Channel routing"
+        description: >
+          notifications.conf extended: per-event-type channel routing.
+          need_human → [ntfy, telegram, macos]. plan_complete → [email, slack].
+          First channel to respond wins (fan-out, first-reply).
+      - id: F-06
+        title: "Channel API + CLI"
+        description: >
+          GET /api/channels — list active channels + health.
+          POST /api/channels/:id/send — manual send.
+          cvg channel list|status|test|send.
+      - id: F-07
+        title: "Channel dashboard view"
+        description: >
+          Dashboard panel: active channels, message volume, response times.
+          Per-channel health indicator. In dashboard/channels/.
+      - id: F-08
+        title: "Evolution feedback from channels"
+        description: >
+          Channel interactions feed evolution engine. Metrics: escalation count
+          per agent, human response time, approval rate per agent.
+          Enables proposals like "Agent X escalates too much on task type Y →
+          increase autonomy" or "Decision Z always approved → auto-approve".
+      - id: F-09
+        title: "ntfy.sh integration"
+        description: >
+          Fix route mismatch: orchestrator calls /api/notify/send but handler
+          is on /api/notify. Enable ntfy.sh as push backend. Single POST.
+          Phone notifications working in <1 hour.
+        note: "This is the P0 quick win from the channels research."
+      - id: F-10
+        title: "TUI notification inbox"
+        description: >
+          Consumer for notification_queue / pending_notifications in TUI.
+          Shows unread count in status bar. Drill into notification → action.
+    repo_mapping:
+      - component: "Channel adapter trait + runtime"
+        repo: convergio-daemon
+        path: "src/channels/"
+      - component: "Telegram/Slack/Email adapters"
+        repo: convergio-daemon
+        path: "src/channels/{telegram,slack,email}.rs"
+      - component: "Channel API endpoints"
+        repo: convergio-daemon
+        path: "src/server/api_channels/"
+      - component: "Channel dashboard view"
+        repo: convergio-web
+        path: "channels/"
+      - component: "Channel presets/templates"
+        repo: convergio-community
+        path: "channels/presets/"
+      - component: "Channel docs"
+        repo: convergio
+        path: "docs/channels/"
+
+  - id: P
+    name: "Plan P — Artifact Registry & Channel Renderers"
+    db_id: null  # to be created
+    spec: specs/plan-p-artifact-registry.yaml
+    waves: 3
+    tasks: 9
+    depends_on: [I, O]
+    note: >
+      NEW PLAN. Unified registry for all platform artifacts (agents, skills,
+      rules, standards, templates) with metadata (constraints, maturity, domain).
+      Channel renderers transform registry → output format.
+      This is what makes Convergio produce HVE-Core-equivalent outputs AND more.
+    status: new
+    phase: 2
+    requirements:
+      - id: F-01
+        title: "Artifacts DB table + API"
+        description: >
+          Table: artifacts (id, type, name, domain, maturity, constraints_json,
+          metadata_json, source_path, created_at, updated_at).
+          API: GET /api/artifacts, GET /api/artifacts/:id, POST /api/artifacts/scan.
+          CLI: cvg artifact list|show|scan.
+          Populated by scanning claude-config/agents/, rules/, skills/.
+      - id: F-02
+        title: "Renderer trait"
+        description: >
+          Generic trait: render(registry, format, options) → Vec<OutputFile>.
+          OutputFile: path, content, content_type. Async.
+      - id: F-03
+        title: "Report renderer"
+        description: >
+          render-to-report: generates markdown/PDF with agent catalog,
+          metrics, compliance status, architecture overview.
+          First renderer — simplest, immediately useful.
+      - id: F-04
+        title: "VS Code extension renderer"
+        description: >
+          render-to-vscode-extension: generates .vsix with agents/*.agent.md +
+          instructions/*.instructions.md. Equivalent to HVE-Core, but
+          generated from Convergio's registry.
+      - id: F-05
+        title: "OpenClaw renderer"
+        description: >
+          render-to-openclaw: generates SKILL.md + index.json.
+          Supersedes current convergio-openclaw-skills.sh static script.
+      - id: F-06
+        title: "API renderer"
+        description: >
+          GET /api/artifacts?domain=security&maturity=stable returns
+          filtered, formatted artifact data. Already almost possible
+          with F-01 API — this adds format negotiation (JSON, YAML, MD).
+      - id: F-07
+        title: "Instructions extraction"
+        description: >
+          Extract coding standards from CLAUDE.md + rules/ into
+          .github/instructions/*.instructions.md with applyTo globs.
+          Format compatible with both Copilot native and Claude.
+          Existing content, new format — refactoring not creation.
+      - id: F-08
+        title: "Accelerator manifest schema (ADR)"
+        description: >
+          Define accelerator.yaml format: domain, agents, workflows,
+          eval_scenarios, data_schemas, deploy_target. ADR only —
+          no implementation. Establishes vocabulary for future Plan Q.
+        note: "Spike task. The actual Accelerator Factory is 2027."
+      - id: F-09
+        title: "Blueprint declarative format"
+        description: >
+          convergio-blueprint.yaml: declares full deployment (agents,
+          channels, inference, policies, ports). Inspired by NemoClaw's
+          blueprint.yaml but richer. cvg deploy plan/apply/rollback stubs.
+        source: "convergio-autonomous-channels-complete.md §5"
+    repo_mapping:
+      - component: "Artifacts table + API"
+        repo: convergio-daemon
+        path: "src/server/api_artifacts.rs"
+      - component: "Renderer trait + implementations"
+        repo: convergio-daemon
+        path: "src/artifacts/"
+      - component: "Instructions extraction"
+        repo: convergio
+        path: ".github/instructions/"
+      - component: "Community renderers"
+        repo: convergio-community
+        path: "renderers/"
+      - component: "Accelerator manifest ADR"
+        repo: convergio
+        path: "docs/adr/"
+
+  - id: L
+    name: "Plan L — Security Perimeters"
+    db_id: 716
+    spec: specs/plan-l-security-perimeters.yaml
+    waves: 2
+    tasks: 8  # +2 from v2
+    depends_on: [J]
+    status: draft
+    phase: 2
+    # v2 additions from channels + NemoClaw research:
+    additions:
+      - id: F-09
+        title: "Per-channel egress rules"
+        description: >
+          Egress firewall extended for channel adapters. Telegram adapter
+          can only reach api.telegram.org. Slack adapter can only reach
+          slack.com + wss-primary.slack.com. Declarative YAML format
+          inspired by NemoClaw openclaw-sandbox.yaml.
+        source: "convergio-autonomous-channels-complete.md §5, convergio-vs-openclaw-strategic.md"
+        effort: 2
+      - id: F-10
+        title: "Operator approval loop for unauthorized actions"
+        description: >
+          Agent attempts unauthorized action → daemon blocks → notification
+          (macOS/ntfy/Telegram) → user approves/denies → result back to agent.
+          Builds on Plan O channel infra + Plan F2 actionable notifications.
+          Inspired by NemoClaw's TUI approval loop, but multi-channel.
+        source: "convergio-autonomous-channels-complete.md §5"
+        effort: 3
+
+  # ── PHASE 3: Intelligence Layer ─────────────────────────────────────────
+
+  - id: M
+    name: "Plan M — Inference Router"
+    db_id: 717
+    spec: specs/plan-m-inference-router.yaml
+    waves: 2
+    tasks: 8  # +1 from v2
+    depends_on: [H]
+    note: "Parallel with J through L"
+    status: draft
+    phase: 3
+    # v2 addition from channels research:
+    additions:
+      - id: F-09
+        title: "Apple Foundation Models provider (spike)"
+        description: >
+          1-task spike: test Apple Foundation Models Framework (Tahoe)
+          as ultra-lightweight provider for T1 tasks (classification,
+          triage, summarization). Offline, private, zero cost.
+          If viable → add as tier in router. If not → document why.
+        source: "convergio-autonomous-channels-complete.md §7"
+        effort: 1
+
+  - id: N
+    name: "Plan N — Voice"
+    db_id: 718
+    spec: specs/plan-n-voice.yaml
+    waves: 2
+    tasks: 9
+    depends_on: [M]
+    status: draft
+    phase: 3
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPENDENCY GRAPH (updated with O, P, and additions)
+# ─────────────────────────────────────────────────────────────────────────────
+
+dependency_graph: |
+  Phase 0 (724) ── W1 ✅ ── W2 [doing] ── W3 ── W4 ── W5
+       │
+       ├──→ H0 (TUI Hierarchy) ──┬──→ H (Hardening NASA) ──→ I (Checklist + constraints + maturity) ──┬──→ J (MCP Client)
+       │                         │                                                                      │
+       ├──→ H0b (Mesh Delegation)│                                                                      ├──→ K (Memory + context matching) [parallel with J]
+       │    [parallel with H0]   │                                                                      │
+       │                         └──→ F2 (SwiftUI + actionable notify + Live Activities + Spotlight)     ├──→ L (Security + channel egress + approval loop)
+       │                                                                                                │
+       ├──→ O (Channel Adapters: Telegram, Slack, Email, ntfy.sh) [after Phase 0 W2] ──────────────────→├──→ P (Artifact Registry + Renderers + Blueprint)
+       │                                                                                                │
+       │                                                                                H ──→ M (Inference Router + Apple FM spike) ──→ N (Voice)
+
+  PARALLELISM:
+    - H0 ∥ H0b (both after Phase 0 W1)
+    - J ∥ K (both after I)
+    - M ∥ J-L (M only needs H, not I)
+    - O can start after Phase 0 W2 (doesn't need H/I/J)
+    - P needs I (for constraints/maturity) + O (for channel context)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REPO MAPPING (post Phase 0 W3 split)
+# ─────────────────────────────────────────────────────────────────────────────
+
+repo_mapping:
+  convergio-daemon:
+    description: "Rust daemon — all runtime code"
+    plans: [H0, H0b, H, I, J, K, L, M, N, O, P]
+    modules:
+      - "src/resilience/ (Phase 0)"
+      - "src/checklist/ (Plan I)"
+      - "src/memory/ (Plan K)"
+      - "src/security/ (Plan L)"
+      - "src/inference/ (Plan M)"
+      - "src/channels/ (Plan O — NEW)"
+      - "src/artifacts/ (Plan P — NEW)"
+      - "src/voice/ (Plan N)"
+
+  convergio-app:
+    description: "SwiftUI native macOS app"
+    plans: [F2]
+    modules:
+      - "Views/ (all native views)"
+      - "Services/DaemonClient.swift"
+      - "Notifications/ (actionable reply — NEW)"
+      - "LiveActivities/ (menu bar — NEW, Tahoe)"
+      - "SpotlightActions/ (NEW)"
+
+  convergio-web:
+    description: "Dashboard web frontend"
+    plans: [H0, O]
+    modules:
+      - "app.js, mn-kpi.js, mesh-actions.js..."
+      - "channels/ (Plan O — NEW)"
+
+  convergio:
+    description: "Meta repo — specs, OpenAPI, ADRs, CI"
+    plans: [Phase-0-W3, P]
+    modules:
+      - "specs/ (all plan specs)"
+      - "docs/adr/ (architecture decisions)"
+      - ".github/instructions/ (Plan P — NEW)"
+      - "openapi.yaml"
+
+  convergio-community:
+    description: "Community skills, agents, presets (ex MyConvergio)"
+    plans: [O, P]
+    modules:
+      - "channels/presets/ (Plan O — NEW)"
+      - "renderers/ (Plan P — NEW)"
+      - "skills/, agents/"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STRATEGIC CONTEXT (from research sessions)
+# ─────────────────────────────────────────────────────────────────────────────
+
+strategic_context:
+  thesis: >
+    Convergio wins 6 to 3 vs OpenClaw/NemoClaw. The 3 gaps (channels, sandboxing,
+    declarative deploy) are closeable. With Plans O, P, and extensions to I/K/F2/L,
+    Convergio becomes a platform that creates, orchestrates, validates, and distributes
+    agent intelligence in any format — something no competitor can do.
+
+  human_in_the_loop_vision: >
+    Agent works → finds block → emits need_human → daemon routes to notification_queue
+    → fan-out to active channels (ntfy push, macOS banner, Telegram, Slack)
+    → first channel to respond wins → daemon → IPC → agent resumes
+    → evolution tracks escalation patterns → auto-approves predictable decisions
+    → system progressively reduces human involvement
+
+  accelerator_factory_vision: >
+    Future Plan Q (2027): given a scenario.yaml (domain + use_case + compliance),
+    generate complete accelerator instance (agents, orchestration, eval, data, deploy).
+    Requires P (artifact registry) as foundation. Not planned now — just the
+    manifest schema ADR in Plan P/F-08 establishes the vocabulary.
+
+  what_not_to_copy_from_hve_core:
+    - "VS Code extension packaging (it's a channel, not engine)"
+    - "PowerShell tooling (different ecosystem)"
+    - ".copilot-tracking/ filesystem state (Plan DB is superior)"
+    - "Manual /clear between phases (Convergio orchestrates automatically)"
+
+  what_not_to_copy_from_nemoclaw:
+    - "Single agent per sandbox (IPC bus is fundamentally superior)"
+    - "Static skills from docs (dynamic registry with confidence is better)"
+    - "Container per agent (too heavy for mesh model)"
+    - "Polling-based channel bridges (WebSocket where possible)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TOTALS
+# ─────────────────────────────────────────────────────────────────────────────
+
+totals:
+  plans: 12  # was 10, added O and P
+  waves: 30  # was 24, added 6 (O:3, P:3)
+  tasks: 104  # was 84, added ~20 (O:10, P:9, additions to I/K/F2/L/M)
+  new_requirements_from_research: 14  # F-10/F-11 in I, F-09 in K, F-11/F-12/F-13 in F2, F-09/F-10 in L, F-09 in M, all of O and P

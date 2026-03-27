@@ -1,0 +1,937 @@
+# Plan Phase 0 — Foundation & Resilient Ecosystem (v3)
+# Prerequisite for ALL 711 sub-plans (712-721).
+# Covers: F-01..F-08, F-11. Progressive: each wave builds on the previous.
+# Post-review revision incorporating vision docs, VirtualBPM issues, HPC directives.
+
+name: "Phase 0 — Foundation & Resilient Ecosystem"
+project: convergio
+version: "18.0.0"
+constitution-version: "3.0.0"
+parallel_mode: standard
+
+requirements:
+  - "F-01: Constitution v3.0.0 — resilience + swarm as NON-NEGOTIABLE articles (Article XI Resilience, Article XII Swarm Intelligence)"
+  - "F-02: Repo split — ConvergioPlatform → convergio-daemon, convergio-app, convergio-web, convergio (meta)"
+  - "F-03: Naming — MyConvergio→convergio-community, MaranelloLuceDesign→maranello-design (mesh→swarm deferred to Plan 720)"
+  - "F-04: OpenAPI 3.1 spec — versioned contract in convergio meta repo"
+  - "F-05: Fix 4 VirtualBPM issues — review CLI, import types, chicken-egg, SQLite WAL locking"
+  - "F-06: Resilience framework — circuit breakers, retry with exponential backoff, checkpoint/restart, graceful degradation"
+  - "F-07: Agent IPC optimization — MessagePack (rmp-serde) replacing JSON for inter-agent communication"
+  - "F-08: Zero-zombie enforcement — reaper for worktrees/branches/processes, auto-cleanup hooks"
+  - "F-11: Multi-repo orchestration — repositories table, cvg repo CLI, cross-project plan dependencies"
+  - "F-26: Local LLM kernel — always-on local model (Ollama/MLX) as watchdog: monitors health, restarts crashes, sends phone notifications, survives cloud API failures"
+  - "F-27: Decision audit trail — log all reasoning (first principles, Socratic) in DB for post-hoc review"
+  - "F-28: Phone notifications — ntfy.sh/Telegram integration for critical events (agent blocked, crash, wave complete)"
+  - "F-29: Self-verification — every action produces automatic verification before reporting done. No self-reported success."
+
+# Audit finding → resolution mapping (F-05 complete):
+#  #1 (711 not started)       → resolved by this plan
+#  #2 (dashboard path)        → W3/T3-03 (web split + daemon path fix)
+#  #3 (macOS web shell)       → W3/T3-03 (app split removes webview)
+#  #4 (macOS build broken)    → W3/T3-03 (fix in app split)
+#  #5 (no auth in Swift)      → W3/T3-03 (shared token file)
+#  #6 (bridge unhooked)       → W3/T3-03 (removed — native only)
+#  #7 (TUI test broken)       → W1/T1-02 (already fixed by prior Claude, verify only)
+#  #8 (TUI data model flat)   → deferred to 719 (TUI hierarchy plan)
+#  #9 (TUI UX generic)        → deferred to 719
+#  #10 (hardening mixed)      → W2/T2-01 (resilience framework)
+#  #11 (IPC drift)            → W2/T2-02 (IPC optimization)
+#  #12 (plan lifecycle txn)   → W1/T1-01 (SQLite WAL + transaction safety)
+#  #13 (specs ahead of code)  → W3 (repo split resolves)
+#  #14 (validation asymmetric)→ W3/T3-04 (per-repo CI)
+#  #15 (over-claims)          → W5/TF-doc (updated docs)
+
+# Plan 723 VirtualBPM issues → task mapping:
+#  Issue 1 (review CLI UX)    → W1/T1-01
+#  Issue 2 (import type)      → W1/T1-01
+#  Issue 3 (chicken-egg)      → W1/T1-01
+#  Issue 4 (SQLite locking)   → W1/T1-01
+
+acceptance_invariants:
+  - description: "Constitution v3.0.0 with resilience + swarm articles"
+    verify: "grep -q 'Article XI' CONSTITUTION.md && grep -q 'Resilience' CONSTITUTION.md && grep -q 'Swarm' CONSTITUTION.md"
+    defined_by: user
+  - description: "convergio-daemon repo exists and builds"
+    verify: "gh repo view Roberdan/convergio-daemon --json name -q .name && cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+    defined_by: user
+  - description: "convergio-app repo exists and builds"
+    verify: "gh repo view Roberdan/convergio-app --json name -q .name && cd /Users/Roberdan/GitHub/convergio-app && swift build"
+    defined_by: user
+  - description: "convergio meta repo exists with OpenAPI spec"
+    verify: "gh repo view Roberdan/convergio --json name -q .name && test -f /Users/Roberdan/GitHub/convergio/specs/openapi.yaml"
+    defined_by: user
+  - description: "cvg repo list shows 6+ registered repos"
+    verify: "cvg repo list 2>&1 | grep -c 'convergio' | awk '{if($1<4) exit 1}'"
+    defined_by: collaborative
+  - description: "Resilience module exists with circuit breaker + retry"
+    verify: "test -f /Users/Roberdan/GitHub/convergio-daemon/src/resilience/mod.rs"
+    defined_by: collaborative
+  - description: "Zero files > 250 lines in daemon"
+    verify: "cd /Users/Roberdan/GitHub/convergio-daemon && ! find src -name '*.rs' -exec awk 'END{if(NR>250){print FILENAME; exit 1}}' {} +"
+    defined_by: collaborative
+  - description: "SQLite WAL mode with retry on BUSY"
+    verify: "grep -q 'busy_timeout\\|WAL\\|wal' /Users/Roberdan/GitHub/convergio-daemon/src/db/mod.rs"
+    defined_by: collaborative
+  - description: "Local LLM watchdog module exists"
+    verify: "test -f /Users/Roberdan/GitHub/convergio-daemon/src/resilience/watchdog.rs"
+    defined_by: user
+  - description: "Phone notification module exists"
+    verify: "test -f /Users/Roberdan/GitHub/convergio-daemon/src/resilience/notify.rs"
+    defined_by: user
+  - description: "Decision audit trail API exists"
+    verify: "test -f /Users/Roberdan/GitHub/convergio-daemon/src/server/api_decisions.rs"
+    defined_by: user
+  - description: "Self-verification enforced on task submission"
+    verify: "grep -q 'verify\\|verification' /Users/Roberdan/GitHub/convergio-daemon/src/server/api_plan_db_lifecycle/handlers.rs"
+    defined_by: user
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAVE 1: Quick Fixes + Constitution (unblocks everything)
+# Fix VirtualBPM bugs, update Constitution, fix remaining >250-line file.
+# These are prerequisites: the rest of the plan uses cvg CLI + DB.
+# ─────────────────────────────────────────────────────────────────────────────
+waves:
+  - id: W1
+    name: "Quick Fixes + Constitution"
+    theme: "Fix CLI/DB bugs, update Constitution with resilience/swarm, fix file limits"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        title: |
+          Fix 4 VirtualBPM bugs in daemon CLI/DB layer.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          BUG 1 — cvg review register misleading parameter order:
+          Current: cvg review register <plan_id> <reviewer> <verdict> [--suggestions]
+          Fix: make parameter names explicit in --help output. Add validation
+          that verdict is one of: proceed|revise|reject. Show error with correct
+          usage if wrong order detected.
+          File: daemon/src/cli_review.rs
+
+          BUG 2 — cvg plan import rejects valid task types:
+          Current CHECK constraint: bug|feature|fix|refactor|test|config|documentation|chore|doc
+          Missing types needed: pr, research, strategy, design, legal, analysis, planning, communication
+          Add ALL missing types to the CHECK constraint.
+          Add migration in daemon/src/server/state_init_migrations.rs (MIGRATIONS array).
+          Must recreate CHECK via new migration (SQLite doesn't support ALTER CHECK).
+
+          BUG 3 — Review workflow chicken-and-egg:
+          Problem: review register requires plan_id but review should happen before plan create.
+          Fix: allow cvg review register with --spec-file <path> instead of plan_id.
+          Store review linked to spec file path. cvg plan create then finds and links
+          the review automatically by source_file match.
+          Files: daemon/src/cli_review.rs, daemon/src/server/api_plan_db_review.rs
+
+          BUG 4 — SQLite "database is locked" during parallel agents:
+          NOTE: WAL mode + busy_timeout=5000 ALREADY exist in daemon/src/db/mod.rs.
+          What's missing: retry with exponential backoff for SQLITE_BUSY errors.
+          Add retry wrapper: 3 attempts, 100ms/500ms/2000ms with jitter.
+          Apply to ALL write operations in daemon/src/db/queries.rs and service.rs.
+          Use the resilience::retry module if W2 is done, otherwise inline.
+          Files: daemon/src/db/mod.rs, daemon/src/db/queries.rs, daemon/src/db/service.rs
+
+          TDD: write failing test for each bug FIRST, then fix.
+          Run: cargo check && cargo test after ALL fixes.
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test"
+          - "cd daemon && cargo test review"
+          - "cd daemon && cargo test import"
+
+      - id: T1-02
+        title: |
+          Fix chat_render.rs (254 lines → ≤250) and verify TUI test fix.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          1. Read daemon/src/tui/views/chat_render.rs (currently 254 lines).
+          2. Extract 4+ lines into a helper function or separate small module.
+          3. Verify daemon/tests/tui_integration.rs has correct render_view() signature
+             (15 params including chat_scroll: u16 and expanded_masters: &[i64]).
+             A prior Claude fixed this — VERIFY it, don't redo.
+          4. cargo check && cargo test (full suite, not just tui).
+        type: refactor
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "wc -l < daemon/src/tui/views/chat_render.rs | awk '{if($1>250) exit 1}'"
+          - "cd daemon && cargo test tui_integration"
+          - "cd daemon && cargo test"
+
+      - id: T1-03
+        title: |
+          Update CONSTITUTION.md to v3.0.0 with resilience + swarm articles.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          Add Article XI: Resilience (NON-NEGOTIABLE)
+          - Every component must self-recover from ANY failure
+          - Circuit breakers at all external boundaries
+          - Retry with exponential backoff for transient failures
+          - Checkpoint/restart for long-running operations
+          - Graceful degradation: partial failure ≠ total failure
+          - Health monitoring: every component exposes health status
+          - Zero zombies: auto-reap stale processes, worktrees, connections
+          - Inspired by HPC distributed systems: fault tolerance is not optional
+
+          Add Article XII: Swarm Intelligence (NON-NEGOTIABLE)
+          - Emergent behavior from local agent interactions (Parisi, Nobel 2021)
+          - Multi-transport discovery: WiFi, LAN, Tailscale, Thunderbolt
+          - Agents are autonomous but coordinated: no single point of failure
+          - Observation without interference: monitoring must not affect execution
+          - Self-healing topology: if a node fails, the swarm reorganizes
+          - Communication efficiency: compact protocols, minimal overhead
+
+          Update version to 3.0.0. Update Version History.
+          Keep total file under 250 lines (compress if needed).
+        type: doc
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "grep -q 'Article XI' CONSTITUTION.md"
+          - "grep -q 'Resilience' CONSTITUTION.md"
+          - "grep -q 'Article XII' CONSTITUTION.md"
+          - "grep -q 'Swarm' CONSTITUTION.md"
+          - "grep -q '3.0.0' CONSTITUTION.md"
+          - "wc -l < CONSTITUTION.md | awk '{if($1>250) exit 1}'"
+
+      - id: T1-04
+        title: |
+          Create backup tag v17.1.0-pre-split on current main.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          1. Verify main is clean: git status --short (must be empty).
+          2. Verify tests pass: cd daemon && cargo test.
+          3. Create annotated tag: git tag -a v17.1.0-pre-split -m "Pre-split backup: last monorepo state before ecosystem split"
+          4. Push tag: git push origin v17.1.0-pre-split
+        type: config
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "git tag -l 'v17.1.0-pre-split' | grep -q 'pre-split'"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # WAVE 2: Resilience Framework (daemon core)
+  # Build the resilience primitives that ALL future phases depend on.
+  # This wave leverages W1's SQLite WAL + retry fixes.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W2
+    name: "Resilience Framework"
+    theme: "Circuit breakers, retry, health monitoring, zombie reaper — HPC patterns in daemon"
+    precondition: "W1 complete"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        title: |
+          Create resilience module in daemon with circuit breaker + retry.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          New module: daemon/src/resilience/ with:
+          - mod.rs (public API, max 250 lines)
+          - circuit_breaker.rs: CircuitBreaker struct with states (Closed/Open/HalfOpen),
+            configurable failure threshold, reset timeout. Used for external calls
+            (HTTP, SSH, filesystem). Thread-safe (Arc<Mutex>).
+          - retry.rs: retry_with_backoff<F, T, E>(f, config) → Result<T, E>.
+            Config: max_retries, initial_delay, max_delay, backoff_factor.
+            Jitter to prevent thundering herd. Async-compatible (tokio).
+          - health.rs: HealthCheck trait, HealthStatus enum (Healthy/Degraded/Unhealthy),
+            ComponentHealth struct. Registry for all daemon components.
+
+          Wire into daemon: add `pub mod resilience;` in main lib/mod.
+          Integration test: circuit breaker opens after N failures, retry succeeds after transient failure.
+          Use in existing code: wrap SQLite connection open with retry (leverage W1's busy_timeout).
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f daemon/src/resilience/mod.rs"
+          - "test -f daemon/src/resilience/circuit_breaker.rs"
+          - "test -f daemon/src/resilience/retry.rs"
+          - "test -f daemon/src/resilience/health.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test resilience"
+
+      - id: T2-02
+        title: |
+          Optimize agent IPC: MessagePack + health endpoints.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          1. IPC OPTIMIZATION:
+          rmp-serde is already in Cargo.toml dependencies.
+          Create daemon/src/ipc/compact.rs:
+          - serialize_compact<T: Serialize>(value: &T) → Vec<u8> (MessagePack)
+          - deserialize_compact<T: DeserializeOwned>(data: &[u8]) → Result<T>
+          - Add Content-Type negotiation in IPC handlers:
+            Accept: application/msgpack → return MessagePack
+            Accept: application/json (default) → return JSON
+          This is backwards-compatible: JSON remains default.
+
+          2. DEEP HEALTH ENDPOINT:
+          Add GET /api/health/deep → returns ComponentHealth for:
+          - database (connection + WAL status + busy check)
+          - filesystem (data dir writable + disk space)
+          - ipc_engine (initialized or not)
+          - swarm (peer count + last heartbeat)
+          Wire via resilience::health::HealthRegistry.
+
+          3. Fix IPC engine initialization (audit finding #11):
+          ServerState::new() must initialize IpcEngine when available.
+          Wire into HTTP router. Lifecycle handlers broadcast events when present.
+
+          Test: health endpoint returns valid JSON with all components.
+          Test: MessagePack round-trip serialization.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f daemon/src/ipc/compact.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test ipc"
+          - "cd daemon && cargo test health"
+
+      - id: T2-03
+        title: |
+          Zero-zombie enforcement: reaper + auto-cleanup.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          New file: daemon/src/resilience/reaper.rs (max 250 lines):
+          - WorktreeReaper: scans git worktree list, removes stale worktrees
+            (no matching wave/plan in DB, or plan cancelled/done > 24h ago).
+          - BranchReaper: removes merged branches (git branch --merged main).
+          - ProcessReaper: checks /tmp for stale agent lock files, removes expired.
+          - StaleConnectionReaper: closes DB connections idle > 30 min.
+
+          New file: daemon/src/resilience/checkpoint.rs (max 250 lines):
+          - save_checkpoint(plan_id, wave_id, state: serde_json::Value) → Result
+          - restore_checkpoint(plan_id) → Option<CheckpointState>
+          - Uses DB table: checkpoints (plan_id, wave_id, state, created_at)
+          - Migration in state_init.rs
+
+          CLI: cvg reap [--dry-run] — runs all reapers, shows what would be cleaned.
+          CLI: cvg checkpoint save/restore <plan_id>
+
+          Wire reaper to run automatically every 30 min via tokio::spawn background task.
+          Test: create stale worktree, verify reaper cleans it.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f daemon/src/resilience/reaper.rs"
+          - "test -f daemon/src/resilience/checkpoint.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test reaper"
+          - "cd daemon && cargo test checkpoint"
+
+      - id: T2-04
+        title: |
+          Local LLM kernel (watchdog) + phone notifications + decision audit.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          F-26 LOCAL LLM KERNEL:
+          New file: daemon/src/resilience/watchdog.rs (max 250 lines):
+          - WatchdogConfig: model_path, check_interval_secs, notification_channels
+          - Watchdog struct: spawns tokio background task that every 30s:
+            a) Checks daemon /api/health/deep (circuit breaker protected)
+            b) Checks agent progress (last DB update > threshold = stalled)
+            c) Checks git worktree list for orphans
+            d) Checks /tmp for stale lock files
+            e) On failure: attempts restart, then sends notification
+          - Uses Ollama HTTP API (localhost:11434) as local inference for:
+            a) Summarizing error state for notifications
+            b) Deciding restart vs escalate
+          - Fallback: if Ollama unavailable, use hardcoded rules (no LLM needed)
+          - CLI: cvg watchdog start/stop/status
+
+          F-28 PHONE NOTIFICATIONS:
+          New file: daemon/src/resilience/notify.rs (max 250 lines):
+          - NotifyChannel trait: send(title, message, severity) → Result
+          - NtfyChannel: HTTP POST to ntfy.sh topic (from notifications.conf)
+          - TelegramChannel: HTTP POST to Telegram bot API (from notifications.conf)
+          - MacOSChannel: terminal-notifier / osascript (already in api_notify)
+          - Enable ntfy in config: claude-config/config/notifications.conf
+          - CLI: cvg notify send "title" "message" [--severity critical|warning|info]
+          - Watchdog calls notify on: agent blocked >5min, crash, rate limit, wave complete
+
+          F-27 DECISION AUDIT TRAIL:
+          Migration: CREATE TABLE decision_log (
+            id INTEGER PRIMARY KEY,
+            plan_id INTEGER, task_id INTEGER,
+            decision TEXT NOT NULL,
+            reasoning TEXT NOT NULL,
+            first_principles TEXT,
+            alternatives_considered TEXT,
+            outcome TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            agent TEXT
+          );
+          API: POST /api/decisions (log a decision), GET /api/decisions?plan_id=X
+          CLI: cvg decision log "decision" --reasoning "why" [--plan-id X]
+          File: daemon/src/server/api_decisions.rs (new, max 250 lines)
+
+          F-29 SELF-VERIFICATION:
+          Add to task submission flow in server/api_plan_db_lifecycle/handlers.rs:
+          Before accepting status=submitted, run ALL verify[] commands from test_criteria.
+          If ANY verify fails, reject the submission with error details.
+          This prevents agents from self-reporting success without evidence.
+          Log verification results in decision_log.
+
+          Test: watchdog detects simulated stalled agent.
+          Test: notification sends to ntfy.sh mock.
+          Test: decision log stores and retrieves entries.
+          Test: task submission rejected when verify fails.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f daemon/src/resilience/watchdog.rs"
+          - "test -f daemon/src/resilience/notify.rs"
+          - "test -f daemon/src/server/api_decisions.rs"
+          - "cd daemon && cargo check"
+          - "cd daemon && cargo test watchdog"
+          - "cd daemon && cargo test decision"
+          - "wc -l < daemon/src/resilience/watchdog.rs | awk '{if($1>250) exit 1}'"
+          - "wc -l < daemon/src/resilience/notify.rs | awk '{if($1>250) exit 1}'"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # WAVE 3: Repo Split (leverages W1 CLI fixes + W2 resilience)
+  # Split monorepo. Use retry/circuit-breaker for git operations.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W3
+    name: "Repo Split"
+    theme: "Split monorepo into convergio-daemon, convergio-app, convergio-web, convergio meta"
+    precondition: "W2 complete"
+    merge_mode: batch
+    tasks:
+      - id: T3-01
+        title: |
+          Extract OpenAPI spec + create convergio meta repo.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+
+          STEP 1 — OpenAPI extraction:
+          Read daemon/src/server/routes/api_routes.rs and ALL api_*.rs handlers.
+          Generate specs/openapi.yaml (OpenAPI 3.1):
+          - All endpoints with paths, methods, request/response schemas
+          - Auth: Bearer token (from ~/.convergio/auth/daemon.token)
+          - Include /api/health, /api/health/deep, /api/repositories (new from W4)
+          - Version: 18.0.0
+
+          STEP 2 — Create convergio meta repo:
+          gh repo create Roberdan/convergio --public --description "Convergio — Business OS Ecosystem"
+          Clone to /Users/Roberdan/GitHub/convergio
+          Initialize with:
+          - README.md (ecosystem map: all repos, their purpose, links)
+          - specs/openapi.yaml
+          - docs/adr/0300-repo-split.md (decision + rationale)
+          - docs/adr/0299-resilience-framework.md (copy from monorepo)
+          - .github/workflows/cross-repo-ci.yaml
+          - CLAUDE.md (meta rules: no source code, specs+docs+CI only)
+          - CONSTITUTION.md (copy v3.0.0 — single source of truth)
+          - LICENSE (MPL-2.0)
+          Push.
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: marco-devops-engineer
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "gh repo view Roberdan/convergio --json name -q .name"
+          - "test -f /Users/Roberdan/GitHub/convergio/specs/openapi.yaml"
+          - "test -f /Users/Roberdan/GitHub/convergio/CONSTITUTION.md"
+          - "grep -q '3.0.0' /Users/Roberdan/GitHub/convergio/CONSTITUTION.md"
+
+      - id: T3-02
+        title: |
+          Split daemon into convergio-daemon repo.
+          Working dir: /Users/Roberdan/GitHub
+
+          STEP 1: Clone ConvergioPlatform to /tmp/convergio-split-daemon.
+          STEP 2: git filter-repo --subdirectory-filter daemon/
+          This moves daemon/* to root. History preserved.
+          STEP 3: Fix Cargo.toml:
+          - [package] name = "convergio-daemon"
+          - Remove workspace references
+          - Verify all path deps resolve from new root
+          STEP 4: Move config/ and scripts/mesh/ from monorepo into repo:
+          - cp -r ConvergioPlatform/config/ convergio-daemon/config/
+          - cp -r ConvergioPlatform/scripts/mesh/ convergio-daemon/scripts/mesh/
+          STEP 5: Add files:
+          - CLAUDE.md (daemon-specific rules, paths updated from daemon/ to .)
+          - README.md (build, run, test, API link to convergio/specs/openapi.yaml)
+          - TROUBLESHOOTING.md (copy+update from monorepo)
+          - LICENSE (MPL-2.0), .gitignore (target/, data/*.db, .DS_Store)
+          STEP 6: Fix static serve path in src/server/ — use CONVERGIO_WEB_DIR env var.
+          Remove all dashboard_web/scripts/dashboard references.
+          STEP 7: Add shared token auth: ~/.convergio/auth/daemon.token
+          (generate on first start, chmod 600, read by app/CLI).
+          STEP 8: cargo check && cargo test.
+          STEP 9: gh repo create Roberdan/convergio-daemon --private
+          git remote add origin ... && git push -u origin main
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: marco-devops-engineer
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "gh repo view Roberdan/convergio-daemon --json name -q .name"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/Cargo.toml"
+          - "! grep -rq 'dashboard_web' /Users/Roberdan/GitHub/convergio-daemon/src/"
+
+      - id: T3-03
+        title: |
+          Split app + web into convergio-app and convergio-web repos.
+          Working dir: /Users/Roberdan/GitHub
+
+          APP SPLIT:
+          1. Clone ConvergioPlatform to /tmp/convergio-split-app
+          2. git filter-repo --subdirectory-filter gui/ConvergioMissionControl/
+          3. Restructure: Sources/ConvergioApp/ (main code), remove ALL WKWebView code
+          4. Fix: CommandPalette.swift .frame() API, deprecated onChange
+          5. Create Package.swift for SwiftUI
+          6. Add: CLAUDE.md, README.md, LICENSE, .gitignore
+          7. swift build MUST succeed
+          8. gh repo create Roberdan/convergio-app --private, push
+
+          WEB SCAFFOLD (NOTE: no existing dashboard web files — demo/index.html is minimal):
+          The "dashboard web" never existed as a full app. Create convergio-web from scratch:
+          1. gh repo create Roberdan/convergio-web --private
+          2. Clone to /Users/Roberdan/GitHub/convergio-web
+          3. Create minimal shell: index.html (Maranello DS, connects to daemon SSE/WS),
+             app.js (fetches /api/health, /api/plans, renders basic dashboard),
+             maranello-enhancer.js (from MaranelloLuceDesign integration guide).
+             Reference @NaSra agent for Maranello DS tokens and components.
+          4. Copy demo/index.html from monorepo as starting reference.
+          5. Add: CLAUDE.md, README.md, LICENSE, package.json, .gitignore
+          6. Push to GitHub.
+        type: config
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: marco-devops-engineer
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "gh repo view Roberdan/convergio-app --json name -q .name"
+          - "gh repo view Roberdan/convergio-web --json name -q .name"
+          - "cd /Users/Roberdan/GitHub/convergio-app && swift build"
+          - "! grep -rq 'WKWebView' /Users/Roberdan/GitHub/convergio-app/Sources/"
+          - "test -f /Users/Roberdan/GitHub/convergio-web/index.html"
+
+      - id: T3-04
+        title: |
+          Rename repos + per-repo CI + update all cross-references.
+          Working dir: /Users/Roberdan/GitHub
+
+          RENAMES:
+          1. gh repo rename convergio-community --repo Roberdan/MyConvergio --yes
+          2. gh repo rename maranello-design --repo Roberdan/MaranelloLuceDesign --yes
+          3. Update local dirs + remotes for both
+
+          PER-REPO CI (GitHub Actions):
+          4. convergio-daemon/.github/workflows/ci.yaml:
+             cargo check, cargo test, cargo clippy, cargo fmt --check
+          5. convergio-app/.github/workflows/ci.yaml:
+             swift build, swift test
+          6. convergio-web/.github/workflows/ci.yaml:
+             file existence check, lint (optional)
+
+          CROSS-REFERENCES:
+          7. Update convergio/README.md with all final repo links
+          8. Update convergio-daemon/CLAUDE.md ecosystem table
+          9. Grep ALL repos for stale "ConvergioPlatform", "MyConvergio",
+             "MaranelloLuceDesign" references — fix or remove ALL.
+
+          Push CI configs to each repo.
+        type: config
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "gh repo view Roberdan/convergio-community --json name -q .name"
+          - "gh repo view Roberdan/maranello-design --json name -q .name"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/.github/workflows/ci.yaml"
+          - "test -f /Users/Roberdan/GitHub/convergio-app/.github/workflows/ci.yaml"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # WAVE 4: Multi-Repo Orchestration (leverages W2 resilience + W3 repos)
+  # Daemon becomes self-aware of the ecosystem it manages.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W4
+    name: "Multi-Repo Orchestration"
+    theme: "repositories table, cvg repo CLI, cross-project deps, ecosystem bootstrap"
+    precondition: "W3 complete"
+    merge_mode: sync
+    tasks:
+      - id: T4-01
+        title: |
+          Add repositories table + cvg repo CLI + API.
+          Working dir: /Users/Roberdan/GitHub/convergio-daemon
+
+          DB MIGRATION (src/db/state_init.rs):
+          CREATE TABLE repositories (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            path TEXT NOT NULL,
+            github_url TEXT,
+            description TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            transport TEXT DEFAULT 'local',
+            health_status TEXT DEFAULT 'unknown',
+            last_health_check DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          ALTER TABLE projects ADD COLUMN repository_id INTEGER REFERENCES repositories(id);
+          CREATE INDEX idx_repositories_name ON repositories(name);
+
+          CLI (new file: src/cli_repo.rs, max 250 lines):
+          - cvg repo add <name> --path <path> [--github-url <url>]
+          - cvg repo list [--json]
+          - cvg repo show <name>
+          - cvg repo link <repo-name> <project-id>
+          - cvg repo sync (verify all repos exist + health check via circuit breaker)
+          Add RepoCommands to main.rs Commands enum.
+
+          API (new file: src/server/api_repositories.rs, max 250 lines):
+          POST/GET /api/repositories, GET /api/repositories/:name
+          PUT /api/repositories/:id/link
+
+          Wire routes in src/server/routes/api_routes.rs.
+          Use resilience::retry for DB writes. Circuit breaker for health checks.
+          Integration test with in-memory DB.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test repo"
+          - "test -f src/cli_repo.rs"
+          - "test -f src/server/api_repositories.rs"
+          - "wc -l < src/cli_repo.rs | awk '{if($1>250) exit 1}'"
+
+      - id: T4-02
+        title: |
+          Implement cross-project plan dependencies.
+          Working dir: /Users/Roberdan/GitHub/convergio-daemon
+
+          Single daemon manages ALL repos. Cross-repo = cross-project in same DB.
+          Migration: ALTER TABLE plans ADD COLUMN cross_project_depends TEXT;
+          (JSON array of {project_id, plan_id} objects, default NULL)
+
+          Extend src/cli_plan.rs: --depends-on-project <project>:<plan_id>
+          Extend check_unblocked_plans() in orchestrator to check cross-project deps.
+          Extend cvg plan execution-tree to show cross-project deps with [repo] prefix.
+
+          Write ADR: /Users/Roberdan/GitHub/convergio/docs/adr/0301-cross-project-deps.md
+
+          Test: create two plans in different projects with cross-dep, verify blocking.
+          Test: execution-tree shows cross-project dependency correctly.
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo check"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "test -f /Users/Roberdan/GitHub/convergio/docs/adr/0301-cross-project-deps.md"
+
+      - id: T4-03
+        title: |
+          Register ecosystem + bootstrap dogfooding + deprecate monorepo.
+          Working dir: /Users/Roberdan/GitHub/convergio-daemon
+
+          1. Start daemon: ./start.sh (or use existing)
+          2. Register repos via API/CLI:
+             cvg repo add convergio-daemon --path ~/GitHub/convergio-daemon --github-url https://github.com/Roberdan/convergio-daemon
+             cvg repo add convergio-app --path ~/GitHub/convergio-app --github-url https://github.com/Roberdan/convergio-app
+             cvg repo add convergio-web --path ~/GitHub/convergio-web --github-url https://github.com/Roberdan/convergio-web
+             cvg repo add convergio --path ~/GitHub/convergio --github-url https://github.com/Roberdan/convergio
+             cvg repo add convergio-community --path ~/GitHub/convergio-community --github-url https://github.com/Roberdan/convergio-community
+             cvg repo add maranello-design --path ~/GitHub/maranello-design --github-url https://github.com/Roberdan/maranello-design
+          3. Link each to its project.
+          4. cvg repo sync — verify all healthy.
+          5. Deprecate ConvergioPlatform monorepo:
+             Update README.md with deprecation notice + links to new repos.
+             Do NOT archive yet (keep for git history reference).
+        type: config
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cvg repo list 2>&1 | grep -c 'convergio' | awk '{if($1<4) exit 1}'"
+          - "grep -qi 'deprecated\\|split' /Users/Roberdan/GitHub/ConvergioPlatform/README.md"
+
+      - id: T4-04
+        title: |
+          Update docs for W3+W4: ecosystem architecture, updated CLAUDE.md files.
+          Working dir: /Users/Roberdan/GitHub
+
+          1. convergio/README.md — final ecosystem map with all 6 repos,
+             architecture diagram (text/ASCII), link to openapi.yaml
+          2. convergio-daemon/CLAUDE.md — complete, correct paths (src/ not daemon/src/),
+             all cvg commands including new ones (repo, reap, checkpoint, watchdog, notify, decision)
+          3. convergio-daemon/TROUBLESHOOTING.md — updated for split paths + new failure modes
+          4. convergio-app/CLAUDE.md — SwiftUI conventions, build, daemon API usage
+          5. convergio-web/CLAUDE.md — Maranello DS conventions, dev server
+          6. Update convergio/specs/openapi.yaml with /api/repositories + /api/decisions endpoints
+          7. ADR docs/adr/0299-resilience-framework.md (HPC patterns, Parisi model)
+          8. ADR docs/adr/0302-local-llm-watchdog.md (why local kernel, Ollama choice)
+          9. Update TROUBLESHOOTING.md with: watchdog alerts, ntfy setup, decision log query
+
+          All docs ≤250 lines. No stale references to old monorepo paths.
+        type: doc
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "! grep -rq 'daemon/src/' /Users/Roberdan/GitHub/convergio-daemon/CLAUDE.md 2>/dev/null"
+          - "! grep -rq 'ConvergioPlatform' /Users/Roberdan/GitHub/convergio-daemon/README.md 2>/dev/null"
+          - "grep -q 'repositories' /Users/Roberdan/GitHub/convergio/specs/openapi.yaml"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/docs/adr/0299-resilience-framework.md"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/docs/adr/0302-local-llm-watchdog.md"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # WAVE 5: Closure — E2E Tests, Final Docs, PRs, Verification
+  # Validates the entire ecosystem works as a unit.
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W5
+    name: "Closure"
+    theme: "E2E integration tests, final docs, PRs, deploy verification"
+    precondition: "W4 complete"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        title: |
+          E2E integration tests for the entire ecosystem.
+          Working dir: /Users/Roberdan/GitHub/convergio
+
+          Create tests/ directory with executable scripts:
+          1. test_daemon_builds.sh — cd convergio-daemon, cargo check, cargo test
+          2. test_app_builds.sh — cd convergio-app, swift build
+          3. test_web_exists.sh — verify convergio-web has index.html + app.js
+          4. test_repo_registry.sh — start daemon, cvg repo list shows 6 repos,
+             cvg repo sync passes, health check returns ok
+          5. test_cross_project.sh — create 2 test plans in different projects with
+             cross-dep, verify blocking works, clean up after
+          6. test_resilience.sh — verify /api/health/deep returns all components,
+             verify circuit breaker behavior, verify retry on SQLITE_BUSY
+          7. test_zero_zombies.sh — verify git worktree list is clean,
+             verify no stale branches, verify no orphan processes
+
+          ALL scripts: set -euo pipefail, proper cleanup via trap.
+          Add to .github/workflows/cross-repo-ci.yaml.
+          Run ALL tests and verify they pass.
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_daemon_builds.sh"
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_resilience.sh"
+          - "test -x /Users/Roberdan/GitHub/convergio/tests/test_zero_zombies.sh"
+          - "bash /Users/Roberdan/GitHub/convergio/tests/test_daemon_builds.sh"
+          - "bash /Users/Roberdan/GitHub/convergio/tests/test_web_exists.sh"
+
+      - id: TF-doc
+        title: |
+          Final documentation sweep across all repos.
+          Working dir: /Users/Roberdan/GitHub
+
+          For EACH repo (convergio, convergio-daemon, convergio-app, convergio-web):
+          1. Verify README.md exists, is accurate, references correct paths
+          2. Verify CLAUDE.md exists, is accurate, ≤250 lines
+          3. Verify no stale references to ConvergioPlatform, MyConvergio, MaranelloLuceDesign
+          4. Verify LICENSE exists (MPL-2.0)
+
+          Update convergio/CHANGELOG.md:
+          ## [18.0.0] - 25 Marzo 2026
+          ### Added
+          - Ecosystem split: convergio-daemon, convergio-app, convergio-web, convergio (meta)
+          - Resilience framework: circuit breakers, retry, health monitoring, zombie reaper
+          - Multi-repo orchestration: repositories table, cvg repo CLI
+          - Cross-project plan dependencies
+          - Agent IPC optimization (MessagePack)
+          - Constitution v3.0.0: resilience + swarm articles
+          ### Fixed
+          - 4 VirtualBPM issues (CLI UX, import types, chicken-egg, SQLite locking)
+          - 15 audit findings from Copilot research
+        type: doc
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "test -f /Users/Roberdan/GitHub/convergio/CHANGELOG.md"
+          - "grep -q '18.0.0' /Users/Roberdan/GitHub/convergio/CHANGELOG.md"
+          - "test -f /Users/Roberdan/GitHub/convergio-daemon/README.md"
+          - "test -f /Users/Roberdan/GitHub/convergio-app/README.md"
+
+      - id: TF-pr
+        title: |
+          Create and merge PRs for all repos.
+          Working dir: /Users/Roberdan/GitHub
+
+          For each repo with changes (convergio-daemon, convergio-app, convergio-web, convergio):
+          1. Create PR: gh pr create --title "Phase 0: Foundation & Resilient Ecosystem"
+             Body: summary of changes, link to plan 711, test plan
+          2. Verify CI passes (per-repo CI from T3-04)
+          3. Squash merge to main
+
+          For ConvergioPlatform: create PR with deprecation notice + Constitution update.
+          All PRs must be merged. No open PRs at end of this task.
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "gh pr list --repo Roberdan/convergio-daemon --state open --json number -q 'length' | grep -q '^0$'"
+          - "gh pr list --repo Roberdan/convergio --state open --json number -q 'length' | grep -q '^0$'"
+
+      - id: TF-deploy-verify
+        title: |
+          Final ecosystem verification.
+          Working dir: /Users/Roberdan/GitHub
+
+          Run ALL acceptance invariants:
+          1. Constitution v3.0.0 with resilience + swarm
+          2. convergio-daemon: cargo check + cargo test PASS
+          3. convergio-app: swift build PASSES
+          4. convergio-web: files exist
+          5. convergio meta: specs + docs exist
+          6. convergio-community + maranello-design: renamed and accessible
+          7. cvg repo list shows 6+ repos
+          8. cvg repo sync passes (all healthy)
+          9. /api/health/deep returns all components healthy
+          10. No files > 250 lines in daemon
+          11. Zero stale worktrees (git worktree list = only main)
+          12. Zero stale branches
+          13. ConvergioPlatform deprecated in README
+          14. No stale references to old repo names in any active repo
+          15. Per-repo CI configs exist for daemon, app, web
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "gh repo view Roberdan/convergio-daemon --json name -q .name"
+          - "gh repo view Roberdan/convergio-app --json name -q .name"
+          - "gh repo view Roberdan/convergio-web --json name -q .name"
+          - "gh repo view Roberdan/convergio --json name -q .name"
+          - "gh repo view Roberdan/convergio-community --json name -q .name"
+          - "gh repo view Roberdan/maranello-design --json name -q .name"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && cargo test"
+          - "cd /Users/Roberdan/GitHub/convergio-app && swift build"
+          - "cvg repo list 2>&1 | grep -c 'convergio' | awk '{if($1<4) exit 1}'"
+          - "cd /Users/Roberdan/GitHub/convergio-daemon && ! find src -name '*.rs' -exec awk 'END{if(NR>250){print FILENAME; exit 1}}' {} +"
+          - "git -C /Users/Roberdan/GitHub/ConvergioPlatform worktree list | wc -l | awk '{if($1>1) exit 1}'"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST-PHASE 0: Sequencing for 712-721
+# Each phase leverages capabilities from the previous phase.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Phase 0 deliverables available to ALL subsequent plans:
+#   - Resilience (circuit breakers, retry, health, reaper, checkpoint)
+#   - Multi-repo orchestration (cvg repo, cross-project deps)
+#   - Clean split repos with per-repo CI
+#   - Constitution v3.0.0 (resilience + swarm philosophy)
+#   - MessagePack IPC optimization
+#   - SQLite WAL + busy_timeout (no more locking)
+#   - Expanded task types in cvg plan import
+#
+# PHASE 1 — Hardening (in convergio-daemon) [parallel, 3 plans]:
+#   712: Plan H — Hardening NASA
+#     INJECT: use resilience module everywhere. Replace thread::spawn with
+#     spawn_blocking. Replace sh -c with Command::new. Wrap external calls
+#     with circuit breaker. Add health checks for all components.
+#     LEVERAGES: resilience framework (W2)
+#
+#   719: Plan H0 — TUI Project Hierarchy
+#     INJECT: project view shows repos from cvg repo list. Master plan tree
+#     shows cross-project deps. Swarm topology view.
+#     LEVERAGES: multi-repo orchestration (W4), health monitoring (W2)
+#
+#   720: Plan H0b — Swarm Delegation (renamed from Mesh)
+#     INJECT: rename mesh → swarm in module, CLI, docs.
+#     Multi-transport: WiFi, LAN cablata, Tailscale, Thunderbolt auto-discovery.
+#     Transport fallback chain with circuit breaker per transport.
+#     Self-healing topology. Bandwidth-aware routing.
+#     LEVERAGES: resilience framework (circuit breaker, health), multi-repo
+#
+# PHASE 2 — Checklist (depends on 712):
+#   713: Plan I — Checklist Engine
+#     8-phase business lifecycle from vision doc.
+#     LEVERAGES: hardened daemon, health monitoring
+#
+# PHASE 3 — Capabilities [parallel, 3 plans] (depends on 713):
+#   714: Plan J — MCP Client (PIVOT POINT)
+#     LEVERAGES: checklist (expose as MCP tool), multi-repo awareness
+#
+#   715: Plan K — Agentic Memory
+#     LEVERAGES: MCP (memory as MCP resource), checkpoint system (W2)
+#
+#   717: Plan M — Inference Router
+#     3-tier from vision doc (local/cloud/specialized)
+#     LEVERAGES: circuit breaker (per-model), health monitoring
+#
+# PHASE 4 — Security (depends on 714):
+#   716: Plan L — Security Perimeters
+#     5-tier from vision doc. Model-agnostic.
+#     LEVERAGES: MCP (security as MCP tool), resilience (all boundaries hardened)
+#
+# PHASE 5 — Voice (depends on 717):
+#   718: Plan N — Voice
+#     LEVERAGES: inference router (model selection), MCP
+#
+# PHASE 6 — Native App (depends on Phases 1-4, CRITICAL PATH WWDC June 2026):
+#   721: Plan F2 — SwiftUI Command Center (EXPANDED)
+#     Full native macOS app in convergio-app repo.
+#     LEVERAGES: ALL prior capabilities via daemon API (OpenAPI spec from W3)
+#     Uses shared auth token (W3), health monitoring, swarm status, all tools.
+#     Must demo ALL capabilities at WWDC.
