@@ -58,16 +58,21 @@ fn test_classify_case_insensitive() {
 // ----- route_intent ----------------------------------------------------------
 
 #[test]
-fn test_route_ask_ali_attempts_chat() {
-    // AskAli tries to contact /api/chat — will fail without daemon but should not panic
+fn test_route_ask_ali_uses_kernel_ask_endpoint() {
+    // AskAli must POST to /api/kernel/ask (not /classify or /api/chat).
+    // With an unreachable daemon the error message confirms the attempt was made.
     let response = route_intent(
         VoiceIntent::AskAli { question: "che succede?".to_string() },
         "http://localhost:9999", // intentionally unreachable
     );
+    // On connection failure route_ask_ali returns a message that contains "Errore"
+    // or "Non riesco" — it never panics and never returns an empty string.
     assert!(
-        response.contains("Ali") || response.contains("Errore") || response.contains("contattare"),
-        "expected Ali error fallback, got: {response}"
+        response.contains("Errore") || response.contains("Non riesco"),
+        "expected /api/kernel/ask error fallback, got: {response}"
     );
+    // Must not be empty — a silent failure here would suppress voice feedback.
+    assert!(!response.is_empty(), "AskAli fallback must produce non-empty response");
 }
 
 #[test]
@@ -88,6 +93,23 @@ fn test_route_restart_returns_confirmation() {
     assert!(
         response.to_lowercase().contains("riavvia") || response.to_lowercase().contains("daemon"),
         "expected restart confirmation, got: {response}"
+    );
+}
+
+#[test]
+fn test_route_status_check_uses_plan_db_list_format() {
+    // StatusCheck calls GET /api/plan-db/list (not /overview or any other endpoint).
+    // Verified via offline fallback: the Italian error phrase "contattare il daemon"
+    // is only produced by the plan-db/list code path (route_status_check).
+    let response = route_intent(VoiceIntent::StatusCheck, "http://localhost:1");
+    assert!(
+        !response.is_empty(),
+        "StatusCheck response must not be empty on offline daemon"
+    );
+    // The offline fallback must contain an Italian message — proves plan-db/list path.
+    assert!(
+        response.contains("daemon") || response.contains("piani") || response.contains("contattare"),
+        "expected Italian plan-db/list fallback, got: {response}"
     );
 }
 

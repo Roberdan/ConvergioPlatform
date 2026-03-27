@@ -173,6 +173,26 @@ cvg repo sync           # checks each repo path exists + health endpoint respond
   Verify: `cvg kernel status` shows correct `audio_target` node.
   Fallback: `afplay` must be available (`which afplay`) for local audio output.
 
+## Node Deployment (Plan 732)
+
+**deploy-node.sh fails on DB sync**
+- Symptom: `scripts/mesh/deploy-node.sh` exits with "rsync: connection unexpectedly closed".
+- Cause: SSH alias in the deploy script does not match the entry in `~/.claude/config/peers.conf`.
+- Fix: verify the target node name in `peers.conf` matches the SSH alias used by `deploy-node.sh`.
+  Run `grep <nodename> ~/.claude/config/peers.conf` and align aliases.
+
+**"keychain User interaction not allowed"**
+- Symptom: deploy script fails with "errSecInteractionNotAllowed" when accessing keychain.
+- Cause: script is launched from a non-interactive context (launchd, cron, SSH non-interactive).
+- Fix: run `scripts/mesh/deploy-node.sh` from an interactive terminal session (Terminal.app or iTerm2),
+  not from launchd or a background agent.
+
+**node readiness shows role FAIL**
+- Symptom: `GET /api/node/readiness` returns a check with `name: "role"` and `status: "FAIL"`.
+- Cause: the node's hostname is not registered in `~/.claude/config/peers.conf` under the correct role.
+- Fix: add or update the hostname entry in `peers.conf` with the correct role field, then restart daemon:
+  `./daemon/start.sh`
+
 ## macOS / App
 
 **Menu bar icon missing**

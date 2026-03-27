@@ -1,5 +1,19 @@
 # Changelog
 
+## [18.3.2] - 2026-03-27
+
+### Fixed
+- mlx_lm uses space-separated subcommand (fixes deprecation warning)
+- /api/kernel/ask returns human answers (not classify format)
+- "stato" uses plan-db/list for accurate plan count
+- Python venv auto-detected (~/convergio-env)
+
+### Added
+- GET /api/node/readiness — 10-check node health report
+- scripts/mesh/deploy-node.sh — single-command node deploy
+- scripts/kernel/sync-db.sh — safe DB rsync with integrity check
+- Node readiness check in kernel monitor loop (every 5min)
+
 ## [18.3.1] - 27 Marzo 2026
 
 ### Added

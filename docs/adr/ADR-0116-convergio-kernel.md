@@ -38,6 +38,26 @@ Voice alerts are routed via the mesh rather than played locally on the kernel no
 
 `say` is used as the current TTS backend because it is available today with zero dependencies on all macOS nodes. The kernel falls back to `say` when Voxtral is unavailable. Voxtral (Mistral's voice model) is planned as the production TTS replacement when it reaches stable local inference on MLX. The fallback path is explicit and not hidden.
 
+## Node Lifecycle (Plan 732)
+
+Plan 732 extends the kernel with node-aware lifecycle management. Three decisions were made:
+
+### Single-command node deployment via deploy-node.sh
+
+`scripts/mesh/deploy-node.sh` was added as a single-command entry point for bootstrapping a new mesh node (SSH key push, peers.conf sync, daemon install, kernel config). The alternative was a manual checklist. A script was chosen to enforce repeatability and eliminate configuration drift across nodes.
+
+### /api/node/readiness endpoint (10-check report)
+
+A structured readiness endpoint was added (daemon, mesh reachability, DB sync, SSH access, kernel config, role assignment, disk space, model presence, Telegram token, audio target). This makes pre-deployment validation machine-readable and integrable with future CI/CD pipelines. The 10 checks were selected to cover all known failure modes from Plan 729 post-mortem.
+
+### Periodic readiness check in kernel monitor (every 5 min)
+
+The kernel monitor loop was extended to call `/api/node/readiness` every 5 minutes and emit a WARNING-level classification event if any check fails. This surfaces degraded nodes proactively rather than waiting for a task failure. The interval (5 min) was chosen to balance signal freshness against inference cost on the M1 Pro.
+
+### scripts/kernel/sync-db.sh for safe DB rsync
+
+A dedicated sync script was added instead of raw `rsync` invocations. The script performs a pre-sync integrity check (`PRAGMA integrity_check`), uses `--checksum` mode to avoid unnecessary transfers, and verifies the destination after transfer. Direct `rsync` without these guards was the cause of two corrupted-DB incidents in Plan 729 mesh handoff testing.
+
 ## Consequences
 
 - Kernel binary must be present on M1 Pro; `cvg kernel start` fails with clear error if mlx_lm is not installed.
