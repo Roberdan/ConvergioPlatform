@@ -1,7 +1,10 @@
 pub mod mcp;
+pub mod permissions;
+pub mod proxy;
 pub mod registry;
 pub mod ring;
 pub mod types;
+pub mod yaml_loader;
 
 pub use ring::Ring;
 pub use types::{Capability, CapabilityError, ToolSchema};
