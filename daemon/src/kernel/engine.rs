@@ -102,18 +102,25 @@ impl KernelEngine {
         heuristic_classify(situation)
     }
 
-    /// Ask the local model a free-form question. Returns the raw text response.
-    /// Used by the Telegram AskAli intent when the question doesn't need Opus.
-    /// Falls back to a polite "non so rispondere" when the model is unavailable.
+    /// Ask the local model a question with real system context.
+    /// Fetches live data from daemon API, injects into prompt, then asks Mistral.
+    /// Strips mlx_lm debug output (=====, Prompt:, Generation:, Peak memory:).
     pub fn ask(&self, question: &str) -> String {
         if !self.bridge.is_available() || self.loaded_model.is_none() {
             return "Il modello locale non e' disponibile. Riprova piu' tardi.".to_string();
         }
         let model = self.loaded_model.as_ref().unwrap();
+        // Gather real context from daemon API
+        let context = gather_system_context();
         let prompt = format!(
-            "Sei l'assistente Convergio. Rispondi in italiano, in modo conciso.\n\
-             Domanda: {question}\n\
-             Risposta:"
+            "Sei l'assistente del sistema Convergio, una piattaforma di orchestrazione AI.\n\
+             Rispondi in italiano, in modo conciso e preciso.\n\
+             Usa SOLO i dati di contesto forniti. Non inventare informazioni.\n\n\
+             === Stato attuale del sistema ===\n\
+             {context}\n\n\
+             === Domanda dell'utente ===\n\
+             {question}\n\n\
+             === Risposta (basata solo sui dati sopra) ==="
         );
         let req = InferenceRequest {
             prompt,
@@ -121,7 +128,7 @@ impl KernelEngine {
             timeout_secs: 60,
         };
         match self.bridge.infer(&req) {
-            Ok(resp) => resp.text.trim().to_string(),
+            Ok(resp) => strip_mlx_debug(&resp.text),
             Err(e) => format!("Errore dal modello locale: {e}"),
         }
     }
@@ -221,4 +228,76 @@ fn query_ram_gb() -> f64 {
     use sysinfo::System;
     let sys = System::new_all();
     sys.total_memory() as f64 / 1_073_741_824.0 // bytes → GB
+}
+
+/// Fetch live system state from daemon API for context injection.
+fn gather_system_context() -> String {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::blocking::Client::new());
+    let base = "http://localhost:8420";
+    let mut ctx = String::new();
+
+    // Plans
+    if let Ok(r) = client.get(format!("{base}/api/plan-db/list")).send() {
+        if let Ok(v) = r.json::<serde_json::Value>() {
+            if let Some(plans) = v.get("plans").and_then(|p| p.as_array()) {
+                let doing: Vec<_> = plans.iter()
+                    .filter(|p| p.get("status").and_then(|s| s.as_str()) == Some("doing"))
+                    .collect();
+                ctx += &format!("Piani attivi: {}\n", doing.len());
+                for p in &doing {
+                    let name = p.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                    let done = p.get("tasks_done").and_then(|n| n.as_u64()).unwrap_or(0);
+                    let total = p.get("tasks_total").and_then(|n| n.as_u64()).unwrap_or(0);
+                    let id = p.get("id").and_then(|n| n.as_u64()).unwrap_or(0);
+                    ctx += &format!("  - Piano {id}: {name} ({done}/{total} task)\n");
+                }
+                ctx += &format!("Piani totali nel DB: {}\n", plans.len());
+            }
+        }
+    }
+
+    // Kernel status
+    if let Ok(r) = client.get(format!("{base}/api/kernel/status")).send() {
+        if let Ok(v) = r.json::<serde_json::Value>() {
+            let models = v.get("models_loaded").and_then(|n| n.as_u64()).unwrap_or(0);
+            let uptime = v.get("uptime_secs").and_then(|n| n.as_u64()).unwrap_or(0);
+            ctx += &format!("Kernel: {models} modello caricato, uptime {uptime}s\n");
+        }
+    }
+
+    // Node readiness
+    if let Ok(r) = client.get(format!("{base}/api/node/readiness")).send() {
+        if let Ok(v) = r.json::<serde_json::Value>() {
+            let ok = v.get("ok").and_then(|b| b.as_bool()).unwrap_or(false);
+            let node = v.get("node").and_then(|s| s.as_str()).unwrap_or("?");
+            ctx += &format!("Nodo: {node}, readiness: {}\n", if ok { "tutto OK" } else { "problemi rilevati" });
+        }
+    }
+
+    if ctx.is_empty() {
+        ctx = "Nessun dato disponibile dal daemon.".to_string();
+    }
+    ctx
+}
+
+/// Strip mlx_lm debug output from model response.
+/// Removes lines starting with "=", "Prompt:", "Generation:", "Peak memory:".
+fn strip_mlx_debug(text: &str) -> String {
+    text.lines()
+        .filter(|line| {
+            let t = line.trim();
+            !t.starts_with('=')
+                && !t.starts_with("Prompt:")
+                && !t.starts_with("Generation:")
+                && !t.starts_with("Peak memory:")
+                && !t.starts_with("Calling `python")
+                && !t.starts_with("Use `mlx_lm")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }

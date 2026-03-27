@@ -219,31 +219,54 @@ fn route_mute() -> String {
 }
 
 fn route_ask_ali(question: &str, daemon_url: &str) -> String {
-    // Forward to /api/kernel/ask — uses local Mistral model for free-form answers.
-    // Avoids classify endpoint misuse: /ask returns plain text in `answer` field.
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(60))
-        .build()
-        .unwrap_or_else(|_| reqwest::blocking::Client::new());
+    // Instead of calling Mistral (which hallucinates without context),
+    // gather real data from daemon API and return a factual summary.
+    // The kernel is a data retriever, not a conversationalist.
+    let q = question.to_lowercase();
 
-    let res = client
-        .post(format!("{daemon_url}/api/kernel/ask"))
-        .json(&serde_json::json!({"question": question}))
-        .send();
-
-    match res {
-        Ok(r) => {
-            let body = r.json::<Value>().unwrap_or_default();
-            body.get("answer")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Non ho una risposta per questa domanda.")
-                .to_string()
-        }
-        Err(e) => {
-            warn!("voice_router: local inference failed: {e}");
-            format!("Non riesco a rispondere. Errore: {e}")
+    // Try to match the question to available data
+    if q.contains("piano") || q.contains("plan") || q.contains("progett") {
+        return route_status_check(daemon_url);
+    }
+    if q.contains("cost") || q.contains("spes") || q.contains("soldi") || q.contains("dollari") {
+        return route_cost_query(daemon_url);
+    }
+    if q.contains("nod") || q.contains("mesh") || q.contains("m1") || q.contains("m5") {
+        match get_json(&format!("{daemon_url}/api/node/readiness")) {
+            Ok(v) => {
+                let ok = v.get("ok").and_then(|b| b.as_bool()).unwrap_or(false);
+                let node = v.get("node").and_then(|s| s.as_str()).unwrap_or("?");
+                let checks = v.get("checks").and_then(|a| a.as_array())
+                    .map(|arr| arr.iter()
+                        .filter(|c| !c.get("passed").and_then(|b| b.as_bool()).unwrap_or(true))
+                        .count())
+                    .unwrap_or(0);
+                return if ok {
+                    format!("Nodo {node}: tutto OK, nessun problema rilevato.")
+                } else {
+                    format!("Nodo {node}: {checks} problemi rilevati. Usa 'stato' per i dettagli.")
+                };
+            }
+            Err(_) => return "Non riesco a verificare lo stato del nodo.".to_string(),
         }
     }
+    if q.contains("kernel") || q.contains("modell") || q.contains("mistral") {
+        match get_json(&format!("{daemon_url}/api/kernel/status")) {
+            Ok(v) => {
+                let models = v.get("models_loaded").and_then(|n| n.as_u64()).unwrap_or(0);
+                let uptime = v.get("uptime_secs").and_then(|n| n.as_u64()).unwrap_or(0);
+                let hours = uptime / 3600;
+                let mins = (uptime % 3600) / 60;
+                return format!("Kernel: {models} modello caricato, attivo da {hours}h {mins}m.");
+            }
+            Err(_) => return "Non riesco a leggere lo stato del kernel.".to_string(),
+        }
+    }
+
+    // Generic: return a summary of everything
+    let status = route_status_check(daemon_url);
+    let cost = route_cost_query(daemon_url);
+    format!("{status}\n{cost}\nPer domande specifiche prova: piano, costi, nodo, kernel.")
 }
 
 // --- HTTP helper + mute ------------------------------------------------------
