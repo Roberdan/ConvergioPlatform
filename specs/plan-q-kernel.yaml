@@ -630,3 +630,38 @@ waves:
           - "grep -q 'kernel' CHANGELOG.md"
           - "grep -q 'kernel' CLAUDE.md"
           - "grep -q 'kernel' TROUBLESHOOTING.md"
+
+      - id: T4-06
+        ref: [F-01]
+        do: |
+          Create nightly job "Model Calibration" via API.
+          POST /api/nightly/jobs/create with:
+            name: "Convergio Model Calibration"
+            schedule: "0 3 * * 0" (every Sunday 03:00)
+            script_path: scripts/kernel/calibrate-models.sh
+            target_host: macProM1 (kernel node)
+            project_id: convergio
+
+          Create scripts/kernel/calibrate-models.sh:
+          1. Collect last 7 days metrics: curl /api/metrics/summary
+          2. Per model used: count tasks, avg duration, avg cost, error rate
+          3. Compare local vs cloud for same task types (from delegation_log)
+          4. Generate routing update proposal as JSON:
+             {model, task_type, recommendation: "promote_local"|"keep_cloud"|"demote", evidence}
+          5. POST proposal to /api/evolution/proposals (existing evolution engine)
+          6. Send Telegram summary: "Calibrazione settimanale: Qwen locale 23% piu veloce
+             di Codex su refactor tasks. Proposta: promuovere a default."
+          7. Human approves via Telegram or dashboard before routing changes apply.
+
+          NO automatic routing changes. Always proposal → human approval → apply.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f scripts/kernel/calibrate-models.sh"
+          - "bash -n scripts/kernel/calibrate-models.sh"
+          - "curl -sf http://localhost:8420/api/nightly/jobs | grep -q 'Model Calibration'"
