@@ -1,0 +1,313 @@
+# Plan S — Kernel Polish + Node Lifecycle
+# Fix all remaining kernel issues from M1 Pro deployment.
+# Quick fixes (W1) + Node management (W2) + Ali integration (W3) + Closure (W4)
+
+name: "Plan S — Kernel Polish + Node Lifecycle"
+project_id: convergio
+priority: P1
+execution_mode: serial
+tags: [kernel, node-management, telegram, deploy, sync]
+
+description: >
+  Fix all issues discovered during kernel M1 Pro deployment:
+  mlx_lm deprecation, /api/kernel/ask, overview data, DB sync,
+  node readiness, deploy pipeline, Ali async via Telegram.
+
+requirements:
+  - F-01: "mlx_lm command uses correct non-deprecated syntax"
+  - F-02: "/api/kernel/ask returns human-readable answers from Mistral"
+  - F-03: "stato command returns accurate plan count from plan-db/list"
+  - F-04: "DB synced automatically between master and kernel node"
+  - F-05: "GET /api/node/readiness reports all dependency checks"
+  - F-06: "Single-command deploy to any mesh node"
+  - F-07: "Complex Telegram questions get intelligent Mistral answers"
+  - F-08: "Kernel venv activated automatically in daemon startup"
+
+acceptance_invariants:
+  - description: "mlx_lm generate uses space-separated subcommand"
+    verify: "grep -q 'mlx_lm.*generate' daemon/src/ipc/models/apple_fm.rs && ! grep -q 'mlx_lm\\.generate' daemon/src/ipc/models/apple_fm.rs"
+    defined_by: user
+  - description: "/api/kernel/ask returns plain text answer"
+    verify: "cargo test --features kernel kernel::api --manifest-path daemon/Cargo.toml --lib"
+    defined_by: user
+  - description: "stato returns non-zero when plans are doing"
+    verify: "cargo test --features kernel kernel::voice_router --manifest-path daemon/Cargo.toml --lib"
+    defined_by: user
+  - description: "deploy-node.sh passes syntax check"
+    verify: "bash -n scripts/mesh/deploy-node.sh"
+    defined_by: collaborative
+  - description: "node readiness endpoint exists"
+    verify: "grep -q '/api/node/readiness' daemon/src/server/routes/api_routes.rs"
+    defined_by: collaborative
+
+waves:
+  - id: W1
+    name: "Quick fixes — mlx_lm, /ask, overview, venv"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01]
+        do: |
+          Fix mlx_lm deprecation in daemon/src/ipc/models/apple_fm.rs.
+          The command `python -m mlx_lm.generate` is deprecated.
+          New syntax: `python -m mlx_lm generate` (space, not dot).
+          Change cli_cmd() method: split "mlx_lm" and "generate" as separate args.
+          Do NOT touch venv logic — that is T1-04's scope.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '\"mlx_lm\"' daemon/src/ipc/models/apple_fm.rs"
+          - "! grep -q 'mlx_lm\\.generate' daemon/src/ipc/models/apple_fm.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+      - id: T1-02
+        ref: [F-02, F-07]
+        do: |
+          Add POST /api/kernel/ask endpoint in daemon/src/kernel/api.rs.
+          Handler: takes {question: String}, calls engine.ask(question), returns {answer: String}.
+          engine.ask() already exists (added in previous session).
+          IMPORTANT: api.rs is already 263 lines. Extract /ask handler to a new file
+          daemon/src/kernel/api_ask.rs and re-export from api.rs to stay under 250 lines.
+          Wire into router() alongside /classify, /status, /speak, /transcribe.
+          Add to api_routes.rs POST_ROUTES.
+          Update route_ask_ali in voice_router.rs to call /api/kernel/ask instead of /classify.
+          The response should be plain human-readable text, NOT classify format.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '/api/kernel/ask' daemon/src/server/routes/api_routes.rs"
+          - "grep -q '/api/kernel/ask' daemon/src/kernel/voice_router.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+      - id: T1-03
+        ref: [F-03]
+        do: |
+          Fix route_status_check in daemon/src/kernel/voice_router.rs.
+          Current: calls /api/overview which returns 0 plans (filters by session project_id).
+          Fix: call /api/plan-db/list, count plans with status=="doing", format Italian response.
+          Also fix route_cost_query to use /api/plan-db/list and sum costs if /api/metrics/summary is empty.
+          Keep using spawn_blocking (reqwest::blocking inside tokio).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q 'plan-db/list' daemon/src/kernel/voice_router.rs"
+          - "cargo test --features kernel kernel::voice_router --manifest-path daemon/Cargo.toml --lib"
+
+      - id: T1-04
+        ref: [F-08]
+        do: |
+          Fix Python venv activation in AppleFmBridge.
+          The M1 Pro has mlx_lm in ~/convergio-env/bin/python, not system python.
+          Update apple_fm.rs cli_cmd() to check for venv python first:
+          1. Check ~/convergio-env/bin/python exists → use it
+          2. Else check CONVERGIO_PYTHON_PATH env var → use it
+          3. Else fall back to "python" in PATH
+          This ensures mlx_lm is found without manual venv activation.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q 'convergio-env' daemon/src/ipc/models/apple_fm.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  - id: W2
+    name: "Node Lifecycle — readiness, deploy, sync"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-05]
+        do: |
+          Create GET /api/node/readiness endpoint.
+          File: daemon/src/server/api_node_readiness.rs (new file).
+          Checks (each returns pass/fail + detail):
+          1. mlx_lm available (AppleFmBridge::is_available)
+          2. Python venv exists (~/.convergio-env/bin/python)
+          3. DB file exists and not corrupt (PRAGMA integrity_check)
+          4. DB symlink correct (points to local user path, not another machine)
+          5. Telegram token configured (CONVERGIO_TELEGRAM_TOKEN env var set)
+          6. Disk space >5GB free
+          7. Models downloaded (check ~/.cache/huggingface for key models)
+          8. Daemon version matches expected (from VERSION.md)
+          9. Node role matches expected (read from peers.conf: role field)
+          10. Required capabilities for role present (kernel role needs mlx_lm + models + Telegram token)
+          Response: {ok: bool, checks: [{name, passed, detail}], node: hostname, role: string}
+          Wire into server routes (NOT behind kernel feature gate — all nodes should report readiness).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "grep -q '/api/node/readiness' daemon/src/server/routes/api_routes.rs"
+          - "test -f daemon/src/server/api_node_readiness.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+      - id: T2-02
+        ref: [F-06]
+        do: |
+          Create scripts/mesh/deploy-node.sh — single-command deploy to any mesh node.
+          Usage: deploy-node.sh <ssh-alias> [--kernel]
+          Steps:
+          1. SSH to node: git pull origin main
+          2. Build: cargo build --features kernel --release (if --kernel)
+             or cargo build --release (otherwise)
+          3. Stop daemon: pkill -f convergio-platform-daemon
+          4. Sync DB: rsync dashboard.db from master (this Mac) to node (daemon stopped = safe)
+          5. Also rsync WAL+SHM files
+          6. Start daemon with correct env vars (read from node's keychain)
+          7. Replicate secrets from master keychain to node keychain:
+             - Read CONVERGIO_TELEGRAM_TOKEN from master keychain (security find-generic-password)
+             - SSH to node: security add-generic-password (or -U to update)
+             - Same for CONVERGIO_TELEGRAM_CHAT_ID
+          8. Wait for /api/health (10 retries x 2s)
+          9. Run /api/node/readiness and report results
+          10. If --kernel: verify /api/kernel/status reports models_loaded >= 1
+          Config: reads SSH alias from peers.conf. set -euo pipefail.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f scripts/mesh/deploy-node.sh"
+          - "bash -n scripts/mesh/deploy-node.sh"
+
+      - id: T2-03
+        ref: [F-04]
+        do: |
+          Create scripts/kernel/sync-db.sh — safe DB rsync between nodes.
+          Usage: sync-db.sh <source-ssh> <target-ssh>
+          Steps:
+          1. SSH to target: pkill -f convergio-platform-daemon (stop daemon)
+          2. Wait 2s for WAL checkpoint
+          3. rsync source DB + WAL + SHM to target
+          4. SSH to target: sqlite3 <db> "PRAGMA integrity_check" (verify)
+          5. SSH to target: restart daemon
+          6. Verify /api/health on target
+          Add cron-like scheduling: create launchd plist that runs sync every 30min
+          from master to M1 Pro. Install via scripts/kernel/install-db-sync.sh.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f scripts/kernel/sync-db.sh"
+          - "bash -n scripts/kernel/sync-db.sh"
+
+      - id: T2-04
+        ref: [F-05]
+        do: |
+          Add node readiness check to kernel monitor loop.
+          In daemon/src/kernel/monitor.rs, add a check that calls /api/node/readiness
+          on all mesh peers every 5 minutes (not every 30s — too frequent).
+          If any check fails → WARN event in kernel_events.
+          If critical checks fail (DB corrupt, daemon down) → CRITICAL + notify.
+          This makes the kernel self-diagnosing: it detects broken nodes automatically.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q 'node.*readiness\\|readiness.*check' daemon/src/kernel/monitor.rs"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+  - id: W3
+    name: "Deploy + verify on M1 Pro"
+    merge_mode: sync
+    tasks:
+      - id: T3-01
+        ref: [F-01, F-02, F-03, F-04, F-05, F-06, F-07, F-08]
+        do: |
+          Deploy all fixes to M1 Pro using the new deploy-node.sh script.
+          Steps:
+          1. Run: bash scripts/mesh/deploy-node.sh m1Pro --kernel
+          2. Verify /api/node/readiness on M1 Pro — all checks must pass
+          3. Verify /api/kernel/status — models_loaded >= 1
+          4. Send Telegram test messages: "stato", "costi", "quanti piani ho"
+          5. Verify responses are accurate (not "0 piani" when plans exist)
+          6. Send complex question: "che mi dici del progetto?" → verify Mistral answers
+          7. Verify no mlx_lm deprecation warnings in /tmp/kernel.log
+          8. Test audio routing: generate TTS on M1 Pro → play on this Mac via /api/kernel/play
+          9. Test Telegram voice: send voice note to bot → verify transcription + reply
+          10. Verify secrets replicated (Telegram token in M1 Pro keychain)
+          11. Report all results
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q 'ok.*true'"
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/kernel/status' | grep -q 'models_loaded'"
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/node/readiness' | grep -q 'ok'"
+
+  - id: W4
+    name: "Closure — tests, docs, version"
+    merge_mode: sync
+    tasks:
+      - id: T4-01
+        ref: [F-01, F-02, F-03, F-05]
+        do: |
+          Update existing kernel tests for new endpoints and fixes.
+          In daemon/tests/kernel_monitor_test.rs: add test_node_readiness_check.
+          In daemon/tests/kernel_voice_test.rs: update test for /api/kernel/ask.
+          In daemon/src/kernel/voice_router_tests.rs: fix tests that reference old classify-based AskAli.
+          In daemon/src/ipc/models/apple_fm.rs tests: verify new cli_cmd format.
+          All tests must pass: cargo test --features kernel kernel --manifest-path daemon/Cargo.toml --lib
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel kernel --manifest-path daemon/Cargo.toml --lib"
+
+      - id: T4-02
+        ref: [F-01, F-02, F-03, F-04, F-05, F-06]
+        do: |
+          Update docs: CHANGELOG (Plan S entries), TROUBLESHOOTING (node readiness,
+          deploy pipeline), ADR-0116 (add node lifecycle decisions).
+          Version bump VERSION.md to 18.3.2.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '18.3.2' VERSION.md"
+          - "grep -q 'node.*readiness\\|deploy.*node' CHANGELOG.md"
