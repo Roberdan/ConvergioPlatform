@@ -28,3 +28,7 @@ mod sharing_tests;
 #[cfg(test)]
 #[path = "attestation_tests.rs"]
 mod attestation_tests;
+
+#[cfg(test)]
+#[path = "integration_tests.rs"]
+mod integration_tests;
