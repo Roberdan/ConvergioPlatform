@@ -42,10 +42,10 @@ fn test_classify_mute() {
 }
 
 #[test]
-fn test_classify_unknown() {
+fn test_classify_unknown_goes_to_ali() {
     let engine = KernelEngine::new(KernelConfig::default());
     let intent = classify_intent("forse domani nevica", &engine);
-    assert_eq!(intent, VoiceIntent::Unknown);
+    matches!(intent, VoiceIntent::AskAli { .. });
 }
 
 #[test]
@@ -58,11 +58,15 @@ fn test_classify_case_insensitive() {
 // ----- route_intent ----------------------------------------------------------
 
 #[test]
-fn test_route_unknown_returns_help_text() {
-    let response = route_intent(VoiceIntent::Unknown, "http://localhost:8420");
+fn test_route_ask_ali_attempts_chat() {
+    // AskAli tries to contact /api/chat — will fail without daemon but should not panic
+    let response = route_intent(
+        VoiceIntent::AskAli { question: "che succede?".to_string() },
+        "http://localhost:9999", // intentionally unreachable
+    );
     assert!(
-        response.contains("stato") || response.contains("Non ho capito"),
-        "expected help text, got: {response}"
+        response.contains("Ali") || response.contains("Errore") || response.contains("contattare"),
+        "expected Ali error fallback, got: {response}"
     );
 }
 
