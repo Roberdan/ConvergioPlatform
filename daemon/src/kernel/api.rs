@@ -4,7 +4,7 @@
 
 #[cfg(feature = "kernel")]
 pub mod handlers {
-    use crate::kernel::engine::{KernelConfig, KernelEngine, KernelSeverity, KernelStatus};
+    use crate::kernel::engine::{KernelConfig, KernelEngine, KernelStatus};
     use axum::extract::State;
     use axum::routing::{get, post};
     use axum::{Json, Router};

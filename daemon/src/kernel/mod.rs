@@ -4,6 +4,8 @@
 
 pub mod engine;
 pub mod monitor;
+pub mod recover;
+pub mod verify;
 
 #[cfg(feature = "kernel")]
 pub mod api;
@@ -12,3 +14,5 @@ pub mod api;
 mod monitor_tests;
 #[cfg(test)]
 mod engine_tests;
+#[cfg(test)]
+mod recover_tests;

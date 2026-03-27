@@ -1,92 +1,197 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Kernel monitor — replaces watchdog.rs (Ollama-based) with model-agnostic
-// health checks. Reuses the core health/stale-lock logic without any LLM dep.
-// watchdog.rs is deprecated; this module is the replacement (cvg kernel).
+// Kernel monitor — model-agnostic health checks every 30s.
+// Replaces watchdog.rs (Ollama-based). No LLM dep.
+// Writes to kernel_events table (migration: state_init_migrations.rs).
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 
-/// Single check outcome produced by the kernel monitor.
+const POLL_INTERVAL: Duration = Duration::from_secs(30);
+const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
+const STALL_SECS: u64 = 300;      // agents idle >5 min with a task
+const RATE_LIMIT_WARN: u64 = 3;   // 429 count in last 5 min
+const DISK_WARN_PCT: f64 = 85.0;
+const RAM_WARN_PCT: f64 = 80.0;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KernelCheckResult {
     pub check_name: String,
     pub ok: bool,
     pub details: Option<String>,
 }
-
 impl KernelCheckResult {
-    pub fn pass(name: &str) -> Self {
-        Self { check_name: name.to_string(), ok: true, details: None }
-    }
+    pub fn pass(name: &str) -> Self { Self { check_name: name.into(), ok: true, details: None } }
+    pub fn fail(name: &str, d: &str) -> Self { Self { check_name: name.into(), ok: false, details: Some(d.into()) } }
+}
 
-    pub fn fail(name: &str, detail: &str) -> Self {
-        Self { check_name: name.to_string(), ok: false, details: Some(detail.to_string()) }
+#[derive(Debug, Clone)]
+pub struct MonitorConfig {
+    pub daemon_url: String,
+    pub peer_urls: Vec<String>,
+    /// Token limit for compaction risk heuristic (0 = skip).
+    pub compaction_token_limit: u64,
+}
+impl Default for MonitorConfig {
+    fn default() -> Self {
+        Self { daemon_url: "http://127.0.0.1:8420".into(), peer_urls: vec![], compaction_token_limit: 180_000 }
     }
 }
 
-/// Check whether the daemon HTTP API responds on the given base URL.
 pub async fn check_daemon_reachable(daemon_url: &str) -> KernelCheckResult {
-    let client = Client::builder().timeout(Duration::from_secs(5)).build().unwrap_or_default();
-    let url = format!("{daemon_url}/api/health");
-    match client.get(&url).send().await {
-        Ok(resp) if resp.status().is_success() => KernelCheckResult::pass("daemon_health"),
-        Ok(resp) => KernelCheckResult::fail("daemon_health", &format!("HTTP {}", resp.status())),
-        Err(e) => KernelCheckResult::fail("daemon_health", &e.to_string()),
+    http_health(daemon_url, "daemon_health").await
+}
+
+pub async fn check_mesh_peers(peer_urls: &[String]) -> Vec<KernelCheckResult> {
+    let mut out = vec![];
+    for p in peer_urls {
+        out.push(http_health(p, &format!("peer_health:{p}")).await);
+    }
+    out
+}
+
+async fn http_health(base: &str, name: &str) -> KernelCheckResult {
+    let c = Client::builder().timeout(HTTP_TIMEOUT).build().unwrap_or_default();
+    match c.get(format!("{base}/api/health")).send().await {
+        Ok(r) if r.status().is_success() => KernelCheckResult::pass(name),
+        Ok(r) => KernelCheckResult::fail(name, &format!("HTTP {}", r.status())),
+        Err(e) => KernelCheckResult::fail(name, &e.to_string()),
     }
 }
 
-/// Scan /tmp for stale .lock files older than `threshold_secs`.
-/// Extracted from watchdog::check_stale_locks; no Ollama dependency.
-pub fn detect_stale_locks(threshold_secs: u64) -> KernelCheckResult {
-    let tmp = std::path::Path::new("/tmp");
-    let cutoff = Duration::from_secs(threshold_secs);
-    let now = std::time::SystemTime::now();
-    let mut stale = vec![];
-    if let Ok(rd) = std::fs::read_dir(tmp) {
-        for entry in rd.flatten() {
-            let path = entry.path();
-            if path.extension().is_some_and(|e| e == "lock") {
-                if let Ok(meta) = std::fs::metadata(&path) {
-                    if let Ok(modified) = meta.modified() {
-                        if now.duration_since(modified).unwrap_or_default() > cutoff {
-                            stale.push(path.display().to_string());
-                        }
-                    }
-                }
+pub async fn detect_stalled_agents(daemon_url: &str) -> KernelCheckResult {
+    let c = Client::builder().timeout(HTTP_TIMEOUT).build().unwrap_or_default();
+    match c.get(format!("{daemon_url}/api/ipc/agents")).send().await {
+        Err(e) => KernelCheckResult::fail("stalled_agents", &e.to_string()),
+        Ok(r) => match r.json::<serde_json::Value>().await {
+            Err(e) => KernelCheckResult::fail("stalled_agents", &e.to_string()),
+            Ok(j) => {
+                let stalled: Vec<_> = j.as_array().unwrap_or(&vec![]).iter()
+                    .filter(|a| a["task_id"].is_string() && a["idle_secs"].as_u64().unwrap_or(0) > STALL_SECS)
+                    .map(|a| a["id"].as_str().unwrap_or("?").to_string())
+                    .collect();
+                if stalled.is_empty() { KernelCheckResult::pass("stalled_agents") }
+                else { KernelCheckResult::fail("stalled_agents", &format!("stalled: {}", stalled.join(","))) }
             }
         }
     }
-    if stale.is_empty() {
-        KernelCheckResult::pass("stale_locks")
-    } else {
-        KernelCheckResult::fail("stale_locks", &format!("stale: {}", stale.join(", ")))
-    }
 }
 
-/// Heuristic orphan worktree check — logs count, passes unless git errors.
-pub async fn detect_orphan_worktrees() -> KernelCheckResult {
-    match std::process::Command::new("git").args(["worktree", "list", "--porcelain"]).output() {
-        Ok(o) if o.status.success() => {
-            let count = String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .filter(|l| l.starts_with("worktree ") && l.contains(".claude/worktrees"))
-                .count();
-            info!("kernel.monitor: {} active worktrees", count);
-            KernelCheckResult::pass("orphan_worktrees")
+pub async fn detect_rate_limits(daemon_url: &str) -> KernelCheckResult {
+    let c = Client::builder().timeout(HTTP_TIMEOUT).build().unwrap_or_default();
+    match c.get(format!("{daemon_url}/api/ipc/route-history")).send().await {
+        Err(e) => KernelCheckResult::fail("rate_limits", &e.to_string()),
+        Ok(r) => match r.json::<serde_json::Value>().await {
+            Err(e) => KernelCheckResult::fail("rate_limits", &e.to_string()),
+            Ok(j) => {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default().as_secs();
+                let count = j.as_array().unwrap_or(&vec![]).iter()
+                    .filter(|e| e["status"].as_u64() == Some(429) && now.saturating_sub(e["timestamp"].as_u64().unwrap_or(0)) < 300)
+                    .count() as u64;
+                if count >= RATE_LIMIT_WARN { KernelCheckResult::fail("rate_limits", &format!("{count} 429s in last 5min")) }
+                else { KernelCheckResult::pass("rate_limits") }
+            }
         }
-        Ok(_) => KernelCheckResult::pass("orphan_worktrees"),
-        Err(e) => KernelCheckResult::fail("orphan_worktrees", &e.to_string()),
     }
 }
 
-/// Run a full monitor cycle: daemon reachability + stale locks + orphan worktrees.
-/// Replaces watchdog::run_checks without Ollama dependency.
-pub async fn run_monitor_cycle(daemon_url: &str, stale_threshold_secs: u64) -> Vec<KernelCheckResult> {
-    vec![
-        check_daemon_reachable(daemon_url).await,
-        detect_stale_locks(stale_threshold_secs),
-        detect_orphan_worktrees().await,
-    ]
+pub fn check_disk_ram() -> Vec<KernelCheckResult> {
+    use sysinfo::{Disks, System};
+    let mut out = vec![];
+    let sys = System::new_all();
+    let total = sys.total_memory();
+    if total > 0 {
+        let pct = sys.used_memory() as f64 / total as f64 * 100.0;
+        if pct >= RAM_WARN_PCT { out.push(KernelCheckResult::fail("ram_pressure", &format!("{pct:.1}% RAM used"))) }
+        else { out.push(KernelCheckResult::pass("ram_pressure")) }
+    }
+    for disk in Disks::new_with_refreshed_list().list() {
+        let t = disk.total_space();
+        if t > 0 {
+            let pct = (t - disk.available_space()) as f64 / t as f64 * 100.0;
+            let n = format!("disk:{}", disk.mount_point().display());
+            if pct >= DISK_WARN_PCT { out.push(KernelCheckResult::fail(&n, &format!("{pct:.1}% used"))) }
+            else { out.push(KernelCheckResult::pass(&n)) }
+        }
+    }
+    out
+}
+
+pub fn detect_compaction_risk(current_tokens: u64, limit: u64) -> KernelCheckResult {
+    if limit == 0 { return KernelCheckResult::pass("compaction_risk"); }
+    let pct = current_tokens as f64 / limit as f64 * 100.0;
+    if pct >= 85.0 { KernelCheckResult::fail("compaction_risk", &format!("{pct:.1}% context — checkpoint now")) }
+    else { KernelCheckResult::pass("compaction_risk") }
+}
+
+pub fn store_kernel_event(pool: &Pool<SqliteConnectionManager>, source: &str, msg: &str, severity: &str) {
+    match pool.get() {
+        Err(e) => warn!("kernel.monitor: db conn: {e}"),
+        Ok(conn) => { let _ = conn.execute(
+            "INSERT INTO kernel_events (severity, source, message, action_taken) VALUES (?1,?2,?3,'none')",
+            rusqlite::params![severity, source, msg],
+        ).map_err(|e| warn!("kernel.monitor: insert: {e}")); }
+    }
+}
+
+/// Classify results → kernel_events. Returns true if any CRITICAL.
+pub fn classify_and_store(pool: &Pool<SqliteConnectionManager>, results: &[KernelCheckResult]) -> bool {
+    let mut critical = false;
+    for r in results {
+        if !r.ok {
+            let msg = r.details.as_deref().unwrap_or("check failed");
+            let sev = if r.check_name.starts_with("peer_health") || r.check_name == "daemon_health" {
+                critical = true; "critical"
+            } else { "warn" };
+            store_kernel_event(pool, &r.check_name, msg, sev);
+            warn!("kernel.monitor [{}] {}: {}", sev, r.check_name, msg);
+        }
+    }
+    critical
+}
+
+/// Scan /tmp for stale .lock files older than `threshold_secs`.
+pub fn detect_stale_locks(threshold_secs: u64) -> KernelCheckResult {
+    let cutoff = Duration::from_secs(threshold_secs);
+    let now = std::time::SystemTime::now();
+    let stale: Vec<_> = std::fs::read_dir("/tmp").into_iter().flatten().flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "lock"))
+        .filter(|e| std::fs::metadata(e.path()).ok()
+            .and_then(|m| m.modified().ok())
+            .map(|t| now.duration_since(t).unwrap_or_default() > cutoff)
+            .unwrap_or(false))
+        .map(|e| e.path().display().to_string())
+        .collect();
+    if stale.is_empty() { KernelCheckResult::pass("stale_locks") }
+    else { KernelCheckResult::fail("stale_locks", &format!("stale: {}", stale.join(", "))) }
+}
+
+/// Run one full cycle and persist results (extracted for testability).
+pub async fn run_and_store_cycle(pool: &Pool<SqliteConnectionManager>, config: &MonitorConfig) {
+    let mut all: Vec<KernelCheckResult> = vec![
+        check_daemon_reachable(&config.daemon_url).await,
+    ];
+    all.extend(check_mesh_peers(&config.peer_urls).await);
+    all.push(detect_stalled_agents(&config.daemon_url).await);
+    all.push(detect_rate_limits(&config.daemon_url).await);
+    all.extend(check_disk_ram());
+    all.push(detect_stale_locks(300));
+    all.push(detect_compaction_risk(0, config.compaction_token_limit));
+    let critical = classify_and_store(pool, &all);
+    if critical { info!("kernel.monitor: CRITICAL — communicate stub (wired W2/W3)"); }
+}
+
+/// Spawn background monitor loop (30s interval). Pool is Arc-backed inside r2d2.
+pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorConfig) {
+    tokio::spawn(async move {
+        info!("kernel.monitor: started (poll every {}s)", POLL_INTERVAL.as_secs());
+        loop { // UNBOUNDED: event loop
+            tokio::time::sleep(POLL_INTERVAL).await;
+            run_and_store_cycle(&pool, &config).await;
+        }
+    });
 }
