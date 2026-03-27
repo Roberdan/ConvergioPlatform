@@ -9,8 +9,12 @@ DAEMON_BIN="${REPO_DIR}/daemon/target/release/convergio-platform-daemon"
 ENV_FILE="${HOME}/.convergio/env"
 VENV="${HOME}/convergio-env/bin/activate"
 
-# Source secrets
-[[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
+# Source and export secrets (source alone doesn't export to child process)
+if [[ -f "$ENV_FILE" ]]; then
+  set -a  # auto-export all variables
+  source "$ENV_FILE"
+  set +a
+fi
 
 # Source Python venv (for mlx_lm)
 [[ -f "$VENV" ]] && source "$VENV"
