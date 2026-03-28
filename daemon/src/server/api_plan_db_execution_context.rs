@@ -176,9 +176,14 @@ fn build_prompt(
         "PLAN {plan_id}, TASK {tid} (DB id: {db_id}), WAVE {wid}\n\n\
          WORKING DIR: {worktree}\nBRANCH: {branch}\n\n\
          DO:\n{title}\n\nVERIFY:\n{vblock}\n{dblock}\n\
-         RULES:\n- Max 250 lines per file\n- TDD: write tests first\n\
+         RULES (NON-NEGOTIABLE):\n\
+         - ACT IMMEDIATELY. Do NOT ask questions. Do NOT propose alternatives.\n\
+         - Max 250 lines per file\n\
+         - TDD: write tests first\n\
          - Commit with conventional commits\n\
-         - Do NOT mark done — use: cvg task update {db_id} submitted"
+         - After work: cvg task update {db_id} submitted --summary \"<what you did>\"\n\
+         - Do NOT set status to done — only submitted. Thor promotes to done.\n\
+         - If task is already done in code (commit exists), submit with summary explaining."
     )
 }
 
