@@ -145,6 +145,11 @@ else
   warn "No local gh auth token found — skipping git credential propagation"
 fi
 
+# Step 5b2: Per-repo gh credential routing on peer
+info "[5b2/11] Setting up per-repo gh credential routing on peer..."
+_ssh "test -f ${REPO_PATH}/scripts/mesh/setup-gh-credentials.sh && bash ${REPO_PATH}/scripts/mesh/setup-gh-credentials.sh 2>/dev/null" \
+  && ok "Per-repo gh credentials configured" || warn "gh credential routing failed (non-fatal)"
+
 # Step 5c: Replicate tmux + zsh config from master node if missing
 info "[5c/11] Replicating shell configs to node..."
 if [[ -f "$HOME/.tmux.conf" ]]; then
