@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use super::types::*;
-use super::utils::{default_db_path, default_peers_conf};
 
 // ── IpcCommands enum construction ──────────────────────────────────
 

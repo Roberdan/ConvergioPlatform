@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Tests for cli_skill_disable — shared-dependency check for plugins and agents.
 
-use super::{deactivate_plugins, DeactivatePluginsResult};
+use super::deactivate_plugins;
 use std::fs;
 use tempfile::TempDir;
 

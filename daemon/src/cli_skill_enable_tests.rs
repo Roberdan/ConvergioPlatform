@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Integration tests for cli_skill_enable plugin activation.
 
-use super::{activate_plugins, PluginActivationResult};
+use super::activate_plugins;
 use std::fs;
 use tempfile::TempDir;
 

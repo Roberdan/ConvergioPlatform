@@ -74,6 +74,7 @@ pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
 
 /// Parse the first <tool_call>...</tool_call> block from model output.
 /// Returns (tool_name, arguments_json_string) or None if no call found.
+#[allow(dead_code)] // Used in tests; will be wired when multi-round tool calling lands.
 pub(crate) fn extract_tool_call(text: &str) -> Option<(String, String)> {
     let start_tag = "<tool_call>";
     let end_tag = "</tool_call>";

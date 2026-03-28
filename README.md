@@ -1,11 +1,13 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
 # Convergio Platform
 
-AI orchestration platform — Rust daemon, local LLM kernel (Qwen 7B), MCP server, mesh P2P, 89 agents, Telegram bot, Siri integration.
+AI orchestration platform — Rust daemon (650+ modules), local LLM kernel (Qwen 7B), MCP server, mesh P2P, 89 agents, Telegram bot, Siri integration.
 
-This is the **sole source of truth** for the Convergio daemon, kernel, and orchestration engine.
+**Free and source-available** under the [Convergio Community License](./LICENSE). Use it, learn from it, build with it. If it helps you, consider supporting [FightTheStroke Foundation](https://fightthestroke.org) — a non-profit for children affected by pediatric stroke.
 
 > Not affiliated with or endorsed by Microsoft Corporation.
+
+Website: [convergio.io](https://convergio.io)
 
 ---
 
@@ -18,8 +20,6 @@ convergio solve "Build a SaaS MVP for fitness tracking"
 ```
 
 Ali handles everything: domain analysis, talent selection (89 agents, 119 skills), plan creation, agent dispatch, real-time monitoring, validation, and knowledge capture.
-
-Website: [convergio.io](https://convergio.io)
 
 ---
 
@@ -43,11 +43,9 @@ cvg wave merge 685 2075                    # merge wave to main
 cvg checkpoint save 685                    # save plan state
 cvg kb search "error keywords"             # search knowledge base
 cvg agent list                             # list active agents
-cvg audit --path .                         # audit project for violations
-cvg skill lint path/to/skill.yaml          # validate skill definition
+cvg kernel status                          # local LLM health
+cvg mesh status                            # peer topology
 cvg workspace list                         # list active workspaces
-cvg workspace create --plan 698 --wave 1   # create workspace for wave
-cvg workspace create-feature my-branch     # create feature workspace
 ```
 
 Common options:
@@ -57,17 +55,9 @@ convergio solve "problem" --autonomous      # no approval gates
 convergio solve "problem" --approve-each    # approve every step
 convergio solve "problem" --context doc.pdf # attach document context
 convergio pause [run_id]                    # suspend, preserve state
-convergio resume [run_id]                  # resume paused run
-cvg run list                                # list all execution runs
+convergio resume [run_id]                   # resume paused run
 convergio stop [run_id]                     # abort execution
 ```
-
-### CommandCenter (native macOS app)
-
-`CommandCenter/` is the native operator surface for ConvergioPlatform. It replaces the old
-web-embedded mission control path with first-class SwiftUI views for plans, agents, mesh,
-evolution, run costs, PTY terminal access, the realtime brain graph, and native
-notifications.
 
 ---
 
@@ -75,43 +65,63 @@ notifications.
 
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
-| **Daemon** | `daemon/` | Rust | IPC, mesh P2P, HTTP/WS/SSE API, SQLite WAL + CRDT, TUI, `cvg` CLI (130+ modules) |
-| **Workspace** | `daemon/src/workspace/` | Rust | Agent workspace isolation, git abstraction, Release Agent, quality gates, event log |
-| **Dashboard** | `dashboard/` | JS | Control Room on Maranello Luce Design — plans, mesh, chat, brain, approvals |
-| **CommandCenter** | `CommandCenter/` | SwiftUI | Native macOS app — onboarding, plans, agents, mesh, evolution, costs, terminal, brain, notifications |
+| **Daemon** | `daemon/` | Rust | HTTP/WS/SSE API (:8420), mesh P2P, IPC, SQLite WAL + CRDT, TUI, `cvg` CLI |
+| **Kernel** | `daemon/src/kernel/` | Rust | Local LLM (Qwen 7B), health monitor, verify gate, TTS, Telegram bot |
+| **MCP Server** | `daemon/src/mcp_server/` | Rust | Expose daemon as MCP tools for any LLM client (17 tools, ring-based security) |
+| **Workspace** | `daemon/src/workspace/` | Rust | Agent isolation, git abstraction, Release Agent, quality gates, event log |
 | **Evolution** | `evolution/` | TS | Self-improvement: telemetry → proposals → experiments |
 | **Scripts** | `scripts/` | Bash | Mesh ops, platform tooling, document ingestion |
-| **Config** | `claude-config/` | MD | 89 agents, 8 commands, 8 rules, 27 validation gates |
+| **Config** | `claude-config/` | MD | 89 agents, 119 skills, 8 rules, 27 validation gates |
 
 Daemon stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde · hmac+sha2+aes-gcm · reqwest · tracing
 
 ---
 
-## Installation
+## Ecosystem
 
-### Prerequisites
+ConvergioPlatform is the core of a multi-repo ecosystem:
 
-- Rust (stable toolchain, `rustup` recommended)
-- Node.js 20+
-- Tailscale (for mesh networking)
+| Repository | Purpose | Status |
+|---|---|---|
+| [**convergio-web**](https://github.com/Roberdan/convergio-web) | Web + desktop UI (Next.js 15 + Tauri 2.0) | Active |
+| [**convergio-design**](https://github.com/Roberdan/convergio-design) | Maranello Luce Design System — 5 themes, 36 components, WCAG 2.2 AA | Active |
+| [**convergio**](https://github.com/Roberdan/convergio) | Specs, ADRs, OpenAPI, governance, CI workflows | Active |
+| [**convergio-community**](https://github.com/Roberdan/convergio-community) | Community-contributed skills and extensions | Active |
 
-### Build
+---
+
+## Kernel
+
+The kernel runs Qwen 2.5 7B locally on Apple Silicon, providing:
+
+- **Monitor loop** (30s) — health checks, stall detection, rate limit tracking
+- **Verify gate** — blocks task completion without evidence (tests pass, build green)
+- **Recovery** — restart crashed daemons, checkpoint state, notify operators
+- **TTS** — macOS Siri voices via Shortcuts
+- **Telegram bot** — bidirectional text + voice, long polling, quiet hours (23:00-07:00 CET)
+- **Ali escalation** — "ali dimmi..." triggers Claude CLI (Opus) subprocess with full context
 
 ```bash
-cd daemon && cargo build --release   # build daemon
-cd daemon && cargo test              # run daemon tests (900+ tests)
-cd CommandCenter && ruby Scripts/generate_xcodeproj.rb \
-  && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-     xcodebuild -project CommandCenter.xcodeproj -scheme CommandCenter -destination 'platform=macOS' build
-cd evolution && npx tsc --noEmit     # type-check evolution
-cd evolution && npx vitest run       # run evolution tests (43 tests)
-cd dashboard && ./start.sh           # serve dashboard at :8420
+cvg kernel status          # health report
+cvg kernel here            # set this machine as active audio node (8h)
+cvg kernel say "hello"     # TTS on active node
 ```
 
-### Optional ingestion tools
+---
+
+## Mesh (P2P Multi-Node)
+
+Tailscale-based peer-to-peer networking with HMAC-SHA256 authentication and CRDT sync.
+
+- Multi-transport: Tailscale, SSH, LAN mDNS, HTTP fallback
+- One-command node deployment: `scripts/mesh/deploy-node.sh <node> --kernel`
+- Safe DB sync: `scripts/kernel/sync-db.sh <source> <target>`
+- Self-healing topology — node failure triggers automatic swarm reorganization
 
 ```bash
-brew install poppler pandoc tesseract && pip install trafilatura openpyxl
+cvg mesh status            # peer topology
+cvg mesh sync              # force sync
+cvg who agents             # list active agents across mesh
 ```
 
 ---
@@ -133,25 +143,6 @@ All agents support: Claude Code, Copilot CLI, OpenCode, local LLMs.
 
 ---
 
-## OpenClaw Bridge
-
-Convergio agents are accessible via 30+ messaging platforms (WhatsApp, Telegram, Slack, Discord, etc.) through the [OpenClaw](https://openclaw.ai) bridge.
-
-```bash
-# Generate SKILL.md files for OpenClaw
-bash scripts/platform/convergio-openclaw-skills.sh
-
-# Daemon exposes bridge API
-curl http://localhost:8420/api/openclaw/agents    # list agents
-curl -X POST http://localhost:8420/api/openclaw/invoke \
-  -H 'Content-Type: application/json' \
-  -d '{"message": "Review my code for security issues"}'
-```
-
-All requests route to Ali orchestrator, who dispatches to the right specialist. See [`integrations/openclaw-bridge/`](integrations/openclaw-bridge/) for the TypeScript plugin source.
-
----
-
 ## Workspace Layer
 
 Git is invisible to agents. The daemon manages workspaces internally — agents edit files normally, hooks register operations in the event log, and the Release Agent automates the git export pipeline.
@@ -169,6 +160,46 @@ cvg workspace release ws-1234              # quality gate → commit → PR → 
 | Release Agent | Rust module: quality gate pass → auto-commit → auto-push → auto-PR → auto-merge |
 | Event Log | `workspace_events` table — CRDT-enabled audit trail independent of git history |
 | Quality Gate | Mechanical checks in Rust: clean tree, file sizes, cargo check/test |
+
+---
+
+## OpenClaw Bridge
+
+Convergio agents are accessible via 30+ messaging platforms (WhatsApp, Telegram, Slack, Discord, etc.) through the [OpenClaw](https://openclaw.ai) bridge.
+
+```bash
+curl http://localhost:8420/api/openclaw/agents    # list agents
+curl -X POST http://localhost:8420/api/openclaw/invoke \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Review my code for security issues"}'
+```
+
+All requests route to Ali orchestrator, who dispatches to the right specialist. See [`integrations/openclaw-bridge/`](integrations/openclaw-bridge/) for the TypeScript plugin source.
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Rust (stable toolchain, `rustup` recommended)
+- Node.js 20+
+- Tailscale (for mesh networking)
+
+### Build
+
+```bash
+cd daemon && cargo build --release   # build daemon
+cd daemon && cargo test              # run daemon tests (1800+ tests)
+cd evolution && npx tsc --noEmit     # type-check evolution
+cd evolution && npx vitest run       # run evolution tests
+```
+
+### Optional ingestion tools
+
+```bash
+brew install poppler pandoc tesseract && pip install trafilatura openpyxl
+```
 
 ---
 
@@ -195,28 +226,44 @@ Convergio Platform is not affiliated with or endorsed by Microsoft Corporation o
 
 ---
 
-## License & Mission
+## License
 
 > **Convergio is free. The code is open. We trust you.**
 
-This project is released under the [Convergio Community License](./LICENSE).
+This project is released under the [**Convergio Community License**](./LICENSE) — a source-available license. The source code is public and readable, but commercial redistribution and hosted services require explicit permission.
 
-Use it to learn. Use it to build. Use it to grow your business.
-Fork it, modify it, redistribute it — the license travels with the code.
+### What you can do
 
-If Convergio helps you, we ask one thing: **help someone who needs it** —
-consider a donation to [FightTheStroke Foundation](https://fightthestroke.org),
-a non-profit supporting children and families affected by pediatric stroke
-and cerebral palsy.
+- **Use** Convergio for any personal, educational, or commercial purpose
+- **Read, study, and learn** from the source code
+- **Modify** the code for your own use
+- **Fork and redistribute** — as long as the license stays attached
 
-**Always free, no questions asked, for:**
-- 🎓 Students
-- ♿ People with disabilities
-- 💚 Non-profit organizations
+### What you cannot do
 
-**Want to go further?** We offer consulting, workshops, and speaking
-engagements — priced on the value we create together, not by the hour.
-→ [convergio.io](https://convergio.io)
+- **Sell** Convergio as a product or substantial part of one
+- **Host** it as a managed/SaaS offering for third parties
+- **Remove** the license or copyright notice
+
+Want to do any of the above? We're happy to talk: **licensing@convergio.io**
+
+### Always free, no questions asked
+
+| Who | Conditions |
+|---|---|
+| Students | None. No registration, no proof. |
+| People with disabilities | None. No paperwork. |
+| Non-profit organizations | None. We trust you. |
+
+### FightTheStroke Foundation
+
+Convergio was created by Roberto D'Angelo, co-founder of [FightTheStroke Foundation](https://fightthestroke.org) — a non-profit born after his son Mario experienced a stroke at birth. The foundation supports children with cerebral palsy and their families through innovative rehabilitation, advocacy, and inclusion programs.
+
+If Convergio brings value to your work, we ask one thing: **help someone who needs it.** Consider a donation to FightTheStroke. This is not a legal obligation — it's an invitation.
+
+### Professional services
+
+Want help getting the most out of Convergio? We offer consulting, workshops, and speaking engagements — priced on the value we create together, not by the hour. Reach out at [convergio.io](https://convergio.io).
 
 ---
 
@@ -224,7 +271,5 @@ engagements — priced on the value we create together, not by the hour.
 *If it helps you grow, help someone grow too.*
 
 ---
-
-## Copyright
 
 Copyright (c) 2026 Roberto D'Angelo

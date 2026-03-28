@@ -2,7 +2,7 @@
 //! Marked #[ignore] — they bind a real TCP listener and fetch live endpoints.
 
 use convergio_core::server::routes::build_router_with_db;
-use convergio_core::tui::{views, KpiData, MainView, TuiData};
+use convergio_core::tui::{views, MainView, TuiData};
 use ratatui::{backend::TestBackend, Terminal};
 use reqwest::Client;
 use std::net::SocketAddr;
