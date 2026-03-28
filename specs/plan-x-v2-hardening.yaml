@@ -1,0 +1,321 @@
+# Plan X v2 — Convergio Hardening (Complete)
+# Replaces cancelled Plan 740. Based on improvement report + session feedback.
+# Core change: libSQL replaces rusqlite+crsqlite for native sync.
+# 28 March 2026.
+
+name: "Plan X v2 — Convergio Hardening"
+project_id: convergio
+priority: P0
+execution_mode: serial
+tags: [hardening, libsql, sync, mesh, delegation, dx, terminal-stack]
+
+description: >
+  Complete platform hardening. Migrate from rusqlite+crsqlite to libSQL
+  for native DB sync. Fix 9 confirmed bugs. Unify delegation workflow.
+  Replicate terminal stack. Clean worktrees. Close documentation gaps.
+  Ensure agents use Convergio tools (cvg plan validate, cvg task update).
+
+requirements:
+  - F-01: "libSQL replaces rusqlite — DB sync native between all nodes"
+  - F-02: "cvg review register works on spec-file before plan creation"
+  - F-03: "coordinator/emit works without CRDT extension (guard or libSQL)"
+  - F-04: "delegated agents execute cvg task update + cvg plan validate per wave"
+  - F-05: "daemon binds 0.0.0.0 in dev-mode (reachable from mesh peers)"
+  - F-06: "centralized peer resolver with fallback chain"
+  - F-07: "all missing API routes wired (/channels, /health/deep)"
+  - F-08: "cvg delegation start/status/cancel CLI complete and functional"
+  - F-09: "delegation prompt includes full Thor workflow + verify commands"
+  - F-10: "terminal stack replicated on all nodes via deploy-node.sh"
+  - F-11: "automatic worktree cleanup on plan completion"
+  - F-12: "spec YAML schema documented + cvg plan template"
+  - F-13: "all documentation gaps closed (D1-D7 from report)"
+  - F-14: "invoke_agent MCP tool functional"
+  - F-15: "full E2E test passes on both nodes"
+
+waves:
+  - id: W1
+    name: "libSQL Migration — replace rusqlite"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01]
+        do: |
+          Migrate daemon from rusqlite to libSQL for native embedded replica sync.
+
+          1. Update daemon/Cargo.toml:
+             Remove: rusqlite = "0.32"
+             Add: libsql = { version = "0.6", features = ["replication"] }
+
+          2. Create daemon/src/db/libsql_adapter.rs:
+             Thin adapter that maps libsql API to our existing DB patterns.
+             libsql::Database::open() instead of Connection::open().
+             libsql uses similar SQL syntax — most queries stay the same.
+
+          3. Update daemon/src/db/mod.rs:
+             Replace rusqlite Connection with libsql Connection.
+             Remove resolve_crsqlite_path() — no longer needed.
+             Remove all crsqlite/CRDT code.
+
+          4. Update ALL files that use rusqlite::Connection (grep -rn 'rusqlite' daemon/src/):
+             Change use statements, type signatures, error handling.
+             libsql has similar API but different error types.
+
+          5. Configure sync between nodes:
+             Each daemon starts with libsql embedded replica.
+             Primary node (coordinator) is the write source.
+             Other nodes sync from primary via HTTP.
+
+          6. Verify: cargo check, cargo test --lib
+
+          NOTE: This is the biggest task. Take care with the migration.
+          If libsql API is too different, consider keeping rusqlite and
+          implementing timestamp-based sync in Rust (200 lines, simpler).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "! grep -q 'crsqlite' daemon/src/db/mod.rs"
+
+      - id: T1-02
+        ref: [F-03]
+        do: |
+          Fix coordinator/emit CRDT error.
+          If libSQL migration done (T1-01): this is automatic — no CRDT extension needed.
+          If libSQL NOT done: guard all crsqlite calls with runtime check.
+
+          Primary target: daemon/src/db/crdt/sync.rs (lines querying crsql_changes).
+          Guard: fn crdt_available(conn) -> bool, skip CRDT if false.
+          Coordinator must work WITHOUT CRDT.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  - id: W2
+    name: "Bugs + Mesh Fixes"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-02, F-05, F-06, F-07]
+        do: |
+          Fix bugs B1, B2, B3, B4, B6, B7, B8, B9 from improvement report.
+
+          B1: cvg review register --spec-file crashes (NOT NULL plan_id).
+              Allow plan_id=0 or NULL for spec-file reviews.
+
+          B2: /api/channels not mounted. Wire api_channels.rs in routes/mod.rs.
+          B3: /api/health/deep not mounted. Wire api_health_deep.rs.
+          B4: delegation status 404 — align plan_id vs delegation_id.
+
+          B6: /api/mesh/exec SSH doesn't resolve peers.
+              Use peer_ssh_alias() from peers.conf.
+
+          B7: daemon binds 127.0.0.1. Bind 0.0.0.0 in dev-mode only.
+
+          B8: cvg plan tree doesn't show wave names. Add wave_id + wave_name.
+
+          B9: centralized peer resolver.
+              Create daemon/src/mesh/peer_resolver.rs.
+              Fallback chain: SSH config → Tailscale IP → LAN → DNS.
+              All mesh code uses this resolver.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "grep -q 'api_channels' daemon/src/server/routes/mod.rs"
+          - "test -f daemon/src/mesh/peer_resolver.rs"
+
+  - id: W3
+    name: "Delegation Workflow + Terminal Stack"
+    merge_mode: sync
+    tasks:
+      - id: T3-01
+        ref: [F-04, F-08, F-09]
+        do: |
+          Unify delegation workflow. Fix the fact that agents don't use Convergio tools.
+
+          1. Fix build_plan_prompt() in daemon/src/orchestrator/executor.rs:
+             Include in the delegated agent's prompt:
+             - "For EACH task: cvg task update <id> in_progress → work → cvg task update <id> submitted"
+             - "After each wave: cvg plan validate <plan_id>"
+             - "Run ALL verify[] commands before submitting"
+             - "After all waves: cvg plan complete <plan_id>"
+
+          2. Add cvg delegation CLI commands:
+             cvg delegation start <plan_id> --peer <peer>
+             cvg delegation cancel <plan_id>
+             Wire into CLI dispatch.
+
+          3. Unify the 3 delegation paths (sse_delegate, executor, bash script)
+             into ONE core function called by all three.
+
+          4. Per-task IPC callback: done_script POSTs progress after EACH task.
+
+          5. Git credential propagation: deploy-node.sh copies gh auth token.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "grep -q 'cvg task update' daemon/src/orchestrator/executor.rs"
+          - "grep -q 'cvg plan validate' daemon/src/orchestrator/executor.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+      - id: T3-02
+        ref: [F-10, F-11]
+        do: |
+          Terminal stack replication + worktree cleanup.
+
+          1. Integrate setup-terminal-stack.sh into deploy-node.sh:
+             After code deploy, run terminal stack setup if tools missing.
+             Check: tmux, fzf, eza, bat, zoxide, starship, fd, rg, lazygit, atuin.
+             Install missing via brew (macOS) or apt (Linux).
+
+          2. Auto cleanup worktrees on plan completion:
+             In cvg plan complete handler (api_plan_db_lifecycle.rs):
+             After marking plan done, run: git worktree prune + delete stale branches.
+             Also clean /tmp/convergio-plan-* files.
+
+          3. Replicate tmux config + zsh config via deploy-node.sh.
+             Copy from master node if missing on target.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "grep -q 'terminal\|tmux\|worktree.*prun' scripts/mesh/deploy-node.sh"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  - id: W4
+    name: "DX + Documentation + MCP"
+    merge_mode: sync
+    tasks:
+      - id: T4-01
+        ref: [F-12, F-13]
+        do: |
+          Developer experience + close ALL documentation gaps.
+
+          S5: cvg plan template — generate example YAML with all fields.
+          S6: Better error messages in cvg plan import.
+          D1: Document spec YAML schema in claude-config/reference/operational/spec-yaml-schema.md.
+          D2: Update OpenAPI spec or create cvg api list command.
+          D3: Document mesh delegation in claude-config/reference/operational/mesh-delegation.md.
+          D5: Document Telegram credential management (authoritative: ~/.convergio/env).
+          D6: Document delegation guide (rsync → tmux → claude → Thor → completion).
+          D7: Document peer_resolver as single source for peer addressing.
+          D4: Fix cvg plan tree = cvg plan execution-tree alias.
+
+          Also update convergio-capabilities.md with all new features.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: doc
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 3
+        verify:
+          - "test -f claude-config/reference/operational/spec-yaml-schema.md"
+          - "test -f claude-config/reference/operational/mesh-delegation.md"
+
+      - id: T4-02
+        ref: [F-14]
+        do: |
+          Add invoke_agent MCP tool (tool 18) to convergio-mcp-server.
+
+          In daemon/src/mcp_server/tools.rs: add McpTool definition.
+          In daemon/src/mcp_server/handlers.rs: handler that:
+          1. Reads agent definition from claude-config/agents/{name}.md
+          2. Builds prompt from definition + task + context
+          3. Launches claude -p with the agent's model
+          4. Returns result
+
+          Ring: Trusted (1).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "grep -q 'invoke_agent' daemon/src/mcp_server/tools.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  - id: W5
+    name: "Closure — tests, docs, deploy"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        ref: [F-15]
+        do: |
+          Full test suite. Fix all failures from W1-W4.
+          cargo test --features kernel --manifest-path daemon/Cargo.toml --lib
+          All tests must pass. No regressions.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+
+      - id: TF-doc
+        ref: [F-15]
+        do: |
+          CHANGELOG, VERSION 19.0.0, Cargo.toml, NEXT_SESSION.md.
+          Major version bump: libSQL migration is breaking change.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '19.0.0' VERSION.md"
+
+      - id: TF-deploy-verify
+        ref: [F-15]
+        do: |
+          Deploy to BOTH nodes. Full E2E verification:
+          - DB sync works natively (write on one node, read on other)
+          - Delegation works: cvg delegation start on test plan
+          - Telegram responds
+          - Terminal stack consistent across nodes
+          - All worktrees clean
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q ok"
+          - "curl -sf http://localhost:8420/api/health | grep -q ok"
