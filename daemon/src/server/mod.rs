@@ -34,6 +34,7 @@ pub mod api_peers_ext;
 pub mod api_plan_db;
 pub mod api_plan_db_agents;
 pub mod api_plan_db_checkpoint;
+pub mod api_plan_db_execution_context;
 pub mod api_plan_db_import;
 pub mod api_plan_db_import_defaults;
 pub mod api_plan_db_import_parsers;
@@ -123,6 +124,8 @@ mod api_openclaw_tests;
 mod api_peers_tests;
 #[cfg(test)]
 mod api_plan_db_checkpoint_tests;
+#[cfg(test)]
+mod api_plan_db_execution_context_tests;
 #[cfg(test)]
 mod api_plan_db_query_tests;
 #[cfg(test)]

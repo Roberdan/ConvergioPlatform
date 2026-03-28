@@ -32,6 +32,7 @@ use super::api_peers;
 use super::api_peers_ext;
 use super::api_plan_db;
 use super::api_plan_db_checkpoint;
+use super::api_plan_db_execution_context;
 use super::api_plan_db_import;
 use super::api_plan_db_lifecycle;
 use super::api_plan_db_ops;
@@ -114,6 +115,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_plan_db_ops::router())
         .merge(api_plan_db_review::router())
         .merge(api_plan_db_checkpoint::router())
+        .merge(api_plan_db_execution_context::router())
         .merge(api_project_tree::router())
         .merge(api_node_readiness::router())
         .merge(api_node_roles::router())
