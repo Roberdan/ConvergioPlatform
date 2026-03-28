@@ -14,6 +14,8 @@ description: >
   for native DB sync. Fix 9 confirmed bugs. Unify delegation workflow.
   Replicate terminal stack. Clean worktrees. Close documentation gaps.
   Ensure agents use Convergio tools (cvg plan validate, cvg task update).
+  Comprehensive test coverage for all 196 API endpoints, mesh, IPC, and CLI.
+  Telemetry instrumentation with tracing and metrics on all handlers.
 
 requirements:
   - F-01: "libSQL replaces rusqlite — DB sync native between all nodes"
@@ -33,6 +35,9 @@ requirements:
   - F-15: "full E2E test passes on both nodes"
   - F-16: "per-repo gh credential routing — no gh auth switch, each repo uses correct account"
   - F-17: "kernel evidence gate hardened — timeout 60s, mutex single instance, child process cleanup"
+  - F-18: "comprehensive test coverage — all 196 API endpoints tested, mesh 90%+, IPC 80%+"
+  - F-19: "telemetry instrumentation — #[instrument] on all API handlers, metrics counters on all endpoints"
+  - F-20: "CLI integration tests — all cvg subcommands tested"
 
 waves:
   - id: W1
@@ -65,7 +70,7 @@ waves:
         type: refactor
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -89,7 +94,7 @@ waves:
         type: refactor
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -116,7 +121,7 @@ waves:
         type: refactor
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -139,7 +144,7 @@ waves:
         type: fix
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -171,7 +176,7 @@ waves:
         type: fix
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -197,7 +202,7 @@ waves:
         type: fix
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -232,7 +237,7 @@ waves:
         type: fix
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -272,7 +277,7 @@ waves:
         type: feature
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 3
         verify:
@@ -302,7 +307,7 @@ waves:
         type: feature
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -332,7 +337,7 @@ waves:
         type: feature
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 1
         verify:
@@ -365,7 +370,7 @@ waves:
         type: doc
         output_type: pr
         model: claude-sonnet-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: doc-validator
         effort: 3
         verify:
@@ -389,7 +394,7 @@ waves:
         type: feature
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -397,6 +402,134 @@ waves:
           - "cargo check --manifest-path daemon/Cargo.toml"
 
   - id: W5
+    name: "Testing + Telemetry Hardening"
+    merge_mode: sync
+    tasks:
+      - id: T5-01
+        ref: [F-18]
+        do: |
+          Comprehensive API integration tests for all untested endpoints.
+
+          Target: 196 endpoints, currently ~155 tested. Add tests for:
+          - api_agent_control (interrupt, reschedule)
+          - api_capabilities (ring promotion, registry, proxy)
+          - api_plan_db lifecycle (start, cancel, complete, approve, readiness, drift-check)
+          - api_plan_db_reviews (register, check, list)
+          - api_plan_db_import (import, validate)
+          - api_coordinator (status, toggle, emit, events)
+          - api_nightly (jobs CRUD, trigger, retry, toggle, config)
+          - api_ingest (formats, ingest)
+          - api_openclaw (agents, invoke)
+          - api_domain (list, map)
+
+          Pattern: use tower::ServiceExt + oneshot with real PlanDb::open_in_memory().
+          Test both success and error paths. Use realistic data (not "Test Studio").
+          All test domains: example.com/example.org only.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- api_agent_control 2>&1 | grep -q 'test result: ok'"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- api_coordinator 2>&1 | grep -q 'test result: ok'"
+
+      - id: T5-02
+        ref: [F-18]
+        do: |
+          Mesh module tests — bring coverage from 40% to 90%+.
+
+          Add tests for untested mesh modules:
+          - daemon_sync_push.rs, daemon_sync_pull.rs
+          - handoff_ssh.rs, handoff_ws.rs
+          - coordinator.rs (orchestration, delegation dispatch)
+          - peer_resolver.rs (created in W2, needs unit tests)
+          - topology.rs, discovery.rs
+          - env.rs (export/import)
+
+          Test patterns: mock SSH connections, mock HTTP responses,
+          real PlanDb for data tests. Test fallback chains in peer_resolver.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- mesh 2>&1 | grep -q 'test result: ok'"
+          - "test -f daemon/src/mesh/coordinator_tests.rs || test -f daemon/src/mesh/tests.rs"
+
+      - id: T5-03
+        ref: [F-18, F-20]
+        do: |
+          IPC + CLI integration tests.
+
+          IPC (currently 20% → target 80%):
+          - Test all 14 IPC endpoints (agents, messages, channels, locks, worktrees,
+            conflicts, status, budget, models, skills, route-history, context, send)
+          - Test budget enforcement, lock acquisition/release
+          - Test skill enable/disable
+
+          CLI integration tests:
+          - Test all cvg subcommands against running daemon
+          - plan list/show/create/start/cancel/complete
+          - task update (all transitions)
+          - agent start/complete
+          - mesh status, kernel status
+          - review register/check
+          - bus who/send/read
+          - Use real daemon HTTP calls (reqwest in tests)
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- ipc 2>&1 | grep -q 'test result: ok'"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- cli 2>&1 | grep -q 'test result: ok'"
+
+      - id: T5-04
+        ref: [F-19]
+        do: |
+          Telemetry instrumentation across all API handlers.
+
+          1. Add #[instrument] macro from tracing to ALL API handler functions:
+             grep for 'async fn handle_' in daemon/src/server/ — every handler gets
+             #[instrument(skip(state))] or #[instrument(skip(state, body))].
+
+          2. Add request counter metrics:
+             In middleware or per-handler: increment counter for each endpoint.
+             Use existing metrics module (api_metrics.rs) or create simple counter.
+
+          3. Add response time histogram:
+             Wrap handlers with timing middleware or use tower-http metrics layer.
+
+          4. Ensure kernel/monitor.rs reads these metrics for health classification.
+
+          5. Wire telemetry into MCP server tools (cost_summary should include API metrics).
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "grep -c '#.instrument' daemon/src/server/api_plan_db.rs | awk '{if($1 < 3) exit 1}'"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+
+  - id: W6
     name: "Closure — tests, docs, deploy"
     merge_mode: sync
     tasks:
@@ -410,7 +543,7 @@ waves:
         type: test
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
@@ -432,7 +565,7 @@ waves:
         type: chore
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 1
         verify:
@@ -450,7 +583,7 @@ waves:
         type: chore
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 1
         verify:
@@ -478,7 +611,7 @@ waves:
         type: test
         output_type: pr
         model: claude-opus-4-6
-        executor_agent: task-executor
+        executor_agent: copilot
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
