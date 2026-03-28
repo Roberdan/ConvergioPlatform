@@ -68,6 +68,7 @@ pub fn handle_tool_call(
         "cvg_restart_node" => restart_node(daemon_url, token, args),
         "cvg_assign_role" => assign_role(daemon_url, token, args),
         "cvg_interrupt_agent" => interrupt_agent(daemon_url, token, args),
+        "cvg_invoke_agent" => crate::mcp_server::invoke_agent::invoke_agent(args),
         "cvg_reschedule_task" => reschedule_task(daemon_url, token, args),
         _ => Err(McpError::InvalidParams("unknown tool name")),
     }

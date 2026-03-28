@@ -14,8 +14,10 @@ use crate::mcp_server::security::check_ring_access;
 use crate::mcp_server::tools::list_tools;
 
 pub mod handlers;
+pub mod invoke_agent;
 pub mod protocol;
 pub mod security;
+pub mod tool_catalog;
 pub mod tools;
 
 #[cfg(test)]
@@ -177,7 +179,8 @@ fn min_ring_for_tool(name: &str) -> Ring {
         | "cvg_agent_start"
         | "cvg_agent_complete"
         | "cvg_kernel_ask"
-        | "cvg_notify" => Ring::Trusted,
+        | "cvg_notify"
+        | "cvg_invoke_agent" => Ring::Trusted,
         // Sandboxed (Ring 3) — accessible to all callers
         "cvg_list_plans" | "cvg_list_agents" => Ring::Sandboxed,
         // Community read-only (Ring 2)
