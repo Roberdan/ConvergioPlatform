@@ -268,13 +268,14 @@ fn route_escalate_to_ali(question: &str, daemon_url: &str) -> String {
         Ok(o) => {
             let err = String::from_utf8_lossy(&o.stderr);
             warn!("voice_router: claude cli failed: {err}");
-            // Fallback to Qwen local
-            route_ask_ali(question, daemon_url)
+            // Fallback: answer with status data (no recursive API call)
+            let context = crate::kernel::engine::smart_context_gather_pub(question, daemon_url);
+            format!("Ali non disponibile. Ecco i dati:\n{context}")
         }
         Err(e) => {
             warn!("voice_router: claude cli not found: {e}");
-            // Fallback to Qwen local
-            route_ask_ali(question, daemon_url)
+            let context = crate::kernel::engine::smart_context_gather_pub(question, daemon_url);
+            format!("Ali non disponibile (claude CLI non trovato). Dati:\n{context}")
         }
     }
 }
