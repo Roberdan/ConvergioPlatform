@@ -7,7 +7,7 @@ mod tests {
     };
     use crate::checklist::engine::{CheckItem, CheckMode, CheckSeverity, Checklist};
     use crate::checklist::registry::ChecklistRegistry;
-    use std::sync::{Arc, Mutex};
+
 
     fn make_checklist(name: &str) -> Checklist {
         Checklist {
@@ -34,7 +34,7 @@ mod tests {
     #[test]
     fn run_store_stores_and_retrieves_report() {
         let store = RunStore::new();
-        let checklist = make_checklist("deploy");
+        let _checklist = make_checklist("deploy");
         // Build a minimal report
         use crate::checklist::engine::{CheckResult, CheckStatus, ExecutionReport};
         use chrono::Utc;

@@ -3,11 +3,8 @@
 #[cfg(test)]
 mod tests {
     use crate::checklist::cli::{ChecklistCliHandler, ChecklistSummary};
-    use crate::checklist::engine::{
-        CheckItem, CheckMode, CheckSeverity, CheckStatus, Checklist,
-    };
+    use crate::checklist::engine::{CheckItem, CheckMode, CheckSeverity, Checklist};
     use crate::checklist::registry::ChecklistRegistry;
-    use std::collections::HashMap;
 
     fn make_checklist(name: &str, mode: CheckMode) -> Checklist {
         Checklist {

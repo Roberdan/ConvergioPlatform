@@ -1,5 +1,5 @@
 // Tests for agents, messaging, and core operations
-use super::super::protocol::{IpcRequest, IpcResponse};
+use super::super::protocol::IpcResponse;
 use super::core::IpcEngine;
 use rusqlite::Connection;
 

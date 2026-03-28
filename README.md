@@ -1,15 +1,9 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
 # Convergio Platform
 
-> **Notice (25 Marzo 2026)**: The Convergio ecosystem has been split into dedicated repositories.
-> - Rust daemon: [convergio-daemon](../convergio-daemon/)
-> - macOS app: [convergio-app](../convergio-app/)
-> - Web frontend: [convergio-web](../convergio-web/)
-> - Meta/specs: [convergio](../convergio/)
->
-> This repository remains the canonical platform monorepo for agent orchestration tooling, scripts, and configuration.
+AI orchestration platform — Rust daemon, local LLM kernel (Qwen 7B), MCP server, mesh P2P, 89 agents, Telegram bot, Siri integration.
 
-Unified agentic AI control plane — Rust daemon, dashboard, native `CommandCenter`, and evolution engine for orchestrating AI agents across any model, tool, and machine.
+This is the **sole source of truth** for the Convergio daemon, kernel, and orchestration engine.
 
 > Not affiliated with or endorsed by Microsoft Corporation.
 
@@ -25,7 +19,7 @@ convergio solve "Build a SaaS MVP for fitness tracking"
 
 Ali handles everything: domain analysis, talent selection (89 agents, 119 skills), plan creation, agent dispatch, real-time monitoring, validation, and knowledge capture.
 
-Website: [convergio.io](https://convergio.io) (coming soon)
+Website: [convergio.io](https://convergio.io)
 
 ---
 

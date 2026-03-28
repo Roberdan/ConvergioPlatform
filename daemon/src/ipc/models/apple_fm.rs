@@ -184,8 +184,6 @@ impl AppleFmBridge {
     }
 
     fn run_subprocess(&self, req: &InferenceRequest) -> Result<AppleFmResponse, InferenceError> {
-        use std::io::Write as _;
-
         let model = req
             .model
             .clone()

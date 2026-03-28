@@ -107,7 +107,7 @@ pub async fn send_text(
     text: &str,
     base_url: Option<&str>,
 ) -> Result<(), String> {
-    let mut adapter = TelegramAdapter::new_with_base_url(
+    let adapter = TelegramAdapter::new_with_base_url(
         token.to_owned(),
         Some(chat_id),
         base_url.unwrap_or("https://api.telegram.org").to_owned(),

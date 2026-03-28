@@ -217,7 +217,6 @@ mod tests {
     #[test]
     fn validate_all_empty_registry_returns_empty_vec() {
         use crate::checklist::registry::ChecklistRegistry;
-        use std::fs;
         use tempfile::TempDir;
 
         let dir = TempDir::new().unwrap();
