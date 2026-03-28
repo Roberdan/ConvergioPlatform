@@ -36,6 +36,7 @@ requirements:
   - F-16: "per-repo gh credential routing — no gh auth switch, each repo uses correct account"
   - F-17: "kernel evidence gate hardened — timeout 60s, mutex single instance, child process cleanup"
   - F-18: "comprehensive test coverage — all 196 API endpoints tested, mesh 90%+, IPC 80%+"
+  - F-21: "workflow enforcement hooks — block Edit/Write without /execute, block done without Thor, block merge without review"
   - F-19: "telemetry instrumentation — #[instrument] on all API handlers, metrics counters on all endpoints"
   - F-20: "CLI integration tests — all cvg subcommands tested"
 
@@ -257,6 +258,47 @@ waves:
           - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
           - "grep -q 'timeout\\|Timeout' daemon/src/kernel/verify.rs"
           - "grep -q 'Mutex\\|mutex' daemon/src/kernel/verify_checks.rs"
+
+      - id: T2-03
+        ref: [F-21]
+        do: |
+          Workflow enforcement hooks — agents CANNOT bypass the process.
+
+          Create Claude Code hooks in settings.json that BLOCK violations:
+
+          1. PreToolUse hook for Edit/Write:
+             If a plan is active (cvg plan list --status doing) AND the current
+             session did NOT invoke /execute → BLOCK with message:
+             "Active plan detected. Use /execute {plan_id} to modify code."
+             Exception: files in specs/, docs/, claude-config/ (non-code).
+
+          2. SubagentStop hook:
+             When any agent completes: auto-commit uncommitted work,
+             verify task status updated in DB, warn if no cvg task update was called.
+
+          3. PreToolUse hook for cvg task update to "done":
+             BLOCK — only Thor (cvg plan validate) can promote to done.
+             Message: "Cannot set done directly. Use cvg task update <id> submitted."
+
+          4. PostToolUse hook for git push/merge:
+             Verify review exists for the plan. BLOCK if no review registered.
+
+          5. Install hooks via scripts/platform/install-hooks.sh:
+             Reads hook definitions from claude-config/hooks/workflow-enforcement.json
+             Merges into ~/.claude/settings.json preserving existing hooks.
+             deploy-node.sh calls this automatically.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f claude-config/hooks/workflow-enforcement.json"
+          - "test -f scripts/platform/install-hooks.sh"
+          - "bash -n scripts/platform/install-hooks.sh"
 
   - id: W3
     name: "Delegation Workflow + Terminal Stack"
