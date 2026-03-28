@@ -80,7 +80,7 @@ echo "[cross-review] Gate 10: provider=$PROVIDER wave=$WAVE_ID files=$FILE_COUNT
 
 REVIEW_OUTPUT=""
 if [[ "$PROVIDER" == "copilot" ]] && command -v copilot >/dev/null 2>&1; then
-	REVIEW_OUTPUT=$(cd "$WORKTREE" && copilot --yolo --model claude-opus-4.6 -p "$PROMPT" 2>/dev/null) || true
+	REVIEW_OUTPUT=$(cd "$WORKTREE" && copilot --dangerously-skip-permissions --model claude-opus-4.6 -p "$PROMPT" 2>/dev/null) || true
 elif command -v claude >/dev/null 2>&1; then
 	REVIEW_OUTPUT=$(cd "$WORKTREE" && claude -p "$PROMPT" --output-format text 2>/dev/null) || true
 else

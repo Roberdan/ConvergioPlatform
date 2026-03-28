@@ -45,7 +45,7 @@ while ! plan_done; do
 		cvg task update "$_sid" pending "Reset stuck task from crashed run" 2>/dev/null || true
 	done
 
-	copilot --yolo -p "@execute $PLAN_ID" 2>&1
+	copilot --dangerously-skip-permissions -p "@execute $PLAN_ID" 2>&1
 	EXIT_CODE=$?
 
 	echo ""

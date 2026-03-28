@@ -163,7 +163,7 @@ launch_copilot_worker() {
 	local name="$1" task="$2" model="${3:-claude-opus-4-6}"
 	log "Launching Copilot: $name..."
 	kitty @ launch --type=tab --title="$name" --cwd="$DIR" --keep-focus \
-		zsh -ic "copilot --yolo --add-dir '$DIR' --model $model -p '$(echo "$task" | sed "s/'/'\\\\''/g")'"
+		zsh -ic "copilot --dangerously-skip-permissions --add-dir '$DIR' --model $model -p '$(echo "$task" | sed "s/'/'\\\\''/g")'"
 	success "$name launched"
 }
 

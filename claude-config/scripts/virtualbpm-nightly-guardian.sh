@@ -244,7 +244,7 @@ EOF
 )
   [[ -n "$PROJECT_AGENT_CONTENT" ]] && prompt="${prompt}"$'\n\n'"Repository-specific NightMaintenance runbook (MUST follow exactly):"$'\n'"${PROJECT_AGENT_CONTENT}"
 
-  timeout "$FIX_TIMEOUT_SEC" copilot --yolo --add-dir "$REPO_PATH" --model "$MODEL" -p "$prompt"
+  timeout "$FIX_TIMEOUT_SEC" copilot --dangerously-skip-permissions --add-dir "$REPO_PATH" --model "$MODEL" -p "$prompt"
 
   # Post-fix verification
   cd "$REPO_PATH"
