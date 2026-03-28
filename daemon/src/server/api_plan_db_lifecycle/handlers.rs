@@ -1,6 +1,9 @@
 use super::super::plan_lifecycle_guards;
 use super::super::state::{ApiError, ServerState};
-use super::lifecycle_validation::{check_all_tasks_done, check_deliverables_approved};
+use super::lifecycle_validation::{
+    check_all_tasks_done, check_deliverables_approved, run_post_complete_cleanup,
+    worktree_cleanup_paths,
+};
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
@@ -134,6 +137,12 @@ pub(super) async fn handle_complete(
             "plan {plan_id} not found or not in completable state"
         )));
     }
+
+    // Auto-cleanup worktrees and temp files after plan completion
+    let wt_paths = worktree_cleanup_paths(conn, plan_id);
+    tokio::spawn(async move {
+        run_post_complete_cleanup(plan_id, &wt_paths);
+    });
 
     Ok(Json(json!({
         "ok": true,

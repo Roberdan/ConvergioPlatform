@@ -77,13 +77,30 @@ else
     && ok "Build complete" || fail "Build failed"
 fi
 
+# Step 2b: Terminal stack — install missing CLI tools on node
+info "[2b/11] Checking terminal stack on node..."
+TERMINAL_TOOLS="tmux fzf eza bat zoxide starship fd rg lazygit atuin"
+MISSING_TOOLS="$(_ssh "missing=''; for t in ${TERMINAL_TOOLS}; do command -v \$t >/dev/null 2>&1 || missing=\"\$missing \$t\"; done; echo \$missing" 2>/dev/null | tr -d '[:space:]' || echo "")"
+if [[ -n "$MISSING_TOOLS" ]]; then
+  info "Installing missing tools: ${MISSING_TOOLS}"
+  # Try setup-terminal-stack.sh if available, otherwise brew/apt
+  if _ssh "test -f ${REPO_PATH}/scripts/platform/setup-terminal-stack.sh" 2>/dev/null; then
+    _ssh "bash ${REPO_PATH}/scripts/platform/setup-terminal-stack.sh --tools-only" && ok "Terminal stack via script" || warn "Terminal stack setup had warnings"
+  else
+    _ssh "command -v brew >/dev/null && brew install ${MISSING_TOOLS} 2>/dev/null || (command -v apt >/dev/null && sudo apt install -y -qq ${MISSING_TOOLS} 2>/dev/null)" \
+      && ok "Terminal tools installed" || warn "Some tools may be missing"
+  fi
+else
+  ok "Terminal stack complete"
+fi
+
 # Step 3: Stop daemon on node
-info "[3/9] Stopping daemon on node..."
+info "[3/11] Stopping daemon on node..."
 _ssh "pkill -f '${DAEMON_PROCESS}' 2>/dev/null && echo 'daemon stopped' || echo 'daemon was not running'"
 sleep 3
 
 # Step 4: Sync DB from this Mac to node (direct rsync, no sync-db.sh dependency)
-info "[4/9] Syncing DB to node..."
+info "[4/11] Syncing DB to node..."
 LOCAL_DB="$(readlink -f "${HOME}/${DB_REL_PATH}" 2>/dev/null || echo "${HOME}/${DB_REL_PATH}")"
 if [[ -f "$LOCAL_DB" ]]; then
   REMOTE_HOME="$(_ssh 'echo $HOME' 2>/dev/null | tr -d '[:space:]')"
@@ -96,7 +113,7 @@ else
 fi
 
 # Step 5: Replicate secrets from this Mac's keychain to node
-info "[5/9] Replicating keychain secrets to node..."
+info "[5/11] Replicating keychain secrets to node..."
 TG_TOKEN=""
 TG_CHAT_ID=""
 TG_TOKEN="$(security find-generic-password -a telegram-bot -s convergio-platform -w 2>/dev/null || true)"
@@ -119,7 +136,7 @@ else
 fi
 
 # Step 5b: Propagate gh auth token for git credential access on peer
-info "[5b] Propagating gh auth token to peer..."
+info "[5b/11] Propagating gh auth token to peer..."
 GH_TOKEN="$(gh auth token 2>/dev/null || true)"
 if [[ -n "$GH_TOKEN" ]]; then
   _ssh "command -v gh >/dev/null 2>&1 && echo '${GH_TOKEN}' | gh auth login --with-token 2>/dev/null" \
@@ -128,8 +145,37 @@ else
   warn "No local gh auth token found — skipping git credential propagation"
 fi
 
+# Step 5c: Replicate tmux + zsh config from master node if missing
+info "[5c/11] Replicating shell configs to node..."
+if [[ -f "$HOME/.tmux.conf" ]]; then
+  _ssh "test -f ~/.tmux.conf" 2>/dev/null || {
+    rsync -aLz "$HOME/.tmux.conf" "${SSH_TARGET}:~/.tmux.conf" 2>/dev/null && ok ".tmux.conf replicated" || warn ".tmux.conf rsync failed"
+  }
+  # Replicate TPM plugins directory
+  if [[ -d "$HOME/.tmux/plugins/tpm" ]]; then
+    _ssh "test -d ~/.tmux/plugins/tpm" 2>/dev/null || {
+      rsync -aLz "$HOME/.tmux/plugins/" "${SSH_TARGET}:~/.tmux/plugins/" 2>/dev/null && ok "TPM replicated" || warn "TPM rsync failed"
+    }
+  fi
+fi
+# Replicate .zshrc only if target has no custom one
+if [[ -f "$HOME/.zshrc" ]]; then
+  HAS_ZSHRC="$(_ssh "test -f ~/.zshrc && echo yes || echo no" 2>/dev/null | tr -d '[:space:]')"
+  if [[ "$HAS_ZSHRC" != "yes" ]]; then
+    rsync -aLz "$HOME/.zshrc" "${SSH_TARGET}:~/.zshrc" 2>/dev/null && ok ".zshrc replicated" || warn ".zshrc rsync failed"
+  fi
+fi
+# Replicate starship config if present
+if [[ -f "$HOME/.config/starship.toml" ]]; then
+  _ssh "mkdir -p ~/.config" 2>/dev/null
+  _ssh "test -f ~/.config/starship.toml" 2>/dev/null || {
+    rsync -aLz "$HOME/.config/starship.toml" "${SSH_TARGET}:~/.config/starship.toml" 2>/dev/null && ok "starship.toml replicated" || true
+  }
+fi
+ok "Shell config replication done"
+
 # Step 6: Create Convergio tmux session + start daemon
-info "[6/9] Starting daemon on node..."
+info "[6/11] Starting daemon on node..."
 _ssh "tmux has-session -t Convergio 2>/dev/null || tmux new-session -d -s Convergio -n kernel -c ~/GitHub/ConvergioPlatform" 2>/dev/null || true
 _ssh "bash -lc '
   # Source secrets from env file (written by deploy step 5)
@@ -149,7 +195,7 @@ _ssh "bash -lc '
 '"
 
 # Step 7: Wait for /api/health
-info "[7/9] Waiting for daemon health (${HEALTH_RETRIES}x${HEALTH_SLEEP}s)..."
+info "[7/11] Waiting for daemon health (${HEALTH_RETRIES}x${HEALTH_SLEEP}s)..."
 attempt=1
 health_ok=false
 while [[ $attempt -le $HEALTH_RETRIES ]]; do
@@ -166,13 +212,13 @@ done
 [[ "$health_ok" == "false" ]] && fail "Daemon did not become healthy after ${HEALTH_RETRIES} attempts"
 
 # Step 8: Node readiness
-info "[8/9] Checking node readiness..."
+info "[8/11] Checking node readiness..."
 readiness="$(_ssh "curl -s 'http://localhost:${DAEMON_PORT}/api/node/readiness' 2>/dev/null || echo '{\"error\":\"unreachable\"}'")";
 echo "Readiness: ${readiness}"
 
 # Step 9: Kernel model verification (--kernel only)
 if [[ "$WITH_KERNEL" == "true" ]]; then
-  info "[9/9] Verifying kernel models (--kernel)..."
+  info "[9/11] Verifying kernel models (--kernel)..."
   kernel_status="$(_ssh "curl -s 'http://localhost:${DAEMON_PORT}/api/kernel/status' 2>/dev/null || echo '{\"models_loaded\":0}'")";
   models_loaded="$(echo "$kernel_status" | grep -oE '"models_loaded"\s*:\s*[0-9]+' | grep -oE '[0-9]+' || echo 0)"
   if [[ "${models_loaded:-0}" -ge 1 ]]; then
@@ -181,7 +227,7 @@ if [[ "$WITH_KERNEL" == "true" ]]; then
     fail "Kernel not ready: models_loaded=${models_loaded:-0}. Status: ${kernel_status}"
   fi
 else
-  info "[9/9] Skipping kernel check (no --kernel flag)"
+  info "[9/11] Skipping kernel check (no --kernel flag)"
 fi
 
 ok "=== Deploy complete: ${PEER_ARG} ==="
