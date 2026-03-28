@@ -114,9 +114,6 @@ impl PlanDb {
         if let Some(path) = &self.db_path {
             cmd.arg("--db-path").arg(path);
         }
-        if let Some(ext) = &self.crsqlite_extension {
-            cmd.arg("--crsqlite-path").arg(ext);
-        }
         let output = cmd.output()?;
         if !output.status.success() {
             return Err(IoError::other(format!(
@@ -138,9 +135,6 @@ impl PlanDb {
             .arg("apply-changes");
         if let Some(path) = &self.db_path {
             cmd.arg("--db-path").arg(path);
-        }
-        if let Some(ext) = &self.crsqlite_extension {
-            cmd.arg("--crsqlite-path").arg(ext);
         }
         cmd.stdin(Stdio::piped());
         let mut child = cmd.spawn()?;

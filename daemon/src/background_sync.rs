@@ -132,7 +132,7 @@ pub fn spawn_sync_loop(
             // read from and written to persistent storage. Using in-memory here
             // would silently discard all sync results.
             let db_path = crate::db_path_from_env();
-            let plan_db = match PlanDb::open_path(&db_path, None) {
+            let plan_db = match PlanDb::open_path(&db_path) {
                 Ok(db) => db,
                 Err(e) => {
                     warn!("background_sync: cannot open PlanDb at {}: {e}", db_path.display());
