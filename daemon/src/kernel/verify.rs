@@ -7,8 +7,8 @@
 
 use crate::kernel::engine::{KernelAction, KernelEngine};
 use crate::kernel::verify_checks::{
-    build_situation_string, run_cargo_check, run_cargo_test, run_git_clean,
-    run_npm_check, run_npm_test,
+    build_situation_string, git_head_sha, run_cargo_check, run_cargo_test,
+    run_git_clean, run_npm_check, run_npm_test, EVIDENCE_CACHE, EVIDENCE_MUTEX,
 };
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -76,6 +76,20 @@ pub fn check_evidence(
 ) -> EvidenceReport {
     info!(task_id, status, "kernel verify: running evidence gate");
 
+    // Serialize: only 1 evidence check at a time to prevent resource exhaustion.
+    let _guard = EVIDENCE_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
+    // SHA cache: skip expensive build/test if git HEAD unchanged (5min TTL).
+    let head_sha = git_head_sha(worktree);
+    if let Some(ref sha) = head_sha {
+        if let Some(cached_passed) = EVIDENCE_CACHE.get(sha) {
+            info!(task_id, sha, "kernel verify: cache hit, skipping checks");
+            return build_cached_report(
+                conn, engine, task_id, status, cached_passed,
+            );
+        }
+    }
+
     let mut checks: Vec<EvidenceCheck> = Vec::new();
 
     // 1. Declared output files exist.
@@ -117,7 +131,41 @@ pub fn check_evidence(
     // Aggregate pass/fail.
     let passed = checks.iter().all(|c| c.passed);
 
-    // Classify via KernelEngine (heuristic if no model loaded).
+    // Update cache with result.
+    if let Some(ref sha) = head_sha {
+        EVIDENCE_CACHE.store(sha, passed);
+    }
+
+    let report = finalize_report(conn, engine, task_id, status, checks, passed);
+    report
+}
+
+/// Build a minimal report from cached result (no expensive checks re-run).
+fn build_cached_report(
+    conn: &Connection,
+    engine: &KernelEngine,
+    task_id: i64,
+    status: &str,
+    passed: bool,
+) -> EvidenceReport {
+    let detail = if passed { "cache hit: passed" } else { "cache hit: failed" };
+    let checks = vec![if passed {
+        EvidenceCheck::pass("cached_evidence", detail)
+    } else {
+        EvidenceCheck::fail("cached_evidence", detail)
+    }];
+    finalize_report(conn, engine, task_id, status, checks, passed)
+}
+
+/// Classify, persist, and return the evidence report.
+fn finalize_report(
+    conn: &Connection,
+    engine: &KernelEngine,
+    task_id: i64,
+    status: &str,
+    checks: Vec<EvidenceCheck>,
+    passed: bool,
+) -> EvidenceReport {
     let situation = build_situation_string(&checks);
     let KernelAction { severity, action, reason } = engine.classify(&situation);
     let severity_str = format!("{severity:?}").to_lowercase();
@@ -151,13 +199,13 @@ pub fn check_evidence(
             blocked_reason,
         ],
     ) {
-        warn!(task_id, error = %e, "kernel verify: failed to persist verification record");
+        warn!(task_id, error = %e, "kernel verify: failed to persist record");
     }
 
     if passed {
         info!(task_id, "kernel verify: all checks passed");
     } else {
-        warn!(task_id, severity = severity_str, "kernel verify: evidence gate BLOCKED");
+        warn!(task_id, severity = severity_str, "kernel verify: BLOCKED");
     }
 
     report

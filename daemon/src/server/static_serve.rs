@@ -37,6 +37,9 @@ pub(super) async fn shutdown_signal() {
         _ = ctrl_c => {}
         _ = terminate => {}
     }
+
+    // Reap orphaned cargo/rustc spawned by evidence gate checks.
+    crate::kernel::verify_hardening::reap_build_processes();
 }
 
 /// Inner logic: given the token presence state, determine effective bind address.

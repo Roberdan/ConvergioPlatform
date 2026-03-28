@@ -18,6 +18,7 @@ pub mod tts;
 pub mod tts_templates;
 pub mod verify;
 pub mod verify_checks;
+pub mod verify_hardening;
 pub mod voice_router;
 pub mod voice_router_helpers;
 pub mod voice_routes;
@@ -43,3 +44,5 @@ mod stt_tests;
 mod voice_router_tests;
 #[cfg(test)]
 mod telegram_poll_tests;
+#[cfg(test)]
+mod verify_hardening_tests;
