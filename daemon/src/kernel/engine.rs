@@ -165,8 +165,6 @@ impl KernelEngine {
         }
     }
 
-    // --- private helpers ---
-
     fn classify_via_bridge(&self, situation: &str, model: &str) -> KernelAction {
         let prompt = format!(
             "Classify this situation as OK, WARN, or CRITICAL and give a one-sentence reason \
