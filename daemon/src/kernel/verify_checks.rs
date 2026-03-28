@@ -51,6 +51,48 @@ pub(crate) fn run_cargo_test(worktree: Option<&str>) -> EvidenceCheck {
     }
 }
 
+pub(crate) fn run_npm_check(worktree: Option<&str>) -> EvidenceCheck {
+    let mut cmd = Command::new("npx");
+    cmd.args(["tsc", "--noEmit"]);
+    if let Some(wt) = worktree {
+        cmd.current_dir(wt);
+    }
+    match cmd.output() {
+        Ok(out) if out.status.success() => EvidenceCheck::pass("npm_check", "tsc --noEmit exit 0"),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let msg = if stderr.is_empty() { stdout } else { stderr };
+            EvidenceCheck::fail(
+                "npm_check",
+                format!("exit {}: {}", out.status.code().unwrap_or(-1), msg.chars().take(200).collect::<String>()),
+            )
+        }
+        Err(e) => EvidenceCheck::fail("npm_check", format!("spawn error: {e}")),
+    }
+}
+
+pub(crate) fn run_npm_test(worktree: Option<&str>) -> EvidenceCheck {
+    let mut cmd = Command::new("npx");
+    cmd.args(["vitest", "run"]);
+    if let Some(wt) = worktree {
+        cmd.current_dir(wt);
+    }
+    match cmd.output() {
+        Ok(out) if out.status.success() => EvidenceCheck::pass("npm_test", "vitest run exit 0"),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let msg = if stderr.is_empty() { stdout } else { stderr };
+            EvidenceCheck::fail(
+                "npm_test",
+                format!("exit {}: {}", out.status.code().unwrap_or(-1), msg.chars().take(200).collect::<String>()),
+            )
+        }
+        Err(e) => EvidenceCheck::fail("npm_test", format!("spawn error: {e}")),
+    }
+}
+
 pub(crate) fn run_git_clean(worktree: Option<&str>) -> EvidenceCheck {
     let mut cmd = Command::new("git");
     cmd.args(["status", "--porcelain"]);

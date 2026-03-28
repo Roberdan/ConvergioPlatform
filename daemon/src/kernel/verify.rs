@@ -6,7 +6,10 @@
 // of the Constitution ("done" = evidence) at the API boundary.
 
 use crate::kernel::engine::{KernelAction, KernelEngine};
-use crate::kernel::verify_checks::{build_situation_string, run_cargo_check, run_cargo_test, run_git_clean};
+use crate::kernel::verify_checks::{
+    build_situation_string, run_cargo_check, run_cargo_test, run_git_clean,
+    run_npm_check, run_npm_test,
+};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -90,11 +93,23 @@ pub fn check_evidence(
         }
     }
 
-    // 2. Build succeeds (cargo check).
-    checks.push(run_cargo_check(worktree));
+    // 2–3. Build + test checks — project-type aware.
+    let wt_root = worktree.unwrap_or(".");
+    let has_cargo = Path::new(wt_root).join("Cargo.toml").exists();
+    let has_package_json = Path::new(wt_root).join("package.json").exists();
 
-    // 3. Tests pass (cargo test).
-    checks.push(run_cargo_test(worktree));
+    if has_cargo {
+        checks.push(run_cargo_check(worktree));
+        checks.push(run_cargo_test(worktree));
+    } else if has_package_json {
+        checks.push(run_npm_check(worktree));
+        checks.push(run_npm_test(worktree));
+    } else {
+        checks.push(EvidenceCheck::pass(
+            "build_check",
+            "skipped: no Cargo.toml or package.json found",
+        ));
+    }
 
     // 4. Working tree clean (git status --porcelain).
     checks.push(run_git_clean(worktree));
