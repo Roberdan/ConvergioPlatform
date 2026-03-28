@@ -250,8 +250,12 @@ fn route_escalate_to_ali(question: &str, daemon_url: &str) -> String {
 
     // Use gh copilot suggest or Claude Code as subprocess
     // Try Claude Code first (claude -p), then gh copilot
-    let output = std::process::Command::new("claude")
-        .args(["-p", &prompt, "--model", "opus"])
+    // Resolve claude CLI path (may not be in PATH under launchd)
+    let claude_bin = format!("{}/.local/bin/claude", std::env::var("HOME").unwrap_or_default());
+    let claude_cmd = if std::path::Path::new(&claude_bin).exists() { &claude_bin } else { "claude" };
+
+    let output = std::process::Command::new(claude_cmd)
+        .args(["-p", &prompt, "--model", "sonnet", "--max-turns", "1"])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output();
