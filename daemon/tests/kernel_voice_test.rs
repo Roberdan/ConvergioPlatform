@@ -169,14 +169,13 @@ fn test_voice_router_classify_costi() {
     );
 }
 
-/// Nonsense input → Unknown.
+/// Nonsense input → AskAli (forwarded to Qwen for reasoning).
 #[test]
-fn test_voice_router_classify_unknown() {
+fn test_voice_router_classify_unknown_goes_to_ask_ali() {
     let engine = KernelEngine::new(KernelConfig::default());
-    assert_eq!(
-        classify_intent("abracadabra", &engine),
-        VoiceIntent::Unknown,
-        "unrecognised input must map to Unknown"
+    assert!(
+        matches!(classify_intent("abracadabra", &engine), VoiceIntent::AskAli { .. }),
+        "unrecognised input must map to AskAli"
     );
 }
 
@@ -184,18 +183,19 @@ fn test_voice_router_classify_unknown() {
 // Voice router — route_intent for Unknown
 // ---------------------------------------------------------------------------
 
-/// Unknown intent → non-empty Italian error/help message.
+/// AskAli intent → non-empty response (error or answer).
 #[test]
-fn test_voice_router_route_unknown() {
-    let response = route_intent(VoiceIntent::Unknown, "http://localhost:1");
+fn test_voice_router_route_ask_ali() {
+    let response = route_intent(VoiceIntent::AskAli { question: "test".to_string() }, "http://localhost:1");
     assert!(
         !response.is_empty(),
-        "route_intent(Unknown) must return a non-empty string"
+        "route_intent(AskAli) must return a non-empty string"
     );
+    // With unreachable daemon, returns error message — must not panic
     assert!(
-        response.contains("stato")
-            || response.contains("Non ho capito")
-            || response.contains("Prova"),
-        "expected Italian help text, got: {response}"
+        response.contains("Errore")
+            || response.contains("Non ho")
+            || response.contains("risposta"),
+        "expected error or answer, got: {response}"
     );
 }
