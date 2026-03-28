@@ -20,7 +20,7 @@ name = "mesh"
 harness = false
 
 [features]
-default = ["crsqlite"]
+default = ["crsqlite", "kernel"]
 crsqlite = []
 kernel = []
 
