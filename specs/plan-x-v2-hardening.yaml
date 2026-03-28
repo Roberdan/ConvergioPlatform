@@ -39,10 +39,10 @@ waves:
     name: "libSQL Migration — replace rusqlite"
     merge_mode: sync
     tasks:
-      - id: T1-01
+      - id: T1-01a
         ref: [F-01]
         do: |
-          Migrate daemon from rusqlite to libSQL for native embedded replica sync.
+          Core libSQL migration: Cargo.toml deps + db/ adapter layer.
 
           1. Update daemon/Cargo.toml:
              Remove: rusqlite = "0.32"
@@ -58,30 +58,72 @@ waves:
              Remove resolve_crsqlite_path() — no longer needed.
              Remove all crsqlite/CRDT code.
 
-          4. Update ALL files that use rusqlite::Connection (grep -rn 'rusqlite' daemon/src/):
-             Change use statements, type signatures, error handling.
-             libsql has similar API but different error types.
-
-          5. Configure sync between nodes:
-             Each daemon starts with libsql embedded replica.
-             Primary node (coordinator) is the write source.
-             Other nodes sync from primary via HTTP.
-
-          6. Verify: cargo check, cargo test --lib
-
-          NOTE: This is the biggest task. Take care with the migration.
-          If libsql API is too different, consider keeping rusqlite and
-          implementing timestamp-based sync in Rust (200 lines, simpler).
+          NOTE: This is the core migration task. If libsql API is too
+          different, consider keeping rusqlite and implementing
+          timestamp-based sync in Rust (200 lines, simpler).
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: refactor
         output_type: pr
         model: claude-opus-4-6
         executor_agent: task-executor
         validator_agent: thor-quality-assurance-guardian
-        effort: 3
+        effort: 2
         verify:
           - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
           - "! grep -q 'crsqlite' daemon/src/db/mod.rs"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- db 2>&1 | grep -q 'test result: ok'"
+
+      - id: T1-01b
+        ref: [F-01]
+        do: |
+          libSQL migration: update all rusqlite::Connection usages across
+          server/, mesh/, ipc/, and orchestrator/ layers.
+
+          Update ALL files that use rusqlite::Connection (grep -rn 'rusqlite' daemon/src/):
+          Change use statements, type signatures, error handling.
+          libsql has similar API but different error types.
+
+          Covers: server/ (32 modules), mesh/ (40 modules), ipc/ (15 modules),
+          orchestrator/, hooks/, tui/, and any remaining references.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "! grep -rq 'rusqlite' daemon/src/server/ daemon/src/mesh/ daemon/src/ipc/"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+
+      - id: T1-01c
+        ref: [F-01]
+        do: |
+          libSQL data migration + verification.
+
+          1. Back up existing data/dashboard.db to data/dashboard.db.bak.
+          2. Test that existing dashboard.db opens correctly with libSQL.
+          3. Verify all schemas load, queries return expected results.
+          4. Create scripts/migration/rollback-libsql.sh:
+             Restores dashboard.db.bak if migration fails.
+          5. Configure sync between nodes:
+             Each daemon starts with libsql embedded replica.
+             Primary node (coordinator) is the write source.
+             Other nodes sync from primary via HTTP.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "test -f data/dashboard.db.bak"
+          - "test -f scripts/migration/rollback-libsql.sh"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
 
       - id: T1-02
         ref: [F-03]
@@ -102,6 +144,11 @@ waves:
         effort: 2
         verify:
           - "cargo check --manifest-path daemon/Cargo.toml"
+          - "cargo test --manifest-path daemon/Cargo.toml --lib -- coordinator 2>&1 | grep -q 'test result: ok'"
+
+    decision_gate: >
+      If libSQL migration proves infeasible after T1-01a, halt and switch to
+      fallback: keep rusqlite + implement timestamp-based sync in Rust (~200 lines).
 
   - id: W2
     name: "Bugs + Mesh Fixes"
@@ -156,6 +203,7 @@ waves:
         verify:
           - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
           - "test -f daemon/src/mesh/peer_resolver.rs"
+          - "grep -q 'pub fn resolve' daemon/src/mesh/peer_resolver.rs"
 
       - id: T2-02
         ref: [F-17]
@@ -190,6 +238,7 @@ waves:
         verify:
           - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
           - "grep -q 'timeout\\|Timeout' daemon/src/kernel/verify.rs"
+          - "grep -q 'Mutex\\|mutex' daemon/src/kernel/verify_checks.rs"
 
   - id: W3
     name: "Delegation Workflow + Terminal Stack"
@@ -288,6 +337,7 @@ waves:
         effort: 1
         verify:
           - "test -f scripts/mesh/setup-gh-credentials.sh"
+          - "bash -n scripts/mesh/setup-gh-credentials.sh"
 
   - id: W4
     name: "DX + Documentation + MCP"
@@ -307,12 +357,14 @@ waves:
           D6: Document delegation guide (rsync → tmux → claude → Thor → completion).
           D7: Document peer_resolver as single source for peer addressing.
           D4: Fix cvg plan tree = cvg plan execution-tree alias.
+          D8: Create a decision tree in claude-config/reference/operational/convergio-decision-tree.md — "what tool to use when".
+          D9: Add `cvg commands` or `cvg cheatsheet` subcommand listing all available commands.
 
           Also update convergio-capabilities.md with all new features.
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: doc
         output_type: pr
-        model: claude-opus-4-6
+        model: claude-sonnet-4-6
         executor_agent: task-executor
         validator_agent: doc-validator
         effort: 3
@@ -369,6 +421,13 @@ waves:
         do: |
           CHANGELOG, VERSION 19.0.0, Cargo.toml, NEXT_SESSION.md.
           Major version bump: libSQL migration is breaking change.
+
+          Create ADR docs/adr/ADR-0121-libsql-migration.md covering libSQL
+          decision, peer resolver design, evidence gate hardening.
+
+          Update TROUBLESHOOTING.md with any new problem/resolution pairs
+          discovered during this plan (libSQL migration issues, delegation
+          errors, credential routing problems).
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: chore
         output_type: pr
@@ -378,6 +437,8 @@ waves:
         effort: 1
         verify:
           - "grep -q '19.0.0' VERSION.md"
+          - "test -f docs/adr/ADR-0121-libsql-migration.md"
+          - "grep -q '19.0.0' CHANGELOG.md"
 
       - id: TF-pr
         ref: [F-15]
@@ -399,11 +460,20 @@ waves:
         ref: [F-15]
         do: |
           Deploy to BOTH nodes. Full E2E verification:
+          - Build release binary on each node
+          - Restart daemons on both nodes (./daemon/start.sh)
           - DB sync works natively (write on one node, read on other)
           - Delegation works: cvg delegation start on test plan
           - Telegram responds
           - Terminal stack consistent across nodes
           - All worktrees clean
+
+          Steps:
+          1. cargo build --features kernel --release on each node
+          2. Stop running daemons (pkill -f convergio-daemon || true)
+          3. Start daemons (./daemon/start.sh on each node)
+          4. Wait for health endpoints to respond
+          5. Run E2E checks
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: test
         output_type: pr
@@ -412,5 +482,6 @@ waves:
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
+          - "cargo build --features kernel --release --manifest-path daemon/Cargo.toml"
           - "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q ok"
           - "curl -sf http://localhost:8420/api/health | grep -q ok"
