@@ -66,6 +66,9 @@ pub fn handle_tool_call(
         "cvg_kernel_ask" => kernel_ask(daemon_url, token, args),
         "cvg_notify" => notify(daemon_url, token, args),
         "cvg_restart_node" => restart_node(daemon_url, token, args),
+        "cvg_assign_role" => assign_role(daemon_url, token, args),
+        "cvg_interrupt_agent" => interrupt_agent(daemon_url, token, args),
+        "cvg_reschedule_task" => reschedule_task(daemon_url, token, args),
         _ => Err(McpError::InvalidParams("unknown tool name")),
     }
 }
@@ -225,10 +228,19 @@ fn notify(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Value, 
 }
 
 fn restart_node(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Value, McpError> {
-    let target = args
-        .get("target")
-        .and_then(|v| v.as_str())
+    let target = args.get("target").and_then(|v| v.as_str())
         .ok_or(McpError::InvalidParams("target is required"))?;
-    let url = format!("{daemon_url}/api/node/recover");
-    http_post(&url, token, &json!({"target": target, "action": "restart"}))
+    http_post(&format!("{daemon_url}/api/node/recover"), token, &json!({"target": target}))
+}
+
+fn assign_role(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Value, McpError> {
+    http_post(&format!("{daemon_url}/api/node/assign-role"), token, args)
+}
+
+fn interrupt_agent(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Value, McpError> {
+    http_post(&format!("{daemon_url}/api/agent/interrupt"), token, args)
+}
+
+fn reschedule_task(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Value, McpError> {
+    http_post(&format!("{daemon_url}/api/task/reschedule"), token, args)
 }

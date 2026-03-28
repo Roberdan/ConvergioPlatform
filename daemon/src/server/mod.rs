@@ -44,6 +44,8 @@ pub mod api_plan_db_review;
 pub mod api_plans;
 pub mod api_project_tree;
 pub mod api_node_readiness;
+pub mod api_node_roles;
+pub mod api_agent_control;
 pub mod api_readiness;
 pub mod api_runs;
 pub mod api_runs_handlers;

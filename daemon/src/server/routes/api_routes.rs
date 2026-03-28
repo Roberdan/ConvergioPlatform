@@ -92,6 +92,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/memory/recall",
     "/api/kernel/status",
     "/api/node/readiness",
+    "/api/node/roles",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -169,6 +170,9 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/kernel/play",
     "/api/kernel/ask",
     "/api/kernel/active-node",
+    "/api/node/assign-role",
+    "/api/agent/interrupt",
+    "/api/task/reschedule",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",

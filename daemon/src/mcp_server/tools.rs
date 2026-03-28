@@ -208,5 +208,47 @@ fn all_tools() -> Vec<McpTool> {
             }),
             min_ring: Ring::Core,
         },
+        McpTool {
+            name: "cvg_assign_role".to_string(),
+            description: "Assign a role to a mesh node (kernel, executor, coordinator).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string"},
+                    "role": {"type": "string", "enum": ["kernel", "executor", "coordinator", "worker"]},
+                    "capabilities": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["node", "role"]
+            }),
+            min_ring: Ring::Core,
+        },
+        McpTool {
+            name: "cvg_interrupt_agent".to_string(),
+            description: "Interrupt a blocked/stalled agent via IPC bus.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "agent_name": {"type": "string"},
+                    "reason": {"type": "string"}
+                },
+                "required": ["agent_name", "reason"]
+            }),
+            min_ring: Ring::Trusted,
+        },
+        McpTool {
+            name: "cvg_reschedule_task".to_string(),
+            description: "Reschedule a task from one node to another.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer"},
+                    "from_node": {"type": "string"},
+                    "to_node": {"type": "string"},
+                    "reason": {"type": "string"}
+                },
+                "required": ["task_id", "to_node", "reason"]
+            }),
+            min_ring: Ring::Trusted,
+        },
     ]
 }

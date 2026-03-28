@@ -79,12 +79,22 @@
 - MirrorBuddy Guardian: daily 01:30
 - VirtualBPM Guardian: daily 02:15
 
-### MCP Server (Plan V — in development)
-- Separate binary: convergio-mcp-server
-- stdio transport, JSON-RPC
-- 14 tools: plans, agents, mesh, metrics, kernel, actions
+### MCP Server (convergio-mcp-server)
+- Separate binary, stdio transport, JSON-RPC
+- 17 tools: plans(4), agents(3), mesh(2), metrics(1), kernel(2), actions(2), control(3)
 - Ring-based security (0=core, 1=trusted, 2=community, 3=sandboxed)
 - Wired into Claude Code via .mcp.json
+- Control tools: assign_role, interrupt_agent, reschedule_task
+
+### Node Role Management
+- `POST /api/node/assign-role` — assign kernel/executor/coordinator role
+- `GET /api/node/roles` — list all node roles
+- Roles stored in DB, replicated via sync
+
+### Agent Control (kernel intervention)
+- `POST /api/agent/interrupt` — stop a blocked agent via IPC bus
+- `POST /api/task/reschedule` — move task to another node
+- Kernel auto-detects stalls and can intervene autonomously
 
 ### Channels (OpenClaw bridge)
 - 30+ platforms: WhatsApp, Telegram, Slack, Discord, etc.

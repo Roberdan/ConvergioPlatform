@@ -38,7 +38,9 @@ use super::api_plan_db_query;
 use super::api_plan_db_review;
 use super::api_plans;
 use super::api_project_tree;
+use super::api_agent_control;
 use super::api_node_readiness;
+use super::api_node_roles;
 use super::api_readiness;
 use super::api_runs;
 use super::api_tracking;
@@ -113,6 +115,8 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_plan_db_checkpoint::router())
         .merge(api_project_tree::router())
         .merge(api_node_readiness::router())
+        .merge(api_node_roles::router())
+        .merge(api_agent_control::router())
         .merge(api_readiness::router())
         .merge(api_tracking::router())
         .merge(api_workers::router())
