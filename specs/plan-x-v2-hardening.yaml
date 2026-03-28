@@ -306,7 +306,7 @@ waves:
         validator_agent: thor-quality-assurance-guardian
         effort: 2
         verify:
-          - "grep -q 'terminal\|tmux\|worktree.*prun' scripts/mesh/deploy-node.sh"
+          - "grep -qE 'terminal|tmux|worktree.*prun' scripts/mesh/deploy-node.sh"
           - "cargo check --manifest-path daemon/Cargo.toml"
 
       - id: T3-03
