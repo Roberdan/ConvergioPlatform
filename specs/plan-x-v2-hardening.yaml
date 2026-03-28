@@ -264,29 +264,30 @@ waves:
         do: |
           Workflow enforcement hooks — agents CANNOT bypass the process.
 
-          Create Claude Code hooks in settings.json that BLOCK violations:
+          Hook scripts ALREADY EXIST in claude-config/hooks/ but are NOT wired
+          into settings.json. Only SessionStart/Stop are installed.
 
-          1. PreToolUse hook for Edit/Write:
-             If a plan is active (cvg plan list --status doing) AND the current
-             session did NOT invoke /execute → BLOCK with message:
-             "Active plan detected. Use /execute {plan_id} to modify code."
-             Exception: files in specs/, docs/, claude-config/ (non-code).
+          Wire these EXISTING hooks into ~/.claude/settings.json:
 
-          2. SubagentStop hook:
-             When any agent completes: auto-commit uncommitted work,
-             verify task status updated in DB, warn if no cvg task update was called.
+          1. PreToolUse: claude-config/hooks/workflow-enforcer.sh
+             Already blocks: Edit/Write without /execute, direct plan-db create/import,
+             direct "done" without Thor, EnterPlanMode bypass.
 
-          3. PreToolUse hook for cvg task update to "done":
-             BLOCK — only Thor (cvg plan validate) can promote to done.
-             Message: "Cannot set done directly. Use cvg task update <id> submitted."
+          2. PreToolUse: claude-config/hooks/enforce-planner-workflow.sh
+             Already blocks: direct plan-db create, import, update-task done.
 
-          4. PostToolUse hook for git push/merge:
-             Verify review exists for the plan. BLOCK if no review registered.
+          3. PreToolUse: claude-config/hooks/worktree-guard.sh
+             Already blocks: git branch/checkout -b (must use worktree).
 
-          5. Install hooks via scripts/platform/install-hooks.sh:
-             Reads hook definitions from claude-config/hooks/workflow-enforcement.json
-             Merges into ~/.claude/settings.json preserving existing hooks.
-             deploy-node.sh calls this automatically.
+          4. PreToolUse: claude-config/hooks/env-vault-guard.sh
+             Already blocks: secrets in code.
+
+          5. Update scripts/platform/setup-session-hooks.sh:
+             Add ALL enforcement hooks, not just agent tracking.
+             deploy-node.sh must call this so every node has enforcement.
+
+          6. Add SubagentStop hook: claude-config/hooks/track-session-stop.sh
+             Auto-commit uncommitted work on agent completion.
 
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
