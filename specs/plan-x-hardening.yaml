@@ -1,0 +1,389 @@
+# Plan X — Convergio Hardening
+# Fix ALL bugs, mesh issues, delegation workflow, DX, documentation.
+# Based on improvement report (28 March 2026) + session backlog.
+# 30 issues consolidated into 5 waves, 15 tasks.
+
+name: "Plan X — Convergio Hardening"
+project_id: convergio
+priority: P0
+execution_mode: serial
+tags: [hardening, bugs, mesh, delegation, dx, documentation]
+
+description: >
+  Fix 9 confirmed bugs (2 P0, 4 P1, 2 P2), unify delegation workflow,
+  improve developer experience, close all documentation gaps.
+  Consolidates improvement report from Plan 738 sessions + session backlog.
+
+requirements:
+  - F-01: "cvg review register works on spec-file before plan creation"
+  - F-02: "coordinator/emit works without CRDT extension"
+  - F-03: "delegated agents execute Thor validation per wave"
+  - F-04: "daemon binds on 0.0.0.0 or Tailscale IP (reachable from mesh)"
+  - F-05: "centralized peer resolver with fallback chain"
+  - F-06: "/api/channels and /api/health/deep wired in router"
+  - F-07: "cvg delegation start/status/cancel CLI complete"
+  - F-08: "one unified delegation flow (API + CLI + orchestrator)"
+  - F-09: "spec YAML schema documented with cvg plan template"
+  - F-10: "all documentation gaps closed (D1-D7)"
+  - F-11: "invoke_agent MCP tool functional"
+  - F-12: "full E2E test on M1 Pro passes"
+
+acceptance_invariants:
+  - description: "review register on spec-file works"
+    verify: "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- cli_review"
+    defined_by: user
+  - description: "coordinator emit does not crash"
+    verify: "cargo test --manifest-path daemon/Cargo.toml --lib -- coordinator"
+    defined_by: user
+  - description: "daemon reachable from other mesh nodes"
+    verify: "grep -q '0.0.0.0\\|tailscale' daemon/src/server/routes/mod.rs || grep -q 'bind.*0.0.0.0' daemon/start.sh"
+    defined_by: user
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAVE 1: P0 Blockers — review, CRDT, Thor delegation
+# ─────────────────────────────────────────────────────────────────────────────
+
+waves:
+  - id: W1
+    name: "P0 Blockers"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01]
+        do: |
+          Fix B1: cvg review register --spec-file crashes with NOT NULL plan_id.
+
+          The workflow should be: write spec → review spec → fix → create plan.
+          But review register requires plan_id which doesn't exist yet.
+
+          Fix in daemon/src/cli_review.rs (or api_plan_db_review.rs):
+          Allow plan_id=0 or NULL when --spec-file is provided.
+          The review is on the SPEC, not the plan.
+          Store spec_file path in plan_reviews table (column already exists).
+          When plan is later created, link reviews by spec_file path.
+
+          Also fix S7: allow pre-plan review workflow.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+          - "cargo test --manifest-path daemon/Cargo.toml --lib -- review"
+
+      - id: T1-02
+        ref: [F-02]
+        do: |
+          Fix B5: coordinator/emit CRDT error (crsql_internal_sync_bit missing).
+
+          The coordinator cannot emit events because the CRDT extension
+          is not loaded (crsqlite.dylib missing on some nodes).
+
+          Fix: guard ALL crsqlite-dependent code with a runtime check.
+          If crsqlite not loaded, skip CRDT operations and use plain SQLite.
+          The coordinator must work WITHOUT CRDT — CRDT is an optimization, not a requirement.
+
+          Primary fix target: daemon/src/db/crdt/sync.rs (lines 15/42/57/74 query crsql_changes).
+          Also check daemon/src/db/ for crsqlite load paths.
+          Add: fn crdt_available(conn) -> bool { conn.query_row("SELECT 1 FROM crsql_changes LIMIT 0", ...).is_ok() }
+          Guard all CRDT calls with this check.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+          - "cargo test --manifest-path daemon/Cargo.toml --lib -- coordinator"
+
+      - id: T1-03
+        ref: [F-03]
+        do: |
+          Fix: delegated agents don't execute Thor validation.
+
+          In daemon/src/orchestrator/executor.rs, build_plan_prompt() generates
+          a generic prompt. It must include the full Convergio workflow:
+
+          1. For each task in the plan:
+             - cvg task update <id> in_progress
+             - Execute the task (code/docs/etc)
+             - Run ALL verify[] commands from the spec
+             - cvg task update <id> submitted "summary"
+          2. After all tasks in a wave:
+             - cvg plan validate <plan_id>
+          3. After all waves:
+             - cvg plan complete <plan_id>
+          4. Send Telegram notification on completion
+
+          Read the current build_plan_prompt() and extend it.
+          Include verify[] commands from the spec YAML (parse from DB tasks.test_criteria).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "grep -q 'cvg task update' daemon/src/orchestrator/executor.rs"
+          - "grep -q 'cvg plan validate' daemon/src/orchestrator/executor.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 2: Mesh Fixes — binding, peer resolver, missing routes
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W2
+    name: "Mesh Fixes"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-04, F-05]
+        do: |
+          Fix B7: daemon binds 127.0.0.1 — unreachable from mesh.
+          Fix B6: /api/mesh/exec SSH doesn't resolve peers.
+          Fix B9: centralized peer resolver.
+
+          1. daemon/start.sh or serve command: bind 0.0.0.0:8420 ONLY in dev-mode.
+             Production keeps 127.0.0.1. Add --bind-all flag gated behind --dev-mode.
+             Verify: non-dev-mode must NOT bind 0.0.0.0.
+
+          2. Create daemon/src/mesh/peer_resolver.rs:
+             pub fn resolve_peer(name: &str, peers_conf: &str) -> PeerAddress
+             Fallback chain: SSH config alias → Tailscale IP → LAN IP → Thunderbolt → DNS
+             Read from peers.conf: ssh_alias, tailscale_ip, thunderbolt_ip, dns_name
+             Return the FIRST that responds to ping/SSH probe
+
+          3. Update /api/mesh/exec to use peer_resolver instead of raw hostname
+          4. Update delegate_to_peer() to use peer_resolver
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f daemon/src/mesh/peer_resolver.rs"
+          - "grep -q 'resolve_peer\\|PeerAddress' daemon/src/mesh/peer_resolver.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+      - id: T2-02
+        ref: [F-06]
+        do: |
+          Fix B2: /api/channels not mounted. Fix B3: /api/health/deep not mounted.
+          Fix B4: cvg delegation status 404 (ID mismatch). Fix B8: plan tree no wave names.
+
+          1. Wire api_channels.rs into routes/mod.rs (add use + merge)
+          2. Wire api_health_deep.rs into routes/mod.rs (add use + merge)
+          3. Fix delegation progress endpoint: align plan_id vs delegation_id
+          4. Fix cvg plan tree: include wave_id and wave_name in output
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "grep -q 'api_channels' daemon/src/server/routes/mod.rs"
+          - "grep -q 'api_health_deep' daemon/src/server/routes/mod.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 3: Delegation Workflow — unified, with Thor + credentials
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W3
+    name: "Unified Delegation Workflow"
+    merge_mode: sync
+    tasks:
+      - id: T3-01
+        ref: [F-07, F-08]
+        do: |
+          Unify delegation into ONE flow. Fix S4: cvg delegation CLI.
+
+          1. Add CLI commands to daemon/src/cli_delegation.rs:
+             cvg delegation start <plan_id> --peer <peer> [--wave <wave_id>]
+             cvg delegation cancel <plan_id>
+             Wire into main.rs CLI dispatch.
+
+          2. POST /api/mesh/delegate must:
+             - Resolve peer via peer_resolver (from W2)
+             - rsync working files
+             - Write prompt with full Thor workflow (from W1 T1-03)
+             - Launch in Convergio tmux session
+             - Propagate git credentials (gh auth token via SSH)
+             - Propagate Telegram/HF tokens via ~/.convergio/env
+
+          3. Per-task IPC callback (S10):
+             The completion script (done_script) should POST progress
+             to coordinator /api/delegation/{plan_id}/progress after EACH task,
+             not just at the end.
+
+          All 3 existing delegation paths (sse_delegate, executor, bash script)
+          must call the same core function.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "grep -q 'delegation.*start' daemon/src/cli_delegation.rs || grep -q 'delegation.*start' daemon/src/cli_commands.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 4: Developer Experience + Documentation
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W4
+    name: "DX + Documentation"
+    merge_mode: sync
+    tasks:
+      - id: T4-01
+        ref: [F-09]
+        do: |
+          Fix S5: cvg plan template. Fix S6: better import errors. Fix S9: planner alignment.
+          Fix D1: document spec YAML schema. Fix D4: tree vs execution-tree.
+
+          1. cvg plan template → writes a complete example spec.yaml to stdout:
+             All required fields, all valid types, all verify patterns.
+             Add to cli_plan.rs.
+
+          2. Better import error messages in api_plan_db_import.rs:
+             Instead of "CHECK constraint failed: type" →
+             "task T1-03 has invalid type 'docs', valid types: bug/feature/fix/refactor/test/config/doc/chore"
+
+          3. Document spec YAML schema in claude-config/reference/operational/spec-yaml-schema.md
+             All fields, required vs optional, valid values, examples.
+
+          4. Fix D4: cvg plan tree = cvg plan execution-tree (alias or redirect).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml"
+          - "test -f claude-config/reference/operational/spec-yaml-schema.md"
+
+      - id: T4-02
+        ref: [F-10]
+        do: |
+          Close ALL documentation gaps (D2, D3, D5, D6, D7).
+
+          D2: Create/update specs/openapi.yaml with current endpoints (or cvg api list command).
+          D3: Document mesh delegation in claude-config/reference/operational/mesh-delegation.md:
+              - Full flow: rsync → tmux → claude → Thor → completion → rsync back
+              - How to delegate: cvg delegation start <plan_id> --peer <peer>
+              - How to monitor: tmux attach -t Convergio
+          D5: Document Telegram credential management in TROUBLESHOOTING.md:
+              - Authoritative source: ~/.convergio/env on each node
+              - deploy-node.sh replicates from master keychain
+          D6: Document the complete delegation guide (same as D3).
+          D7: Document that peer_resolver is the ONE source for peer addressing.
+
+          Update convergio-capabilities.md with delegation section.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: doc
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "test -f claude-config/reference/operational/mesh-delegation.md"
+          - "test -f claude-config/reference/operational/spec-yaml-schema.md"
+
+      - id: T4-03
+        ref: [F-11]
+        do: |
+          Add invoke_agent MCP tool (tool 18).
+
+          In daemon/src/mcp_server/tools.rs: add McpTool definition:
+          {name: "cvg_invoke_agent", description: "Invoke a Convergio agent by name with a task",
+           input_schema: {agent: string, task: string, context: string, model: string}}
+
+          In daemon/src/mcp_server/handlers.rs: add handler that:
+          1. Reads agent definition from claude-config/agents/{name}.md
+          2. Builds prompt from agent definition + task + context
+          3. Launches claude -p with the agent's model
+          4. Returns the result
+
+          Ring: Trusted (1).
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "grep -q 'invoke_agent' daemon/src/mcp_server/tools.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WAVE 5: Tests + Docs + Deploy
+  # ─────────────────────────────────────────────────────────────────────────
+
+  - id: W5
+    name: "Closure — tests, docs, deploy"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        ref: [F-12]
+        do: |
+          Full test suite. Fix any failures from W1-W4 changes.
+          cargo test --features kernel --manifest-path daemon/Cargo.toml --lib
+          All tests must pass. No regressions.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+
+      - id: TF-doc
+        ref: [F-10, F-12]
+        do: |
+          CHANGELOG (Plan X entries), VERSION bump 19.0.0 (major: mesh fixes + delegation).
+          daemon/Cargo.toml version 19.0.0. NEXT_SESSION.md updated.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '19.0.0' VERSION.md"
+
+      - id: TF-deploy-verify
+        ref: [F-12]
+        do: |
+          Deploy to M1 Pro. Full E2E verification:
+          - Health, kernel, readiness, Telegram, MCP tools
+          - Test delegation: cvg delegation start on a test plan
+          - Test peer resolver: SSH to M1 Pro via resolved address
+          - Test coordinator emit (should not crash)
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q ok"
