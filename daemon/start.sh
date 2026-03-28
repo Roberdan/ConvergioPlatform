@@ -6,6 +6,10 @@
 #   ./daemon/start.sh tui --api-url http://host:8420
 set -euo pipefail
 
+# Daemon needs many FDs for SQLite + HTTP + background tasks.
+# macOS default is 256 which causes "Too many open files" errors.
+ulimit -n 10240 2>/dev/null || true
+
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
