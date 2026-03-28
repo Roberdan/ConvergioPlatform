@@ -5,7 +5,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde_json::{json, Value};
 
-#[cfg(feature = "kernel")]
+#[cfg(all(feature = "kernel", not(test)))]
 use crate::kernel::{engine::{KernelConfig, KernelEngine}, verify};
 
 pub fn router() -> Router<ServerState> {

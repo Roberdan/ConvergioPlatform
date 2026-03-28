@@ -6,7 +6,7 @@ mod tests {
     use crate::kernel::monitor::{
         check_daemon_reachable, check_mesh_peers, check_disk_ram, classify_and_store,
         detect_compaction_risk, detect_stale_locks, peer_name_from_url,
-        classify_readiness_results, KernelCheckResult, MonitorConfig,
+        KernelCheckResult, MonitorConfig,
     };
 
     // --- KernelCheckResult construction ---

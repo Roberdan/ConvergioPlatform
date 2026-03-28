@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::kernel::engine::{KernelAction, KernelConfig, KernelEngine, KernelSeverity, KernelStatus};
+    use crate::kernel::engine::{KernelAction, KernelConfig, KernelEngine, KernelSeverity};
 
     fn make_engine() -> KernelEngine {
         KernelEngine::new(KernelConfig {

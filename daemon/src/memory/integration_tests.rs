@@ -180,7 +180,7 @@ fn performance_10k_memories_recall_under_100ms() {
 fn blob_store_with_memory_lifecycle() {
     let (store, _vs, bs, _db, _bd) = setup();
     let mem = make_mem("agent-blob", "Memory with large attachment", &["blob"]);
-    let id = store.remember(mem).unwrap();
+    let _id = store.remember(mem).unwrap();
 
     let attachment = b"Large binary content for artifact storage";
     let hash = bs.store(attachment).unwrap();

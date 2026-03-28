@@ -7,7 +7,6 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::Router;
 use serde_json::{json, Value};
-use std::path::PathBuf;
 use tempfile::TempDir;
 use tower::ServiceExt;
 

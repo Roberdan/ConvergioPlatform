@@ -5,7 +5,7 @@ use crate::capabilities::proxy::CapabilityProxy;
 use crate::capabilities::registry::CapabilityRegistry;
 use crate::capabilities::ring::Ring;
 use crate::capabilities::types::Capability;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query};
 use axum::routing::{get, post, put};
 use axum::{Extension, Json, Router};
 use serde::Deserialize;

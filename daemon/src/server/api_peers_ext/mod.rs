@@ -4,7 +4,7 @@ pub use handlers::router;
 #[cfg(test)]
 mod tests {
     use crate::db::PlanDb;
-    use crate::server::state::{query_one, query_rows};
+    use crate::server::state::query_rows;
 
     fn setup_db() -> PlanDb {
         let db = PlanDb::open_in_memory().expect("db");

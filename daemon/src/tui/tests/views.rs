@@ -1,5 +1,5 @@
 // View rendering tests — all renders_* and tab/status bar assertions.
-use super::super::{BrainNode, MainView, ProjectTreeData, ProjectTreeNode};
+use super::super::{BrainNode, MainView};
 use super::{render_to_text, render_to_text_full, render_to_text_with_refresh, sample_data};
 
 // --- Kanban redesign ---

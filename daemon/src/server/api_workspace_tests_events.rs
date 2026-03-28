@@ -60,7 +60,7 @@ async fn delete_seeded_workspace_succeeds() {
     assert_eq!(body["workspace_id"], "ws-del-0001");
 
     // After delete, status endpoint returns 404
-    let resp = app
+    let _resp = app
         .router
         .clone()
         .oneshot(

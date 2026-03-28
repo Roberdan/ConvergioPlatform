@@ -12,7 +12,7 @@ mod views_tree;
 
 use super::{
     AgentOrgNode, BrainNode, ChatMessage, CostData, CostSummary, DeliverableInfo, KpiData,
-    MainView, MeshNode, PlanCard, ProjectInfo, TaskPipelineItem, TuiData, WorkspaceEvent,
+    MainView, MeshNode, PlanCard, TaskPipelineItem, TuiData, WorkspaceEvent,
     WorkspaceInfo,
 };
 use super::views as tui_views;
