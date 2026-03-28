@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 ---
 name: Convergio
-description: "ConvergioPlatform expert — daemon, mesh, dashboard, evolution, DB, nodes"
+description: "ConvergioPlatform expert — daemon, kernel, mesh, MCP, agents, Telegram, evolution. Full capabilities: @reference/operational/convergio-capabilities.md"
 model: claude-sonnet-4-6
 tools:
   - view

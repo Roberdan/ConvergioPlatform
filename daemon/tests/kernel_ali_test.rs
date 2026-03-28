@@ -5,8 +5,8 @@
 
 #![cfg(feature = "kernel")]
 
-use claude_core::kernel::engine::{KernelConfig, KernelEngine};
-use claude_core::kernel::voice_router::{classify_intent, VoiceIntent};
+use convergio_core::kernel::engine::{KernelConfig, KernelEngine};
+use convergio_core::kernel::voice_router::{classify_intent, VoiceIntent};
 
 // Helper: build a KernelEngine with no model loaded (ensures keyword fallback).
 fn unloaded_engine() -> KernelEngine {

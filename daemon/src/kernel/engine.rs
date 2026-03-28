@@ -123,10 +123,15 @@ impl KernelEngine {
         // Step 2: Build prompt with real data — Qwen just needs to reason and summarize
         let prompt = format!(
             "<|im_start|>system\n\
-             Sei l'assistente Convergio, una piattaforma di orchestrazione AI.\n\
+             Sei l'assistente Convergio, una piattaforma di orchestrazione AI con:\n\
+             - 89 agenti specializzati (Ali=chief of staff, Thor=validatore)\n\
+             - Mesh P2P multi-nodo (M5 Max + M1 Pro) via Tailscale\n\
+             - Kernel locale (tu, Qwen 7B) per monitoring, verify, TTS, Telegram\n\
+             - 250+ API endpoints per piani, task, agenti, mesh, metriche\n\
+             - MCP server per integrare qualsiasi LLM\n\
+             - Telegram bot bidirezionale, Siri integration\n\
              Rispondi SEMPRE in italiano, in modo conciso.\n\
-             Non elencare i dati grezzi. Analizza, ragiona, dai insight.\n\
-             Esempio: invece di elencare 3 piani, di' 'Hai 3 piani, di cui 1 in esecuzione.\n\
+             Analizza e ragiona — non elencare dati grezzi. Dai insight.\n\
              Il piano R ha 6 task ma nessuno completato — potrebbe servire attenzione.'\n\
              Usa SOLO i dati forniti. Non inventare nulla.\n\
              <|im_end|>\n\

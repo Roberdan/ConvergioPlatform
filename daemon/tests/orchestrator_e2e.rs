@@ -1,11 +1,11 @@
 // Orchestrator end-to-end integration tests — in-memory SQLite, no HTTP, no daemon.
-use claude_core::ipc::{IpcEngine, IpcResponse, MessageInfo};
-use claude_core::orchestrator::actions::emit;
-use claude_core::orchestrator::handlers::{
+use convergio_core::ipc::{IpcEngine, IpcResponse, MessageInfo};
+use convergio_core::orchestrator::actions::emit;
+use convergio_core::orchestrator::handlers::{
     on_delegation_failed, on_plan_done, on_plan_ready, on_task_done, on_wave_done,
     on_wave_validated,
 };
-use claude_core::orchestrator::{ALI_AGENT, CHANNEL};
+use convergio_core::orchestrator::{ALI_AGENT, CHANNEL};
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 
@@ -37,7 +37,7 @@ fn setup_test_db() -> (NamedTempFile, rusqlite::Connection) {
 
 fn test_engine(db_path: &std::path::Path) -> Arc<IpcEngine> {
     let engine = Arc::new(IpcEngine::new(db_path.to_path_buf()));
-    claude_core::ipc::ensure_ipc_schema(&engine.open_conn().unwrap()).unwrap();
+    convergio_core::ipc::ensure_ipc_schema(&engine.open_conn().unwrap()).unwrap();
     let _ = engine.channel_create(CHANNEL, Some("test"), ALI_AGENT);
     engine
 }

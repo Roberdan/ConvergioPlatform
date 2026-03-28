@@ -1,4 +1,4 @@
-use claude_core::server::routes::{DELETE_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
+use convergio_core::server::routes::{DELETE_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
 macro_rules! route_case {
     ($group:ident, $exists:ident, $shape:ident, $route:expr, $prefix:expr) => {

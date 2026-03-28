@@ -4,7 +4,7 @@
 
 #![cfg(feature = "kernel")]
 
-use claude_core::kernel::audio::{resolve_active_node, ActiveNode, ActiveNodeSource};
+use convergio_core::kernel::audio::{resolve_active_node, ActiveNode, ActiveNodeSource};
 
 // ── Schema helper ─────────────────────────────────────────────────────────────
 

@@ -2,7 +2,9 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # ConvergioPlatform
 
-Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
+Unified AI orchestration platform: Rust daemon + kernel (Qwen 7B local) + mesh + 89 agents + Telegram + Siri.
+
+**Full capabilities**: @reference/operational/convergio-capabilities.md (MUST READ for any non-trivial task)
 
 ## DB Access (NON-NEGOTIABLE)
 

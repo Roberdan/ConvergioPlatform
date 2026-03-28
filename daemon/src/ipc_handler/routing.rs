@@ -13,7 +13,7 @@ pub fn handle_route(
     let conn = rusqlite::Connection::open(&path)
         .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
     if parallel {
-        match claude_core::ipc::router::plan_parallel_execution(&conn, &task_description, 3) {
+        match convergio_core::ipc::router::plan_parallel_execution(&conn, &task_description, 3) {
             Ok(plan) => println!(
                 "{}",
                 serde_json::to_string_pretty(&plan).unwrap_or_default()
@@ -25,12 +25,12 @@ pub fn handle_route(
             }
         }
     } else if dry_run {
-        let analysis = claude_core::ipc::router::analyze_task(&task_description);
+        let analysis = convergio_core::ipc::router::analyze_task(&task_description);
         println!(
             "Analysis: {}",
             serde_json::to_string_pretty(&analysis).unwrap_or_default()
         );
-        if let Ok(chain) = claude_core::ipc::router::fallback_chain(&conn, "") {
+        if let Ok(chain) = convergio_core::ipc::router::fallback_chain(&conn, "") {
             println!("\nFallback chain:");
             for f in &chain {
                 println!(
@@ -40,7 +40,7 @@ pub fn handle_route(
             }
         }
     } else {
-        match claude_core::ipc::router::route_task(&conn, &task_description) {
+        match convergio_core::ipc::router::route_task(&conn, &task_description) {
             Ok(Some(d)) => {
                 println!("Model:      {}", d.model);
                 println!("Provider:   {}", d.provider);
@@ -66,7 +66,7 @@ pub fn handle_skills(
     let conn = rusqlite::Connection::open(&path)
         .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
     if let Some(agent_name) = agent {
-        match claude_core::ipc::skills::get_skills_for_agent(&conn, &agent_name) {
+        match convergio_core::ipc::skills::get_skills_for_agent(&conn, &agent_name) {
             Ok(skills) => {
                 println!(
                     "{:<20} {:<15} {:<15} {:>10} LAST_USED",
@@ -84,7 +84,7 @@ pub fn handle_skills(
             }
         }
     } else {
-        match claude_core::ipc::skills::get_skill_pool(&conn) {
+        match convergio_core::ipc::skills::get_skill_pool(&conn) {
             Ok(pool) => {
                 println!(
                     "{:<20} {:<15} {:<15} {:>10} LAST_USED",
@@ -115,13 +115,13 @@ pub fn handle_request_skill(
     let path = db_path.unwrap_or_else(default_db_path);
     let conn = rusqlite::Connection::open(&path)
         .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
-    match claude_core::ipc::skills::create_skill_request(&conn, &skill, &payload) {
+    match convergio_core::ipc::skills::create_skill_request(&conn, &skill, &payload) {
         Ok(id) => {
             println!("Request created: {id}");
             if let Ok(Some((agent, host))) =
-                claude_core::ipc::skills::find_best_agent(&conn, &skill)
+                convergio_core::ipc::skills::find_best_agent(&conn, &skill)
             {
-                let _ = claude_core::ipc::skills::assign_request(&conn, &id, &agent, &host);
+                let _ = convergio_core::ipc::skills::assign_request(&conn, &id, &agent, &host);
                 println!("Assigned to: {agent}@{host}");
             }
         }
@@ -142,7 +142,7 @@ pub fn handle_respond_skill(
     let path = db_path.unwrap_or_else(default_db_path);
     let conn = rusqlite::Connection::open(&path)
         .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
-    match claude_core::ipc::skills::complete_skill_request(&conn, &request_id, &result) {
+    match convergio_core::ipc::skills::complete_skill_request(&conn, &request_id, &result) {
         Ok(()) => println!("Request {request_id} completed"),
         Err(e) => {
             return Err(IpcHandlerError::OperationFailed(format!(
@@ -161,7 +161,7 @@ pub fn handle_rate_skill(
     let path = db_path.unwrap_or_else(default_db_path);
     let conn = rusqlite::Connection::open(&path)
         .map_err(|e| IpcHandlerError::DbOpen(format!("db open: {e}")))?;
-    match claude_core::ipc::skills::rate_skill_response(&conn, &request_id, rating) {
+    match convergio_core::ipc::skills::rate_skill_response(&conn, &request_id, rating) {
         Ok(()) => println!("Rated request {request_id}: {rating}"),
         Err(e) => {
             return Err(IpcHandlerError::OperationFailed(format!("rate-skill: {e}")));

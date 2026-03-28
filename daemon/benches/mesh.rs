@@ -1,4 +1,4 @@
-use claude_core::mesh::sync::{DeltaChange, MeshSyncFrame};
+use convergio_core::mesh::sync::{DeltaChange, MeshSyncFrame};
 use std::time::Instant;
 
 fn main() {

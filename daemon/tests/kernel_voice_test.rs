@@ -5,10 +5,10 @@
 
 #![cfg(feature = "kernel")]
 
-use claude_core::kernel::engine::{KernelConfig, KernelEngine};
-use claude_core::kernel::stt::{SttEngine, SttError};
-use claude_core::kernel::tts::TtsEngine;
-use claude_core::kernel::voice_router::{classify_intent, route_intent, VoiceIntent};
+use convergio_core::kernel::engine::{KernelConfig, KernelEngine};
+use convergio_core::kernel::stt::{SttEngine, SttError};
+use convergio_core::kernel::tts::TtsEngine;
+use convergio_core::kernel::voice_router::{classify_intent, route_intent, VoiceIntent};
 use std::time::Instant;
 
 // ---------------------------------------------------------------------------

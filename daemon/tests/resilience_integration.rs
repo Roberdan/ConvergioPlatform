@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 // These imports will fail until the module is implemented (RED phase).
-use claude_core::resilience::{
+use convergio_core::resilience::{
     circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState},
     health::{ComponentHealth, HealthCheck, HealthStatus},
     retry::{retry_with_backoff, RetryConfig},

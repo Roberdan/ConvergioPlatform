@@ -48,7 +48,7 @@ async fn write_report(
     yes: bool,
     api_url: &str,
 ) -> Result<(), CliError> {
-    let output_dir = claude_core::platform_paths::project_output_dir(project_id);
+    let output_dir = convergio_core::platform_paths::project_output_dir(project_id);
     let now = Utc::now();
     let date_prefix = now.format("%Y-%m-%d").to_string();
 

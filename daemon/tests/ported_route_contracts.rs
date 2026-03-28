@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use claude_core::server::routes::{
+use convergio_core::server::routes::{
     DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES,
 };
 

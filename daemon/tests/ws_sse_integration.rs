@@ -1,7 +1,7 @@
 //! Integration tests for WS brain push and SSE preflight/delegate streams.
 //! Marked #[ignore] because they bind a real TCP listener.
 
-use claude_core::server::routes::build_router_with_db;
+use convergio_core::server::routes::build_router_with_db;
 use futures_util::StreamExt;
 use reqwest::StatusCode;
 use serde_json::{json, Value};

@@ -1,11 +1,11 @@
 // Plan 633/634: Socket-based IPC integration tests
 use std::sync::Arc;
 
-use claude_core::ipc::engine::IpcEngine;
-use claude_core::ipc::protocol::{
+use convergio_core::ipc::engine::IpcEngine;
+use convergio_core::ipc::protocol::{
     decode_response, encode_request, read_ipc_frame, write_ipc_frame, IpcRequest, IpcResponse,
 };
-use claude_core::ipc::socket::start_ipc_server;
+use convergio_core::ipc::socket::start_ipc_server;
 
 async fn ipc_request(socket_path: &std::path::Path, request: &IpcRequest) -> IpcResponse {
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -162,7 +162,7 @@ async fn test_ping_pong() {
 }
 
 // Plan 635: Intelligence layer integration tests
-use claude_core::ipc::{budget, models, router, skills};
+use convergio_core::ipc::{budget, models, router, skills};
 use rusqlite::Connection;
 
 fn setup_full_db() -> Connection {

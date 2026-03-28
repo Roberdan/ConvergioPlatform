@@ -1,8 +1,8 @@
 //! Integration tests for TUI rendering against real API data.
 //! Marked #[ignore] — they bind a real TCP listener and fetch live endpoints.
 
-use claude_core::server::routes::build_router_with_db;
-use claude_core::tui::{views, KpiData, MainView, TuiData};
+use convergio_core::server::routes::build_router_with_db;
+use convergio_core::tui::{views, KpiData, MainView, TuiData};
 use ratatui::{backend::TestBackend, Terminal};
 use reqwest::Client;
 use std::net::SocketAddr;
@@ -90,7 +90,7 @@ async fn tui_renders_real_api_plan_data() {
     let base = format!("http://{addr}");
 
     // Fetch plans via TUI API function
-    let plans = claude_core::tui::api::fetch_plans(&client, &base).await;
+    let plans = convergio_core::tui::api::fetch_plans(&client, &base).await;
     assert!(!plans.is_empty(), "plans should not be empty");
     assert_eq!(plans[0].name, "Dashboard Restructure");
     assert_eq!(plans[0].status, "doing");
@@ -122,7 +122,7 @@ async fn tui_kpi_strip_populated_from_api() {
     let client = Client::new();
     let base = format!("http://{addr}");
 
-    let kpis = claude_core::tui::api::fetch_overview(&client, &base).await;
+    let kpis = convergio_core::tui::api::fetch_overview(&client, &base).await;
     // Seeded DB has 1 active plan, 1 running agent, 1 online peer
     assert!(kpis.plans_active >= 1, "expected at least 1 active plan");
 
@@ -152,11 +152,11 @@ async fn tui_views_cycle_with_real_data() {
     let base = format!("http://{addr}");
 
     let (kpis, plans, tasks, mesh, agents) = tokio::join!(
-        claude_core::tui::api::fetch_overview(&client, &base),
-        claude_core::tui::api::fetch_plans(&client, &base),
-        claude_core::tui::api::fetch_all_tasks(&client, &base),
-        claude_core::tui::api::fetch_mesh(&client, &base),
-        claude_core::tui::api::fetch_agents(&client, &base),
+        convergio_core::tui::api::fetch_overview(&client, &base),
+        convergio_core::tui::api::fetch_plans(&client, &base),
+        convergio_core::tui::api::fetch_all_tasks(&client, &base),
+        convergio_core::tui::api::fetch_mesh(&client, &base),
+        convergio_core::tui::api::fetch_agents(&client, &base),
     );
 
     let data = TuiData {

@@ -98,7 +98,7 @@ async fn handle_create(
     })?;
 
     // Resolve output directory via platform_paths (F-21)
-    let output_dir = claude_core::platform_paths::project_output_dir(name);
+    let output_dir = convergio_core::platform_paths::project_output_dir(name);
 
     // Interactive confirmation unless --yes (F-20)
     if !yes {

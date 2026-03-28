@@ -5,7 +5,7 @@ use super::utils::default_db_path;
 
 pub fn handle_models(db_path: Option<PathBuf>) -> Result<(), IpcHandlerError> {
     let conn = open_db(db_path)?;
-    match claude_core::ipc::models::get_all_models(&conn) {
+    match convergio_core::ipc::models::get_all_models(&conn) {
         Ok(models) => {
             println!(
                 "{:<15} {:<10} {:<30} {:>8} {:<10} LAST_SEEN",
@@ -45,7 +45,7 @@ pub fn handle_sub(command: SubCommands) -> Result<(), IpcHandlerError> {
             models,
             ..
         } => {
-            let sub = claude_core::ipc::models::Subscription {
+            let sub = convergio_core::ipc::models::Subscription {
                 name,
                 provider,
                 plan,
@@ -53,14 +53,14 @@ pub fn handle_sub(command: SubCommands) -> Result<(), IpcHandlerError> {
                 reset_day,
                 models,
             };
-            match claude_core::ipc::models::add_subscription(&conn, &sub) {
+            match convergio_core::ipc::models::add_subscription(&conn, &sub) {
                 Ok(()) => println!("added subscription {}", sub.name),
                 Err(e) => {
                     return Err(IpcHandlerError::OperationFailed(format!("add sub: {e}")));
                 }
             }
         }
-        SubCommands::List { .. } => match claude_core::ipc::models::list_subscriptions(&conn) {
+        SubCommands::List { .. } => match convergio_core::ipc::models::list_subscriptions(&conn) {
             Ok(subs) => {
                 println!(
                     "{:<20} {:<12} {:<10} {:>10} {:>5} MODELS",
@@ -84,7 +84,7 @@ pub fn handle_sub(command: SubCommands) -> Result<(), IpcHandlerError> {
             }
         },
         SubCommands::Remove { name, .. } => {
-            match claude_core::ipc::models::remove_subscription(&conn, &name) {
+            match convergio_core::ipc::models::remove_subscription(&conn, &name) {
                 Ok(n) => println!("removed {n} subscription(s)"),
                 Err(e) => {
                     return Err(IpcHandlerError::OperationFailed(format!("remove sub: {e}")));
@@ -97,14 +97,14 @@ pub fn handle_sub(command: SubCommands) -> Result<(), IpcHandlerError> {
 
 pub fn handle_budget(db_path: Option<PathBuf>) -> Result<(), IpcHandlerError> {
     let conn = open_db(db_path)?;
-    match claude_core::ipc::models::list_subscriptions(&conn) {
+    match convergio_core::ipc::models::list_subscriptions(&conn) {
         Ok(subs) => {
             println!(
                 "{:<20} {:<10} {:>10} {:>10} {:>10} {:>6} {:>10} STATUS",
                 "SUBSCRIPTION", "PROVIDER", "BUDGET", "SPENT", "REMAINING", "DAYS", "PROJECTED"
             );
             for s in &subs {
-                if let Ok(Some(st)) = claude_core::ipc::budget::get_budget_status(&conn, &s.name) {
+                if let Ok(Some(st)) = convergio_core::ipc::budget::get_budget_status(&conn, &s.name) {
                     let status = if st.usage_pct >= 95.0 {
                         "CRITICAL"
                     } else if st.usage_pct >= 85.0 {

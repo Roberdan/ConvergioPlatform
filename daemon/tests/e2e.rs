@@ -12,7 +12,7 @@
 #![allow(dead_code, unused_imports)]
 #![cfg(feature = "__disabled_pending_api_migration")]
 
-use claude_core::mesh::{
+use convergio_core::mesh::{
     auth::{decrypt_bundle, encrypt_bundle, load_bundle, save_bundle, AuthBundle},
     compat::{load_legacy_peers, verify_backward_compat},
     coordinator::{MigrationState, PeerSnapshot},
@@ -90,7 +90,7 @@ fn test_invite_join_flow() {
     // Step 4: validate again — single-use enforcement
     let err = validate_token(&token, SECRET, &db).expect_err("second validation must fail");
     assert!(
-        matches!(err, claude_core::mesh::token::TokenError::AlreadyUsed),
+        matches!(err, convergio_core::mesh::token::TokenError::AlreadyUsed),
         "expected AlreadyUsed, got: {err:?}"
     );
 }
@@ -136,7 +136,7 @@ fn test_auth_wrong_password_rejected() {
     assert!(
         matches!(
             result,
-            Err(claude_core::mesh::auth::AuthError::DecryptionFailed)
+            Err(convergio_core::mesh::auth::AuthError::DecryptionFailed)
         ),
         "expected DecryptionFailed, got: {result:?}"
     );
@@ -152,7 +152,7 @@ fn test_auth_wrong_token_rejected() {
     assert!(
         matches!(
             result,
-            Err(claude_core::mesh::auth::AuthError::DecryptionFailed)
+            Err(convergio_core::mesh::auth::AuthError::DecryptionFailed)
         ),
         "expected DecryptionFailed, got: {result:?}"
     );
@@ -167,7 +167,7 @@ fn test_token_security_expired() {
         generate_token(SECRET, "worker", vec![], "100.64.0.2", -1).expect("generate expired token");
     let err = validate_token(&token, SECRET, &db).expect_err("expired token must fail");
     assert!(
-        matches!(err, claude_core::mesh::token::TokenError::Expired),
+        matches!(err, convergio_core::mesh::token::TokenError::Expired),
         "expected Expired, got: {err:?}"
     );
 }
@@ -186,7 +186,7 @@ fn test_token_security_replay() {
     // Replay — must fail
     let err = validate_token(&token, SECRET, &db).expect_err("replay must fail");
     assert!(
-        matches!(err, claude_core::mesh::token::TokenError::AlreadyUsed),
+        matches!(err, convergio_core::mesh::token::TokenError::AlreadyUsed),
         "expected AlreadyUsed on replay, got: {err:?}"
     );
 }

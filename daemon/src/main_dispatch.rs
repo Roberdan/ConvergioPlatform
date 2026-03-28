@@ -21,14 +21,14 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
             args,
         } => {
             let path = db_path.unwrap_or_else(ipc_handler::default_db_path);
-            let db = match claude_core::db::PlanDb::open_path(&path, crsqlite_path) {
+            let db = match convergio_core::db::PlanDb::open_path(&path, crsqlite_path) {
                 Ok(db) => db,
                 Err(err) => {
                     eprintln!("db open failed: {err}");
                     return ExitCode::from(2);
                 }
             };
-            if let Err(e) = claude_core::db::migrations::run(db.connection()) {
+            if let Err(e) = convergio_core::db::migrations::run(db.connection()) {
                 eprintln!("[startup] migrations failed: {e}");
             }
             let command = args.first().map(String::as_str).unwrap_or_default();
@@ -54,9 +54,9 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let context = claude_core::hooks::checks::CheckContext::from_env(&home);
+            let context = convergio_core::hooks::checks::CheckContext::from_env(&home);
             if mode == "pre" {
-                match claude_core::hooks::dispatch_pre_tool(&input, &context) {
+                match convergio_core::hooks::dispatch_pre_tool(&input, &context) {
                     Ok(Some(result)) => println!("{result}"),
                     Ok(None) => {}
                     Err(err) => {
@@ -79,7 +79,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
                 std::env::set_var("DASHBOARD_DB", p);
             }
             let db_path = ipc_handler::default_db_path();
-            tokio::spawn(claude_core::background::run_pause_bridge(db_path));
+            tokio::spawn(convergio_core::background::run_pause_bridge(db_path));
             if let Err(e) =
                 ipc_handler::run_serve(bind, static_dir, crsqlite_path, dev_mode, mesh).await
             {
@@ -108,9 +108,9 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
                         return ExitCode::from(2);
                     }
                 };
-                let sync_interval = claude_core::background_sync::resolve_interval_secs(None);
+                let sync_interval = convergio_core::background_sync::resolve_interval_secs(None);
                 let _sync_handle =
-                    claude_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
+                    convergio_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
 
                 if let Err(e) = ipc_handler::run_daemon(
                     bind_ip,
@@ -129,7 +129,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
             }
         },
         Commands::Ipc { args } => {
-            if let Err(e) = claude_core::ipc::cli::run_ipc(args).await {
+            if let Err(e) = convergio_core::ipc::cli::run_ipc(args).await {
                 eprintln!("{e}");
                 return ExitCode::from(2);
             }
@@ -144,7 +144,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         }
         Commands::Tui { api_url } => {
             env::set_var("CONVERGIO_API_URL", &api_url);
-            match claude_core::tui::TuiApp::new() {
+            match convergio_core::tui::TuiApp::new() {
                 Ok(mut app) => {
                     if let Err(err) = app.run().await {
                         eprintln!("TUI error: {err}");

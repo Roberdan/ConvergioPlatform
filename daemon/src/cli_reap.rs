@@ -34,13 +34,13 @@ pub async fn handle(cmd: ReapCommands) {
             let stale_wt = Duration::from_secs(24 * 3600);
             let stale_lock = Duration::from_secs(3600);
 
-            let wt = claude_core::resilience::reaper::reap_worktrees(
+            let wt = convergio_core::resilience::reaper::reap_worktrees(
                 &repo_root,
                 stale_wt,
                 dry_run,
             );
-            let br = claude_core::resilience::reaper::reap_merged_branches(&repo_root, dry_run);
-            let lk = claude_core::resilience::reaper::reap_lock_files(
+            let br = convergio_core::resilience::reaper::reap_merged_branches(&repo_root, dry_run);
+            let lk = convergio_core::resilience::reaper::reap_lock_files(
                 &lock_dir,
                 stale_lock,
                 dry_run,

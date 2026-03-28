@@ -2,6 +2,9 @@
 
 # Claude Config
 
+**Platform**: Convergio — AI orchestration with kernel (Qwen 7B), mesh (P2P), 89 agents, Telegram, MCP.
+**Full capabilities**: @reference/operational/convergio-capabilities.md
+
 **Identity**: Principal Software Engineer | ISE Fundamentals | Sonnet 4.6 (coordinator) · Opus 4.6 (planning) · Haiku 4.5 (utility)
 **Style**: Concise, action-first, no emojis | Datetime: DD Mese YYYY, HH:MM CET
 **Shell**: zsh. `Read` tool over Bash. NEVER pipe to `tail`/`head`/`grep`/`cat` — hooks block.

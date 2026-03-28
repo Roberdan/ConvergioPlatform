@@ -34,14 +34,14 @@ pub async fn run_serve(
     mesh_enabled: bool,
 ) -> Result<(), IpcHandlerError> {
     // Initialise dev-mode flag before any request is handled.
-    claude_core::server::middleware::set_dev_mode(dev_mode);
+    convergio_core::server::middleware::set_dev_mode(dev_mode);
 
     // In dev-mode with no auth token, force localhost-only binding.
-    let effective_bind = claude_core::server::resolve_bind_addr(&bind, dev_mode);
+    let effective_bind = convergio_core::server::resolve_bind_addr(&bind, dev_mode);
 
     let dir = static_dir.unwrap_or_else(|| {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        claude_core::server::resolve_dashboard_static_dir(PathBuf::from(home).join(".claude"))
+        convergio_core::server::resolve_dashboard_static_dir(PathBuf::from(home).join(".claude"))
     });
     info!("claude-core serve → {effective_bind} (static: {dir:?})");
     eprintln!("claude-core serve → {effective_bind} (static: {dir:?})");
@@ -54,13 +54,13 @@ pub async fn run_serve(
 
     // Unified daemon: ONE shared IPC engine for HTTP + mesh + Ali
     let db_path = default_db_path();
-    let shared_ipc = std::sync::Arc::new(claude_core::ipc::IpcEngine::new(db_path.clone()));
+    let shared_ipc = std::sync::Arc::new(convergio_core::ipc::IpcEngine::new(db_path.clone()));
     if let Ok(conn) = shared_ipc.open_conn() {
-        let _ = claude_core::ipc::ensure_ipc_schema(&conn);
+        let _ = convergio_core::ipc::ensure_ipc_schema(&conn);
     }
 
     // ServerState uses the shared IPC engine
-    let server_state = claude_core::server::state::ServerState::with_ipc_engine(
+    let server_state = convergio_core::server::state::ServerState::with_ipc_engine(
         db_path.clone(),
         crsqlite_path.clone(),
         shared_ipc.clone(),
@@ -70,8 +70,8 @@ pub async fn run_serve(
         // Background CRDT sync
         if let Ok(sync_conn) = rusqlite::Connection::open(&db_path) {
             let sync_conn = std::sync::Arc::new(std::sync::Mutex::new(sync_conn));
-            let interval = claude_core::background_sync::resolve_interval_secs(None);
-            claude_core::background_sync::spawn_sync_loop(sync_conn, interval);
+            let interval = convergio_core::background_sync::resolve_interval_secs(None);
+            convergio_core::background_sync::spawn_sync_loop(sync_conn, interval);
         }
 
         // Mesh daemon (shares same IPC engine via DB path — Ali spawns inside)
@@ -79,8 +79,8 @@ pub async fn run_serve(
         let crsqlite_clone = crsqlite_path.clone();
         let mesh_db = db_path.clone();
         tokio::spawn(async move {
-            let config = claude_core::mesh::daemon::DaemonConfig {
-                bind_ip: claude_core::mesh::daemon::detect_tailscale_ip()
+            let config = convergio_core::mesh::daemon::DaemonConfig {
+                bind_ip: convergio_core::mesh::daemon::detect_tailscale_ip()
                     .unwrap_or_else(|| "127.0.0.1".to_string()),
                 port: 9420,
                 peers_conf_path: peers_conf,
@@ -90,17 +90,17 @@ pub async fn run_serve(
             };
             info!("mesh service starting on {}:{}", config.bind_ip, config.port);
             eprintln!("mesh service → {}:{}", config.bind_ip, config.port);
-            if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
+            if let Err(err) = convergio_core::mesh::daemon::run_service(config).await {
                 warn!("mesh service failed: {err}");
                 eprintln!("mesh service failed (non-fatal): {err}");
             }
         });
 
         // Spawn Ali on the SHARED IPC engine (same Notify as ServerState)
-        claude_core::orchestrator::spawn_ali(shared_ipc.clone(), db_path);
+        convergio_core::orchestrator::spawn_ali(shared_ipc.clone(), db_path);
     }
 
-    if let Err(err) = claude_core::server::run_with_state(&effective_bind, dir, server_state).await
+    if let Err(err) = convergio_core::server::run_with_state(&effective_bind, dir, server_state).await
     {
         warn!("server failed: {err}");
         return Err(IpcHandlerError::ServerFailed(format!(
@@ -123,10 +123,10 @@ pub async fn run_daemon(
     } else {
         bind_ip
             .or_else(|| std::env::var("TAILSCALE_IP").ok())
-            .or_else(claude_core::mesh::daemon::detect_tailscale_ip)
+            .or_else(convergio_core::mesh::daemon::detect_tailscale_ip)
             .unwrap_or_else(|| "0.0.0.0".to_string())
     };
-    let config = claude_core::mesh::daemon::DaemonConfig {
+    let config = convergio_core::mesh::daemon::DaemonConfig {
         bind_ip: resolved_ip,
         port,
         peers_conf_path: peers_conf.unwrap_or_else(default_peers_conf),
@@ -134,7 +134,7 @@ pub async fn run_daemon(
         crsqlite_path,
         local_only,
     };
-    if let Err(err) = claude_core::mesh::daemon::run_service(config).await {
+    if let Err(err) = convergio_core::mesh::daemon::run_service(config).await {
         return Err(IpcHandlerError::ServerFailed(format!(
             "daemon start failed: {err}"
         )));

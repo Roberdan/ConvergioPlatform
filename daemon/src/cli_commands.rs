@@ -72,7 +72,7 @@ pub enum Commands {
     },
     Ipc {
         #[command(flatten)]
-        args: claude_core::ipc::cli::IpcArgs,
+        args: convergio_core::ipc::cli::IpcArgs,
     },
     /// IPC Intelligence Layer commands (auth, models, budget, routing, skills)
     #[command(name = "ipc-intel")]

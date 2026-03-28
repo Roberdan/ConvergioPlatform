@@ -1,0 +1,1182 @@
+# Convergio Web — Full Design System + API Coverage
+# Redesign convergio-web to leverage 100% of daemon API + convergio-design components.
+# F-01..F-46 from /solve gap analysis.
+
+name: "Convergio Web — Full Design System + API Coverage"
+project: convergio-web-1774705056
+version: "2.0.0"
+constitution-version: "3.0.0"
+parallel_mode: standard
+execution_host: macProM1
+worktree_path: /Users/roberdandev/GitHub/convergio-web-plan-ui
+worktree_branch: plan-web-full-ui
+repo_url: https://github.com/Roberdan/convergio-web.git
+design_system_path: /Users/roberdandev/GitHub/convergio-design
+
+# Parallelism: W2, W3, W4, W5 are INDEPENDENT — execute in parallel after W1.
+# Within each wave, API-layer tasks run first, then UI tasks in parallel.
+#
+# Notification: Telegram alerts on decision-needed + wave-complete + plan-done.
+# ADR: ADR-0120 (Full Design System Migration) created in W0.
+# Workflow: worktree → branch per wave → PR → CI → review → merge → release.
+
+requirements:
+  - "F-01: Install @convergio/design-tokens and @convergio/design-elements in convergio-web"
+  - "F-02: Register all mn-* web components via register-all"
+  - "F-03: Replace custom sparkline with design system sparkline() API"
+  - "F-04: Add mn-toast notification system"
+  - "F-05: Add mn-header-shell as enhanced app shell"
+  - "F-06: Fix evolution page to use daemon-api.ts consistently"
+  - "F-07: All existing 7 pages pass current test suites"
+  - "F-08: New /plans page with plan list using mn-data-table"
+  - "F-09: Plan detail view with execution tree, readiness, drift check"
+  - "F-10: Kanban board for tasks using mn-kanban-board with drag-drop"
+  - "F-11: Gantt timeline for waves using mn-gantt"
+  - "F-12: Plan lifecycle actions: create, start, cancel, complete, approve, validate"
+  - "F-13: Task update flow with status changes"
+  - "F-14: Wave management: create and update waves"
+  - "F-15: New /ideas page with full CRUD and notes"
+  - "F-16: Promote idea to plan flow"
+  - "F-17: Enhanced dashboard with mn-gauge Ferrari-style KPIs"
+  - "F-18: Token/cost analytics with design system charts"
+  - "F-19: Animated counters with mn-flip-counter"
+  - "F-20: Notification center with queue endpoint"
+  - "F-21: Memory system: remember, recall, share, forget"
+  - "F-22: New /ipc page with live agent coordination dashboard"
+  - "F-23: Agent triage flow"
+  - "F-24: Agent creation and scaffolding"
+  - "F-25: Worker launch and status monitoring"
+  - "F-26: IPC: messages, channels, locks, worktrees, conflicts"
+  - "F-27: Budget and model routing visibility"
+  - "F-28: New /settings page"
+  - "F-29: Peer management CRUD with SSH check and discovery"
+  - "F-30: Project management CRUD with audit and tree"
+  - "F-31: Repository management"
+  - "F-32: Nightly jobs management"
+  - "F-33: Coordinator controls"
+  - "F-34: Kernel/voice: classify, play, ask"
+  - "F-35: CRDT dashboard"
+  - "F-36: Decision audit trail"
+  - "F-37: Deliverables management"
+  - "F-38: GitHub integration views"
+  - "F-39: OpenClaw integration"
+  - "F-40: Ingest and domain mapping"
+  - "F-41: All new pages have E2E tests"
+  - "F-42: All new components have unit tests"
+  - "F-43: WCAG 2.1 AA compliance on all pages"
+  - "F-44: All API calls through typed daemon-api.ts"
+  - "F-45: All response types in daemon-types.ts"
+  - "F-46: Every file <= 250 lines"
+
+acceptance_invariants:
+  - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+  - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+  - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test"
+  - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+  - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -rL 'DAEMON_URL\\|daemon' src/app/*/page.tsx | grep -v node_modules | wc -l | grep -q '^0$'"
+  - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && find src/ -name '*.ts' -o -name '*.tsx' | xargs wc -l | awk '{if($1>250 && $2!=\"total\") exit 1}'"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Wave 0: Setup — ADR, Worktree Verification, Notification Hook
+# ─────────────────────────────────────────────────────────────────────────────
+waves:
+  - id: W0
+    name: "Setup — ADR, Worktree, Notifications"
+    theme: "Architecture decision record, worktree verification, Telegram notification setup"
+    tasks:
+      - id: T0-01
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Verify worktree is on branch plan-web-full-ui
+          2. Verify npm install completed, tsc --noEmit passes, vitest run passes
+          3. Verify convergio-design is available at /Users/roberdandev/GitHub/convergio-design
+          4. Create docs/adr/ADR-0120-full-design-system-migration.md:
+             - Title: Full Design System Migration
+             - Status: Accepted
+             - Context: convergio-web uses ~10% of daemon API (20/200+ endpoints) and
+               0% of convergio-design components (0/31 web components, 0/72 headless).
+               All UI is custom React. This creates maintenance burden, inconsistent UX,
+               and fails to leverage the Ferrari Luce-inspired design language.
+             - Decision: Migrate convergio-web to fully use @convergio/design-tokens v6.0.0
+               and @convergio/design-elements v6.0.0. Replace custom components with mn-*
+               web components. Add pages for all daemon API categories. Target 100% endpoint
+               coverage across 12 pages.
+             - Consequences: Consistent design language, reduced custom code, full platform
+               control surface, dependency on convergio-design v6.0.0+.
+          5. Set up Telegram notification hook:
+             - Create scripts/notify-telegram.sh in the worktree:
+               Reads CONVERGIO_TELEGRAM_TOKEN and CONVERGIO_TELEGRAM_CHAT_ID from
+               macOS Keychain (security find-generic-password).
+               Sends message via Telegram Bot API.
+               Usage: ./scripts/notify-telegram.sh "title" "message"
+             - Test with a ping message: "🚀 Plan convergio-web-full-ui started on macProM1"
+          6. Update CHANGELOG.md: add Unreleased section header
+        type: chore
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && git branch --show-current | grep -q plan-web-full-ui"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f docs/adr/ADR-0120-full-design-system-migration.md"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f scripts/notify-telegram.sh"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'Unreleased' CHANGELOG.md"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Wave 1: Foundation — Design System Integration
+  # SEQUENTIAL — must complete before W2/W3/W4/W5
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: W1
+    name: "Foundation — Design System Integration"
+    theme: "Install design packages, register WCs, replace custom components, fix evolution bug"
+    tasks:
+      - id: T1-01
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Install design packages from local sibling:
+             npm install ../convergio-design/packages/tokens ../convergio-design
+          2. Update src/app/globals.css:
+             - Replace relative ../../.. imports with package imports:
+               @import '@convergio/design-tokens/css';
+               @import '@convergio/design-tokens/bridge-shadcn';
+               @import '@convergio/design-elements/css';
+             - Keep existing Tailwind directives and custom styles
+          3. Create src/lib/design-system.ts:
+             - import { registerAll } from '@convergio/design-elements/register-all';
+             - Export a registerDesignSystem() function that calls registerAll()
+             - Export type-safe React wrapper helpers for mn-* web components
+          4. Create src/components/design-system-init.tsx ('use client' directive)
+             that calls registerDesignSystem() in useEffect. Import in layout.tsx.
+          5. Verify: npm run build succeeds, all existing tests pass
+          Requirements: F-01, F-02
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm ls @convergio/design-tokens 2>&1 | grep -q design-tokens"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm ls @convergio/design-elements 2>&1 | grep -q design-elements"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'design-tokens' src/app/globals.css"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'registerAll\\|registerDesignSystem' src/lib/design-system.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+
+      - id: T1-02
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Replace src/components/sparkline.tsx:
+             - Import sparkline from @convergio/design-elements
+             - Create a React wrapper SparklineChart that renders a <canvas> or <div>
+               and calls sparkline(container, { data, color, ... }) in useEffect
+             - Keep the same props interface for backward compat
+          2. Update src/components/sparkline.test.tsx for the new implementation
+          3. Update all consumers (dashboard-widgets, kpi-strip, etc.) to use new SparklineChart
+          4. Add mn-toast integration:
+             - Create src/components/ui/toast-provider.tsx ('use client' directive)
+             - Register mn-toast web component
+             - Export useToast() hook that dispatches custom events to mn-toast
+             - Wire into layout.tsx
+          5. Add mn-header-shell integration (F-05):
+             - Update src/components/app-shell.tsx to use mn-header-shell web component
+             - Import headerShell from @convergio/design-elements
+             - Wire navigation, theme switching, and notification bell into header-shell
+             - Ensure 'use client' directive on components using WCs
+          6. Verify: sparkline renders, toast shows on action, header-shell renders
+          Requirements: F-03, F-04, F-05
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q '@convergio/design-elements' src/components/sparkline.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/ui/toast-provider.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'mn-header-shell\\|headerShell' src/components/app-shell.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+
+      - id: T1-03
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Fix src/app/evolution/page.tsx:
+             - Replace all raw fetch('/api/...') calls with daemon-api.ts functions
+             - Add missing API functions to daemon-api.ts: evolutionProposals(), evolutionExperiments(), evolutionRoi()
+             - Add corresponding types to daemon-types.ts
+             - Ensure it works with NEXT_PUBLIC_DAEMON_URL for Tauri builds
+          2. Add missing API functions to daemon-api.ts for endpoints already displayed but not yet typed:
+             - workspaces() for GET /api/workspace/list (currently uses /api/workspaces which may not exist)
+             - meshTopology() already exists but verify it's consumed
+             - meshTraffic() already exists but verify it's consumed
+          3. Update daemon-types.ts with complete types for all responses
+          4. Clean up dashboard-widgets.tsx if unused (remove or wire it)
+          5. Remove dead lifecycle-pipeline.tsx if unused by any import
+          6. Verify: all 7 pages work, Tauri build succeeds
+          Requirements: F-06, F-07, F-44, F-45
+        type: fix
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && ! grep -rn \"fetch('/api\" src/app/evolution/"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'evolutionProposals' src/lib/daemon-api.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+
+      - id: T1-04
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Write/update E2E tests for all W1 changes:
+             - e2e/design-system.spec.ts: verify mn-toast renders, sparkline canvas exists
+             - Update e2e/evolution.spec.ts: verify evolution page loads without raw fetch errors
+             - Update e2e/accessibility.spec.ts: verify new components are keyboard-accessible
+          2. Write unit tests for new modules:
+             - src/lib/design-system.test.ts: registerDesignSystem exports
+             - src/components/ui/toast-provider.test.tsx: useToast hook
+          3. Run full test suite and fix any regressions
+          4. Update CHANGELOG.md with W1 changes
+          5. Send Telegram notification: "✅ W1 Foundation complete — design system integrated"
+             using scripts/notify-telegram.sh
+          6. Create PR: branch plan-web-full-ui → main, title "feat(W1): design system integration"
+          Requirements: F-07, F-41, F-42, F-43
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f e2e/design-system.spec.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'W1' CHANGELOG.md"
+
+      - id: T1-05
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          CRITICAL: Split daemon-api.ts and daemon-types.ts into domain modules
+          to enable parallel execution of W2/W3/W4/W5 without merge conflicts.
+
+          1. Create src/lib/api/ directory with domain modules:
+             - src/lib/api/client.ts: base DAEMON_URL, fetchJson helper, daemonWs, daemonSSE
+             - src/lib/api/overview.ts: health, overview, mission, history (existing)
+             - src/lib/api/agents.ts: agents, catalog, sessions (existing)
+             - src/lib/api/mesh.ts: mesh, topology, traffic, peers (existing)
+             - src/lib/api/brain.ts: brain WS (existing)
+             - src/lib/api/chat.ts: chat session/message/stream (existing)
+             - src/lib/api/evolution.ts: proposals, experiments, roi (existing from T1-03)
+             - src/lib/api/workspaces.ts: workspace list/status (existing)
+             - src/lib/api/plans.ts: EMPTY — placeholder for W2
+             - src/lib/api/ideas.ts: EMPTY — placeholder for W3
+             - src/lib/api/ipc.ts: EMPTY — placeholder for W4
+             - src/lib/api/settings.ts: EMPTY — placeholder for W5
+             - src/lib/api/advanced.ts: EMPTY — placeholder for W6
+             - src/lib/api/index.ts: barrel re-export of ALL modules
+          2. Create src/lib/types/ directory with domain type modules:
+             - src/lib/types/overview.ts, agents.ts, mesh.ts, brain.ts, chat.ts,
+               evolution.ts, workspaces.ts, plans.ts, ideas.ts, ipc.ts, settings.ts,
+               advanced.ts, index.ts (barrel re-export)
+          3. Move existing types from daemon-types.ts into appropriate domain files
+          4. Move existing API functions from daemon-api.ts into appropriate domain files
+          5. Update daemon-api.ts to re-export from api/index.ts (backward compat)
+          6. Update daemon-types.ts to re-export from types/index.ts (backward compat)
+          7. Update ALL imports across src/ to use new paths or existing re-exports
+          8. Verify: all existing tests pass, build succeeds, no import errors
+          NOTE: Each parallel wave (W2-W5) will now own its domain file exclusively,
+          eliminating merge conflicts during parallel execution.
+          Requirements: F-44, F-45, F-46
+        type: refactor
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/lib/api/client.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/lib/api/index.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/lib/types/index.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/lib/api/plans.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/lib/api/ideas.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/lib/api/ipc.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/lib/api/settings.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && wc -l src/lib/api/*.ts | awk '{if($1>250 && $2!=\"total\") exit 1}'"
+
+      - id: T1-06
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Install @axe-core/playwright as dev dependency for WCAG 2.1 AA compliance:
+             npm install -D @axe-core/playwright
+          2. Update e2e/accessibility.spec.ts:
+             - Import AxeBuilder from @axe-core/playwright
+             - Run axe audit on every page (/, /chat, /agents, /mesh, /brain, /evolution, /workspaces)
+             - Assert zero critical/serious violations
+             - Check heading hierarchy, focus indicators, ARIA labels, color contrast
+          3. Set up MSW (Mock Service Worker) for offline E2E testing:
+             - npm install -D msw
+             - Create src/test/msw-handlers.ts with mock responses for all existing API endpoints
+             - Create src/test/msw-server.ts for test setup
+             - Update vitest.config.ts to use MSW for unit tests
+          4. Update e2e tests to handle daemon-down gracefully (skeleton loading states)
+          5. Verify: axe audit passes, MSW mocks work in unit tests
+          Requirements: F-43, F-41, F-42
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm ls @axe-core/playwright 2>&1 | grep -q axe-core"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm ls msw 2>&1 | grep -q msw"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/test/msw-handlers.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Wave 2: Plan Management — The #1 missing feature
+  # PARALLEL with W3, W4, W5 (independent after W1)
+  # Kanban, Gantt, data table, plan lifecycle, task updates
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: W2
+    name: "Plan Management — Kanban, Gantt, Lifecycle"
+    theme: "Full plan/task/wave CRUD with mn-kanban-board, mn-gantt, mn-data-table"
+    tasks:
+      - id: T2-01
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Add plan management API functions to src/lib/api/plans.ts (domain module):
+             - planList() → GET /api/plan-db/list
+             - planDetail(id) → GET /api/plan-db/json/:plan_id
+             - planExecutionTree(id) → GET /api/plan-db/execution-tree/:plan_id
+             - planReadiness(id) → GET /api/plan-db/readiness/:plan_id
+             - planDriftCheck(id) → GET /api/plan-db/drift-check/:plan_id
+             - planContext(id) → GET /api/plan-db/context/:plan_id
+             - planCreate(data) → POST /api/plan-db/create
+             - planStart(id) → POST /api/plan-db/start/:plan_id
+             - planCancel(id) → POST /api/plan-db/cancel/:plan_id
+             - planComplete(id) → POST /api/plan-db/complete/:plan_id
+             - planApprove(id) → POST /api/plan-db/approve/:plan_id
+             - planValidate(id) → POST /api/plans/:plan_id/validate
+             - taskUpdate(data) → POST /api/plan-db/task/update
+             - waveCreate(data) → POST /api/plan-db/wave/create
+             - waveUpdate(data) → POST /api/plan-db/wave/update
+             - kbSearch(query) → GET /api/plan-db/kb-search
+             - plansTimeline() → GET /api/plans/timeline
+             - tasksDistribution() → GET /api/tasks/distribution
+             - tasksBlocked() → GET /api/tasks/blocked
+          2. Add full TypeScript types to src/lib/types/plans.ts:
+             - PlanSummary, PlanDetail, ExecutionTree, Wave, Task, TaskStatus
+             - PlanReadiness, DriftCheck, PlanContext
+             - KBSearchResult, Timeline, TaskDistribution
+          3. Write unit tests in src/lib/api/plans.test.ts
+          4. Re-export from src/lib/api/index.ts and src/lib/types/index.ts
+          Requirements: F-44, F-45
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'planList' src/lib/api/plans.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'planCreate' src/lib/api/plans.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'taskUpdate' src/lib/api/plans.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'ExecutionTree' src/lib/types/plans.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+
+      - id: T2-02
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/app/plans/page.tsx — Plans page (<250 lines, thin composition):
+             - Heading "Plans" with h1
+             - Fetch plan list from planList() on mount with 5s polling
+             - Render plan cards showing: name, status, progress (tasks done/total), waves, created_at
+             - Filter controls: status (all/todo/doing/done/cancelled), search by name
+             - "New Plan" button → opens create modal
+             - Click plan → navigates to /plans/[id]
+          2. Create src/app/plans/[id]/page.tsx — Plan detail (<250 lines):
+             - Tab bar: Overview | Kanban | Gantt | Tree
+             - Overview tab: plan metadata, readiness gates, drift check status
+             - Action buttons: Start, Cancel, Complete, Approve, Validate (based on plan status)
+             - Each action uses optimistic UI + API call + refresh
+          3. Create src/components/plans/plan-card.tsx:
+             - Card with plan name, status badge, progress bar, wave count
+             - Click handler for navigation
+          4. Create src/components/plans/plan-actions.tsx:
+             - Action button group with confirm dialogs for destructive actions
+          5. Update src/components/app-shell.tsx: add "Plans" to navigation (shortcut key 8)
+          6. Update src/app/layout.tsx: add /plans route
+          Requirements: F-08, F-12
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/app/plans/page.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f 'src/app/plans/[id]/page.tsx'"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/plan-card.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/plan-actions.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'plans' src/components/app-shell.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+
+      - id: T2-03
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/components/plans/kanban-board.tsx:
+             - React wrapper for mn-kanban-board web component
+             - Columns: todo, doing, in_review, done, blocked
+             - Cards show: task ID, title, assignee, effort badge
+             - Drag-drop between columns calls taskUpdate() API
+             - Optimistic UI: move card immediately, revert on error
+             - useEffect to initialize kanbanBoard() from @convergio/design-elements
+          2. Create src/components/plans/gantt-view.tsx:
+             - React wrapper for mn-gantt web component
+             - Rows = waves, sub-rows = tasks
+             - Color-coded by status
+             - useEffect to initialize gantt() from @convergio/design-elements
+          3. Create src/components/plans/execution-tree.tsx:
+             - Tree visualization of plan → waves → tasks
+             - Uses planExecutionTree() API
+             - Expand/collapse waves, color-coded task status
+          4. Wire all three into /plans/[id]/page.tsx tabs
+          Requirements: F-09, F-10, F-11
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/kanban-board.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/gantt-view.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/execution-tree.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'kanbanBoard\\|mn-kanban' src/components/plans/kanban-board.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'gantt\\|mn-gantt' src/components/plans/gantt-view.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+
+      - id: T2-04
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/components/plans/plan-create-modal.tsx:
+             - Modal form for creating a new plan
+             - Fields: name, project (select from /api/projects), description
+             - Submit calls planCreate() API
+             - Close on success, show toast notification
+          2. Create src/components/plans/wave-manager.tsx:
+             - Component for creating and updating waves within a plan
+             - Add wave form: name, theme
+             - Edit wave inline: name, theme
+             - Calls waveCreate() and waveUpdate() APIs
+          3. Create src/components/plans/task-detail-panel.tsx:
+             - Uses mn-detail-panel or custom panel
+             - Shows: task ID, title, status, effort, model, executor, verify commands
+             - Status update dropdown: pending → in_progress → done → blocked
+             - Calls taskUpdate() on change
+          4. Write unit tests for all plan components:
+             - plan-card.test.tsx, plan-actions.test.tsx
+             - kanban-board.test.tsx, gantt-view.test.tsx
+             - plan-create-modal.test.tsx, task-detail-panel.test.tsx
+          5. Write E2E test: e2e/plans.spec.ts
+             - Navigate to /plans, verify heading
+             - Verify plan list loads or shows empty state
+             - Keyboard shortcut 8 navigates to plans
+          6. Update CHANGELOG.md with W2 changes
+          7. Send Telegram: "✅ W2 Plan Management complete — kanban, gantt, lifecycle"
+          8. Create/update PR with W2 changes, request review
+          Requirements: F-12, F-13, F-14, F-41, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/plan-create-modal.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/wave-manager.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/task-detail-panel.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f e2e/plans.spec.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test e2e/plans.spec.ts"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Wave 3: Ideas, Analytics & Enriched Dashboard
+  # PARALLEL with W2, W4, W5 (independent after W1)
+  # Ideas CRUD, Ferrari gauges, charts, notifications, memory
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: W3
+    name: "Ideas, Analytics & Enriched Dashboard"
+    theme: "Ideas CRUD, mn-gauge KPIs, charts, notification center, memory system"
+    tasks:
+      - id: T3-01
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Add ideas/memory/token API functions to src/lib/api/ideas.ts (domain module):
+             - ideasList() → GET /api/ideas
+             - ideaGet(id) → GET /api/ideas/:id
+             - ideaCreate(data) → POST /api/ideas
+             - ideaUpdate(id, data) → PUT /api/ideas/:id
+             - ideaDelete(id) → DELETE /api/ideas/:id
+             - ideaNotes(id) → GET /api/ideas/:id/notes
+             - ideaAddNote(id, note) → POST /api/ideas/:id/notes
+             - ideaPromote(id) → POST /api/ideas/:id/promote
+             - notifications() → GET /api/notifications
+             - notifyQueue() → GET /api/notify/queue
+             - memoryRecall(query) → GET /api/memory/recall
+             - memoryRemember(data) → POST /api/memory/remember
+             - memoryShare(data) → POST /api/memory/share
+             - memoryForget(id) → DELETE /api/memory/forget/:id
+             - tokenDaily() → GET /api/tokens/daily
+             - tokenModels() → GET /api/tokens/models
+          2. Add TypeScript types to src/lib/types/ideas.ts
+          3. Unit tests in src/lib/api/ideas.test.ts
+          4. Re-export from src/lib/api/index.ts and src/lib/types/index.ts
+          Requirements: F-44, F-45
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'ideasList' src/lib/api/ideas.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'memoryRecall' src/lib/api/ideas.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'Idea' src/lib/types/ideas.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+
+      - id: T3-02
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/app/ideas/page.tsx — Ideas page (<250 lines):
+             - Heading "Ideas" with h1
+             - Fetch ideas list on mount with 5s polling
+             - Grid of idea cards: title, status, created_at, note count
+             - Floating action button "New Idea" → opens create form
+             - Click idea → expands detail panel with notes
+             - "Promote to Plan" button on each idea → calls ideaPromote()
+          2. Create src/components/ideas/idea-card.tsx:
+             - Card with title, description preview, status badge, note count
+             - Edit/delete actions
+          3. Create src/components/ideas/idea-form.tsx:
+             - Modal form for create/edit: title, description, tags
+          4. Create src/components/ideas/idea-notes.tsx:
+             - Notes list with add note form
+             - Each note shows author, timestamp, content
+          5. Update app-shell.tsx: add "Ideas" to navigation (shortcut key 9)
+          6. Write tests: idea-card.test.tsx, e2e/ideas.spec.ts
+          Requirements: F-15, F-16, F-41, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/app/ideas/page.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/ideas/idea-card.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f e2e/ideas.spec.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test e2e/ideas.spec.ts"
+
+      - id: T3-03
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Enhance src/app/page.tsx (Dashboard / Control Room):
+             - Replace existing KPI cards with mn-gauge (Ferrari-style) for key metrics:
+               - Plans active/total → mn-gauge
+               - Agents running → mn-gauge
+               - Mesh online/total → mn-gauge
+               - Token usage today → mn-gauge with budget ring
+             - Add mn-flip-counter for animated token/cost numbers
+             - Add progress rings (mn-progress-ring or progressRing()) for wave completion
+          2. Create src/components/dashboard/kpi-gauges.tsx:
+             - React wrapper for mn-gauge web component
+             - Props: value, max, label, color, complications (sub-values)
+             - Uses FerrariGauge from @convergio/design-elements
+          3. Create src/components/dashboard/token-charts.tsx:
+             - Daily token usage line chart using areaChart() from design-elements
+             - Model breakdown donut chart using donut() from design-elements
+             - Data from tokenDaily() and tokenModels() APIs
+          4. Update src/components/dashboard/kpi-strip.tsx to use new gauge components
+          5. Write tests: kpi-gauges.test.tsx, token-charts.test.tsx
+          6. Update e2e/dashboard.spec.ts to verify gauges render
+          Requirements: F-17, F-18, F-19, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'FerrariGauge\\|mn-gauge\\|createGauge' src/components/dashboard/kpi-gauges.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/dashboard/token-charts.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test e2e/dashboard.spec.ts"
+
+      - id: T3-04
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/components/notifications/notification-center.tsx:
+             - Slide-out panel triggered by bell icon in app shell
+             - Fetches from notifications() and notifyQueue() APIs
+             - Groups by severity (info, warning, error, critical)
+             - Mark as read, dismiss, clear all actions
+             - Uses mn-toast for inline notification popups
+          2. Create src/components/memory/memory-panel.tsx:
+             - Search recall with memoryRecall(query)
+             - "Remember" form: key, value, context
+             - Memory list with forget button
+             - Share memory to other agents
+          3. Wire notification bell into app-shell.tsx header area
+          4. Wire memory panel as a drawer/modal accessible from command palette
+          5. Write tests and E2E
+          6. Update CHANGELOG.md with W3 changes
+          7. Send Telegram: "✅ W3 Ideas + Analytics complete — gauges, charts, notifications"
+          8. Create/update PR with W3 changes, request review
+          Requirements: F-20, F-21, F-41, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/notifications/notification-center.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/memory/memory-panel.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Wave 4: IPC, Agent Orchestration & Workers
+  # PARALLEL with W2, W3, W5 (independent after W1)
+  # Agent coordination dashboard, triage, creation, workers
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: W4
+    name: "IPC & Agent Orchestration"
+    theme: "IPC dashboard, agent triage/creation, workers, budget/model visibility"
+    tasks:
+      - id: T4-01
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Add IPC/agent/worker API functions to src/lib/api/ipc.ts (domain module):
+             - ipcAgents() → GET /api/ipc/agents
+             - ipcMessages() → GET /api/ipc/messages
+             - ipcChannels() → GET /api/ipc/channels
+             - ipcContext() → GET /api/ipc/context
+             - ipcLocks() → GET /api/ipc/locks
+             - ipcWorktrees() → GET /api/ipc/worktrees
+             - ipcConflicts() → GET /api/ipc/conflicts
+             - ipcStatus() → GET /api/ipc/status
+             - ipcBudget() → GET /api/ipc/budget
+             - ipcModels() → GET /api/ipc/models
+             - ipcSkills() → GET /api/ipc/skills
+             - ipcRouteHistory() → GET /api/ipc/route-history
+             - ipcSend(data) → POST /api/ipc/send
+             - agentTriage(data) → POST /api/agents/triage
+             - agentCreate(data) → POST /api/agents/create
+             - agentScaffold(data) → POST /api/agents/scaffold
+             - agentEnable(data) → POST /api/agents/enable
+             - agentDisable(data) → POST /api/agents/disable
+             - workersList() → GET /api/workers
+             - workersStatus() → GET /api/workers/status
+             - workersLaunch(data) → POST /api/workers/launch
+          2. Add TypeScript types to src/lib/types/ipc.ts
+          3. Unit tests in src/lib/api/ipc.test.ts
+          4. Re-export from src/lib/api/index.ts and src/lib/types/index.ts
+          Requirements: F-44, F-45
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'ipcAgents' src/lib/api/ipc.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'agentTriage' src/lib/api/ipc.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'workersLaunch' src/lib/api/ipc.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+
+      - id: T4-02
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/app/ipc/page.tsx — IPC Dashboard (<250 lines):
+             - Heading "Agent Coordination" with h1
+             - 4-section layout:
+               a. Active agents grid (from ipcAgents) with status indicators
+               b. Message feed (from ipcMessages) — scrollable log
+               c. Resource status: locks, worktrees, conflicts (tabs)
+               d. Budget/model panel: token budget, model allocation chart
+          2. Create src/components/ipc/agent-grid.tsx:
+             - Grid of active IPC agents with name, type, model, capabilities
+             - Pulse animation for active agents
+             - Uses mn-data-table for tabular view option
+          3. Create src/components/ipc/message-feed.tsx:
+             - Scrollable message log with auto-scroll
+             - Filter by channel
+             - Timestamp, sender, content display
+          4. Create src/components/ipc/resource-status.tsx:
+             - Tabs: Locks, Worktrees, Conflicts
+             - Each tab shows mn-data-table with relevant data
+          5. Create src/components/ipc/budget-panel.tsx:
+             - Token budget gauge (mn-gauge)
+             - Model distribution chart (donut)
+             - Route history table
+          6. Update app-shell.tsx: add "IPC" to navigation
+          7. Write tests and E2E: e2e/ipc.spec.ts
+          Requirements: F-22, F-26, F-27, F-41, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/app/ipc/page.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/ipc/agent-grid.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/ipc/budget-panel.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f e2e/ipc.spec.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+
+      - id: T4-03
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Enhance src/app/agents/page.tsx:
+             - Add "Triage" button that opens triage modal
+             - Add "Create Agent" button that opens creation form
+             - Add worker status section below agents
+          2. Create src/components/agents/triage-modal.tsx:
+             - Text input: describe the problem/task
+             - Submit calls agentTriage() API
+             - Shows recommended agent with confidence score
+             - "Launch Agent" button to start the recommended agent
+          3. Create src/components/agents/agent-create-form.tsx:
+             - Form: name, type, model, capabilities, description
+             - Submit calls agentCreate() API
+             - Option to scaffold from template via agentScaffold()
+          4. Create src/components/agents/worker-status.tsx:
+             - Worker cards with status, launch button
+             - workersList() + workersStatus() APIs
+             - workersLaunch() on button click
+          5. Write tests: triage-modal.test.tsx, agent-create-form.test.tsx
+          6. Update e2e/agents.spec.ts
+          7. Update CHANGELOG.md with W4 changes
+          8. Send Telegram: "✅ W4 IPC + Agents complete — coordination, triage, workers"
+          9. Create/update PR with W4 changes, request review
+          Requirements: F-23, F-24, F-25, F-41, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/agents/triage-modal.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/agents/agent-create-form.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/agents/worker-status.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test e2e/agents.spec.ts"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Wave 5: Settings, Admin & Peer Management
+  # PARALLEL with W2, W3, W4 (independent after W1)
+  # Settings page, peers CRUD, projects, repos, nightly, coordinator
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: W5
+    name: "Settings & Admin"
+    theme: "Settings page, peer management, projects, repos, nightly jobs, coordinator"
+    tasks:
+      - id: T5-01
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Add settings/admin API functions to src/lib/api/settings.ts (domain module):
+             - peersList() → GET /api/peers
+             - peerCreate(data) → POST /api/peers
+             - peerUpdate(name, data) → PUT /api/peers/:name
+             - peerDelete(name) → DELETE /api/peers/:name
+             - peersDiscover() → GET /api/peers/discover
+             - peersSshCheck(data) → POST /api/peers/ssh-check
+             - peersCoordinator() → GET /api/peers/coordinator
+             - projectsList() → GET /api/projects
+             - projectCreate(data) → POST /api/projects
+             - projectTree(id) → GET /api/project/:id/tree
+             - projectAudit(id) → GET /api/audit/project/:project_id
+             - reposList() → GET /api/repositories
+             - repoCreate(data) → POST /api/repositories
+             - repoGet(name) → GET /api/repositories/:name
+             - nightlyJobs() → GET /api/nightly/jobs
+             - nightlyJobGet(id) → GET /api/nightly/jobs/:id
+             - nightlyJobCreate(data) → POST /api/nightly/jobs/create
+             - nightlyJobTrigger(data) → POST /api/nightly/jobs/trigger
+             - nightlyJobRetry(id) → POST /api/nightly/jobs/:id/retry
+             - nightlyJobToggle(id) → POST /api/nightly/jobs/definitions/:id/toggle
+             - nightlyConfig(projectId) → GET /api/nightly/config/:project_id
+             - nightlyConfigUpdate(projectId, data) → PUT /api/nightly/config/:project_id
+             - coordinatorStatus() → GET /api/coordinator/status
+             - coordinatorToggle() → GET /api/coordinator/toggle
+             - coordinatorEvents() → GET /api/coordinator/events
+             - coordinatorEmit(data) → POST /api/coordinator/emit
+          2. Add TypeScript types to src/lib/types/settings.ts
+          3. Unit tests in src/lib/api/settings.test.ts
+          4. Re-export from src/lib/api/index.ts and src/lib/types/index.ts
+          Requirements: F-44, F-45
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'peersList' src/lib/api/settings.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'nightlyJobs' src/lib/api/settings.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'coordinatorStatus' src/lib/api/settings.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+
+      - id: T5-02
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/app/settings/page.tsx — Settings page (<250 lines):
+             - Heading "Settings" with h1
+             - Tab layout: Peers | Projects | Repositories | Nightly | Coordinator
+             - Each tab renders its dedicated component
+          2. Create src/components/settings/peers-manager.tsx:
+             - mn-data-table with peer list: name, host, status, last heartbeat
+             - "Add Peer" button → form modal: name, host, port
+             - Edit inline → PUT /api/peers/:name
+             - Delete with confirm → DELETE /api/peers/:name
+             - "Discover" button → peersDiscover() shows found peers
+             - "SSH Check" button per peer → peersSshCheck()
+          3. Create src/components/settings/projects-manager.tsx:
+             - Project list with create form
+             - Click project → shows tree view and audit summary
+          4. Create src/components/settings/repos-manager.tsx:
+             - Repository list with add form
+          5. Update app-shell.tsx: add "Settings" to navigation (gear icon)
+          Requirements: F-28, F-29, F-30, F-31
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/app/settings/page.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/peers-manager.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/projects-manager.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/repos-manager.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+
+      - id: T5-03
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Create src/components/settings/nightly-manager.tsx:
+             - Nightly jobs list with mn-data-table
+             - Status badges: pending, running, success, failed
+             - Actions: create, trigger, retry, toggle enabled
+             - Per-project config editor (nightlyConfig + nightlyConfigUpdate)
+          2. Create src/components/settings/coordinator-panel.tsx:
+             - Coordinator status display with toggle on/off
+             - Event stream showing recent coordinator events
+             - Emit custom event form
+          3. Write tests and E2E:
+             - peers-manager.test.tsx, nightly-manager.test.tsx
+             - e2e/settings.spec.ts: navigate, verify heading, tabs
+          4. Update CHANGELOG.md with W5 changes
+          5. Send Telegram: "✅ W5 Settings + Admin complete — peers, nightly, coordinator"
+          6. Create/update PR with W5 changes, request review
+          Requirements: F-32, F-33, F-41, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/nightly-manager.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/coordinator-panel.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f e2e/settings.spec.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test e2e/settings.spec.ts"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Wave 6: Advanced — Voice, CRDT, Decisions, Deliverables, GitHub
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: W6
+    name: "Advanced Features"
+    depends_on: "W2, W3, W4, W5"
+    theme: "Voice/kernel, CRDT, decisions, deliverables, GitHub, OpenClaw, ingest"
+    tasks:
+      - id: T6-01
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Add advanced API functions to src/lib/api/advanced.ts (domain module):
+             - kernelStatus() → GET /api/kernel/status
+             - kernelClassify(data) → POST /api/kernel/classify
+             - kernelPlay(data) → POST /api/kernel/play
+             - kernelAsk(data) → POST /api/kernel/ask
+             - kernelActiveNode(data) → POST /api/kernel/active-node
+             - crdtStatus() → GET /api/crdt/status
+             - crdtPeers() → GET /api/crdt/peers
+             - crdtForceSync() → POST /api/crdt/force-sync
+             - decisions() → GET /api/decisions
+             - decisionCreate(data) → POST /api/decisions
+             - deliverablesList() → GET /api/deliverables
+             - deliverableCreate(data) → POST /api/deliverables
+             - deliverableGet(id) → GET /api/deliverables/:id
+             - deliverableApprove(id) → POST /api/deliverables/:id/approve
+             - deliverableVersion(id) → POST /api/deliverables/:id/version
+             - githubCommits(planId) → GET /api/github/commits/:plan_id
+             - githubEvents(projectId) → GET /api/github/events/:project_id
+             - githubStats(planId) → GET /api/github/stats/:plan_id
+             - openclawAgents() → GET /api/openclaw/agents
+             - openclawInvoke(data) → POST /api/openclaw/invoke
+             - ingestFormats() → GET /api/ingest/formats
+             - ingest(data) → POST /api/ingest
+             - domainList() → GET /api/domain/list
+             - domainMap(data) → POST /api/domain/map
+          2. Add TypeScript types to src/lib/types/advanced.ts
+          3. Unit tests in src/lib/api/advanced.test.ts
+          4. Re-export from src/lib/api/index.ts and src/lib/types/index.ts
+          Requirements: F-44, F-45
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'kernelStatus' src/lib/api/advanced.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'deliverablesList' src/lib/api/advanced.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'githubCommits' src/lib/api/advanced.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+
+      - id: T6-02
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Enhance src/app/chat/page.tsx — add voice controls:
+             - Microphone button: uses mn-voice-manager or browser MediaRecorder
+             - Records audio → sends to kernelAsk() → receives text response
+             - "Play" button on assistant messages → kernelPlay() for TTS
+             - Kernel status indicator (online/offline) from kernelStatus()
+          2. Create src/components/chat/voice-controls.tsx:
+             - Record button with animation (pulsing red when recording)
+             - Play button for TTS on messages
+             - Status indicator for kernel connection
+          3. Enhance src/app/mesh/page.tsx:
+             - Add CRDT status section: sync state, peer count, last sync
+             - "Force Sync" button → crdtForceSync()
+          4. Create src/components/mesh/crdt-status.tsx:
+             - CRDT peer status cards
+             - Sync status with last-sync timestamp
+             - Force sync button with loading state
+          5. Write tests: voice-controls.test.tsx, crdt-status.test.tsx
+          Requirements: F-34, F-35, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/chat/voice-controls.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/mesh/crdt-status.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q 'kernelAsk\\|kernelPlay' src/components/chat/voice-controls.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+
+      - id: T6-03
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Enhance plan detail (/plans/[id]) — add GitHub integration tab:
+             - Commits list from githubCommits(planId)
+             - Stats summary from githubStats(planId)
+             - Link to GitHub PRs
+          2. Create src/components/plans/github-tab.tsx:
+             - Commit history table with author, message, date
+             - Stats cards: files changed, additions, deletions
+          3. Create src/components/plans/deliverables-tab.tsx:
+             - Deliverables list for the plan
+             - Status: pending → ready → approved
+             - Approve button, version button
+             - Create deliverable form
+          4. Create src/app/decisions/page.tsx — Decision Audit Trail:
+             - Heading "Decision Log" with h1
+             - mn-data-table with decision entries
+             - Create decision form: title, context, options, chosen, rationale
+             - Filter by plan, date range
+          5. Update app-shell.tsx: add "Decisions" to navigation
+          6. Write tests: github-tab.test.tsx, deliverables-tab.test.tsx
+          7. Write E2E: e2e/decisions.spec.ts
+          Requirements: F-36, F-37, F-38, F-41, F-42
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/github-tab.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/plans/deliverables-tab.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/app/decisions/page.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f e2e/decisions.spec.ts"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+
+      - id: T6-04
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Enhance settings page — add OpenClaw and Ingest tabs:
+             - OpenClaw tab: list agents from openclawAgents(), invoke button
+             - Ingest tab: show supported formats from ingestFormats(), upload form
+             - Domain tab: domain list from domainList(), domain map form
+          2. Create src/components/settings/openclaw-panel.tsx
+          3. Create src/components/settings/ingest-panel.tsx
+          4. Create src/components/settings/domain-panel.tsx
+          5. Write tests for all new settings panels
+          6. Final sweep:
+             - Ensure every file is <= 250 lines (split if needed)
+             - Ensure all API calls go through daemon-api.ts (no raw fetch in pages)
+             - Ensure all types are in daemon-types.ts
+             - Run full test suite
+          7. Update CHANGELOG.md with W6 changes
+          8. Send Telegram: "✅ W6 Advanced features complete — voice, CRDT, decisions, deliverables"
+          9. Create/update PR with W6 changes, request review
+          Requirements: F-39, F-40, F-46
+        type: feature
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/openclaw-panel.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/ingest-panel.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && test -f src/components/settings/domain-panel.tsx"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && find src/ -name '*.ts' -o -name '*.tsx' | xargs wc -l | awk '{if($1>250 && $2!=\"total\") exit 1}'"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Wave F: Final Closure — Tests, Docs, PR, Deploy Verify
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: WF
+    name: "Final Closure"
+    theme: "Full test suite, documentation, PR, deploy verification"
+    tasks:
+      - id: TF-tests
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Run and fix ALL tests:
+             - npx vitest run (all unit tests)
+             - npx playwright test (all E2E tests)
+             - npx tsc --noEmit (type checking)
+             - npm run build (Next.js build)
+          2. Ensure E2E coverage for ALL pages:
+             - / (dashboard), /chat, /agents, /mesh, /brain, /evolution, /workspaces
+             - /plans, /ideas, /ipc, /settings, /decisions
+          3. Ensure accessibility E2E covers all pages
+          4. Fix any remaining test failures
+          5. Verify 250-line limit on all files
+          6. Verify no raw fetch() in page files
+          Requirements: F-41, F-42, F-43, F-44, F-46
+        type: test
+        output_type: pr
+        model: gpt-5.3-codex
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx vitest run"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx playwright test"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+
+      - id: TF-doc
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Update README.md:
+             - Add all new pages to page listing
+             - Add new keyboard shortcuts
+             - Update architecture section with new components
+             - Add design system usage guide
+          2. Update CHANGELOG.md with final version entry
+          3. Ensure all pages are documented with their API endpoints
+          Requirements: documentation
+        type: doc
+        output_type: pr
+        model: gpt-5-mini
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q '/plans' README.md"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q '/ideas' README.md"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q '/ipc' README.md"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q '/settings' README.md"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && grep -q '/decisions' README.md"
+
+      - id: TF-pr
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Squash-merge all wave PRs if not already merged
+          2. Create final PR: plan-web-full-ui → main
+             - Title: "feat: Full Design System + API Coverage — 200+ Endpoints"
+             - Body: summary of all waves, F-xx coverage matrix, test results
+             - Include test plan section with all verify commands
+          3. Monitor CI — wait for all checks to pass
+          4. Request review if CI green
+          5. Send Telegram: "📋 PR ready for review — convergio-web full UI"
+             with PR URL for quick access
+          Requirements: PR closure
+        type: chore
+        output_type: pr
+        model: gpt-5-mini
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && git --no-pager log --oneline -1 | grep -qi 'feat\\|fix\\|chore'"
+
+      - id: TF-deploy-verify
+        do: |
+          In /Users/roberdandev/GitHub/convergio-web-plan-ui:
+          1. Build and verify Tauri desktop app:
+             - NEXT_PUBLIC_DAEMON_URL=http://localhost:8420 npm run build
+             - Verify static export exists in out/
+             - Verify all pages are in out/ directory
+          2. Start Next.js dev server and verify:
+             - All pages load
+             - API proxy works
+             - WebSocket connects
+             - Design system components render
+          3. Document final test results
+          4. Merge PR after approval
+          5. Clean up: remove worktree, delete plan branch
+             git worktree remove /Users/roberdandev/GitHub/convergio-web-plan-ui
+          6. Tag release: git tag v1.0.0 on main
+          7. Send Telegram: "🚀 convergio-web v1.0.0 RELEASED — Full Design System + 200+ endpoints"
+          8. Update plan status via cvg plan complete
+          Requirements: deploy verification
+        type: chore
+        output_type: pr
+        model: gpt-5-mini
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npm run build"
+          - "cd /Users/roberdandev/GitHub/convergio-web-plan-ui && npx tsc --noEmit"

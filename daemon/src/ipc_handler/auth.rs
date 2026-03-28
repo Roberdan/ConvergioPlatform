@@ -17,7 +17,7 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
             token,
             secret,
             ..
-        } => match claude_core::ipc::auth_sync::store_token(&conn, &service, &token, &secret) {
+        } => match convergio_core::ipc::auth_sync::store_token(&conn, &service, &token, &secret) {
             Ok(()) => println!("stored token for {service}"),
             Err(e) => {
                 return Err(IpcHandlerError::OperationFailed(format!(
@@ -25,7 +25,7 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
                 )));
             }
         },
-        AuthCommands::List { .. } => match claude_core::ipc::auth_sync::list_tokens(&conn) {
+        AuthCommands::List { .. } => match convergio_core::ipc::auth_sync::list_tokens(&conn) {
             Ok(tokens) => {
                 println!("{:<20} {:<20} UPDATED", "SERVICE", "HOST");
                 for t in &tokens {
@@ -41,7 +41,7 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
         },
         AuthCommands::Get {
             service, secret, ..
-        } => match claude_core::ipc::auth_sync::get_token(&conn, &service, &secret) {
+        } => match convergio_core::ipc::auth_sync::get_token(&conn, &service, &secret) {
             Ok(Some(val)) => println!("{val}"),
             Ok(None) => {
                 return Err(IpcHandlerError::NotFound(format!(
@@ -58,7 +58,7 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
                     .map(|h| h.to_string_lossy().to_string())
                     .unwrap_or_else(|_| "unknown".to_string())
             });
-            match claude_core::ipc::auth_sync::revoke_token(&conn, &service, &h) {
+            match convergio_core::ipc::auth_sync::revoke_token(&conn, &service, &h) {
                 Ok(n) => println!("revoked {n} token(s) for {service}@{h}"),
                 Err(e) => {
                     return Err(IpcHandlerError::OperationFailed(format!(
@@ -71,7 +71,7 @@ pub async fn handle_auth(command: AuthCommands) -> Result<(), IpcHandlerError> {
             old_secret,
             new_secret,
             ..
-        } => match claude_core::ipc::auth_sync::rotate_keys(&conn, &old_secret, &new_secret) {
+        } => match convergio_core::ipc::auth_sync::rotate_keys(&conn, &old_secret, &new_secret) {
             Ok(n) => println!("rotated {n} token(s)"),
             Err(e) => {
                 return Err(IpcHandlerError::OperationFailed(format!(

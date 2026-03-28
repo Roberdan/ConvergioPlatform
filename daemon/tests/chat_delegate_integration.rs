@@ -1,7 +1,7 @@
 //! Integration tests for chat CRUD and delegation SSE with task status.
 //! Marked #[ignore] because they bind a real TCP listener.
 
-use claude_core::server::routes::build_router_with_db;
+use convergio_core::server::routes::build_router_with_db;
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 use std::net::SocketAddr;

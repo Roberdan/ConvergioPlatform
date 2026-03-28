@@ -1,0 +1,290 @@
+# Plan W — Cross-Repo Cleanup & Archive
+# Archive duplicates, normalize naming, clean legacy code.
+# No new features — cleanup only. Everything must still build after.
+
+name: "Plan W — Cross-Repo Cleanup, MCP Server & Ecosystem Alignment"
+project_id: convergio
+priority: P1
+execution_mode: serial
+tags: [cleanup, archive, naming, cross-repo, mcp-server]
+
+description: >
+  Archive duplicate repos, remove legacy code, normalize naming,
+  build MCP server, wire into ecosystem. Based on cross-repo audit.
+  Impacts: Plan 731 (cancel), Plan 733 (naming alignment), Plan 728 (naming).
+
+requirements:
+  - F-01: "convergio-daemon standalone archived on GitHub"
+  - F-02: "convergio-app archived on GitHub"
+  - F-03: "ConvergioPlatform/gui/ removed (legacy SwiftUI)"
+  - F-04: "ConvergioPlatform/dashboard/ removed (replaced by convergio-web)"
+  - F-05: "Plan R (731) cancelled — convergio-web replaces CommandCenter"
+  - F-06: "Cargo.toml lib name: claude_core → convergio_core"
+  - F-07: "ADR documenting all archive/naming decisions"
+  - F-08: "All builds still pass after cleanup"
+  - F-09: "convergio-mcp-server binary builds and responds to tools/list"
+  - F-10: "MCP server wired into Claude Code config (.mcp.json)"
+  - F-11: "Plan 733 naming aligned (decide @maranello vs @convergio)"
+  - F-12: "14 MCP tools functional (plans, agents, mesh, metrics, kernel, actions)"
+
+acceptance_invariants:
+  - description: "convergio-daemon archived on GitHub"
+    verify: "gh repo view Roberdan/convergio-daemon --json isArchived -q .isArchived | grep -q true"
+    defined_by: user
+  - description: "convergio-app archived on GitHub"
+    verify: "gh repo view Roberdan/convergio-app --json isArchived -q .isArchived | grep -q true"
+    defined_by: user
+  - description: "gui/ directory removed from ConvergioPlatform"
+    verify: "test ! -d gui/"
+    defined_by: user
+  - description: "daemon still builds"
+    verify: "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+    defined_by: collaborative
+
+waves:
+  - id: W1
+    name: "Archive duplicate repos"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01, F-02, F-05, F-07]
+        do: |
+          Archive duplicate repos on GitHub and document decisions.
+
+          1. Archive convergio-daemon standalone:
+             gh repo edit Roberdan/convergio-daemon --archived
+             Reason: ConvergioPlatform/daemon/ is SoT per ADR-0118
+
+          2. Archive convergio-app:
+             gh repo edit Roberdan/convergio-app --archived
+             Reason: README already says deprecated, convergio-web replaces it
+
+          3. Cancel Plan R (731) in DB:
+             cvg plan cancel 731 "Replaced by convergio-web (Tauri + Next.js)"
+             Reason: CommandCenter SwiftUI replaced by convergio-web
+
+          4. Create docs/adr/ADR-0120-cross-repo-cleanup.md documenting:
+             - Why each repo was archived
+             - Source of truth for each component
+             - Naming decisions (see T2-01)
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "gh repo view Roberdan/convergio-daemon --json isArchived -q .isArchived 2>/dev/null | grep -q true || echo 'skipped-no-gh-access'"
+          - "ls docs/adr/ADR-*cleanup*.md 2>/dev/null | grep -q ."
+
+  - id: W2
+    name: "Remove legacy code from ConvergioPlatform"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-03, F-04, F-06]
+        do: |
+          Remove legacy directories and normalize naming.
+
+          1. Remove gui/ directory:
+             git rm -rf gui/
+             Reason: ConvergioMissionControl is replaced by convergio-web
+
+          2. Remove dashboard/ directory:
+             git rm -rf dashboard/
+             Reason: replaced by convergio-web (Next.js + Tauri)
+
+          3. Keep CommandCenter/ for now (Plan R has SwiftUI code that may be useful
+             for reference, but mark as archived with a README note)
+
+          4. Rename Cargo.toml lib name:
+             [lib] name = "claude_core" → name = "convergio_core"
+             Update ALL internal references across entire daemon/ (src/ + tests/ + benches/):
+             grep -rn 'claude_core' daemon/ — expect ~30 files.
+             Replace all `use claude_core::` with `use convergio_core::`
+             Replace all `claude_core::` with `convergio_core::` in test imports.
+             This is a breaking change for ALL imports.
+
+          5. Update daemon/Cargo.toml binary name if needed:
+             Keep convergio-platform-daemon for now (changing binary name breaks
+             launchd, scripts, deploy-node.sh — too risky for a cleanup plan)
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test ! -d gui/"
+          - "test ! -d dashboard/"
+          - "grep -q 'convergio_core' daemon/Cargo.toml"
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+
+  - id: W3
+    name: "MCP Server — protocol + tools"
+    merge_mode: sync
+    tasks:
+      - id: T3-01
+        ref: [F-09, F-12]
+        do: |
+          Create convergio-mcp-server binary per ADR-0119 design.
+
+          1. Add [[bin]] to daemon/Cargo.toml:
+             name = "convergio-mcp-server"
+             path = "src/mcp_server/main.rs"
+
+          2. Create daemon/src/mcp_server/:
+             - main.rs: stdio loop, JSON-RPC dispatch, ring-based auth
+             - protocol.rs: JSON-RPC types (request, response, error)
+             - tools.rs: 14 tool definitions with JSON Schema
+             - handlers.rs: HTTP bridge to daemon localhost:8420
+               Reuse patterns from kernel/tools.rs (same reqwest::blocking calls)
+             - security.rs: ring-based filtering from CONVERGIO_MCP_RING env
+
+          3. Implement all 14 tools:
+             Plans: list_plans, get_plan, create_plan, update_task
+             Agents: list_agents, agent_status, start_agent
+             Mesh: mesh_status, node_readiness
+             Metrics: cost_summary
+             Kernel: kernel_status, speak
+             Actions: checkpoint_save, notify
+
+          4. Each file ≤250 lines.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo build --manifest-path daemon/Cargo.toml --bin convergio-mcp-server"
+          - "test -f daemon/src/mcp_server/main.rs"
+          - "wc -l daemon/src/mcp_server/*.rs | awk '$1>250{exit 1}'"
+          - "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' | timeout 5 daemon/target/debug/convergio-mcp-server 2>/dev/null | python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); assert len(d.get(\"result\",{}).get(\"tools\",[]))>=14, f\"expected 14 tools, got {len(d.get(\"result\",{}).get(\"tools\",[]))}\"'"
+
+      - id: T3-02
+        ref: [F-10]
+        do: |
+          Wire MCP server into Claude Code and test.
+
+          1. Create .mcp.json at repo root for Claude Code:
+             {
+               "mcpServers": {
+                 "convergio": {
+                   "command": "daemon/target/release/convergio-mcp-server",
+                   "env": {"CONVERGIO_MCP_RING": "1"}
+                 }
+               }
+             }
+
+          2. Test: run convergio-mcp-server manually, send tools/list via stdin,
+             verify 14 tools returned.
+
+          3. Test: send tools/call "list_plans", verify real data from daemon.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f .mcp.json"
+          - "cargo build --manifest-path daemon/Cargo.toml --bin convergio-mcp-server"
+
+  - id: W4
+    name: "Naming alignment + Plan 733"
+    merge_mode: sync
+    tasks:
+      - id: T4-01
+        ref: [F-11]
+        do: |
+          Decide and document naming: @maranello vs @convergio for design system.
+
+          Current state:
+          - convergio-design exports @convergio/design-tokens + @convergio/design-elements
+          - convergio-web README mentions @maranello/tokens and @maranello/elements
+          - CSS variables use --mn-* prefix (maranello)
+          - Plan 733 (Monorepo Split) uses @maranello naming
+
+          Decision to document in ADR-0120:
+          - The design system keeps the @convergio npm scope (official)
+          - CSS variables keep --mn-* prefix (too much to rename, brand identity)
+          - @maranello references in convergio-web README → update to @convergio
+          - Plan 733 spec: update @maranello → @convergio if applicable
+
+          Update convergio-web README if accessible via git.
+          Update Plan 733 spec naming if applicable.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: doc
+        output_type: document
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "ls docs/adr/ADR-*cleanup*.md 2>/dev/null | grep -q ."
+
+  - id: W5
+    name: "Verify + docs + deploy"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        ref: [F-08]
+        do: |
+          Run full test suite after cleanup.
+          cargo test --features kernel --manifest-path daemon/Cargo.toml --lib
+          Verify no broken imports from claude_core → convergio_core rename.
+          Fix any compilation errors.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+
+      - id: TF-doc
+        ref: [F-07]
+        do: |
+          Update all docs:
+          - CHANGELOG.md: add cleanup entries
+          - VERSION.md: bump to 18.5.0 (breaking: lib rename)
+          - daemon/Cargo.toml: version 18.5.0
+          - NEXT_SESSION.md: update with cleanup results
+          - README.md: update repo references if needed
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "grep -q '18.5.0' VERSION.md"
+          - "grep -q 'cleanup\\|archive' CHANGELOG.md"
+
+      - id: TF-deploy-verify
+        ref: [F-08]
+        do: |
+          Deploy to M1 Pro and verify everything still works.
+          bash scripts/mesh/deploy-node.sh m1Pro --kernel
+          Verify: health, kernel, readiness, Telegram responds.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "ssh m1Pro 'curl -sf http://localhost:8420/api/health' | grep -q ok"

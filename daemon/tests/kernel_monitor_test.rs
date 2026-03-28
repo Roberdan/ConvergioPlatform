@@ -5,13 +5,13 @@
 
 #![cfg(feature = "kernel")]
 
-use claude_core::kernel::{
+use convergio_core::kernel::{
     audio::{resolve_active_node, ActiveNodeSource},
     monitor::{check_daemon_reachable, classify_and_store},
     recover::{recover, RecoveryConfig, Severity},
     verify::{check_evidence, EvidenceReport},
 };
-use claude_core::kernel::engine::{KernelConfig, KernelEngine};
+use convergio_core::kernel::engine::{KernelConfig, KernelEngine};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;

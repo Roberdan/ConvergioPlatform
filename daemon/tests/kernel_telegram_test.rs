@@ -5,7 +5,7 @@
 
 #![cfg(feature = "kernel")]
 
-use claude_core::kernel::{
+use convergio_core::kernel::{
     reports::{
         format_daily_report, format_plan_complete, parse_report_config, report_plan_complete,
         DailyMetrics,

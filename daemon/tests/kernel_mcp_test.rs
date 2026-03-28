@@ -4,7 +4,7 @@
 
 #![cfg(feature = "kernel")]
 
-use claude_core::kernel::tools::{call_tool, tool_definitions};
+use convergio_core::kernel::tools::{call_tool, tool_definitions};
 
 // ── tool_definitions ──────────────────────────────────────────────────────────
 
@@ -80,9 +80,9 @@ fn test_tool_get_costs_returns_json() {
 
 // ── extract_tool_call — tested via inline unit tests in engine.rs ─────────────
 // The integration tests below verify the public-facing behaviour of the engine
-// through the types exported from claude_core::kernel::engine.
+// through the types exported from convergio_core::kernel::engine.
 
-use claude_core::kernel::engine::{KernelConfig, KernelEngine};
+use convergio_core::kernel::engine::{KernelConfig, KernelEngine};
 
 /// KernelEngine::new() must succeed; is_loaded() returns false before load_model().
 #[test]

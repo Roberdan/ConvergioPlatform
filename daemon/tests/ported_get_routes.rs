@@ -1,4 +1,4 @@
-use claude_core::server::routes::GET_ROUTES;
+use convergio_core::server::routes::GET_ROUTES;
 
 macro_rules! get_route_case {
     ($exists:ident, $shape:ident, $route:expr) => {
