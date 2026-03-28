@@ -1,7 +1,12 @@
+use rusqlite::Connection;
+
 use crate::db::PlanDb;
-use rusqlite::{functions::FunctionFlags, Connection};
+#[cfg(feature = "crsqlite")]
+use rusqlite::functions::FunctionFlags;
+#[cfg(feature = "crsqlite")]
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "crsqlite")]
 use super::required_crdt_tables;
 use super::sync::{record_sync_failure, record_sync_success};
 
@@ -71,6 +76,7 @@ fn test_reset_on_success() {
     assert_eq!(status, "online");
 }
 
+#[cfg(feature = "crsqlite")]
 fn seed_change_schema(db: &PlanDb) {
     db.connection()
         .execute_batch(
@@ -91,6 +97,7 @@ fn seed_change_schema(db: &PlanDb) {
         .expect("schema");
 }
 
+#[cfg(feature = "crsqlite")]
 #[test]
 fn crdt_marks_required_tables() {
     let conn = Connection::open_in_memory().expect("conn");
@@ -121,6 +128,7 @@ fn crdt_marks_required_tables() {
     );
 }
 
+#[cfg(feature = "crsqlite")]
 #[test]
 fn crdt_changes_converge_between_two_nodes() {
     let left = PlanDb::open_in_memory().expect("left db");
@@ -150,6 +158,7 @@ fn crdt_changes_converge_between_two_nodes() {
     assert_eq!(right.export_changes().expect("right final").len(), 2);
 }
 
+#[cfg(feature = "crsqlite")]
 #[test]
 fn crdt_apply_is_idempotent() {
     // Applying the same CrdtChange twice must be a no-op on the second call.
@@ -184,6 +193,7 @@ fn crdt_apply_is_idempotent() {
     assert_eq!(count, 1, "table must hold exactly one row after duplicate apply");
 }
 
+#[cfg(feature = "crsqlite")]
 #[test]
 fn crdt_apply_newer_version_replaces_older() {
     let db = PlanDb::open_in_memory().expect("db");
@@ -224,6 +234,7 @@ fn crdt_apply_newer_version_replaces_older() {
 // Needed by newer_version test: CrdtChange must be Clone
 // (already derived in mod.rs — this is a compile-time check)
 
+#[cfg(feature = "crsqlite")]
 #[test]
 fn crdt_avoids_format_sql_for_dynamic_identifiers() {
     // Verify that migration.rs (the file that does actual SQL) avoids raw format! for SQL identifiers

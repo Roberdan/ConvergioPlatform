@@ -177,4 +177,32 @@ mod tests {
         assert_eq!(back, snap);
         assert!(back.peers_conf_backup.contains("worker"));
     }
+
+    /// Coordinator must work without crsqlite feature — all coordinator
+    /// operations (state serialisation, load, peer validation) must not
+    /// depend on crsqlite extension or crsql_changes tables.
+    #[test]
+    fn test_coordinator_works_without_crsqlite() {
+        // Construct a MigrationState, serialise, and load — no DB needed.
+        let state = MigrationState {
+            old_coordinator: "node-alpha".to_owned(),
+            new_coordinator: "node-beta".to_owned(),
+            snapshots: vec![PeerSnapshot {
+                peer_name: "node-alpha".to_owned(),
+                peers_conf_backup: "[mesh]\nshared_secret=s\n".to_owned(),
+            }],
+            started_at: "2026-03-28T10:00:00Z".to_owned(),
+            completed: false,
+        };
+        let json = serde_json::to_string(&state).expect("serialise without crsqlite");
+        let back: MigrationState =
+            serde_json::from_str(&json).expect("deserialise without crsqlite");
+        assert_eq!(back.old_coordinator, "node-alpha");
+        assert_eq!(back.new_coordinator, "node-beta");
+        assert!(!back.completed);
+
+        // Verify the coordinator error type is usable without crsqlite
+        let err = CoordinatorError::PeerNotFound("ghost".to_owned());
+        assert!(format!("{err}").contains("ghost"));
+    }
 }

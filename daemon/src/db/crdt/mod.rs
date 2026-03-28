@@ -9,6 +9,7 @@ mod tests;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "crsqlite")]
 pub use migration::mark_required_tables;
 pub use sync::io_as_sql_error;
 

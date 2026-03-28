@@ -1,8 +1,14 @@
-use rusqlite::{params, Connection};
+// CRDT migration: mark tables as CRR via crsql_as_crr() extension function.
+// Only available when the crsqlite feature is enabled.
 
+#[cfg(feature = "crsqlite")]
+use rusqlite::{params, Connection};
+#[cfg(feature = "crsqlite")]
 use super::migration_helpers::{drop_sql_object_if_exists, rebuild_crr_compatible};
+#[cfg(feature = "crsqlite")]
 use super::required_crdt_tables;
 
+#[cfg(feature = "crsqlite")]
 pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
     // Clean up any leftover temp tables from failed migrations
     let temps: Vec<String> = {
@@ -101,6 +107,7 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "crsqlite")]
 fn drop_unique_indices(conn: &Connection, table: &str) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare(
         "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?1 AND sql LIKE '%UNIQUE%'",

@@ -120,3 +120,93 @@ fn test_domain_skill_map_migration() {
 
     run(&conn).expect("second run must be idempotent");
 }
+
+#[test]
+fn sync_meta_table_created_by_migration() {
+    let conn = in_memory();
+    run(&conn).expect("migration");
+
+    assert!(
+        table_exists(&conn, "_sync_meta").unwrap(),
+        "_sync_meta table must exist after migration"
+    );
+
+    // Verify schema: peer TEXT, table_name TEXT, last_sync_at TEXT, PK (peer, table_name)
+    conn.execute(
+        "INSERT INTO _sync_meta (peer, table_name, last_sync_at) VALUES (?1, ?2, ?3)",
+        ["node-alpha", "tasks", "2026-03-28T10:00:00"],
+    )
+    .expect("insert must succeed");
+
+    let ts: String = conn
+        .query_row(
+            "SELECT last_sync_at FROM _sync_meta WHERE peer=?1 AND table_name=?2",
+            ["node-alpha", "tasks"],
+            |r| r.get(0),
+        )
+        .expect("select");
+    assert_eq!(ts, "2026-03-28T10:00:00");
+}
+
+#[test]
+fn sync_meta_migration_idempotent_with_existing_data() {
+    let conn = in_memory();
+    run(&conn).expect("first run");
+
+    conn.execute(
+        "INSERT INTO _sync_meta (peer, table_name, last_sync_at) VALUES (?1, ?2, ?3)",
+        ["node-beta", "plans", "2026-03-28T12:00:00"],
+    )
+    .expect("insert data");
+
+    run(&conn).expect("second run must not drop existing data");
+
+    let ts: String = conn
+        .query_row(
+            "SELECT last_sync_at FROM _sync_meta WHERE peer=?1 AND table_name=?2",
+            ["node-beta", "plans"],
+            |r| r.get(0),
+        )
+        .expect("data must survive re-migration");
+    assert_eq!(ts, "2026-03-28T12:00:00");
+}
+
+#[test]
+fn sync_meta_rejects_duplicate_peer_table_pair() {
+    let conn = in_memory();
+    run(&conn).expect("migration");
+
+    conn.execute(
+        "INSERT INTO _sync_meta (peer, table_name, last_sync_at) VALUES (?1, ?2, ?3)",
+        ["node-a", "tasks", "2026-03-28T10:00:00"],
+    )
+    .expect("first insert");
+
+    let dup = conn.execute(
+        "INSERT INTO _sync_meta (peer, table_name, last_sync_at) VALUES (?1, ?2, ?3)",
+        ["node-a", "tasks", "2026-03-28T11:00:00"],
+    );
+    assert!(
+        dup.is_err(),
+        "PRIMARY KEY (peer, table_name) must reject duplicate"
+    );
+}
+
+#[test]
+fn schema_loads_without_crsqlite_extension() {
+    // Verify that PlanDb::open_path works and migrations run
+    // without any crsqlite extension loaded.
+    let dir = tempfile::tempdir().expect("tmpdir");
+    let db_path = dir.path().join("migration-test.db");
+    let db = crate::db::PlanDb::open_path(&db_path).expect("open_path");
+    run(db.connection()).expect("migrations must succeed without crsqlite");
+
+    assert!(
+        table_exists(db.connection(), "_sync_meta").unwrap(),
+        "_sync_meta must exist after migration on file-backed DB"
+    );
+    assert!(
+        table_exists(db.connection(), "execution_runs").unwrap(),
+        "execution_runs must exist after migration on file-backed DB"
+    );
+}
