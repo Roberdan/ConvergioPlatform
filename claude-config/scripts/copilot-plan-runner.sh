@@ -59,14 +59,14 @@ print(f'PROMPT_FILE=\"{path}\"')
 	echo ""
 	echo "[Run ${RETRY}/${MAX_RETRIES}] Wave: ${WAVE_ID} | Next: ${NEXT_TASK} | Thor: ${NEEDS_THOR}"
 
-	# Reset stuck in_progress tasks from crashed runs
+	# Reset ONLY in_progress tasks (NOT submitted — those are awaiting Thor)
 	curl -sf "${DAEMON_API}/api/plan-db/json/${PLAN_ID}" 2>/dev/null \
 		| python3 -c "
 import json, sys, urllib.request
 d = json.load(sys.stdin)
 for t in d.get('tasks', []):
     if t.get('status') == 'in_progress':
-        print(f'  Resetting stuck task {t[\"id\"]}...')
+        print(f'  Resetting stuck task {t[\"id\"]} (was in_progress)...')
         try:
             req = urllib.request.Request(
                 '${DAEMON_API}/api/plan-db/task/update',
