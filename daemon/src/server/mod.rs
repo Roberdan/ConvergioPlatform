@@ -4,6 +4,7 @@ pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_audit;
 pub mod api_capabilities;
+pub mod api_channels;
 pub mod api_delegation;
 pub mod api_chat;
 pub mod api_coordinator;
@@ -16,6 +17,7 @@ pub mod api_domain;
 pub mod api_evolution;
 pub mod api_github;
 pub mod api_github_handlers;
+pub mod api_health_deep;
 pub mod api_heartbeat;
 pub mod api_heartbeat_handlers;
 pub mod api_ideas;
@@ -80,6 +82,10 @@ pub mod ws_pty;
 mod api_agent_catalog_tests;
 #[cfg(test)]
 mod api_agents_brain_tests;
+#[cfg(test)]
+mod api_channels_tests;
+#[cfg(test)]
+mod api_health_deep_tests;
 #[cfg(test)]
 mod api_agents_legacy_tests;
 #[cfg(test)]

@@ -30,6 +30,10 @@ pub fn router() -> Router<ServerState> {
             "/api/delegation/:id/progress",
             post(handle_post_progress).get(handle_get_progress),
         )
+        .route(
+            "/api/delegation/by-plan/:plan_id",
+            axum::routing::get(handle_get_by_plan),
+        )
 }
 
 /// POST /api/delegation/:id/progress
@@ -113,6 +117,48 @@ async fn handle_get_progress(
     }
 }
 
+/// GET /api/delegation/by-plan/:plan_id
+/// Returns all delegation progress entries whose delegation_id starts with `del-{plan_id}-`.
+/// This resolves the mismatch where CLI passes plan_id but the per-delegation endpoint
+/// expects a full delegation_id.
+async fn handle_get_by_plan(
+    State(state): State<ServerState>,
+    Path(plan_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = state.get_conn()?;
+    ensure_schema(&conn)
+        .map_err(|e| ApiError::internal(format!("schema init failed: {e}")))?;
+
+    let prefix = format!("del-{plan_id}-%");
+    let mut stmt = conn
+        .prepare(
+            "SELECT delegation_id, status, current_task, output_summary, updated_at \
+             FROM delegation_progress WHERE delegation_id LIKE ?1 \
+             ORDER BY updated_at DESC",
+        )
+        .map_err(|e| ApiError::internal(format!("query prepare failed: {e}")))?;
+
+    let rows: Vec<Value> = stmt
+        .query_map(rusqlite::params![prefix], |r| {
+            Ok(json!({
+                "delegation_id": r.get::<_, String>(0)?,
+                "status": r.get::<_, String>(1)?,
+                "current_task": r.get::<_, Option<String>>(2)?,
+                "output_summary": r.get::<_, Option<String>>(3)?,
+                "last_update": r.get::<_, String>(4)?,
+            }))
+        })
+        .map_err(|e| ApiError::internal(format!("query failed: {e}")))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(Json(json!({
+        "ok": true,
+        "plan_id": plan_id,
+        "delegations": rows,
+    })))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db::PlanDb;
@@ -188,6 +234,47 @@ mod tests {
             .ok();
 
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn by_plan_returns_matching_delegations() {
+        let db = setup_db();
+        let conn = db.connection();
+
+        conn.execute(
+            "INSERT INTO delegation_progress (delegation_id, status, current_task) \
+             VALUES (?1, ?2, ?3)",
+            rusqlite::params!["del-742-M1Pro-1234", "running", "T1-01"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO delegation_progress (delegation_id, status, current_task) \
+             VALUES (?1, ?2, ?3)",
+            rusqlite::params!["del-742-M5Max-5678", "done", "T2-01"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO delegation_progress (delegation_id, status) \
+             VALUES (?1, ?2)",
+            rusqlite::params!["del-999-other-0", "running"],
+        )
+        .unwrap();
+
+        // Query by plan_id=742 should return 2 rows
+        let mut stmt = conn
+            .prepare(
+                "SELECT delegation_id FROM delegation_progress \
+                 WHERE delegation_id LIKE ?1 ORDER BY updated_at DESC",
+            )
+            .unwrap();
+        let rows: Vec<String> = stmt
+            .query_map(rusqlite::params!["del-742-%"], |r| r.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|r| r.starts_with("del-742-")));
     }
 
     #[test]

@@ -69,7 +69,7 @@ pub fn format_progress_table(body: &serde_json::Value) -> String {
 }
 
 async fn fetch_progress(api_url: &str, plan_id: i64) -> Result<serde_json::Value, CliError> {
-    let url = format!("{api_url}/api/delegation/{plan_id}/progress");
+    let url = format!("{api_url}/api/delegation/by-plan/{plan_id}");
     cli_http::get_and_return(&url).await.map_err(api_err)
 }
 

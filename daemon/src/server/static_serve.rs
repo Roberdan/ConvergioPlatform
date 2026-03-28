@@ -41,16 +41,16 @@ pub(super) async fn shutdown_signal() {
 
 /// Inner logic: given the token presence state, determine effective bind address.
 /// Separated for deterministic unit testing without env-var races.
+///
+/// In dev-mode without auth token, we warn about network exposure but respect
+/// the requested bind address so that mesh nodes remain reachable via --bind.
 pub(crate) fn resolve_bind_addr_with(requested: &str, dev_mode: bool, has_token: bool) -> String {
-    if dev_mode && !has_token {
-        // Force 127.0.0.1 to prevent accidental network exposure of an
-        // unauthenticated server. Keep the original port if parseable.
-        if let Some(port) = requested.rsplit(':').next() {
-            if port.parse::<u16>().is_ok() {
-                return format!("127.0.0.1:{port}");
-            }
-        }
-        return "127.0.0.1:8420".to_string();
+    if dev_mode && !has_token && !requested.starts_with("127.0.0.1") {
+        eprintln!(
+            "[warn] dev-mode without CONVERGIO_AUTH_TOKEN: binding to {requested} \
+             exposes an unauthenticated server. Set CONVERGIO_AUTH_TOKEN or use \
+             --bind 127.0.0.1:<port> to restrict access."
+        );
     }
     requested.to_string()
 }
@@ -73,14 +73,14 @@ mod bind_addr_tests {
     use super::resolve_bind_addr_with;
 
     #[test]
-    fn dev_mode_no_token_forces_localhost() {
+    fn dev_mode_no_token_respects_requested_addr() {
+        // B7: dev-mode now respects --bind (warns but does not override)
         let addr = resolve_bind_addr_with("0.0.0.0:8420", true, false);
-        assert_eq!(addr, "127.0.0.1:8420");
+        assert_eq!(addr, "0.0.0.0:8420");
     }
 
     #[test]
     fn dev_mode_with_token_keeps_requested_addr() {
-        // Token is set: dev-mode does NOT force localhost.
         let addr = resolve_bind_addr_with("0.0.0.0:8420", true, true);
         assert_eq!(addr, "0.0.0.0:8420");
     }
@@ -92,8 +92,16 @@ mod bind_addr_tests {
     }
 
     #[test]
-    fn dev_mode_preserves_custom_port() {
+    fn dev_mode_preserves_custom_bind() {
+        // B7: explicit --bind is respected even in dev-mode
         let addr = resolve_bind_addr_with("192.168.1.1:9000", true, false);
-        assert_eq!(addr, "127.0.0.1:9000");
+        assert_eq!(addr, "192.168.1.1:9000");
+    }
+
+    #[test]
+    fn dev_mode_localhost_no_warning() {
+        // Binding to 127.0.0.1 in dev-mode is safe, no override needed
+        let addr = resolve_bind_addr_with("127.0.0.1:8420", true, false);
+        assert_eq!(addr, "127.0.0.1:8420");
     }
 }

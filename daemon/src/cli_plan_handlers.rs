@@ -15,11 +15,18 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
-                &format!("{api_url}/api/plan-db/execution-tree/{plan_id}"),
-                human,
-            )
-            .await;
+            if human {
+                let url = format!("{api_url}/api/plan-db/execution-tree/{plan_id}");
+                if let Ok(val) = crate::cli_http::get_and_return(&url).await {
+                    crate::cli_plan_tree_fmt::print_execution_tree(&val);
+                }
+            } else {
+                let _ = crate::cli_http::fetch_and_print(
+                    &format!("{api_url}/api/plan-db/execution-tree/{plan_id}"),
+                    false,
+                )
+                .await;
+            }
         }
         PlanCommands::Show {
             plan_id,

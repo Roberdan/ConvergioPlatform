@@ -23,6 +23,7 @@ mod cli_memory;
 mod cli_ops;
 mod cli_plan;
 mod cli_plan_handlers;
+mod cli_plan_tree_fmt;
 mod cli_project;
 mod cli_project_tree;
 mod cli_review;

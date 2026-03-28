@@ -148,6 +148,21 @@ pub(super) const MIGRATIONS: &[&str] = &[
          value      TEXT NOT NULL DEFAULT '',
          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
      )",
+    // B1 fix: plan_reviews.plan_id must allow NULL for spec-file reviews.
+    // SQLite cannot ALTER COLUMN, so recreate the table with corrected schema.
+    "CREATE TABLE IF NOT EXISTS plan_reviews_v2 (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         plan_id INTEGER,
+         spec_file TEXT,
+         reviewer_agent TEXT NOT NULL,
+         verdict TEXT NOT NULL,
+         suggestions TEXT,
+         raw_report TEXT,
+         reviewed_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )",
+    "INSERT OR IGNORE INTO plan_reviews_v2 (id, plan_id, spec_file, reviewer_agent, verdict, suggestions, raw_report, reviewed_at) SELECT id, plan_id, spec_file, reviewer_agent, verdict, suggestions, raw_report, reviewed_at FROM plan_reviews",
+    "DROP TABLE IF EXISTS plan_reviews",
+    "ALTER TABLE plan_reviews_v2 RENAME TO plan_reviews",
     // Add updated_at to tasks and waves for timestamp-based sync
     "ALTER TABLE tasks ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
     "ALTER TABLE waves ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
