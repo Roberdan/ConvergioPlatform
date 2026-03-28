@@ -23,6 +23,7 @@ harness = false
 default = ["crsqlite", "kernel"]
 crsqlite = []
 kernel = []
+__disabled_pending_api_migration = []
 
 [dependencies]
 thiserror = "1"
