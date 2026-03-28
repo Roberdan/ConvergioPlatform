@@ -88,7 +88,14 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let content = std::fs::read_to_string(&spec_file).map_err(|e| {
-                CliError::InvalidInput(format!("error reading spec file '{spec_file}': {e}"))
+                let hint = if e.kind() == std::io::ErrorKind::NotFound {
+                    format!(". Does '{spec_file}' exist? Use absolute path or check cwd.")
+                } else {
+                    String::new()
+                };
+                CliError::InvalidInput(format!(
+                    "cannot read spec file '{spec_file}': {e}{hint}"
+                ))
             })?;
             let body = serde_json::json!({
                 "plan_id": plan_id,
@@ -160,6 +167,9 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
                 human,
             )
             .await;
+        }
+        PlanCommands::Template => {
+            crate::cli_plan_template::print_template();
         }
     }
     Ok(())

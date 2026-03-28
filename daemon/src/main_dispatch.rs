@@ -237,9 +237,10 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         }
         Commands::Repo { command } => exit_on_err(cli_repo::handle(command).await),
         Commands::Kernel { command } => cli_kernel::dispatch(command).await,
+        Commands::Cheatsheet => { crate::cli_cheatsheet::print_cheatsheet(); ExitCode::SUCCESS }
+        Commands::Api => { crate::cli_api_list::print_api_list(); ExitCode::SUCCESS }
     }
 }
-
 fn exit_on_err(result: Result<(), CliError>) -> ExitCode {
     if let Err(e) = result {
         eprintln!("{e}");

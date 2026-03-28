@@ -1,7 +1,7 @@
 # Convergio Platform — Complete Capability Reference
 
 > Single source of truth for what Convergio can do. Load this in every agent session.
-> Updated: 28 Marzo 2026 | v18.4.0+
+> Updated: 29 Marzo 2026 | v18.5.0+
 
 ## Core Architecture
 
@@ -19,7 +19,9 @@
 
 ### Plan Management
 - `cvg plan create/list/show/start/complete/cancel`
-- `cvg plan import <id> spec.yaml` — import from YAML spec
+- `cvg plan import <id> spec.yaml` — import from YAML spec (detailed error messages)
+- `cvg plan template` — generate example spec YAML with all supported fields
+- `cvg plan tree <id>` — execution tree (alias: `execution-tree`)
 - `cvg plan validate <id>` — Thor wave-level validation
 - `cvg plan readiness <id>` — pre-execution checks
 - `cvg checkpoint save/restore <id>` — fault tolerance
@@ -110,6 +112,15 @@
 - A/B testing, multi-armed bandit
 - Cost calibration, model routing optimization
 - Proposals require human approval
+
+### Developer Experience (v18.5.0)
+- `cvg cheatsheet` / `cvg commands` — all commands grouped by domain
+- `cvg api` — all daemon HTTP API endpoints with methods
+- `cvg plan template` — example spec YAML with all fields + aliases
+- Improved `cvg plan import` error messages: YAML location, missing keys, type hints
+- `cvg plan tree` alias for `cvg plan execution-tree`
+- Peer resolver: single source of truth for peer addressing (3-stage fuzzy match)
+- Docs: spec-yaml-schema, mesh-delegation, delegation-guide, peer-resolver, telegram-credentials, decision-tree
 
 ## API Surface (250+ endpoints)
 
