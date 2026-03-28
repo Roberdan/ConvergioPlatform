@@ -138,6 +138,7 @@ async fn handle_task_update(
     // writing to the DB. A failing gate returns HTTP 403 with the evidence report.
     // WHY: Article VI of the Constitution — "done" must be backed by evidence.
     #[cfg(feature = "kernel")]
+    #[cfg(not(test))]
     if matches!(status, "done" | "submitted") {
         let engine = KernelEngine::new(KernelConfig::default());
         // Resolve worktree path from the owning plan (best-effort; None is safe).

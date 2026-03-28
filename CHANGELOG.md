@@ -1,5 +1,23 @@
 # Changelog
 
+## [18.5.0] - 2026-03-28
+
+### Removed
+- gui/ directory (legacy SwiftUI, archived)
+- dashboard/ directory (replaced by convergio-web)
+- convergio-daemon standalone repo (archived on GitHub)
+- convergio-app repo (archived on GitHub)
+- Plan R (731) cancelled (replaced by convergio-web)
+
+### Changed
+- Library name: claude_core → convergio_core
+
+### Added
+- convergio-mcp-server binary (14 tools, ring security, stdio transport)
+- .mcp.json for Claude Code MCP integration
+- ADR-0120 cross-repo cleanup decisions
+- convergio-capabilities.md reference document
+
 ## [18.4.0] - 2026-03-27
 
 ### Added

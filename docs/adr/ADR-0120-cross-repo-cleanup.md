@@ -52,6 +52,23 @@ The following will be addressed in Task T2-01 of Plan 737:
 
 ## Naming Decisions (Preserved)
 
-- `@convergio` npm scope: retained across all packages
-- `--mn-*` CSS prefix: retained (Maranello Design System)
-- These naming decisions are stable and do not require further changes.
+### npm Scope
+
+- **Official scope**: `@convergio` — all packages published under this scope.
+- `@maranello` references in external repos (e.g., convergio-design, convergio-community) should be updated to `@convergio` **when those files are next touched**. No bulk rename required now.
+- **Plan 733 (Monorepo Split)**: spec currently references `@maranello` packages — must be updated to `@convergio` before execution.
+
+### CSS Variables
+
+- **Prefix**: `--mn-*` retained as-is (Maranello brand identity).
+- Renaming to `--cv-*` or similar is not planned: cost/benefit unfavorable (hundreds of references, zero functional gain, high breakage risk).
+- This decision is final for Plan 737 scope.
+
+### Summary Table
+
+| Artifact | Decision | Rationale |
+|---|---|---|
+| npm scope | `@convergio` (official) | Brand alignment |
+| CSS variables | `--mn-*` (kept) | Too many references, brand identity |
+| `@maranello` in other repos | Update when touched | Incremental, low risk |
+| Plan 733 spec | Must update to `@convergio` | Pre-execution requirement |
