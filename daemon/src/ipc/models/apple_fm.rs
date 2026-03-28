@@ -190,7 +190,7 @@ impl AppleFmBridge {
             .unwrap_or_else(|| "mlx-community/Llama-3.2-1B-Instruct-4bit".to_string());
 
         let cmd = self.cli_cmd();
-        let mut child = std::process::Command::new(&cmd[0])
+        let child = std::process::Command::new(&cmd[0])
             .args(&cmd[1..])
             .args(["--model", &model, "--prompt", &req.prompt, "--max-tokens", "512"])
             .stdout(std::process::Stdio::piped())
@@ -205,9 +205,7 @@ impl AppleFmBridge {
             std::thread::sleep(timeout);
             // SIGTERM the child if it is still running.
             #[cfg(unix)]
-            unsafe {
-                libc_kill(child_id);
-            }
+            libc_kill(child_id);
         });
 
         let output = child

@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use super::super::data::{ProjectInfo, TuiData};
 use super::super::input::{handle_key, InteractiveState};
 
-fn make_projects() -> Vec<ProjectInfo> {
+fn _make_projects() -> Vec<ProjectInfo> {
     vec![
         ProjectInfo {
             id: 1,

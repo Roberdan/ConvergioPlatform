@@ -12,9 +12,9 @@ pub struct BudgetEnforcer {
 struct BudgetUsage {
     api_calls: u64,
     tokens: u64,
-    compute_seconds: u64,
-    storage_bytes: u64,
-    window_start: Instant,
+    _compute_seconds: u64,
+    _storage_bytes: u64,
+    _window_start: Instant,
 }
 
 impl BudgetEnforcer {
@@ -82,8 +82,8 @@ impl BudgetEnforcer {
     fn ensure_usage(&self, agent_id: &str) {
         if let Ok(mut usage) = self.usage.lock() {
             usage.entry(agent_id.to_string()).or_insert(BudgetUsage {
-                api_calls: 0, tokens: 0, compute_seconds: 0, storage_bytes: 0,
-                window_start: Instant::now(),
+                api_calls: 0, tokens: 0, _compute_seconds: 0, _storage_bytes: 0,
+                _window_start: Instant::now(),
             });
         }
     }

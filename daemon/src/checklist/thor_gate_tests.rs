@@ -22,7 +22,7 @@ mod tests {
         }
     }
 
-    fn pass_result(item_id: &str) -> CheckResult {
+    fn _pass_result(item_id: &str) -> CheckResult {
         CheckResult {
             item_id: item_id.to_string(),
             status: CheckStatus::Pass,
@@ -31,7 +31,7 @@ mod tests {
         }
     }
 
-    fn fail_result(item_id: &str) -> CheckResult {
+    fn _fail_result(item_id: &str) -> CheckResult {
         CheckResult {
             item_id: item_id.to_string(),
             status: CheckStatus::Fail,
