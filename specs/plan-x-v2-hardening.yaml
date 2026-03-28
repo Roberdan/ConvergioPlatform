@@ -379,6 +379,22 @@ waves:
         verify:
           - "grep -q '19.0.0' VERSION.md"
 
+      - id: TF-pr
+        ref: [F-15]
+        do: |
+          Create PR for plan-x-v2-hardening branch → main.
+          Title: "feat: Convergio Hardening v19.0.0 — libSQL, mesh, delegation"
+          Include F-xx coverage matrix and test results in PR body.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "gh pr list --head plan-x-v2-hardening --json number | grep -q number"
+
       - id: TF-deploy-verify
         ref: [F-15]
         do: |
