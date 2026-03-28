@@ -45,6 +45,17 @@ while ! plan_done; do
 		cvg task update "$_sid" pending "Reset stuck task from crashed run" 2>/dev/null || true
 	done
 
+	# Resolve worktree path from plan DB (or memory checkpoint)
+	WORKTREE="$(echo "$_plan_json" | jq -r '.worktree_path // empty' 2>/dev/null || echo '')"
+	if [ -z "$WORKTREE" ]; then
+		# Fallback: check for worktree matching plan branch
+		WORKTREE="$(git worktree list 2>/dev/null | grep -v '\[main\]' | head -1 | awk '{print $1}')"
+	fi
+	if [ -n "$WORKTREE" ] && [ -d "$WORKTREE" ]; then
+		echo "[INFO] Using worktree: $WORKTREE"
+		cd "$WORKTREE"
+	fi
+
 	# Use claude or copilot — whichever is available
 	if command -v claude &>/dev/null; then
 		CLI="claude"
