@@ -239,111 +239,44 @@ fn route_mute() -> String {
 ///
 /// Called from spawn_blocking so blocking HTTP is safe.
 fn route_escalate_to_ali(question: &str, daemon_url: &str) -> String {
-    use reqwest::blocking::Client;
+    // Ali = Opus via GitHub Copilot CLI. Uses existing subscription, not API key.
+    // Runs: gh copilot explain "question" with system context.
+    let context = crate::kernel::engine::smart_context_gather_pub(question, daemon_url);
 
-    let client = match Client::builder().timeout(Duration::from_secs(10)).build() {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("voice_router: escalate_to_ali: build client: {e}");
-            return "Non riesco a contattare Ali. Riprova.".to_string();
-        }
-    };
+    let prompt = format!(
+        "Sei Ali, il chief of staff di Convergio. Rispondi in italiano, conciso.\n\n\
+         Dati sistema:\n{context}\n\nDomanda dell'utente: {question}"
+    );
 
-    // Step 1: create a transient chat session
-    let session_body = serde_json::json!({"title": "voice-escalation"});
-    let session_resp: Value = match client
-        .post(format!("{daemon_url}/api/chat/session"))
-        .json(&session_body)
-        .send()
-        .and_then(|r| r.json())
-    {
-        Ok(v) => v,
-        Err(e) => {
-            warn!("voice_router: escalate_to_ali: create session: {e}");
-            return "Non riesco a avviare una sessione con Ali. Riprova.".to_string();
-        }
-    };
-    let session_id = match session_resp
-        .get("session")
-        .and_then(|s| s.get("id"))
-        .and_then(|v| v.as_str())
-    {
-        Some(id) => id.to_string(),
-        None => {
-            warn!("voice_router: escalate_to_ali: no session id in response");
-            return "Ali non ha risposto correttamente. Riprova.".to_string();
-        }
-    };
+    // Use gh copilot suggest or Claude Code as subprocess
+    // Try Claude Code first (claude -p), then gh copilot
+    let output = std::process::Command::new("claude")
+        .args(["-p", &prompt, "--model", "opus"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output();
 
-    // Step 2: post the user question into the session
-    let msg_body = serde_json::json!({
-        "session_id": session_id,
-        "content": question,
-        "role": "user",
-    });
-    if let Err(e) = client
-        .post(format!("{daemon_url}/api/chat/message"))
-        .json(&msg_body)
-        .send()
-    {
-        warn!("voice_router: escalate_to_ali: send message: {e}");
-        return "Non riesco a inviare la domanda ad Ali. Riprova.".to_string();
-    }
-
-    // Step 3: poll for an assistant reply (max 60 s, every 2 s)
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        std::thread::sleep(Duration::from_secs(2));
-
-        let sessions_url = format!("{daemon_url}/api/chat/sessions");
-        let sessions_val: Value = match client.get(&sessions_url).send().and_then(|r| r.json()) {
-            Ok(v) => v,
-            Err(_) => {
-                if Instant::now() >= deadline {
-                    break;
-                }
-                continue;
-            }
-        };
-
-        // Locate the session and check for an assistant message
-        if let Some(sessions) = sessions_val.get("sessions").and_then(|s| s.as_array()) {
-            for sess in sessions {
-                if sess.get("id").and_then(|v| v.as_str()) == Some(&session_id) {
-                    // The session has received a reply when last_message_at changed
-                    // and there are messages with role=assistant. We check via
-                    // the in-memory last_message_at field presence and content.
-                    // Since chat API returns sessions but not messages inline, we
-                    // detect a reply by comparing message count via a GET on /api/chat/sessions
-                    // — however the API only returns sessions, not messages.
-                    // Use the /api/chat/sessions response: if the session's
-                    // last_message_at is more recent than when we sent the message,
-                    // that indicates a new message arrived.
-                    // The simplest reliable signal: any change to last_message_at
-                    // after our POST means Ali responded.
-                    if let Some(last_at) = sess.get("last_message_at").and_then(|v| v.as_str()) {
-                        if !last_at.is_empty() {
-                            // Fetch the full message list for this session via
-                            // the plan-db context or chat messages endpoint if available.
-                            // Since the chat API doesn't expose a messages-list endpoint
-                            // directly, return the session title change as a signal.
-                            // For now: emit a cue that Ali is processing and return
-                            // the question echoed — a future task can add GET /api/chat/messages.
-                            debug!("voice_router: escalate_to_ali: session {session_id} has last_message_at={last_at}");
-                            return format!("Ali sta elaborando: {question}. Controlla la chat per la risposta completa.");
-                        }
-                    }
-                    break;
-                }
+    match output {
+        Ok(o) if o.status.success() => {
+            let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if text.is_empty() {
+                "Ali non ha prodotto una risposta.".to_string()
+            } else {
+                text
             }
         }
-
-        if Instant::now() >= deadline {
-            break;
+        Ok(o) => {
+            let err = String::from_utf8_lossy(&o.stderr);
+            warn!("voice_router: claude cli failed: {err}");
+            // Fallback to Qwen local
+            route_ask_ali(question, daemon_url)
+        }
+        Err(e) => {
+            warn!("voice_router: claude cli not found: {e}");
+            // Fallback to Qwen local
+            route_ask_ali(question, daemon_url)
         }
     }
-
-    "Ali non ha risposto in tempo. Riprova.".to_string()
 }
 
 fn route_ask_ali(question: &str, daemon_url: &str) -> String {

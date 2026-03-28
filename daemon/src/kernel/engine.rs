@@ -122,9 +122,11 @@ impl KernelEngine {
         let prompt = format!(
             "<|im_start|>system\n\
              Sei l'assistente Convergio, una piattaforma di orchestrazione AI.\n\
-             Rispondi SEMPRE in italiano, in modo conciso e preciso.\n\
-             Usa SOLO i dati forniti nel contesto. Non inventare nulla.\n\
-             Se i dati non contengono la risposta, dillo.\n\
+             Rispondi SEMPRE in italiano, in modo conciso.\n\
+             Non elencare i dati grezzi. Analizza, ragiona, dai insight.\n\
+             Esempio: invece di elencare 3 piani, di' 'Hai 3 piani, di cui 1 in esecuzione.\n\
+             Il piano R ha 6 task ma nessuno completato — potrebbe servire attenzione.'\n\
+             Usa SOLO i dati forniti. Non inventare nulla.\n\
              <|im_end|>\n\
              <|im_start|>user\n\
              Ecco i dati attuali del sistema:\n\n\
@@ -237,6 +239,11 @@ fn heuristic_classify(situation: &str) -> KernelAction {
 
 /// Smart context gathering: picks APIs based on question keywords.
 /// The kernel (Rust, deterministic) does the retrieval; the LLM just reasons.
+/// Public wrapper for voice_router Ali escalation.
+pub fn smart_context_gather_pub(question: &str, daemon_url: &str) -> String {
+    smart_context_gather(question, daemon_url)
+}
+
 fn smart_context_gather(question: &str, daemon_url: &str) -> String {
     let q = question.to_lowercase();
     let mut ctx = String::new();
