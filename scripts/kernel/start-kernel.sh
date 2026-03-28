@@ -19,6 +19,9 @@ fi
 # Source Python venv (for mlx_lm)
 [[ -f "$VENV" ]] && source "$VENV"
 
+# Ensure Claude CLI and other user binaries are in PATH
+export PATH="${HOME}/.local/bin:${HOME}/convergio-env/bin:/opt/homebrew/bin:${PATH}"
+
 # Prevent sleep — kernel node must stay awake 24/7
 caffeinate -s &
 
