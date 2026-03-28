@@ -12,6 +12,7 @@ use super::api_delegation;
 use super::api_chat;
 use super::api_coordinator;
 use super::api_crdt;
+use super::api_sync;
 use super::api_dashboard;
 use super::api_deliverables;
 use super::api_domain;
@@ -130,6 +131,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_domain::router())
         .merge(api_openclaw::router())
         .merge(api_crdt::router())
+        .merge(api_sync::router())
         .merge(api_capabilities::router())
         .merge(api_kernel_audio::router())
         .merge(api_memory::router())

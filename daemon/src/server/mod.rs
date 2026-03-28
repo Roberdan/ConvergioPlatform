@@ -8,6 +8,7 @@ pub mod api_delegation;
 pub mod api_chat;
 pub mod api_coordinator;
 pub mod api_crdt;
+pub mod api_sync;
 pub mod api_dashboard;
 pub mod api_deliverables;
 pub mod api_deliverables_handlers;

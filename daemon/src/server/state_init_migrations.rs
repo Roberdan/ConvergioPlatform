@@ -148,4 +148,14 @@ pub(super) const MIGRATIONS: &[&str] = &[
          value      TEXT NOT NULL DEFAULT '',
          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
      )",
+    // Add updated_at to tasks and waves for timestamp-based sync
+    "ALTER TABLE tasks ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
+    "ALTER TABLE waves ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
+    // Timestamp-based sync metadata (replaces crsqlite CRDT sync checkpoints)
+    "CREATE TABLE IF NOT EXISTS _sync_meta (
+         peer       TEXT NOT NULL,
+         table_name TEXT NOT NULL,
+         last_sync_at TEXT NOT NULL,
+         PRIMARY KEY (peer, table_name)
+     )",
 ];

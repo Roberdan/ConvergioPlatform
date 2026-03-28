@@ -93,11 +93,14 @@ pub fn init_db_and_pool(
 ) -> Pool<SqliteConnectionManager> {
     if let Ok(conn) = Connection::open(db_path) {
         let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
+        #[cfg(feature = "crsqlite")]
         if let Some(ref ext) = crsqlite_path {
             if let Err(e) = crate::db::crdt::load_crsqlite(&conn, ext) {
                 eprintln!("[migration] crsqlite load failed: {e}");
             }
         }
+        #[cfg(not(feature = "crsqlite"))]
+        let _ = &crsqlite_path; // suppress unused warning
         if let Err(err) = ensure_agent_activity_schema(&conn) {
             eprintln!("[migration] agent_activity schema repair failed: {err:?}");
         }

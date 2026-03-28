@@ -20,7 +20,7 @@ name = "mesh"
 harness = false
 
 [features]
-default = ["crsqlite", "kernel"]
+default = ["kernel"]
 crsqlite = []
 kernel = []
 __disabled_pending_api_migration = []
