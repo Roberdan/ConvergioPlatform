@@ -182,4 +182,4 @@ claude-config/config/dotfiles-backup/**/development_credentials
 claude-config/config/dotfiles-backup/**/settings.local.json
 claude-config/config/dotfiles-backup/**/*.mdb
 claude-config/config/dotfiles-backup/**/.tmp*
-data/*.bak
+data/
