@@ -109,7 +109,7 @@ pub async fn handle(cmd: ReviewCommands) {
                 "verdict": verdict,
                 "suggestions": suggestions,
             });
-            crate::cli_http::post_and_print(
+            let _ = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/register"),
                 &body,
                 human,
@@ -121,7 +121,7 @@ pub async fn handle(cmd: ReviewCommands) {
             human,
             api_url,
         } => {
-            crate::cli_http::fetch_and_print(
+            let _ = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/review/check?plan_id={plan_id}"),
                 human,
             )
@@ -133,7 +133,7 @@ pub async fn handle(cmd: ReviewCommands) {
             api_url,
         } => {
             let body = serde_json::json!({ "plan_id": plan_id.unwrap_or(0) });
-            crate::cli_http::post_and_print(
+            let _ = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/reset"),
                 &body,
                 human,

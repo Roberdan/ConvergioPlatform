@@ -79,7 +79,7 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
                 "status": status,
                 "summary": summary,
             });
-            crate::cli_http::post_and_print(
+            let _ = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/task/update"),
                 &body,
                 human,
@@ -124,7 +124,7 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
             human,
             api_url,
         } => {
-            crate::cli_http::fetch_and_print(
+            let _ = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/kb-search?q={query}&limit={limit}"),
                 human,
             )

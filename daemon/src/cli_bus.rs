@@ -59,7 +59,7 @@ pub enum BusCommands {
 pub async fn handle(cmd: BusCommands) {
     match cmd {
         BusCommands::Who { human, api_url } => {
-            crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/agents"), human).await;
+            let _ = crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/agents"), human).await;
         }
         BusCommands::Send {
             from,
@@ -73,14 +73,14 @@ pub async fn handle(cmd: BusCommands) {
                 "to": to,
                 "message": message,
             });
-            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/send"), &body, human).await;
+            let _ = crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/send"), &body, human).await;
         }
         BusCommands::Read {
             name,
             human,
             api_url,
         } => {
-            crate::cli_http::fetch_and_print(
+            let _ = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/ipc/messages?agent={name}"),
                 human,
             )
@@ -96,7 +96,7 @@ pub async fn handle(cmd: BusCommands) {
                 "from": from,
                 "message": message,
             });
-            crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/broadcast"), &body, human)
+            let _ = crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/broadcast"), &body, human)
                 .await;
         }
     }

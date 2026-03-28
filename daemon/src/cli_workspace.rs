@@ -83,7 +83,7 @@ pub async fn handle(cmd: WorkspaceCommands) {
             api_url,
         } => {
             let body = serde_json::json!({"plan_id": plan, "wave_db_id": wave});
-            crate::cli_http::post_and_print(
+            let _ = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/workspace/create"),
                 &body,
                 human,
@@ -96,7 +96,7 @@ pub async fn handle(cmd: WorkspaceCommands) {
             api_url,
         } => {
             let body = serde_json::json!({"feature": true, "branch": branch});
-            crate::cli_http::post_and_print(
+            let _ = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/workspace/create"),
                 &body,
                 human,
@@ -109,7 +109,7 @@ pub async fn handle(cmd: WorkspaceCommands) {
             api_url,
         } => {
             let body = serde_json::json!({"workspace_id": workspace_id});
-            crate::cli_http::post_and_print(
+            let _ = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/workspace/delete"),
                 &body,
                 human,
@@ -126,14 +126,14 @@ pub async fn handle(cmd: WorkspaceCommands) {
             } else {
                 format!("{api_url}/api/workspace/list")
             };
-            crate::cli_http::fetch_and_print(&url, human).await;
+            let _ = crate::cli_http::fetch_and_print(&url, human).await;
         }
         WorkspaceCommands::Status {
             workspace_id,
             human,
             api_url,
         } => {
-            crate::cli_http::fetch_and_print(
+            let _ = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/workspace/status/{workspace_id}"),
                 human,
             )
@@ -145,7 +145,7 @@ pub async fn handle(cmd: WorkspaceCommands) {
             human,
             api_url,
         } => {
-            crate::cli_http::fetch_and_print(
+            let _ = crate::cli_http::fetch_and_print(
                 &format!(
                     "{api_url}/api/workspace/events?workspace_id={workspace_id}&limit={limit}"
                 ),
