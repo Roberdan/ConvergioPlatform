@@ -31,6 +31,8 @@ requirements:
   - F-13: "all documentation gaps closed (D1-D7 from report)"
   - F-14: "invoke_agent MCP tool functional"
   - F-15: "full E2E test passes on both nodes"
+  - F-16: "per-repo gh credential routing — no gh auth switch, each repo uses correct account"
+  - F-17: "kernel evidence gate hardened — timeout 60s, mutex single instance, child process cleanup"
 
 waves:
   - id: W1
@@ -105,29 +107,18 @@ waves:
     name: "Bugs + Mesh Fixes"
     merge_mode: sync
     tasks:
-      - id: T2-01
-        ref: [F-02, F-05, F-06, F-07]
+      - id: T2-01a
+        ref: [F-02, F-05, F-07]
         do: |
-          Fix bugs B1, B2, B3, B4, B6, B7, B8, B9 from improvement report.
+          Fix simple bugs B1, B2, B3, B4, B7, B8 from improvement report.
 
           B1: cvg review register --spec-file crashes (NOT NULL plan_id).
               Allow plan_id=0 or NULL for spec-file reviews.
-
           B2: /api/channels not mounted. Wire api_channels.rs in routes/mod.rs.
           B3: /api/health/deep not mounted. Wire api_health_deep.rs.
           B4: delegation status 404 — align plan_id vs delegation_id.
-
-          B6: /api/mesh/exec SSH doesn't resolve peers.
-              Use peer_ssh_alias() from peers.conf.
-
-          B7: daemon binds 127.0.0.1. Bind 0.0.0.0 in dev-mode only.
-
+          B7: daemon binds 127.0.0.1. Add --bind flag, default 0.0.0.0 in dev-mode.
           B8: cvg plan tree doesn't show wave names. Add wave_id + wave_name.
-
-          B9: centralized peer resolver.
-              Create daemon/src/mesh/peer_resolver.rs.
-              Fallback chain: SSH config → Tailscale IP → LAN → DNS.
-              All mesh code uses this resolver.
 
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: fix
@@ -135,11 +126,70 @@ waves:
         model: claude-opus-4-6
         executor_agent: task-executor
         validator_agent: thor-quality-assurance-guardian
-        effort: 3
+        effort: 2
         verify:
           - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
           - "grep -q 'api_channels' daemon/src/server/routes/mod.rs"
+
+      - id: T2-01b
+        ref: [F-06]
+        do: |
+          Fix B6 + B9: centralized peer resolver.
+
+          B6: /api/mesh/exec SSH doesn't resolve peers from peers.conf.
+          B9: 5 different names for 2 machines. Unify.
+
+          Create daemon/src/mesh/peer_resolver.rs:
+          - pub fn resolve(peer_name: &str) -> ResolvedPeer { host, port, user }
+          - Fallback chain: SSH config → Tailscale IP → LAN mDNS → raw DNS
+          - Reads peers.conf for tailscale_ip, ssh_alias
+          - All mesh code (exec, delegate, SSE) uses this single resolver
+          - Dedup peer names: normalize to canonical name from peers.conf
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
           - "test -f daemon/src/mesh/peer_resolver.rs"
+
+      - id: T2-02
+        ref: [F-17]
+        do: |
+          Harden kernel evidence gate to prevent resource exhaustion.
+
+          The kernel evidence gate in api_plan_db.rs spawns `cargo test` on every
+          task status transition to "submitted"/"done". This causes:
+          - 482 threads, 50% CPU, 500MB+ RAM per invocation
+          - No timeout — hangs forever if tests are slow
+          - No mutex — multiple concurrent transitions spawn parallel cargo tests
+          - No child process cleanup on timeout/failure
+
+          ALREADY DONE (this session):
+          - cargo test --lib only (not full suite)
+          - 90s timeout with SIGKILL on process group
+          - setpgid(0,0) for clean child tree cleanup
+          Committed: c94096e
+
+          REMAINING (this task):
+          1. Add static Mutex so only 1 evidence check runs at a time
+          2. SHA-based cache: if git HEAD unchanged since last pass, skip (5min TTL)
+          3. On daemon shutdown: reap orphaned cargo/rustc processes
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "grep -q 'timeout\\|Timeout' daemon/src/kernel/verify.rs"
 
   - id: W3
     name: "Delegation Workflow + Terminal Stack"
@@ -209,6 +259,35 @@ waves:
         verify:
           - "grep -q 'terminal\|tmux\|worktree.*prun' scripts/mesh/deploy-node.sh"
           - "cargo check --manifest-path daemon/Cargo.toml"
+
+      - id: T3-03
+        ref: [F-16]
+        do: |
+          Per-repo gh credential routing — eliminate gh auth switch.
+
+          Problem: switching between GitHub accounts (personal vs org) wastes tokens
+          and causes auth failures when agents work across repos.
+
+          Fix:
+          1. Create scripts/mesh/setup-gh-credentials.sh:
+             For each repo in ~/GitHub/*, check .git/config for github.com URL.
+             Set git config credential.helper to use the correct gh auth token.
+             Uses: git config --local credential.helper '!gh auth token --hostname github.com'
+             or per-repo .git/config [credential] with specific account.
+
+          2. Add to deploy-node.sh: run setup-gh-credentials.sh after code sync.
+
+          3. Document in claude-config/reference/operational/gh-credentials.md.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "test -f scripts/mesh/setup-gh-credentials.sh"
 
   - id: W4
     name: "DX + Documentation + MCP"
