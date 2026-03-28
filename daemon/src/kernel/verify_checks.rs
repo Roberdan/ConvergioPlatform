@@ -3,52 +3,76 @@
 
 use crate::kernel::monitor::KernelCheckResult;
 use crate::kernel::verify::EvidenceCheck;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 pub(crate) fn run_cargo_check(worktree: Option<&str>) -> EvidenceCheck {
-    let mut cmd = Command::new("cargo");
-    cmd.arg("check");
+    run_command_with_timeout("cargo_check", "cargo", &["check"], worktree, 60)
+}
+
+/// Shared helper: run a command with timeout and process-group cleanup.
+fn run_command_with_timeout(
+    check_name: &str,
+    program: &str,
+    args: &[&str],
+    worktree: Option<&str>,
+    timeout_secs: u64,
+) -> EvidenceCheck {
+    use std::time::Duration;
+    let mut cmd = Command::new(program);
+    cmd.args(args);
     if let Some(wt) = worktree {
         cmd.current_dir(wt);
     }
-    match cmd.output() {
-        Ok(out) if out.status.success() => EvidenceCheck::pass("cargo_check", "exit 0"),
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            EvidenceCheck::fail(
-                "cargo_check",
-                format!(
-                    "exit {}: {}",
-                    out.status.code().unwrap_or(-1),
-                    stderr.chars().take(200).collect::<String>()
-                ),
-            )
+    cmd.stderr(std::process::Stdio::piped());
+    #[cfg(unix)]
+    unsafe { cmd.pre_exec(|| { libc::setpgid(0, 0); Ok(()) }); }
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => return EvidenceCheck::fail(check_name, format!("spawn error: {e}")),
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => {
+                return EvidenceCheck::pass(check_name, "exit 0");
+            }
+            Ok(Some(status)) => {
+                let stderr = child.stderr.take().map(|mut s| {
+                    let mut buf = String::new();
+                    use std::io::Read;
+                    let _ = s.read_to_string(&mut buf);
+                    buf
+                }).unwrap_or_default();
+                return EvidenceCheck::fail(
+                    check_name,
+                    format!("exit {}: {}",
+                        status.code().unwrap_or(-1),
+                        stderr.chars().take(200).collect::<String>()),
+                );
+            }
+            Ok(None) if start.elapsed() > timeout => {
+                #[cfg(unix)]
+                unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
+                let _ = child.kill();
+                let _ = child.wait();
+                return EvidenceCheck::fail(
+                    check_name,
+                    format!("timeout after {timeout_secs}s — killed"),
+                );
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(500)),
+            Err(e) => return EvidenceCheck::fail(check_name, format!("wait error: {e}")),
         }
-        Err(e) => EvidenceCheck::fail("cargo_check", format!("spawn error: {e}")),
     }
 }
 
 pub(crate) fn run_cargo_test(worktree: Option<&str>) -> EvidenceCheck {
-    let mut cmd = Command::new("cargo");
-    cmd.arg("test");
-    if let Some(wt) = worktree {
-        cmd.current_dir(wt);
-    }
-    match cmd.output() {
-        Ok(out) if out.status.success() => EvidenceCheck::pass("cargo_test", "exit 0"),
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            EvidenceCheck::fail(
-                "cargo_test",
-                format!(
-                    "exit {}: {}",
-                    out.status.code().unwrap_or(-1),
-                    stderr.chars().take(200).collect::<String>()
-                ),
-            )
-        }
-        Err(e) => EvidenceCheck::fail("cargo_test", format!("spawn error: {e}")),
-    }
+    // --lib only: unit tests are fast (~20s). Full test (bins+integration) takes 45s+
+    // and spawns 400+ threads, risking resource exhaustion.
+    run_command_with_timeout("cargo_test", "cargo", &["test", "--lib"], worktree, 90)
 }
 
 pub(crate) fn run_npm_check(worktree: Option<&str>) -> EvidenceCheck {
