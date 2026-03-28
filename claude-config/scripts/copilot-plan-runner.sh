@@ -3,8 +3,10 @@
 # Spawns fresh CLI sessions until plan is 100% complete.
 # Uses daemon API execution-context for prompt generation.
 # Usage: copilot-plan-runner.sh <plan_id>
-set -euo pipefail
-trap 'echo "ERROR at line $LINENO" >&2' ERR
+set -uo pipefail
+# No set -e: runner must NEVER die from a non-critical error.
+# Each loop iteration handles its own errors.
+trap 'echo "[RUNNER ERROR] line $LINENO, exit $?" >&2' ERR
 
 PLAN_ID="${1:?Usage: copilot-plan-runner.sh <plan_id>}"
 DAEMON_API="${CVG_URL:-http://localhost:8420}"
@@ -35,26 +37,28 @@ while ! plan_done; do
 	CTX="$(get_context)"
 
 	# Extract key info via python3 (handles control chars in JSON)
+	WORKTREE=""; WAVE_ID="?"; NEEDS_THOR=false; NEXT_TASK="none"; PLAN_STATUS="unknown"; PROMPT_FILE=""
 	eval "$(echo "$CTX" | python3 -c "
 import json, sys
-d = json.load(sys.stdin)
+try:
+    d = json.load(sys.stdin)
+except: d = {}
 wt = d.get('worktree_path', '')
-prompt = d.get('prompt', '')
+prompt = d.get('prompt', '/execute $PLAN_ID')
 wave = d.get('current_wave', {})
-nt = d.get('next_task', {})
+nt = d.get('next_task') or {}
 status = d.get('status', 'unknown')
 print(f'WORKTREE=\"{wt}\"')
 print(f'WAVE_ID=\"{wave.get(\"id\",\"?\")}\"')
 print(f'NEEDS_THOR={\"true\" if wave.get(\"needs_thor\") else \"false\"}')
-print(f'NEXT_TASK=\"{nt.get(\"task_id\",\"none\")}\"')
+print(f'NEXT_TASK=\"{nt.get(\"task_id\",\"none\") if nt else \"none\"}\"')
 print(f'PLAN_STATUS=\"{status}\"')
-# Write prompt to temp file (can contain special chars)
 import tempfile, os
 fd, path = tempfile.mkstemp(prefix='convergio-prompt-', suffix='.txt')
 os.write(fd, prompt.encode())
 os.close(fd)
 print(f'PROMPT_FILE=\"{path}\"')
-" 2>/dev/null)"
+" 2>/dev/null)" || echo "[WARN] Context extraction failed, using defaults"
 
 	echo ""
 	echo "[Run ${RETRY}/${MAX_RETRIES}] Wave: ${WAVE_ID} | Next: ${NEXT_TASK} | Thor: ${NEEDS_THOR}"
@@ -101,7 +105,7 @@ for t in d.get('tasks', []):
 	fi
 
 	echo "[INFO] Launching $CLI..."
-	$CLI $CLI_ARGS "$PROMPT" 2>&1
+	$CLI $CLI_ARGS "$PROMPT" 2>&1 || true
 	EXIT_CODE=$?
 
 	echo ""
