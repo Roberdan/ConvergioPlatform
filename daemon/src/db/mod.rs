@@ -1,5 +1,4 @@
 mod cli;
-pub mod crdt;
 pub mod libsql_adapter;
 pub mod migrations;
 mod models;

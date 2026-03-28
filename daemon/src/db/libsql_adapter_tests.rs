@@ -198,3 +198,59 @@ fn plandb_no_crsqlite_extension_field() {
         .execute_batch("CREATE TABLE t(id INTEGER PRIMARY KEY)")
         .expect("create table");
 }
+
+#[test]
+fn db_mod_has_no_crsqlite_references() {
+    // Compile-time proof: crsqlite is removed from the db layer.
+    // PlanDb::open_path works without any extension loading.
+    let dir = tempfile::tempdir().expect("tmpdir");
+    let db_path = dir.path().join("no-crdt.db");
+    let db = crate::db::PlanDb::open_path(&db_path).expect("open");
+    // Timestamp-based sync works as the replacement
+    db.connection()
+        .execute_batch(
+            "CREATE TABLE _sync_meta (
+               peer TEXT NOT NULL,
+               table_name TEXT NOT NULL,
+               last_sync_at TEXT NOT NULL,
+               PRIMARY KEY (peer, table_name)
+             );",
+        )
+        .expect("sync meta table");
+    let meta = SyncMeta {
+        peer: "test-node".into(),
+        table_name: "plans".into(),
+        last_sync_at: "2026-03-28T12:00:00".into(),
+    };
+    super::upsert_sync_meta(db.connection(), &meta).expect("upsert");
+    let result = super::get_sync_meta(db.connection(), "test-node", "plans")
+        .expect("get")
+        .expect("found");
+    assert_eq!(result.last_sync_at, "2026-03-28T12:00:00");
+}
+
+#[test]
+fn cli_sync_commands_point_to_timestamp_adapter() {
+    // After crsqlite removal, sync CLI commands should direct users
+    // to the timestamp-based sync (libsql_adapter).
+    let db = crate::db::PlanDb::open_in_memory().expect("db");
+    // Seed minimal schema for subcommand dispatch
+    db.connection()
+        .execute_batch(
+            "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT);
+             CREATE TABLE plans (id INTEGER PRIMARY KEY, project_id TEXT, name TEXT, status TEXT, tasks_done INTEGER DEFAULT 0, tasks_total INTEGER DEFAULT 0);
+             CREATE TABLE waves (id INTEGER PRIMARY KEY, plan_id INTEGER, wave_id TEXT, name TEXT, status TEXT, tasks_done INTEGER DEFAULT 0, tasks_total INTEGER DEFAULT 0, position INTEGER DEFAULT 0);
+             CREATE TABLE tasks (id INTEGER PRIMARY KEY, project_id TEXT, plan_id INTEGER, wave_id_fk INTEGER, wave_id TEXT, task_id TEXT, title TEXT, status TEXT, started_at TEXT, completed_at TEXT, notes TEXT, tokens INTEGER, output_data TEXT, executor_host TEXT, validated_at TEXT, validated_by TEXT, validation_report TEXT);",
+        )
+        .expect("schema");
+    for cmd in &["export-changes", "apply-changes", "sync"] {
+        let err = db
+            .run_subcommand(&[cmd.to_string()])
+            .expect_err(&format!("{cmd} should return error"));
+        let msg = err.to_string();
+        assert!(
+            msg.contains("timestamp-based sync") || msg.contains("libsql_adapter"),
+            "{cmd} error should mention timestamp sync, got: {msg}"
+        );
+    }
+}
