@@ -164,7 +164,7 @@ EOF
   [[ "$RUN_RELEASE_GATE" == "true" ]] && prompt="${prompt}"$'\n'"  - npm run release:gate"
   [[ -n "$PROJECT_AGENT_CONTENT" ]] && prompt="${prompt}"$'\n\n'"Repository-specific NightMaintenance runbook (MUST follow exactly):"$'\n'"${PROJECT_AGENT_CONTENT}"
   prompt="${prompt}"$'\n\n'"4. Commit with: fix: nightly guardian remediation"$'\n'"5. Do not force push and do not merge main."
-  timeout "$FIX_TIMEOUT_SEC" copilot --dangerously-skip-permissions --add-dir "$REPO_PATH" --model "$MODEL" -p "$prompt"
+  timeout "$FIX_TIMEOUT_SEC" copilot --yolo --add-dir "$REPO_PATH" --model "$MODEL" -p "$prompt"
   npm run ci:summary:full
   npm run i18n:check
   [[ "$RUN_RELEASE_GATE" == "true" ]] && npm run release:gate

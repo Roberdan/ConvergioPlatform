@@ -204,7 +204,7 @@ execute_copilot() {
 
 	# Pipe copilot output to tee: file + stderr (visible to user)
 	# Track child PID for cleanup on parent exit
-	timeout "$TIMEOUT" copilot --dangerously-skip-permissions --add-dir "$WT" \
+	timeout "$TIMEOUT" copilot --yolo --add-dir "$WT" \
 		--disable-mcp-server codegraph \
 		--model "$MODEL" -p "$PROMPT" 2>&1 | tee "$copilot_stdout_file" >&2 &
 	local copilot_bg_pid=$!
@@ -381,7 +381,7 @@ if [[ "$AUTO_VALIDATE" == "true" && "$FINAL_STATUS" == "submitted" && "$WAVE_DB_
 	if [[ "$eval_result" == "READY" && "$unresolved_count" -eq 0 && "$submitted_count" -gt 0 ]]; then
 		validate_prompt="@validate Wave ${WAVE_ID:-$WAVE_DB_ID} in plan ${PLAN_ID}. All wave tasks are submitted. Run wave-level validation now."
 		echo "Auto-validate: wave ${WAVE_ID:-$WAVE_DB_ID} is fully submitted. Triggering @validate..."
-		timeout "$TIMEOUT" copilot --dangerously-skip-permissions --add-dir "$WT" \
+		timeout "$TIMEOUT" copilot --yolo --add-dir "$WT" \
 			--disable-mcp-server codegraph \
 			-p "$validate_prompt" >/dev/null 2>&1 || {
 			echo "WARN: Auto-validate trigger failed for wave ${WAVE_ID:-$WAVE_DB_ID}" >&2

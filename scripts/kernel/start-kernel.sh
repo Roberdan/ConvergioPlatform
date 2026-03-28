@@ -19,8 +19,5 @@ fi
 # Source Python venv (for mlx_lm)
 [[ -f "$VENV" ]] && source "$VENV"
 
-# Prevent sleep — kernel node must stay awake 24/7
-caffeinate -s &
-
 # Start daemon
 exec "$DAEMON_BIN" serve --dev-mode

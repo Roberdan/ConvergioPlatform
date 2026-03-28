@@ -65,7 +65,7 @@ copilot)
 
 	kitty @ launch --type=tab --title="$TAB_NAME" --cwd="$CWD" \
 		--keep-focus zsh -ic \
-		"copilot --dangerously-skip-permissions --add-dir '$CWD' $MODEL_FLAG -p '$(echo "$PROMPT" | sed "s/'/'\\\\''/g")'"
+		"copilot --yolo --add-dir '$CWD' $MODEL_FLAG -p '$(echo "$PROMPT" | sed "s/'/'\\\\''/g")'"
 	;;
 
 *)

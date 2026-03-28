@@ -38,14 +38,14 @@ tmux kill-session -t "$SESSION" 2>/dev/null || true
 IFS='|' read -r pid project label dir token <<<"${PLANS[0]}"
 tmux new-session -d -s "$SESSION" -n "$label" -c "$dir"
 tmux send-keys -t "$SESSION:$label" \
-	"export GH_TOKEN='$token' && echo '=== Plan #$pid: $label (COPILOT) ===' && cd $dir && copilot --dangerously-skip-permissions -p '@execute $pid'" Enter
+	"export GH_TOKEN='$token' && echo '=== Plan #$pid: $label (COPILOT) ===' && cd $dir && copilot --yolo -p '@execute $pid'" Enter
 
 # Create remaining windows
 for i in 1 2 3; do
 	IFS='|' read -r pid project label dir token <<<"${PLANS[$i]}"
 	tmux new-window -t "$SESSION" -n "$label" -c "$dir"
 	tmux send-keys -t "$SESSION:$label" \
-		"export GH_TOKEN='$token' && echo '=== Plan #$pid: $label (COPILOT) ===' && cd $dir && copilot --dangerously-skip-permissions -p '@execute $pid'" Enter
+		"export GH_TOKEN='$token' && echo '=== Plan #$pid: $label (COPILOT) ===' && cd $dir && copilot --yolo -p '@execute $pid'" Enter
 done
 
 # Create monitor window (5th tab)
