@@ -45,11 +45,23 @@ while ! plan_done; do
 		cvg task update "$_sid" pending "Reset stuck task from crashed run" 2>/dev/null || true
 	done
 
-	copilot --yolo -p "@execute $PLAN_ID" 2>&1
+	# Use claude or copilot — whichever is available
+	if command -v claude &>/dev/null; then
+		CLI="claude"
+		CLI_ARGS="--dangerously-skip-permissions -p"
+	elif command -v copilot &>/dev/null; then
+		CLI="copilot"
+		CLI_ARGS="--yolo -p"
+	else
+		echo "[FAIL] Neither claude nor copilot CLI found" >&2
+		exit 1
+	fi
+
+	$CLI $CLI_ARGS "/execute $PLAN_ID" 2>&1
 	EXIT_CODE=$?
 
 	echo ""
-	echo "[Run $RETRY] Copilot exited (code $EXIT_CODE). Checking progress..."
+	echo "[Run $RETRY] $CLI exited (code $EXIT_CODE). Checking progress..."
 	sleep 2
 done
 
