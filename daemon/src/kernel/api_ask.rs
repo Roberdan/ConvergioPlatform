@@ -35,14 +35,23 @@ mod inner {
     ) -> Json<AskResponse> {
         let question = body.question.clone();
         let engine = state.engine.clone();
-        // Route through voice_router (uses spawn_blocking for reqwest::blocking)
         let answer = tokio::task::spawn_blocking(move || {
+            let q = question.to_lowercase();
+            // Check for Ali escalation FIRST (before any LLM classification)
+            if q.starts_with("ali ") || q.starts_with("ali,") || q == "ali"
+                || q.contains(" ali ") || q.contains("chiedi ad ali")
+                || q.contains("opus") || q.contains("cloud")
+            {
+                return route_intent(
+                    VoiceIntent::EscalateToAli { question: question.clone() },
+                    "http://localhost:8420",
+                );
+            }
+            // For everything else: classify intent then route
             let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
             let intent = classify_intent(&question, &eng);
             match &intent {
-                // AskAli → use engine.ask() with context stuffing (Qwen reasons on data)
                 VoiceIntent::AskAli { .. } => eng.ask(&question),
-                // Everything else (StatusCheck, CostQuery, EscalateToAli, etc.) → voice_router
                 _ => route_intent(intent, "http://localhost:8420"),
             }
         })
