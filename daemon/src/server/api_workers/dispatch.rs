@@ -1,4 +1,5 @@
 use super::super::state::{ApiError, ServerState};
+use crate::mesh::peer_resolver;
 use axum::extract::State;
 use axum::routing::post;
 use axum::{Json, Router};
@@ -34,8 +35,16 @@ async fn handle_exec(
         .and_then(Value::as_u64)
         .unwrap_or(30);
 
+    // Resolve peer through centralized resolver (B6 fix: SSH resolves from peers.conf)
+    let resolved = peer_resolver::resolve(peer).ok();
+    let connect_host = resolved
+        .as_ref()
+        .map(|r| r.tailscale_ip.clone())
+        .filter(|ip| !ip.is_empty())
+        .unwrap_or_else(|| peer.to_string());
+
     // Try HTTP first (daemon-to-daemon)
-    let url = format!("http://{}:8420/api/health", peer);
+    let url = format!("http://{}:8420/api/health", connect_host);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -45,7 +54,7 @@ async fn handle_exec(
 
     if peer_reachable {
         // Forward command via daemon API
-        let exec_url = format!("http://{}:8420/api/mesh/exec", peer);
+        let exec_url = format!("http://{}:8420/api/mesh/exec", connect_host);
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs),
             client.post(&exec_url).json(&body).send(),
@@ -72,8 +81,12 @@ async fn handle_exec(
         }
     }
 
-    // Fallback: SSH exec
-    let mut cmd_args = vec![peer.to_string(), command.to_string()];
+    // Fallback: SSH exec (B6 fix: resolve SSH destination from peers.conf)
+    let ssh_dest = resolved
+        .as_ref()
+        .map(|r| peer_resolver::ssh_destination(r))
+        .unwrap_or_else(|| peer.to_string());
+    let mut cmd_args = vec![ssh_dest, command.to_string()];
     for arg in &args {
         if let Some(s) = arg.as_str() {
             cmd_args.push(s.to_string());
@@ -126,6 +139,11 @@ async fn handle_delegate(
         .and_then(Value::as_str)
         .ok_or_else(|| ApiError::bad_request("missing peer"))?;
 
+    // B9 fix: canonicalize peer name before storing in DB
+    let canonical = peer_resolver::resolve(peer)
+        .map(|r| r.canonical_name)
+        .unwrap_or_else(|_| peer.to_string());
+
     let conn = state.get_conn()?;
     let conn = &conn;
 
@@ -134,7 +152,7 @@ async fn handle_delegate(
         .execute(
             "UPDATE plans SET execution_host = ?1, updated_at = datetime('now') \
              WHERE id = ?2",
-            rusqlite::params![peer, plan_id],
+            rusqlite::params![canonical, plan_id],
         )
         .map_err(|e| ApiError::internal(format!("delegate failed: {e}")))?;
 

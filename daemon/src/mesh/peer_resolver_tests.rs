@@ -1,0 +1,149 @@
+use super::*;
+use crate::mesh::peers::{PeerConfig, PeersRegistry};
+use std::collections::BTreeMap;
+
+fn test_registry() -> PeersRegistry {
+    let mut peers = BTreeMap::new();
+    peers.insert(
+        "m5max".to_string(),
+        PeerConfig {
+            ssh_alias: "RoberdanM5Max.local".to_string(),
+            user: "roberdan".to_string(),
+            os: "macos".to_string(),
+            tailscale_ip: "100.89.245.79".to_string(),
+            dns_name: "macbook-pro-di-roberdan.tail01f12c.ts.net".to_string(),
+            capabilities: vec!["claude".into(), "copilot".into()],
+            role: "coordinator".to_string(),
+            status: "active".to_string(),
+            mac_address: None,
+            gh_account: None,
+            runners: None,
+            runner_paths: None,
+        },
+    );
+    peers.insert(
+        "m1pro".to_string(),
+        PeerConfig {
+            ssh_alias: "robertos-mbp-m1.tail01f12c.ts.net".to_string(),
+            user: "roberdan".to_string(),
+            os: "macos".to_string(),
+            tailscale_ip: "100.64.0.2".to_string(),
+            dns_name: "m1-pro-worker.tail01f12c.ts.net".to_string(),
+            capabilities: vec!["claude".into()],
+            role: "worker".to_string(),
+            status: "active".to_string(),
+            mac_address: None,
+            gh_account: None,
+            runners: None,
+            runner_paths: None,
+        },
+    );
+    PeersRegistry {
+        shared_secret: "test-secret".to_string(),
+        peers,
+    }
+}
+
+#[test]
+fn resolve_exact_section_name() {
+    let reg = test_registry();
+    let resolved = resolve_from_registry("m5max", &reg).unwrap();
+    assert_eq!(resolved.canonical_name, "m5max");
+    assert_eq!(resolved.host, "RoberdanM5Max.local");
+    assert_eq!(resolved.user, "roberdan");
+    assert_eq!(resolved.port, DEFAULT_SSH_PORT);
+}
+
+#[test]
+fn resolve_case_insensitive_section_name() {
+    let reg = test_registry();
+    let resolved = resolve_from_registry("M5Max", &reg).unwrap();
+    assert_eq!(resolved.canonical_name, "m5max");
+}
+
+#[test]
+fn resolve_by_tailscale_ip() {
+    let reg = test_registry();
+    let resolved = resolve_from_registry("100.64.0.2", &reg).unwrap();
+    assert_eq!(resolved.canonical_name, "m1pro");
+}
+
+#[test]
+fn resolve_by_ssh_alias() {
+    let reg = test_registry();
+    let resolved = resolve_from_registry("RoberdanM5Max.local", &reg).unwrap();
+    assert_eq!(resolved.canonical_name, "m5max");
+}
+
+#[test]
+fn resolve_by_dns_name_substring() {
+    let reg = test_registry();
+    let resolved = resolve_from_registry("m1-pro-worker", &reg).unwrap();
+    assert_eq!(resolved.canonical_name, "m1pro");
+}
+
+#[test]
+fn resolve_unknown_peer_returns_error() {
+    let reg = test_registry();
+    let err = resolve_from_registry("nonexistent", &reg);
+    assert!(err.is_err());
+}
+
+#[test]
+fn normalize_name_strips_separators() {
+    assert_eq!(normalize_name("Mac-Worker_1"), "macworker1");
+    assert_eq!(normalize_name("M5Max"), "m5max");
+    assert_eq!(normalize_name("roberto's-mbp"), "robertosmbp");
+}
+
+#[test]
+fn ssh_destination_prefers_alias() {
+    let resolved = ResolvedPeer {
+        canonical_name: "m5max".to_string(),
+        host: "RoberdanM5Max.local".to_string(),
+        port: DEFAULT_SSH_PORT,
+        user: "roberdan".to_string(),
+        ssh_alias: "RoberdanM5Max.local".to_string(),
+        tailscale_ip: "100.89.245.79".to_string(),
+    };
+    assert_eq!(ssh_destination(&resolved), "RoberdanM5Max.local");
+}
+
+#[test]
+fn ssh_destination_falls_back_to_user_at_host() {
+    let resolved = ResolvedPeer {
+        canonical_name: "worker".to_string(),
+        host: "100.64.0.2".to_string(),
+        port: DEFAULT_SSH_PORT,
+        user: "roberdan".to_string(),
+        ssh_alias: String::new(),
+        tailscale_ip: "100.64.0.2".to_string(),
+    };
+    assert_eq!(ssh_destination(&resolved), "roberdan@100.64.0.2");
+}
+
+#[test]
+fn fallback_chain_ssh_alias_first() {
+    let reg = test_registry();
+    let resolved = resolve_from_registry("m5max", &reg).unwrap();
+    // ssh_alias is "RoberdanM5Max.local", so host should be that
+    assert_eq!(resolved.host, "RoberdanM5Max.local");
+}
+
+#[test]
+fn fallback_chain_tailscale_ip_when_no_ssh_alias() {
+    let mut reg = test_registry();
+    reg.peers.get_mut("m1pro").unwrap().ssh_alias = String::new();
+    let resolved = resolve_from_registry("m1pro", &reg).unwrap();
+    assert_eq!(resolved.host, "100.64.0.2");
+}
+
+#[test]
+fn fallback_chain_dns_name_when_no_ip() {
+    let mut reg = test_registry();
+    let peer = reg.peers.get_mut("m1pro").unwrap();
+    peer.ssh_alias = String::new();
+    peer.tailscale_ip = String::new();
+    let resolved = resolve_from_registry("m1pro", &reg).unwrap();
+    assert_eq!(resolved.host, "m1-pro-worker.tail01f12c.ts.net");
+}

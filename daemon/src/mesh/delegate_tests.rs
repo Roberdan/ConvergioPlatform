@@ -44,15 +44,15 @@ mod tests {
     }
 
     #[test]
-    fn ssh_destination_prefers_alias() {
+    fn ssh_destination_legacy_prefers_alias() {
         let peer = test_peer("mac-dev-ts", "alice", "100.64.0.1");
-        assert_eq!(ssh_destination(&peer), "mac-dev-ts");
+        assert_eq!(ssh_destination_legacy(&peer), "mac-dev-ts");
     }
 
     #[test]
-    fn ssh_destination_fallback_to_ip() {
+    fn ssh_destination_legacy_fallback_to_ip() {
         let peer = test_peer("", "bob", "100.64.0.2");
-        assert_eq!(ssh_destination(&peer), "bob@100.64.0.2");
+        assert_eq!(ssh_destination_legacy(&peer), "bob@100.64.0.2");
     }
 
     #[test]

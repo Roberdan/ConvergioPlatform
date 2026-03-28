@@ -3,6 +3,7 @@ pub mod daemon;
 pub mod delegate;
 pub mod delegate_monitor;
 mod delegate_types;
+pub mod peer_resolver;
 pub mod error;
 pub mod handoff;
 pub mod http_api;

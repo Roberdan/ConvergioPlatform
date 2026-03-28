@@ -1,6 +1,6 @@
 use super::state::ServerState;
 use super::ws_pty::peer_ssh_alias;
-use crate::mesh::delegate::DelegateEngine;
+use crate::mesh::peer_resolver;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,17 +79,13 @@ pub async fn delegate(
         &stage("connecting", target, "Resolving peer"),
     );
 
-    // DelegateEngine provides peer resolution; SSE flow uses it for validation
-    let conf = state
-        .db_path
-        .parent()
-        .and_then(|d| d.parent())
-        .map(|b| b.join("config/peers.conf"))
-        .unwrap_or_default();
-    let _engine = DelegateEngine::new(conf);
-    let ssh_dest = match peer_ssh_alias(state, target) {
-        Some(d) => d,
-        None => return do_fail(ev, state, qs, &del_id, "Cannot resolve peer"),
+    // Centralized peer resolution (B6/B9 fix): try peer_resolver first, fall back to legacy
+    let ssh_dest = match peer_resolver::resolve(target) {
+        Ok(resolved) => peer_resolver::ssh_destination(&resolved),
+        Err(_) => match peer_ssh_alias(state, target) {
+            Some(d) => d,
+            None => return do_fail(ev, state, qs, &del_id, "Cannot resolve peer"),
+        },
     };
     if cancelled.load(Ordering::Acquire) {
         return cancel_events(ev, state, qs, &del_id);

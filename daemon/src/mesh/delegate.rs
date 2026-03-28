@@ -3,7 +3,8 @@
 pub use super::delegate_types::{DelegateError, DelegateResult, DelegateStatus};
 
 use super::handoff::SshClient;
-use super::peers::{PeerConfig, PeersRegistry};
+use super::peer_resolver;
+use super::peers::PeersRegistry;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
@@ -12,7 +13,7 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30 * 60;
 const SSH_CONNECT_TIMEOUT_SECS: u64 = 15;
 const HEALTH_CHECK_RETRIES: u32 = 3;
 
-pub(crate) fn ssh_destination(peer: &PeerConfig) -> String {
+pub(crate) fn ssh_destination_legacy(peer: &super::peers::PeerConfig) -> String {
     if !peer.ssh_alias.is_empty() {
         peer.ssh_alias.clone()
     } else {
@@ -45,19 +46,22 @@ impl DelegateEngine {
         Self { peers_conf_path }
     }
 
-    fn resolve_peer(&self, peer_name: &str) -> Result<PeerConfig, DelegateError> {
+    fn resolve_peer(&self, peer_name: &str) -> Result<(peer_resolver::ResolvedPeer, String), DelegateError> {
         let registry = PeersRegistry::load(&self.peers_conf_path)?;
-        let peer = registry
+        let resolved = peer_resolver::resolve_from_registry(peer_name, &registry)
+            .map_err(|_| DelegateError::PeerNotFound(peer_name.to_owned()))?;
+        let config = registry
             .peers
-            .get(peer_name)
+            .get(&resolved.canonical_name)
             .ok_or_else(|| DelegateError::PeerNotFound(peer_name.to_owned()))?;
-        if peer.status != "active" {
+        if config.status != "active" {
             return Err(DelegateError::PeerInactive(
-                peer_name.to_owned(),
-                peer.status.clone(),
+                resolved.canonical_name.clone(),
+                config.status.clone(),
             ));
         }
-        Ok(peer.clone())
+        let dest = peer_resolver::ssh_destination(&resolved);
+        Ok((resolved, dest))
     }
 
     fn check_remote_health(ssh: &SshClient, peer_name: &str) -> Result<(), DelegateError> {
@@ -164,11 +168,10 @@ impl DelegateEngine {
         task_id: &str,
         agent_type: &str,
     ) -> Result<DelegateResult, DelegateError> {
-        let peer = self.resolve_peer(peer_name)?;
-        let dest = ssh_destination(&peer);
+        let (resolved, dest) = self.resolve_peer(peer_name)?;
         let timeout = delegate_timeout();
         let (peer_owned, task_owned, agent_owned) = (
-            peer_name.to_owned(),
+            resolved.canonical_name.clone(),
             task_id.to_owned(),
             agent_type.to_owned(),
         );
