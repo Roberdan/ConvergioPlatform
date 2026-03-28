@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "convergio-platform-daemon"
 path = "src/main.rs"
 
+[[bin]]
+name = "convergio-mcp-server"
+path = "src/mcp_server/main.rs"
+
 [[bench]]
 name = "mesh"
 harness = false

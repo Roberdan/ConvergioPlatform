@@ -3,6 +3,7 @@ pub mod background_sync;
 pub mod artifacts;
 pub mod kernel;
 pub mod capabilities;
+pub mod mcp_server;
 pub mod channels;
 pub mod checklist;
 pub mod db;
