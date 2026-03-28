@@ -25,5 +25,10 @@ export PATH="${HOME}/.local/bin:${HOME}/convergio-env/bin:/opt/homebrew/bin:${PA
 # Prevent sleep — kernel node must stay awake 24/7
 caffeinate -s &
 
+# Create unified Convergio tmux session if it doesn't exist.
+# All delegations land here as windows. User monitors with: tmux attach -t Convergio
+tmux has-session -t Convergio 2>/dev/null || \
+  tmux new-session -d -s Convergio -n kernel -c "${REPO_DIR}"
+
 # Start daemon
 exec "$DAEMON_BIN" serve --dev-mode

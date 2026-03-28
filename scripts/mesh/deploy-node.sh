@@ -118,8 +118,9 @@ else
   warn "No secrets found in local keychain — skipping"
 fi
 
-# Step 6: Start daemon on node (reads secrets from its own keychain)
+# Step 6: Create Convergio tmux session + start daemon
 info "[6/9] Starting daemon on node..."
+_ssh "tmux has-session -t Convergio 2>/dev/null || tmux new-session -d -s Convergio -n kernel -c ~/GitHub/ConvergioPlatform" 2>/dev/null || true
 _ssh "bash -lc '
   # Source secrets from env file (written by deploy step 5)
   [[ -f ~/.convergio/env ]] && source ~/.convergio/env

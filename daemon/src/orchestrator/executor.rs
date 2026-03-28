@@ -46,20 +46,23 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
     write_file_on_peer(&client, peer, &done_script, &done_content).await?;
     exec_on_peer(&client, peer, &format!("chmod +x '{done_script}'")).await?;
 
-    // Launch claude in tmux
-    let session = format!("plan-{plan_id}");
+    // Launch in unified "Convergio" tmux session — one session per node, one window per plan.
+    // User can monitor all delegations: tmux attach -t Convergio
+    let session = "Convergio";
+    let window = format!("plan-{plan_id}");
     let launch = format!(
-        "tmux kill-session -t '{session}' 2>/dev/null; \
-         tmux new-session -d -s '{session}' -c '{remote_repo}'; \
-         tmux send-keys -t '{session}' \
+        "tmux has-session -t '{session}' 2>/dev/null || \
+         tmux new-session -d -s '{session}' -n 'kernel' -c '{remote_repo}'; \
+         tmux new-window -t '{session}' -n '{window}' -c '{remote_repo}'; \
+         tmux send-keys -t '{session}:{window}' \
          'claude -p \"$(cat {prompt_file})\" --dangerously-skip-permissions; \
          bash {done_script}' Enter"
     );
     exec_on_peer(&client, peer, &launch).await?;
 
-    tracing::info!("ali: plan {plan_id} launched on {peer} in tmux:{session}");
+    tracing::info!("ali: plan {plan_id} launched on {peer} in tmux:Convergio:{window}");
     emit(engine, "plan_delegated", &serde_json::json!({
-        "plan_id": plan_id, "peer": peer, "tmux_session": session,
+        "plan_id": plan_id, "peer": peer, "tmux_session": session, "tmux_window": window,
     }))?;
     Ok(())
 }
