@@ -78,6 +78,15 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
             if let Some(ref p) = db_path {
                 std::env::set_var("DASHBOARD_DB", p);
             }
+            // Auto-resolve crsqlite path if not explicitly provided
+            let crsqlite_path = crsqlite_path.or_else(|| {
+                let resolved = convergio_core::db::resolve_crsqlite_path(None);
+                if resolved != "crsqlite" && std::path::Path::new(&resolved).exists() {
+                    Some(resolved)
+                } else {
+                    None
+                }
+            });
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(convergio_core::background::run_pause_bridge(db_path));
             if let Err(e) =
