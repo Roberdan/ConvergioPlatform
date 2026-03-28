@@ -172,6 +172,19 @@ waves:
           B7: daemon binds 127.0.0.1. Add --bind flag, default 0.0.0.0 in dev-mode.
           B8: cvg plan tree doesn't show wave names. Add wave_id + wave_name.
 
+          PROVISIONING (new node must work out of the box):
+          B10: Daemon startup self-diagnostic — on serve, check:
+               - ulimit -n >= 4096, warn + set if lower
+               - DB file accessible (try open), refuse to start if not
+               - DASHBOARD_DB auto-detect: search well-known paths
+                 ($DASHBOARD_DB, ./data/dashboard.db, ~/.claude/data/dashboard.db)
+               - Log all checks at INFO level
+               If critical check fails: print clear error and exit 1 (not silent loop).
+          B11: copilot-worker.sh task lookup broken — /api/plan-db/list
+               doesn't include tasks, jq fails on control chars in task descriptions.
+               Fix the API: /api/plan-db/list should include basic task info,
+               or add /api/plan-db/find-task/:task_id endpoint.
+
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: fix
         output_type: pr
@@ -273,6 +286,15 @@ waves:
 
           5. Git credential propagation: deploy-node.sh copies gh auth token.
 
+          6. DELEGATION PRE-FLIGHT (NON-NEGOTIABLE):
+             Before delegating ANY work to a peer node:
+             a. Call GET /api/node/readiness on the target — must return ok:true
+             b. Verify cvg plan list returns data (daemon + DB working)
+             c. Verify claude/copilot CLI is available on target
+             d. Sync claude memory: rsync ~/.claude/projects/ to target
+             e. Sync ~/.convergio/env to target (credentials)
+             If ANY pre-flight fails: refuse delegation with clear error, don't silently proceed.
+
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
         output_type: pr
@@ -302,6 +324,19 @@ waves:
 
           3. Replicate tmux config + zsh config via deploy-node.sh.
              Copy from master node if missing on target.
+
+          4. FULL NODE PROVISIONING in deploy-node.sh (new node = zero config):
+             a. Sync code: git pull or rsync from coordinator
+             b. Build daemon: cargo build --release
+             c. Create cvg symlink: ln -sf target/release/convergio-platform-daemon ~/.local/bin/cvg
+             d. Sync credentials: rsync ~/.convergio/env from coordinator
+             e. Sync Claude memory: rsync ~/.claude/projects/ from coordinator
+             f. Set DASHBOARD_DB in ~/.zshrc if not set
+             g. Set ulimit -n 10240 in ~/.zshrc if not set
+             h. Install launchd plist for daemon auto-restart
+             i. Start daemon and verify health: curl /api/health + /api/node/readiness
+             j. Run cvg plan list — must return data
+             ONE COMMAND to provision a new node. Zero manual steps.
 
           Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
         type: feature
