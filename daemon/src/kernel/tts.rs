@@ -20,9 +20,11 @@ pub enum TtsError {
 /// Supported TTS backend strategies.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TtsBackend {
-    /// macOS built-in `say` command — zero deps, supports Italian (Alice voice).
+    /// Qwen3-TTS via mlx-audio — neural voice, Italian, female (Vivian).
+    Qwen3Tts,
+    /// macOS built-in `say` command — zero deps fallback.
     MacOsSay,
-    /// Voxtral MLX (future) — replace `say` when model verified on Apple Silicon.
+    /// Voxtral MLX (future) — replace when mlx-audio supports it.
     VoxtralMlx,
 }
 
@@ -68,12 +70,15 @@ impl Default for TtsEngine {
 
 impl TtsEngine {
     pub fn new() -> Self {
-        let backend = if Self::voxtral_available() {
+        let backend = if Self::qwen3_tts_available() {
+            TtsBackend::Qwen3Tts
+        } else if Self::voxtral_available() {
             TtsBackend::VoxtralMlx
         } else {
             TtsBackend::MacOsSay
         };
         let model_name = match &backend {
+            TtsBackend::Qwen3Tts => "qwen3-tts-vivian".to_string(),
             TtsBackend::VoxtralMlx => "voxtral-mlx".to_string(),
             TtsBackend::MacOsSay => "macos-say-alice".to_string(),
         };
@@ -84,6 +89,18 @@ impl TtsEngine {
             backend,
             wav_path_override: None,
         }
+    }
+
+    /// Returns `true` when Qwen3-TTS is available via mlx-audio.
+    pub fn qwen3_tts_available() -> bool {
+        let python = crate::ipc::models::apple_fm::AppleFmBridge::resolve_python();
+        std::process::Command::new(&python)
+            .args(["-c", "from mlx_audio.tts.generate import generate_audio; print('ok')"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
     }
 
     /// Returns `true` when the Voxtral MLX CLI is reachable on Apple Silicon.
@@ -122,6 +139,7 @@ impl TtsEngine {
 
         let start = Instant::now();
         let wav = match self.backend {
+            TtsBackend::Qwen3Tts => self.speak_via_qwen3(text, locale)?,
             TtsBackend::MacOsSay => self.speak_via_say(text, locale)?,
             TtsBackend::VoxtralMlx => self.speak_via_voxtral(text, locale)?,
         };
@@ -166,6 +184,32 @@ impl TtsEngine {
         }
 
         std::fs::read(&wav_path)
+            .map_err(|e| TtsError::SubprocessFailed(format!("read wav: {e}")))
+    }
+
+    fn speak_via_qwen3(&self, text: &str, locale: &str) -> Result<Vec<u8>, TtsError> {
+        let wav_dir = self.temp_wav_path();
+        let lang = if locale.starts_with("it") { "it" } else { "en" };
+        let python = crate::ipc::models::apple_fm::AppleFmBridge::resolve_python();
+        let status = std::process::Command::new(&python)
+            .args([
+                "-m", "mlx_audio.tts.generate",
+                "--model", "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16",
+                "--text", text,
+                "--voice", "Vivian",
+                "--lang_code", lang,
+                "--output_path", wav_dir.to_str().unwrap_or("/tmp/convergio_tts"),
+            ])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map_err(|e| TtsError::SubprocessFailed(e.to_string()))?;
+        if !status.success() {
+            return Err(TtsError::SubprocessFailed("qwen3-tts exited with error".into()));
+        }
+        // mlx-audio saves to <output_path>/audio_000.wav
+        let audio_path = wav_dir.join("audio_000.wav");
+        std::fs::read(&audio_path)
             .map_err(|e| TtsError::SubprocessFailed(format!("read wav: {e}")))
     }
 

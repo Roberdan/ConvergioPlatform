@@ -102,12 +102,20 @@ TG_CHAT_ID=""
 TG_TOKEN="$(security find-generic-password -a telegram-bot -s convergio-platform -w 2>/dev/null || true)"
 TG_CHAT_ID="$(security find-generic-password -a telegram-chat-id -s convergio-platform -w 2>/dev/null || true)"
 
-if [[ -n "$TG_TOKEN" ]]; then
-  # Write token to env file on remote node (keychain may be locked over SSH)
-  _ssh "mkdir -p ~/.convergio && echo 'CONVERGIO_TELEGRAM_TOKEN=${TG_TOKEN}' > ~/.convergio/env && echo 'CONVERGIO_TELEGRAM_CHAT_ID=${TG_CHAT_ID}' >> ~/.convergio/env && chmod 600 ~/.convergio/env" \
-    && ok "Telegram secrets written to ~/.convergio/env" || warn "Secret write failed (non-fatal)"
+HF_TOKEN="$(security find-generic-password -a huggingface -s convergio-platform -w 2>/dev/null || true)"
+
+_ssh "mkdir -p ~/.convergio && : > ~/.convergio/env && chmod 600 ~/.convergio/env"
+[[ -n "$TG_TOKEN" ]] && _ssh "echo 'CONVERGIO_TELEGRAM_TOKEN=${TG_TOKEN}' >> ~/.convergio/env"
+[[ -n "$TG_CHAT_ID" ]] && _ssh "echo 'CONVERGIO_TELEGRAM_CHAT_ID=${TG_CHAT_ID}' >> ~/.convergio/env"
+[[ -n "$HF_TOKEN" ]] && _ssh "echo 'HF_TOKEN=${HF_TOKEN}' >> ~/.convergio/env"
+
+if [[ -n "$TG_TOKEN" ]] || [[ -n "$HF_TOKEN" ]]; then
+  ok "Secrets written to ~/.convergio/env (TG=$([ -n \"$TG_TOKEN\" ] && echo yes || echo no), HF=$([ -n \"$HF_TOKEN\" ] && echo yes || echo no))"
+  # Also login huggingface if token available
+  [[ -n "$HF_TOKEN" ]] && _ssh "source ~/convergio-env/bin/activate 2>/dev/null && python3 -c \"from huggingface_hub import login; login(token='${HF_TOKEN}', add_to_git_credential=False)\" 2>/dev/null" \
+    && ok "HuggingFace login OK" || warn "HF login failed (non-fatal)"
 else
-  warn "Telegram token not found in local keychain — skipping"
+  warn "No secrets found in local keychain — skipping"
 fi
 
 # Step 6: Start daemon on node (reads secrets from its own keychain)

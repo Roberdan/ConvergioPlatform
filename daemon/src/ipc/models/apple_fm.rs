@@ -163,7 +163,7 @@ impl AppleFmBridge {
     }
 
     /// Resolves the Python interpreter path with the venv-first strategy.
-    fn resolve_python() -> String {
+    pub fn resolve_python() -> String {
         // 1. Check for convergio venv (standard M1 Pro install location).
         if let Ok(home) = std::env::var("HOME") {
             let venv_python = format!("{home}/convergio-env/bin/python");
