@@ -10,6 +10,14 @@ set -euo pipefail
 # macOS default is 256 which causes "Too many open files" errors.
 ulimit -n 10240 2>/dev/null || true
 
+# Load Convergio credentials (Telegram token, etc.) if available.
+# nohup/launchd don't inherit shell env, so we source explicitly.
+if [ -f "$HOME/.convergio/env" ]; then
+  set -a
+  . "$HOME/.convergio/env"
+  set +a
+fi
+
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
