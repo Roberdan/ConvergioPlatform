@@ -1,5 +1,5 @@
 use super::ring::Ring;
-use super::types::{Capability, CapabilityError};
+use super::types::Capability;
 
 /// Security review requirements for capability ring promotion.
 /// When a capability is registered or promoted to a higher ring,
