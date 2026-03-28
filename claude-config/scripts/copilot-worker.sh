@@ -110,16 +110,44 @@ if [[ -z "${GH_TOKEN:-}" && -z "${COPILOT_TOKEN:-}" ]] && ! gh auth status &>/de
 	exit 1
 fi
 
-# Verify task exists and is pending — find plan containing this task via API
-_plan_list="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '[]')"
-_found_plan_id="$(echo "$_plan_list" | jq -r --argjson tid "$TASK_ID" '[.[] | select(.tasks[]? | (.id // .db_task_id) == $tid)] | .[0].id // empty' 2>/dev/null || echo '')"
+# Verify task exists and is pending — query active plans to find the task
+# Uses python3 instead of jq because task descriptions contain unescaped control chars.
+_plan_list="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '{"plans":[]}')"
+_found_plan_id="$(python3 -c "
+import json, sys, urllib.request
+data = json.loads('''$_plan_list''') if '${_plan_list}' != '' else {'plans':[]}
+plans = data.get('plans', data if isinstance(data, list) else [])
+for p in plans:
+    if p.get('status') not in ('doing', 'draft'): continue
+    try:
+        resp = urllib.request.urlopen('${DAEMON_API}/api/plan-db/json/' + str(p['id']))
+        pj = json.loads(resp.read())
+        for t in pj.get('tasks', []):
+            if t.get('id') == $TASK_ID:
+                print(p['id']); sys.exit(0)
+    except: pass
+" 2>/dev/null || echo '')"
 if [[ -z "$_found_plan_id" ]]; then
-	echo '{"error":"task not found"}' >&2
+	echo '{"error":"task not found in any active plan"}' >&2
 	exit 1
 fi
-_plan_json="$(cvg plan show "$_found_plan_id" 2>/dev/null || echo '{}')"
-_task_json="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '.tasks[] | select((.id // .db_task_id) == $tid)' 2>/dev/null || echo '{}')"
-STATUS="$(echo "$_task_json" | jq -r '.status // ""' 2>/dev/null || echo '')"
+_plan_json="$(curl -sf "${DAEMON_API}/api/plan-db/json/${_found_plan_id}" 2>/dev/null || echo '{}')"
+STATUS="$(python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+for t in data.get('tasks', []):
+    if t.get('id') == $TASK_ID:
+        print(t.get('status', '')); sys.exit(0)
+print('')
+" <<< "$_plan_json" 2>/dev/null || echo '')"
+_task_json="$(python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+for t in data.get('tasks', []):
+    if t.get('id') == $TASK_ID:
+        json.dump(t, sys.stdout); sys.exit(0)
+print('{}')
+" <<< "$_plan_json" 2>/dev/null || echo '{}')"
 if [[ -z "$STATUS" ]]; then
 	echo '{"error":"task not found"}' >&2
 	exit 1
@@ -131,7 +159,7 @@ fi
 
 # Get context for execution and delegation log
 TASK_CTX="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '
-	(.tasks[] | select((.id // .db_task_id) == $tid)) as $t |
+	(.tasks[] | select(.id == $tid)) as $t |
 	{worktree: ($t.worktree_path // .worktree_path // ""),
 	 plan_id: (.id // 0),
 	 wave_db_id: ($t.wave_id_fk // 0),
@@ -295,7 +323,7 @@ if [[ "$TOKENS_USED" == "0" || "$TOKENS_USED" == "" ]]; then
 fi
 
 # Process results and update task status based on exit code
-FINAL_STATUS="$(cvg plan show "$_found_plan_id" 2>/dev/null | jq -r --argjson tid "$TASK_ID" '.tasks[] | select((.id // .db_task_id) == $tid) | .status // ""' 2>/dev/null || echo '')"
+FINAL_STATUS="$(cvg plan show "$_found_plan_id" 2>/dev/null | jq -r --argjson tid "$TASK_ID" '.tasks[] | select(.id == $tid) | .status // ""' 2>/dev/null || echo '')"
 NOTE=""
 THOR_RESULT="UNKNOWN"
 STASH_REF=""
