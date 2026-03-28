@@ -1,7 +1,5 @@
-// Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Deterministic recovery chain for the kernel monitor.
-// Actions are selected by if/else rules — NOT by LLM inference.
-// WARN threshold: >= 3 consecutive cycles (≈90 s at 30 s/cycle).
+// Deterministic recovery chain. Actions by if/else rules, NOT LLM.
+// WARN threshold: >= 3 consecutive cycles (≈90s).
 
 use std::fmt;
 use std::path::PathBuf;
@@ -147,32 +145,15 @@ pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig
     }
 }
 
-// ----- Private helpers -------------------------------------------------------
-
 /// Execute the full CRITICAL recovery chain.
 async fn run_critical_chain(cfg: &RecoveryConfig) -> Result<(), String> {
-    // Step 1: checkpoint — best-effort, failure does not halt the chain
     if cfg.dry_run {
-        info!("kernel.recover: [dry_run] skipping cvg checkpoint save");
+        info!("kernel.recover: [dry_run] skipping checkpoint+restart+reap");
     } else {
         run_checkpoint();
-    }
-
-    // Step 2: SSH restart peer daemon via mesh
-    if cfg.dry_run {
-        info!("kernel.recover: [dry_run] skipping SSH peer restart");
-    } else {
         ssh_restart_peer();
-    }
-
-    // Step 3: reap zombies
-    if cfg.dry_run {
-        info!("kernel.recover: [dry_run] skipping cvg reap");
-    } else {
         run_reap();
     }
-
-    // Step 4: notify
     communicate("CRITICAL: daemon recovery chain triggered", Severity::Critical, cfg).await;
 
     Ok(())
@@ -253,7 +234,6 @@ async fn post_ntfy(topic: &str, message: &str, severity: &Severity) {
 fn log_kernel_event(label: &str, cycles: u32) {
     info!("kernel.recover: kernel_event label={label} consecutive_cycles={cycles}");
 }
-
 /// Parse "local,telegram,ntfy" → Vec<NotifyChannel>.
 fn parse_channels(raw: &str) -> Vec<NotifyChannel> {
     raw.split(',')

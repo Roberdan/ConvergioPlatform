@@ -2,6 +2,8 @@
 // TTS integration for kernel messages — macOS `say` fallback, Voxtral MLX future target.
 // Pattern: AppleFmBridge subprocess model (see ipc/models/apple_fm.rs).
 
+pub use crate::kernel::tts_templates::KernelTemplates;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -26,26 +28,6 @@ pub enum TtsBackend {
     MacOsSay,
     /// Voxtral MLX (future) — replace when mlx-audio supports it.
     VoxtralMlx,
-}
-
-/// Kernel message templates in Italian.
-pub struct KernelTemplates;
-
-impl KernelTemplates {
-    /// "Piano {name} completato. Costo {cost} dollari, durata {duration}."
-    pub fn plan_completed(name: &str, cost: &str, duration: &str) -> String {
-        format!("Piano {name} completato. Costo {cost} dollari, durata {duration}.")
-    }
-
-    /// "Attenzione: il daemon non risponde da {minutes} minuti."
-    pub fn daemon_unresponsive(minutes: &str) -> String {
-        format!("Attenzione: il daemon non risponde da {minutes} minuti.")
-    }
-
-    /// "Task {task_id} bloccato: {reason}."
-    pub fn task_blocked(task_id: &str, reason: &str) -> String {
-        format!("Task {task_id} bloccato: {reason}.")
-    }
 }
 
 /// TTS engine — wraps macOS `say` as practical fallback; Voxtral MLX as future target.
@@ -243,61 +225,8 @@ impl TtsEngine {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+// ----- Tests (external file) -------------------------------------------------
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_engine_init() {
-        let e = TtsEngine::new();
-        assert!(e.loaded);
-        assert!(!e.model_name.is_empty());
-    }
-
-    #[test]
-    fn test_templates() {
-        let p = KernelTemplates::plan_completed("Alpha", "42", "3 ore");
-        assert!(p.starts_with("Piano ") && p.contains("Alpha") && p.contains("42"));
-        let d = KernelTemplates::daemon_unresponsive("15");
-        assert!(d.contains("Attenzione") && d.contains("15"));
-        let t = KernelTemplates::task_blocked("T2-01", "dipendenza mancante");
-        assert!(t.starts_with("Task ") && t.contains("T2-01") && t.contains("dipendenza"));
-    }
-
-    #[test]
-    fn test_speak_cache_hit() {
-        let mut engine = TtsEngine::new();
-        engine.phrase_cache.insert("it-IT:Ciao".to_string(), b"RIFF stub".to_vec());
-        let first = engine.speak("Ciao", "it-IT").expect("cache hit");
-        let second = engine.speak("Ciao", "it-IT").expect("second cache hit");
-        assert_eq!(first, second);
-    }
-
-    #[test]
-    fn test_locale_differentiates_cache() {
-        let mut engine = TtsEngine::new();
-        engine.phrase_cache.insert("it-IT:Hello".to_string(), b"it".to_vec());
-        engine.phrase_cache.insert("en-US:Hello".to_string(), b"en".to_vec());
-        assert_ne!(
-            engine.phrase_cache.get("it-IT:Hello"),
-            engine.phrase_cache.get("en-US:Hello")
-        );
-    }
-
-    #[test]
-    fn test_backend_detection_no_panic() {
-        let _ = TtsEngine::voxtral_available();
-        let _ = TtsEngine::say_available();
-    }
-
-    #[test]
-    fn test_error_display() {
-        assert!(TtsError::SubprocessFailed("oops".to_string()).to_string().contains("oops"));
-        assert!(TtsError::Unavailable("none".to_string()).to_string().contains("none"));
-        assert!(TtsError::Template("bad".to_string()).to_string().contains("bad"));
-    }
-}
+#[path = "tts_tests.rs"]
+mod tests;

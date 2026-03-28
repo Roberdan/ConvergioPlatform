@@ -3,7 +3,9 @@
 // Replaces the Ollama-based watchdog. Use `cvg kernel` for all health/monitoring operations.
 
 pub mod audio;
+pub mod audio_routing;
 pub mod engine;
+pub mod engine_context;
 pub mod tools;
 pub mod monitor;
 pub mod recover;
@@ -13,8 +15,12 @@ pub mod telegram;
 pub mod telegram_poll;
 pub mod telegram_voice;
 pub mod tts;
+pub mod tts_templates;
 pub mod verify;
+pub mod verify_checks;
 pub mod voice_router;
+pub mod voice_router_helpers;
+pub mod voice_routes;
 
 #[cfg(feature = "kernel")]
 pub mod api;
@@ -27,6 +33,8 @@ mod api_ask_tests;
 mod engine_tests;
 #[cfg(test)]
 mod monitor_tests;
+#[cfg(test)]
+mod monitor_tests_db;
 #[cfg(test)]
 mod recover_tests;
 #[cfg(test)]

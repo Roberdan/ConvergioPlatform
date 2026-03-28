@@ -1,7 +1,4 @@
-// Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Kernel API endpoints — gated behind the "kernel" feature flag.
-// POST /api/kernel/classify, GET /api/kernel/status, POST /api/kernel/speak,
-// POST /api/kernel/transcribe, POST /api/kernel/listen.
+// Kernel API endpoints — gated behind "kernel" feature flag.
 
 #[cfg(feature = "kernel")]
 pub mod handlers {
@@ -134,10 +131,7 @@ pub mod handlers {
         Json(StatusResponse::from(status))
     }
 
-    /// POST /api/kernel/speak — synthesise text and return WAV audio bytes.
-    ///
-    /// Input JSON: `{"text": "...", "locale": "it-IT"}`
-    /// Output: `audio/wav` bytes (or 500 on synthesis failure).
+    /// POST /api/kernel/speak — text to WAV audio bytes.
     async fn handle_speak(
         State(state): State<KernelState>,
         Json(body): Json<SpeakRequest>,
@@ -165,11 +159,7 @@ pub mod handlers {
         }
     }
 
-    /// POST /api/kernel/transcribe — transcribe raw audio bytes uploaded as body.
-    ///
-    /// Input: raw audio bytes (WAV/FLAC/MP3) as request body.
-    /// Output: `{"text":"...","locale":"en","confidence":0.9}`
-    /// Privacy: audio bytes never stored; only the transcription text is returned.
+    /// POST /api/kernel/transcribe — audio bytes to text.
     async fn handle_transcribe(
         State(state): State<KernelState>,
         body: Bytes,
@@ -192,11 +182,7 @@ pub mod handlers {
         }
     }
 
-    /// POST /api/kernel/listen — record microphone on kernel node, transcribe, return text.
-    ///
-    /// Recording uses SoX `rec` command: mono 16kHz WAV, stops after 1.5s silence.
-    /// Privacy: WAV file is deleted immediately after transcription.
-    /// For remote recording: caller records locally and POSTs audio to /transcribe instead.
+    /// POST /api/kernel/listen — record mic, transcribe, return text.
     async fn handle_listen(State(state): State<KernelState>) -> impl IntoResponse {
         // Shell out to `rec` (SoX) to capture microphone input.
         let wav_path = "/tmp/cvg_listen.wav";

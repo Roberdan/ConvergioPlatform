@@ -97,7 +97,7 @@ Canonical model fields used in `copilot-agents/`:
 | Alias | Model ID | Params | RAM (Q4) | Strength |
 |-------|----------|--------|----------|----------|
 | `mistral-local` | `mlx-community/Mistral-7B-Instruct-v0.3-4bit` | 8B | ~5GB | Kernel brain, function calling, classify |
-| `qwen-local` | `mlx-community/Qwen-3.5-7B-Instruct-4bit` | 7B | ~5GB | Best open coding <8B (SWE-bench 76.4%) |
+| `qwen-local` | `mlx-community/Qwen2.5-7B-Instruct-4bit` | 7B | ~5GB | Best open coding <8B (SWE-bench 76.4%) |
 | `codestral-local` | `mlx-community/Codestral-*-4bit` | 8B | ~5GB | Pure code gen (HumanEval 86.6%) |
 | `mistral-sm4-local` | `mlx-community/Mistral-Small-4-*-4bit` | 119B MoE (6.5B active) | ~8GB | Heavy local reasoning |
 | `voxtral-local` | Voxtral TTS 4B | 4B | ~3GB | TTS, 9 languages incl. Italian |

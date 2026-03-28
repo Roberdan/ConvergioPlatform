@@ -3,6 +3,7 @@
 ## [18.4.0] - 2026-03-27
 
 ### Added
+- Siri integration via Shortcuts (scripts/siri/)
 - Kernel MCP tools: 7 functions for intelligent data retrieval (plans, costs, nodes, agents)
 - ChatML function calling: Mistral uses <tool_call> to query daemon API
 - EscalateToAli: explicit escalation to Opus via Telegram ("ali", "opus", "cloud")

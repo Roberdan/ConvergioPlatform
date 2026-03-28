@@ -1,0 +1,489 @@
+# Plan V — Convergio MCP Server
+# Expose the daemon as an MCP server so any LLM client can discover and invoke Convergio tools.
+# stdio transport, ring-based security, 14 tools, HTTP bridge to localhost:8420.
+
+name: "Plan V — Convergio MCP Server"
+project_id: convergio
+priority: P1
+execution_mode: serial
+tags: [mcp, rust, stdio, tools, ring-security, llm-integration, claude-code]
+
+description: >
+  Add a second binary 'convergio-mcp-server' to the daemon crate.
+  The binary speaks the Model Context Protocol (JSON-RPC over stdio) and bridges
+  calls to the daemon HTTP API on localhost:8420.
+  Security uses the existing ring model (ring.rs): callers set CONVERGIO_MCP_RING
+  in their environment; the server filters and enforces tool access accordingly.
+  14 tools across 6 domains: plans, agents, mesh, metrics, kernel, actions.
+  Any MCP-compatible client (Claude Code, GitHub Copilot, local Qwen/Mistral)
+  can discover and call Convergio capabilities without custom integration code.
+
+requirements:
+  - F-01: "convergio-mcp-server binary built via [[bin]] in daemon/Cargo.toml"
+  - F-02: "JSON-RPC stdio loop: initialize, tools/list, tools/call all handled"
+  - F-03: "Ring-based security: tool list and call filtered by CONVERGIO_MCP_RING (0-3)"
+  - F-04: "14 tools registered: cvg_list_plans, cvg_get_plan, cvg_update_task, cvg_checkpoint_save, cvg_list_agents, cvg_agent_start, cvg_agent_complete, cvg_mesh_status, cvg_node_readiness, cvg_cost_summary, cvg_kernel_status, cvg_kernel_ask, cvg_notify, cvg_restart_node"
+  - F-05: "All tool handlers call daemon HTTP API via reqwest blocking (no new deps)"
+  - F-06: "stdout reserved for JSON-RPC only; all tracing/logs go to stderr"
+  - F-07: "Daemon unreachable returns -32002 error with actionable message"
+  - F-08: "Ring violation returns -32001 error with caller and required ring levels"
+  - F-09: "Claude Code ~/.claude/mcp.json config documented and working"
+  - F-10: "Integration test: spawn binary, send initialize+tools/list+tools/call, verify MCP spec compliance"
+  - F-11: "Unit tests: ring filtering, protocol parsing, error codes — all passing"
+  - F-12: "No file exceeds 250 lines; handlers.rs split if needed"
+  - F-13: "CHANGELOG, VERSION.md, TROUBLESHOOTING.md, ADR updated"
+
+acceptance_invariants:
+  - description: "Binary builds without errors"
+    verify: "cargo build --release --bin convergio-mcp-server --manifest-path daemon/Cargo.toml"
+    defined_by: user
+  - description: "Ring 3 cannot see ring 0/1 tools in tools/list"
+    verify: "cargo test --manifest-path daemon/Cargo.toml mcp_server::tests"
+    defined_by: user
+  - description: "initialize handshake returns correct MCP protocol version"
+    verify: "cargo test --manifest-path daemon/Cargo.toml mcp_server::tests::test_initialize"
+    defined_by: user
+  - description: "stdout is clean JSON-RPC only (no tracing pollution)"
+    verify: "cargo test --manifest-path daemon/Cargo.toml mcp_server::tests::test_no_stdout_pollution"
+    defined_by: user
+  - description: "Integration test spawns binary and receives tool list"
+    verify: "cargo test --manifest-path daemon/Cargo.toml --test mcp_integration"
+    defined_by: user
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAVE 1: Protocol + Core Infrastructure
+# ─────────────────────────────────────────────────────────────────────────────
+
+waves:
+  - id: W1
+    name: "Protocol + Core — JSON-RPC loop, tool registry, ring security"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01, F-02, F-06]
+        do: |
+          Create daemon/src/mcp_server/ module with the binary entry point and
+          the core JSON-RPC stdio loop.
+
+          Files to create:
+          1. daemon/src/mcp_server/mod.rs — McpServer struct + run_stdio() blocking loop.
+             Reads stdin line-by-line via BufReader. On each line: parse JSON-RPC,
+             dispatch to handler, write response to stdout, flush. Empty lines skipped.
+             All tracing output via tracing::error!/warn!/info! to stderr ONLY.
+             No println! macro anywhere in mcp_server/. Clippy lint enforces this.
+          2. daemon/src/mcp_server/protocol.rs — JSON-RPC types:
+             JsonRpcRequest { jsonrpc, id, method, params }
+             JsonRpcResponse { jsonrpc, id, result/error }
+             McpError enum: RingViolation, DaemonUnreachable, DaemonError,
+               InvalidRequest, MethodNotFound, InvalidParams.
+             McpError::code() → i32 map:
+               RingViolation = -32001, DaemonUnreachable = -32002,
+               DaemonError = -32003, InvalidRequest = -32600,
+               MethodNotFound = -32601, InvalidParams = -32602.
+             McpError::message() → human-readable string with context.
+          3. daemon/src/mcp_server/main.rs — binary entry point (convergio-mcp-server).
+             Reads CONVERGIO_MCP_RING (default 3), CONVERGIO_DAEMON_URL
+             (default http://localhost:8420), CONVERGIO_API_TOKEN (optional).
+             Initializes tracing_subscriber to stderr. Constructs McpServer, calls run_stdio().
+          4. Add [[bin]] to daemon/Cargo.toml:
+             [[bin]]
+             name = "convergio-mcp-server"
+             path = "src/mcp_server/main.rs"
+          5. Declare pub mod mcp_server in daemon/src/lib.rs or main daemon lib entry.
+
+          McpServer::handle_request(raw: &str) -> String:
+          - Deserialize raw JSON. On error: return -32600 (InvalidRequest).
+          - Match method:
+            "initialize" → handle_initialize(id)
+            "tools/list" → handle_tools_list(id)
+            "tools/call" → handle_tools_call(id, params)
+            _ → error -32601 (MethodNotFound)
+
+          McpServer::handle_initialize(id) returns:
+          {
+            "jsonrpc": "2.0", "id": id,
+            "result": {
+              "protocolVersion": "2024-11-05",
+              "capabilities": { "tools": {} },
+              "serverInfo": { "name": "convergio-mcp-server", "version": env!("CARGO_PKG_VERSION") }
+            }
+          }
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f daemon/src/mcp_server/mod.rs"
+          - "test -f daemon/src/mcp_server/protocol.rs"
+          - "test -f daemon/src/mcp_server/main.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml 2>&1 | grep -v warning | grep -qv error"
+          - "grep -q 'convergio-mcp-server' daemon/Cargo.toml"
+          - "! grep -rn 'println!' daemon/src/mcp_server/"
+
+      - id: T1-02
+        ref: [F-03, F-08]
+        do: |
+          Create daemon/src/mcp_server/security.rs — ring-based access enforcement.
+
+          The MCP server reuses the existing Ring type from daemon/src/capabilities/ring.rs.
+          If Ring is not public, export it. If Ring does not have can_access(other: Ring) -> bool,
+          add the method: ring 0 (Core) accesses all; ring 1 (Trusted) accesses 1/2/3;
+          ring 2 (Community) accesses 2/3; ring 3 (Sandboxed) accesses 3 only.
+
+          security.rs contents:
+          - pub fn check_ring_access(caller: Ring, required: Ring) -> Result<(), McpError>
+            Returns McpError::RingViolation with caller level and required level if denied.
+          - Ring::from_env() -> Ring: reads CONVERGIO_MCP_RING, defaults to Ring::Sandboxed (3).
+          - Ring display: "Ring 0 (Core)", "Ring 1 (Trusted)", "Ring 2 (Community)",
+            "Ring 3 (Sandboxed)".
+
+          Error message format for RingViolation:
+          "Ring violation: caller ring {caller} cannot access tool {tool_name} (requires ring {required})"
+
+          Tests in security.rs (inline #[cfg(test)]):
+          - ring 0 can access ring 0, 1, 2, 3
+          - ring 1 can access ring 1, 2, 3; cannot access ring 0
+          - ring 2 can access ring 2, 3; cannot access ring 0, 1
+          - ring 3 can access ring 3 only; cannot access ring 0, 1, 2
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "test -f daemon/src/mcp_server/security.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml mcp_server::security 2>&1 | grep -q 'test result: ok'"
+          - "grep -q 'check_ring_access' daemon/src/mcp_server/security.rs"
+
+      - id: T1-03
+        ref: [F-03, F-04, F-11]
+        do: |
+          Create daemon/src/mcp_server/tools.rs — ToolRegistry with all 14 tool definitions.
+
+          ToolRegistry:
+          - pub struct McpTool { name, description, input_schema: Value, ring: Ring,
+              handler: fn(&str, Option<&str>, &Value) -> Result<Value, McpError> }
+          - pub struct ToolRegistry { tools: Vec<McpTool> }
+          - impl ToolRegistry:
+            - pub fn v1() -> Self — builds the full 14-tool set (see below)
+            - pub fn tools_for_ring(&self, ring: Ring) -> Vec<&McpTool>
+              Returns tools where tool.ring >= caller ring (lower number = higher privilege,
+              so caller at ring 1 sees tools with ring <= 1 means: ring 1 caller accesses
+              tools requiring ring 1 or less privileged (ring 1, 2, 3)).
+              Use check_ring_access logic: caller can see tool if caller.can_access(tool.ring).
+            - pub fn get(&self, name: &str, ring: Ring) -> Result<&McpTool, McpError>
+              Returns MethodNotFound if name not in registry.
+              Returns RingViolation if ring check fails.
+
+          14 tools (name, ring, description, required inputSchema fields):
+
+          Plans domain:
+          1. cvg_list_plans — Ring 2 — "List all plans with id, name, status, tasks_done, tasks_total"
+             schema: { status_filter?: string enum[todo, doing, done, cancelled] }
+          2. cvg_get_plan — Ring 2 — "Get full plan JSON with tasks, waves, and progress"
+             schema: { plan_id: integer (required) }
+          3. cvg_update_task — Ring 1 — "Update task status. Valid: pending->in_progress->submitted->done"
+             schema: { task_id: integer (required), status: enum[in_progress,submitted,done,blocked] (required), summary?: string }
+          4. cvg_checkpoint_save — Ring 1 — "Save plan checkpoint to survive compaction"
+             schema: { plan_id: integer (required) }
+
+          Agents domain:
+          5. cvg_list_agents — Ring 2 — "List registered agents with status and last heartbeat"
+             schema: {}
+          6. cvg_agent_start — Ring 1 — "Register agent as active in the plan"
+             schema: { agent_id: string (required), task_id?: integer }
+          7. cvg_agent_complete — Ring 1 — "Mark agent as completed"
+             schema: { agent_id: string (required) }
+
+          Mesh domain:
+          8. cvg_mesh_status — Ring 2 — "Peer topology, sync state, and mesh health"
+             schema: {}
+          9. cvg_node_readiness — Ring 2 — "Health checks for this node (deps, ports, models)"
+             schema: {}
+
+          Metrics domain:
+          10. cvg_cost_summary — Ring 2 — "Spending overview: total, today, per-plan breakdown"
+              schema: {}
+
+          Kernel domain:
+          11. cvg_kernel_status — Ring 2 — "Models loaded, uptime, active node, memory usage"
+              schema: {}
+          12. cvg_kernel_ask — Ring 1 — "Ask the local LLM a question. Returns model response."
+              schema: { question: string (required), context?: string }
+
+          Actions domain:
+          13. cvg_notify — Ring 1 — "Send notification via Telegram or ntfy"
+              schema: { title: string (required), message: string (required), severity?: enum[info,warn,error] }
+          14. cvg_restart_node — Ring 0 — "Trigger node recovery. Destructive. Ring 0 only."
+              schema: { reason: string (required) }
+
+          Unit tests in tools.rs #[cfg(test)]:
+          - ToolRegistry::v1() returns exactly 14 tools
+          - tools_for_ring(Ring::Sandboxed) returns tools with ring <= 2 (cvg_list_plans through cvg_cost_summary through cvg_mesh + cvg_kernel_status)
+          - tools_for_ring(Ring::Core) returns all 14
+          - get("cvg_restart_node", Ring::Trusted) returns RingViolation
+          - get("cvg_restart_node", Ring::Core) returns Ok
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f daemon/src/mcp_server/tools.rs"
+          - "cargo test --manifest-path daemon/Cargo.toml mcp_server::tools 2>&1 | grep -q 'test result: ok'"
+          - "grep -c 'cvg_' daemon/src/mcp_server/tools.rs | awk '{if($1>=14) exit 0; else exit 1}'"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAVE 2: Tool Handler Implementations
+# ─────────────────────────────────────────────────────────────────────────────
+
+  - id: W2
+    name: "Tool Implementations — HTTP bridge to daemon API"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-05, F-07]
+        do: |
+          Create daemon/src/mcp_server/handlers.rs — HTTP bridge implementations
+          for all 14 tools. Each handler: fn(daemon_url: &str, token: Option<&str>, args: &Value)
+          -> Result<Value, McpError>.
+
+          Internal HTTP helpers (private):
+          - fn http_get(url: &str, token: Option<&str>) -> Result<Value, McpError>
+            Uses reqwest blocking client. On connection refused: McpError::DaemonUnreachable.
+            On HTTP error status: McpError::DaemonError with status code and body.
+            Timeout: 10 seconds.
+          - fn http_post(url: &str, token: Option<&str>, body: &Value) -> Result<Value, McpError>
+            Same error handling as http_get.
+          - fn add_auth(builder: RequestBuilder, token: Option<&str>) -> RequestBuilder
+            Adds Authorization: Bearer {token} header if token is Some.
+
+          Handler implementations (all public):
+
+          Plans:
+          - list_plans: GET /api/plan-db/list. Optional status_filter arg.
+            If status_filter present, filter returned plans by status field.
+            Return array of {id, name, status, tasks_done, tasks_total}.
+          - get_plan: GET /api/plan-db/json/{plan_id}. Requires plan_id integer.
+            Return full plan JSON.
+          - update_task: POST /api/plan-db/task/update with {task_id, status, summary}.
+            Requires task_id (integer) and status. summary defaults to "".
+            Return daemon response.
+          - checkpoint_save: POST /api/plan-db/checkpoint/save with {plan_id}.
+            Requires plan_id integer.
+
+          Agents:
+          - list_agents: GET /api/ipc/agents. Return agents array.
+          - agent_start: POST /api/plan-db/agent/start with {agent_id, task_id?}.
+            Requires agent_id string.
+          - agent_complete: POST /api/plan-db/agent/complete with {agent_id}.
+            Requires agent_id string.
+
+          Mesh:
+          - mesh_status: GET /api/mesh. Return mesh topology JSON.
+          - node_readiness: GET /api/node/readiness. Return readiness checks JSON.
+
+          Metrics:
+          - cost_summary: GET /api/metrics/cost. Return cost summary JSON.
+
+          Kernel:
+          - kernel_status: GET /api/kernel/status. Return kernel status JSON.
+          - kernel_ask: POST /api/kernel/ask with {question, context?}.
+            Requires question string.
+
+          Actions:
+          - notify: POST /api/notify with {title, message, severity?}.
+            Requires title and message.
+          - restart_node: POST /api/node/recover with {reason}.
+            Requires reason string.
+
+          Error messages must be actionable:
+          DaemonUnreachable: "Daemon unreachable at {daemon_url}. Is the daemon running? Start with: ./daemon/start.sh"
+          DaemonError: "Daemon returned HTTP {status}: {body}"
+          InvalidParams: "Invalid params: {field} is required"
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f daemon/src/mcp_server/handlers.rs"
+          - "cargo check --manifest-path daemon/Cargo.toml 2>&1 | grep -v warning | grep -qv error"
+          - "grep -c 'pub fn ' daemon/src/mcp_server/handlers.rs | awk '{if($1>=14) exit 0; else exit 1}'"
+          - "grep -q 'DaemonUnreachable' daemon/src/mcp_server/handlers.rs"
+
+      - id: T2-02
+        ref: [F-02, F-04, F-11]
+        do: |
+          Wire tool handlers into McpServer dispatch in mod.rs.
+          Complete handle_tools_list() and handle_tools_call() implementations.
+
+          handle_tools_list(id: u64) -> JsonRpcResponse:
+          - Call self.tools.tools_for_ring(self.ring)
+          - For each tool, serialize as MCP spec tool object:
+            { name, description, inputSchema: tool.input_schema }
+          - Return { "tools": [...] } result
+
+          handle_tools_call(id: u64, params: Value) -> JsonRpcResponse:
+          - Extract params.name (string) and params.arguments (object, default {})
+          - Call self.tools.get(name, self.ring) — handles ring check and not-found
+          - Call (tool.handler)(&self.daemon_url, self.api_token.as_deref(), &arguments)
+          - On Ok(value): return { "content": [{ "type": "text", "text": value.to_string() }] }
+          - On Err(e): return JSON-RPC error with e.code() and e.message()
+
+          Ensure error responses always include valid JSON-RPC error objects:
+          { "jsonrpc": "2.0", "id": id, "error": { "code": -32001, "message": "..." } }
+
+          Wire ToolRegistry::v1() with handler function pointers into McpTool.handler field.
+          Each McpTool.handler must point to the corresponding handler in handlers.rs.
+
+          Add unit test test_tools_call_dispatch in mod.rs that:
+          - Creates McpServer with ring=2 and a mock daemon_url
+          - Sends tools/call for cvg_list_plans with daemon unreachable
+          - Verifies response is valid JSON-RPC error -32002 (not a panic)
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --manifest-path daemon/Cargo.toml 2>&1 | grep -v warning | grep -qv error"
+          - "cargo test --manifest-path daemon/Cargo.toml mcp_server 2>&1 | grep -q 'test result: ok'"
+          - "grep -q 'handle_tools_call' daemon/src/mcp_server/mod.rs"
+          - "grep -q 'handle_tools_list' daemon/src/mcp_server/mod.rs"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WAVE 3: Integration, Claude Code Config, Tests, Docs
+# ─────────────────────────────────────────────────────────────────────────────
+
+  - id: W3
+    name: "Integration — client configs, E2E test, docs, release"
+    merge_mode: sync
+    tasks:
+      - id: T3-01
+        ref: [F-09, F-10]
+        do: |
+          Write integration test: daemon/tests/mcp_integration.rs.
+          The test spawns the convergio-mcp-server binary and communicates via stdin/stdout.
+
+          Test setup:
+          - Build binary first (skip test if binary not found, not fail).
+          - Spawn convergio-mcp-server with CONVERGIO_MCP_RING=2 and
+            CONVERGIO_DAEMON_URL=http://localhost:8420 (daemon may not be running).
+          - Write JSON-RPC messages to child stdin, read responses from child stdout.
+
+          Test cases (all must pass without daemon running — errors are valid responses):
+          1. test_initialize: send initialize, verify response has protocolVersion "2024-11-05"
+             and serverInfo.name == "convergio-mcp-server".
+          2. test_tools_list_ring2: send initialize then tools/list.
+             Verify ring 2 sees cvg_list_plans, cvg_mesh_status, cvg_cost_summary.
+             Verify ring 2 does NOT see cvg_restart_node (ring 0).
+             Verify ring 2 does NOT see cvg_update_task (ring 1).
+          3. test_tools_call_daemon_unreachable: send tools/call for cvg_list_plans.
+             With daemon down, verify response is JSON-RPC error -32002 (not a crash).
+          4. test_ring_violation: spawn with CONVERGIO_MCP_RING=3.
+             Send tools/call for cvg_notify (ring 1).
+             Verify response is JSON-RPC error -32001.
+          5. test_invalid_json: send malformed JSON line.
+             Verify response is JSON-RPC error -32600.
+          6. test_no_stdout_pollution: after initialize, verify every stdout line
+             is valid JSON (no tracing/debug output on stdout).
+
+          Use std::process::{Command, Stdio} for spawning.
+          Communicate via write to stdin handle + BufRead from stdout handle.
+          Each test sends one message at a time and reads one response.
+          Process is killed in test teardown.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f daemon/tests/mcp_integration.rs"
+          - "cargo build --release --bin convergio-mcp-server --manifest-path daemon/Cargo.toml"
+          - "cargo test --manifest-path daemon/Cargo.toml --test mcp_integration 2>&1 | grep -q 'test result: ok'"
+
+      - id: T3-02
+        ref: [F-09, F-13]
+        do: |
+          Configure Claude Code MCP integration and update documentation.
+
+          1. Create docs/mcp-server-setup.md — setup guide for all MCP clients:
+             - Claude Code: ~/.claude/mcp.json config (CONVERGIO_MCP_RING=1)
+             - GitHub Copilot: .github/copilot-mcp.json
+             - Manual testing: echo pipeline command
+             - Kernel programmatic use via McpConnector
+             - Tool reference table (all 14 tools with ring, description, required params)
+             - Security model explanation (ring levels, env var, token auth)
+             - Troubleshooting section (daemon not running, ring errors, binary not found)
+
+          2. Create ~/.claude/mcp.json if it does not exist, or add "convergio" entry:
+             {
+               "mcpServers": {
+                 "convergio": {
+                   "command": "<absolute_path>/daemon/target/release/convergio-mcp-server",
+                   "env": {
+                     "CONVERGIO_MCP_RING": "1",
+                     "CONVERGIO_DAEMON_URL": "http://localhost:8420"
+                   }
+                 }
+               }
+             }
+             Use the actual absolute path. Do NOT hardcode /Users/Roberdan — resolve at task time
+             using the working directory.
+
+          3. Update daemon/start.sh to warn if convergio-mcp-server binary is not built:
+             if [[ ! -f "$DAEMON_DIR/target/release/convergio-mcp-server" ]]; then
+               echo "WARN: convergio-mcp-server not built. Run: cargo build --release"
+             fi
+
+          4. Create ADR at docs/adr/ADR-0XXX-mcp-server.md (use next available number).
+             Title: "MCP Server — Expose Daemon as Model Context Protocol Server"
+             Content: problem, decision (separate binary, stdio, ring security), consequences.
+             Max 1-3 sentences per section per project convention.
+
+          5. Update CHANGELOG.md with version entry for Plan V.
+             Format: ## [18.5.0] - 27 Marzo 2026
+             ### Added
+             - convergio-mcp-server binary: expose daemon as MCP server (14 tools, ring security)
+
+          6. Update TROUBLESHOOTING.md with:
+             ## Problem: MCP server not found by Claude Code
+             **Symptom**: Claude Code cannot find convergio MCP tools
+             **Cause**: Binary not built or mcp.json path incorrect
+             **Fix**: cargo build --release --bin convergio-mcp-server; verify ~/.claude/mcp.json path
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: docs
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "test -f docs/mcp-server-setup.md"
+          - "test -f ~/.claude/mcp.json"
+          - "grep -q 'convergio-mcp-server' ~/.claude/mcp.json"
+          - "grep -q 'convergio-mcp-server' daemon/start.sh"
+          - "grep -q 'mcp-server' TROUBLESHOOTING.md"
+          - "grep -q '18.5.0' CHANGELOG.md"
+          - "ls docs/adr/ | grep -q 'mcp-server'"

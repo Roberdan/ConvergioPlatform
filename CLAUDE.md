@@ -61,6 +61,8 @@ cvg agent complete "<type>-$(hostname -s)-$$"  # before /exit
 | `cvg checkpoint save <plan_id>` | Snapshot plan state |
 | `cvg checkpoint restore <plan_id>` | Restore from snapshot |
 | `cvg kernel start\|stop\|status` | Manage kernel health monitor (replaces watchdog) |
+| `cvg kernel here` | Set this machine as active audio node (valid 8h) |
+| `cvg kernel say <text>` | Synthesise TTS and play on active audio node |
 | `cvg notify send <title> <msg> [--severity ...]` | Send notification |
 | `cvg decision log [--plan-id <id>]` | Query decision audit trail |
 

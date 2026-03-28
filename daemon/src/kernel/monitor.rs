@@ -11,10 +11,10 @@ use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
-const READINESS_INTERVAL: Duration = Duration::from_secs(300); // 5 min — less frequent than 30s cycle
+const READINESS_INTERVAL: Duration = Duration::from_secs(300);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
-const STALL_SECS: u64 = 300;      // agents idle >5 min with a task
-const RATE_LIMIT_WARN: u64 = 3;   // 429 count in last 5 min
+const STALL_SECS: u64 = 300;
+const RATE_LIMIT_WARN: u64 = 3;
 const DISK_WARN_PCT: f64 = 85.0;
 const RAM_WARN_PCT: f64 = 80.0;
 
@@ -51,9 +51,7 @@ pub async fn check_daemon_reachable(daemon_url: &str) -> KernelCheckResult {
 
 pub async fn check_mesh_peers(peer_urls: &[String]) -> Vec<KernelCheckResult> {
     let mut out = vec![];
-    for p in peer_urls {
-        out.push(http_health(p, &format!("peer_health:{p}")).await);
-    }
+    for p in peer_urls { out.push(http_health(p, &format!("peer_health:{p}")).await); }
     out
 }
 
@@ -91,10 +89,11 @@ pub async fn detect_rate_limits(daemon_url: &str) -> KernelCheckResult {
         Ok(r) => match r.json::<serde_json::Value>().await {
             Err(e) => KernelCheckResult::fail("rate_limits", &e.to_string()),
             Ok(j) => {
-                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default().as_secs();
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
                 let count = j.as_array().unwrap_or(&vec![]).iter()
-                    .filter(|e| e["status"].as_u64() == Some(429) && now.saturating_sub(e["timestamp"].as_u64().unwrap_or(0)) < 300)
+                    .filter(|e| e["status"].as_u64() == Some(429)
+                        && now.saturating_sub(e["timestamp"].as_u64().unwrap_or(0)) < 300)
                     .count() as u64;
                 if count >= RATE_LIMIT_WARN { KernelCheckResult::fail("rate_limits", &format!("{count} 429s in last 5min")) }
                 else { KernelCheckResult::pass("rate_limits") }
@@ -134,23 +133,15 @@ pub fn detect_compaction_risk(current_tokens: u64, limit: u64) -> KernelCheckRes
 
 /// Extract peer name from a base URL (hostname portion, no port).
 pub fn peer_name_from_url(url: &str) -> String {
-    // Strip scheme, then take everything before the first '/' or end.
     let without_scheme = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(url);
+        .strip_prefix("https://").or_else(|| url.strip_prefix("http://")).unwrap_or(url);
     let host_port = without_scheme.split('/').next().unwrap_or(without_scheme);
-    // Remove port if present.
     host_port.split(':').next().unwrap_or(host_port).to_string()
 }
 
 /// Parse a JSON `checks` array from `/api/node/readiness`, store CRITICAL/WARN events.
 /// Returns true if any critical check failed.
-pub fn classify_readiness_results(
-    pool: &Pool<SqliteConnectionManager>,
-    peer_name: &str,
-    checks: &serde_json::Value,
-) -> bool {
+pub fn classify_readiness_results(pool: &Pool<SqliteConnectionManager>, peer_name: &str, checks: &serde_json::Value) -> bool {
     let source = format!("readiness:{peer_name}");
     let mut critical = false;
     if let Some(arr) = checks.as_array() {
@@ -159,12 +150,7 @@ pub fn classify_readiness_results(
             if !passed {
                 let name = c["name"].as_str().unwrap_or("unknown");
                 let detail = c["detail"].as_str().unwrap_or("check failed");
-                let sev = if CRITICAL_CHECKS.contains(&name) {
-                    critical = true;
-                    "critical"
-                } else {
-                    "warn"
-                };
+                let sev = if CRITICAL_CHECKS.contains(&name) { critical = true; "critical" } else { "warn" };
                 store_kernel_event(pool, &source, &format!("{name}: {detail}"), sev);
                 warn!("kernel.monitor [{}] readiness:{} {}: {}", sev, peer_name, name, detail);
             }
@@ -178,12 +164,8 @@ pub async fn check_peer_readiness(pool: &Pool<SqliteConnectionManager>, peer_url
     let peer_name = peer_name_from_url(peer_url);
     let source = format!("readiness:{peer_name}");
     let client = Client::builder().timeout(HTTP_TIMEOUT).build().unwrap_or_default();
-    let warn_event = |msg: String| {
-        store_kernel_event(pool, &source, &msg, "warn");
-        warn!("kernel.monitor {source} {msg}");
-    };
+    let warn_event = |msg: String| { store_kernel_event(pool, &source, &msg, "warn"); warn!("kernel.monitor {source} {msg}"); };
     match client.get(format!("{peer_url}/api/node/readiness")).send().await {
-        // Network failure — warn only; peer may be temporarily offline.
         Err(e) => warn_event(format!("unreachable: {e}")),
         Ok(r) if !r.status().is_success() => warn_event(format!("HTTP {}", r.status())),
         Ok(r) => match r.json::<serde_json::Value>().await {
@@ -237,9 +219,7 @@ pub fn detect_stale_locks(threshold_secs: u64) -> KernelCheckResult {
 
 /// Run one full cycle and persist results (extracted for testability).
 pub async fn run_and_store_cycle(pool: &Pool<SqliteConnectionManager>, config: &MonitorConfig) {
-    let mut all: Vec<KernelCheckResult> = vec![
-        check_daemon_reachable(&config.daemon_url).await,
-    ];
+    let mut all: Vec<KernelCheckResult> = vec![check_daemon_reachable(&config.daemon_url).await];
     all.extend(check_mesh_peers(&config.peer_urls).await);
     all.push(detect_stalled_agents(&config.daemon_url).await);
     all.push(detect_rate_limits(&config.daemon_url).await);
@@ -250,9 +230,7 @@ pub async fn run_and_store_cycle(pool: &Pool<SqliteConnectionManager>, config: &
     if critical { info!("kernel.monitor: CRITICAL — communicate stub (wired W2/W3)"); }
 }
 
-/// Spawn background monitor loop (30s interval). Pool is Arc-backed inside r2d2.
-/// Node readiness is checked every 5 minutes (READINESS_INTERVAL) — less frequent
-/// than the main cycle to avoid hammering peer HTTP endpoints.
+/// Spawn background monitor loop (30s poll, 5min readiness check).
 pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorConfig) {
     tokio::spawn(async move {
         info!("kernel.monitor: started (poll every {}s)", POLL_INTERVAL.as_secs());
@@ -260,16 +238,11 @@ pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorCo
         loop { // UNBOUNDED: event loop
             tokio::time::sleep(POLL_INTERVAL).await;
             run_and_store_cycle(&pool, &config).await;
-
-            // Readiness check: run every READINESS_INTERVAL across all mesh peers.
             let should_check = last_readiness_check
-                .map(|t| t.elapsed() >= READINESS_INTERVAL)
-                .unwrap_or(true); // first iteration: run immediately
+                .map(|t| t.elapsed() >= READINESS_INTERVAL).unwrap_or(true);
             if should_check && !config.peer_urls.is_empty() {
                 info!("kernel.monitor: running node readiness check on {} peers", config.peer_urls.len());
-                for peer_url in &config.peer_urls {
-                    check_peer_readiness(&pool, peer_url).await;
-                }
+                for peer_url in &config.peer_urls { check_peer_readiness(&pool, peer_url).await; }
                 last_readiness_check = Some(Instant::now());
             }
         }
