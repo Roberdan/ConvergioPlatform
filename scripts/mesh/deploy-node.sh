@@ -118,6 +118,16 @@ else
   warn "No secrets found in local keychain — skipping"
 fi
 
+# Step 5b: Propagate gh auth token for git credential access on peer
+info "[5b] Propagating gh auth token to peer..."
+GH_TOKEN="$(gh auth token 2>/dev/null || true)"
+if [[ -n "$GH_TOKEN" ]]; then
+  _ssh "command -v gh >/dev/null 2>&1 && echo '${GH_TOKEN}' | gh auth login --with-token 2>/dev/null" \
+    && ok "gh auth token propagated" || warn "gh auth propagation failed (non-fatal)"
+else
+  warn "No local gh auth token found — skipping git credential propagation"
+fi
+
 # Step 6: Create Convergio tmux session + start daemon
 info "[6/9] Starting daemon on node..."
 _ssh "tmux has-session -t Convergio 2>/dev/null || tmux new-session -d -s Convergio -n kernel -c ~/GitHub/ConvergioPlatform" 2>/dev/null || true

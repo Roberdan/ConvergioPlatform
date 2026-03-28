@@ -2,6 +2,7 @@
 // Listens on #orchestration IPC channel and delegates work to mesh peers.
 
 pub mod actions;
+pub mod delegation_core;
 mod executor;
 pub mod handlers;
 mod reactor;
