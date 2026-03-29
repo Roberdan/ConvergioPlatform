@@ -66,7 +66,7 @@ if [ -n "$REMOTE_NODE" ]; then
   echo "--- DB Sync ---"
   # Write a test value on local, check if remote can export it
   check "local plan count > 0" "curl -sf '$DAEMON_URL/api/sync/export?table=plans&since=2020-01-01' | python3 -c \"import json,sys; d=json.load(sys.stdin); assert len(d) > 0, 'no plans to sync'\""
-  check "remote sync export" "ssh $REMOTE_NODE 'curl -sf http://localhost:8420/api/sync/export?table=plans&since=2020-01-01' | python3 -c \"import json,sys; json.load(sys.stdin)\""
+  check "remote sync export" "ssh $REMOTE_NODE 'curl -sf \"http://localhost:8420/api/sync/export?table=plans&since=2020-01-01\"' | python3 -c \"import json,sys; json.load(sys.stdin)\""
 fi
 
 # --- 6c. Telegram ---
