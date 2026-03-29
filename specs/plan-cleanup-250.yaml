@@ -1,0 +1,116 @@
+name: "Cleanup — 250-line splits, warnings, test fix"
+project_id: convergio
+priority: P1
+execution_mode: serial
+tags: [cleanup, quality, 250-line]
+
+description: >
+  Fix all quality issues from codebase audit:
+  30 files over 250 lines, 12 warnings, 1 failing test,
+  runner plan_done() bug.
+
+requirements:
+  - F-01: "all files under 250 lines"
+  - F-02: "zero compiler warnings"
+  - F-03: "all tests pass"
+  - F-04: "runner plan_done detects completed status"
+
+waves:
+  - id: W1
+    name: "File splits + warnings + test fix"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01]
+        do: |
+          Split all files over 250 lines in daemon/src/.
+          Top priority files (over 300 lines):
+          - ipc/models/apple_fm.rs (448) → split inference logic to apple_fm_inference.rs
+          - resilience/reaper.rs (387) → split scan logic to reaper_scan.rs
+          - tui/tests/views_tree.rs (377) → split into views_tree_render.rs + views_tree_data.rs
+          - tui/input.rs (328) → split key handlers to input_handlers.rs
+          - server/api_cli_integration_tests.rs (309) → split by domain
+          - inference/router.rs (305) → split model selection to router_models.rs
+
+          For each split: move code, update mod.rs, verify cargo check passes.
+          Do NOT change functionality — only restructure.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "! find daemon/src -name '*.rs' -exec sh -c 'test $(wc -l < \"$1\") -gt 250' _ {} \\; -print | grep -q ."
+
+      - id: T1-02
+        ref: [F-02, F-03]
+        do: |
+          Fix all 12 compiler warnings and the 1 failing test.
+
+          Warnings:
+          - 8 unexpected crsqlite cfg: add crsqlite to Cargo.toml features (already there, check test targets)
+          - 2 unused imports: remove
+          - 1 dead code: remove or #[allow] with reason
+          - 1 unused function: remove or wire
+
+          Failing test: identify and fix root cause. Run:
+          cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep FAILED
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --no-run 2>&1 | grep -c '^warning:' | grep -q '^0$'"
+
+      - id: T1-03
+        ref: [F-04]
+        do: |
+          Fix copilot-plan-runner.sh plan_done() function.
+          It doesn't detect "completed" status correctly.
+
+          The function queries execution-context which returns status.
+          But when plan is completed, execution-context might return empty or error.
+
+          Fix: check plan status directly via API before calling execution-context:
+          curl -sf /api/plan-db/json/{plan_id} | python3 -c "..." → check plan.status
+
+          Also: when runner detects plan completed, exit 0 cleanly.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "bash -n claude-config/scripts/copilot-plan-runner.sh"
+
+  - id: W2
+    name: "Closure"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        ref: [F-01, F-02, F-03]
+        do: |
+          Full test suite. All passing. Zero warnings.
+          Deploy to both nodes. Restart daemons.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+          - "curl -sf http://localhost:8420/api/health | grep -q ok"
