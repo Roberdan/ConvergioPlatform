@@ -183,3 +183,7 @@ pub(super) fn load_required_shared_secret(
         ))
     })
 }
+
+#[cfg(test)]
+#[path = "daemon_sync_frame_tests.rs"]
+mod daemon_sync_frame_tests;

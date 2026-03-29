@@ -43,3 +43,7 @@ pub enum DelegateStatus {
     TimedOut,
     Cancelled,
 }
+
+#[cfg(test)]
+#[path = "delegate_types_tests.rs"]
+mod tests;

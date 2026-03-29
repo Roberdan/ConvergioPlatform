@@ -128,3 +128,7 @@ fn split_host_port(addr: &str) -> Option<(&str, &str)> {
     }
     Some((host, port))
 }
+
+#[cfg(test)]
+#[path = "net_tests.rs"]
+mod net_tests;
