@@ -25,8 +25,12 @@ impl SshClient {
         };
         let tcp = TcpStream::connect(addr)
             .map_err(|e: std::io::Error| MeshError::Network(e.to_string()))?;
-        let _ = tcp.set_read_timeout(Some(timeout));
-        let _ = tcp.set_write_timeout(Some(timeout));
+        if let Err(e) = tcp.set_read_timeout(Some(timeout)) {
+            tracing::warn!("SSH set_read_timeout failed: {e}");
+        }
+        if let Err(e) = tcp.set_write_timeout(Some(timeout)) {
+            tracing::warn!("SSH set_write_timeout failed: {e}");
+        }
         let mut session =
             Session::new().map_err(|e: ssh2::Error| MeshError::Network(e.to_string()))?;
         session.set_tcp_stream(tcp);
@@ -59,7 +63,9 @@ impl SshClient {
         let mut err = String::new();
         channel.read_to_string(&mut out)?;
         channel.stderr().read_to_string(&mut err)?;
-        let _ = channel.wait_close();
+        if let Err(e) = channel.wait_close() {
+            tracing::warn!("SSH channel wait_close failed: {e}");
+        }
         let status = channel.exit_status().unwrap_or(-1);
         drop(channel);
         Ok((status, out, err))
@@ -93,7 +99,9 @@ pub fn pull_db_from_peer(
     local_db: &Path,
 ) -> Result<String, MeshError> {
     let client = SshClient::connect(ssh_dest, Duration::from_secs(10))?;
-    let _ = client.exec("sqlite3 ~/.claude/data/dashboard.db 'PRAGMA wal_checkpoint(TRUNCATE);'");
+    if let Err(e) = client.exec("sqlite3 ~/.claude/data/dashboard.db 'PRAGMA wal_checkpoint(TRUNCATE);'") {
+        tracing::warn!("remote WAL checkpoint failed: {e}");
+    }
     let tmp = std::env::temp_dir().join(format!(
         "mesh-handoff-{}.db",
         SystemTime::now()
@@ -103,8 +111,10 @@ pub fn pull_db_from_peer(
     ));
     client.scp_download(Path::new(".claude/data/dashboard.db"), &tmp)?;
     for plan_id in plan_ids {
-        let _ = merge_plan_status(*plan_id, local_db, &tmp)?;
+        merge_plan_status(*plan_id, local_db, &tmp)?;
     }
-    let _ = fs::remove_file(tmp);
+    if let Err(e) = fs::remove_file(&tmp) {
+        tracing::warn!("failed to remove temp DB {}: {e}", tmp.display());
+    }
     Ok(format!("{} plan(s) synced from {ssh_dest}", plan_ids.len()))
 }

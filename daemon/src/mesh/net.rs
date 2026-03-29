@@ -35,8 +35,12 @@ pub fn apply_socket_tuning(stream: &TcpStream) -> Result<(), MeshError> {
         .set_tcp_keepalive(&keepalive)
         .map_err(|e| MeshError::Network(format!("set SO_KEEPALIVE failed: {e}")))?;
     // Optimize buffer sizes for Tailscale (WireGuard MTU ~1280, aim for good throughput)
-    let _ = socket.set_send_buffer_size(256 * 1024);
-    let _ = socket.set_recv_buffer_size(256 * 1024);
+    if let Err(e) = socket.set_send_buffer_size(256 * 1024) {
+        tracing::warn!("set send buffer size failed: {e}");
+    }
+    if let Err(e) = socket.set_recv_buffer_size(256 * 1024) {
+        tracing::warn!("set recv buffer size failed: {e}");
+    }
     // Linux: disable delayed ACKs for lower latency
     #[cfg(target_os = "linux")]
     {
@@ -67,12 +71,14 @@ pub fn load_tailscale_peer_ips() -> HashMap<String, String> {
         "C:\\Program Files (x86)\\Tailscale\\tailscale.exe",
     ];
     let output = match CANDIDATES.iter().find_map(|cmd| {
-        std::process::Command::new(cmd)
+        match std::process::Command::new(cmd)
             .arg("status")
             .arg("--json")
             .output()
-            .ok()
-            .filter(|o| o.status.success())
+        {
+            Ok(o) if o.status.success() => Some(o),
+            _ => None,
+        }
     }) {
         Some(output) => output,
         None => return HashMap::new(),

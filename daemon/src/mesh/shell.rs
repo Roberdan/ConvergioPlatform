@@ -35,7 +35,14 @@ pub struct ShellConfig {
 }
 
 fn read_file_opt(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path).ok()
+    match std::fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            eprintln!("WARN: failed to read {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 fn extract_aliases(zshrc: &str) -> Vec<String> {
@@ -67,12 +74,16 @@ pub fn export_shell_config_from(home: &Path) -> Result<ShellConfig> {
     let vscode_keybindings = read_file_opt(&home.join("Library/Application Support/Code/User/keybindings.json"));
 
     // VSCode extensions list
-    let vscode_extensions = std::process::Command::new("code")
+    let vscode_extensions = match std::process::Command::new("code")
         .args(["--list-extensions"])
         .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect())
-        .unwrap_or_default();
+    {
+        Ok(o) if o.status.success() => {
+            String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect()
+        }
+        Ok(_) => Vec::new(),
+        Err(_) => Vec::new(), // code CLI not available
+    };
 
     // Warp themes (yaml + png files)
     let warp_themes = read_dir_binary(&home.join(".warp/themes"));
@@ -98,7 +109,14 @@ pub fn export_shell_config_from(home: &Path) -> Result<ShellConfig> {
 fn read_dir_binary(dir: &Path) -> Option<Vec<(String, Vec<u8>)>> {
     if !dir.is_dir() { return None; }
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("WARN: failed to read dir {}: {e}", dir.display());
+            return None;
+        }
+    };
+    for entry in entries.flatten() {
         let p = entry.path();
         if p.is_file() {
             if let (Some(name), Ok(bytes)) = (
@@ -115,7 +133,14 @@ fn read_dir_binary(dir: &Path) -> Option<Vec<(String, Vec<u8>)>> {
 fn read_claude_config(dir: &Path) -> Option<Vec<(String, String)>> {
     if !dir.is_dir() { return None; }
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("WARN: failed to read claude config dir {}: {e}", dir.display());
+            return None;
+        }
+    };
+    for entry in entries.flatten() {
         let p = entry.path();
         if p.is_file() {
             let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -133,25 +158,46 @@ fn read_claude_config(dir: &Path) -> Option<Vec<(String, String)>> {
 
 fn create_tar_gz(dir: &Path) -> Option<Vec<u8>> {
     if !dir.is_dir() { return None; }
-    std::process::Command::new("tar")
+    match std::process::Command::new("tar")
         .args(["czf", "-", "-C", &dir.to_string_lossy(), "."])
         .output()
-        .ok()
-        .filter(|o| o.status.success() && !o.stdout.is_empty())
-        .map(|o| o.stdout)
+    {
+        Ok(o) if o.status.success() && !o.stdout.is_empty() => Some(o.stdout),
+        Ok(o) if !o.status.success() => {
+            eprintln!("WARN: tar failed for {}: exit {}", dir.display(), o.status);
+            None
+        }
+        Ok(_) => None,
+        Err(e) => {
+            eprintln!("WARN: tar command failed for {}: {e}", dir.display());
+            None
+        }
+    }
 }
 
 fn export_plist(domain: &str) -> Option<Vec<u8>> {
     let tmp = format!("/tmp/_convergiomesh_{}.plist", domain.replace('.', "_"));
-    let ok = std::process::Command::new("defaults")
+    let ok = match std::process::Command::new("defaults")
         .args(["export", domain, &tmp])
         .status()
-        .ok()
-        .map(|s| s.success())
-        .unwrap_or(false);
+    {
+        Ok(s) => s.success(),
+        Err(e) => {
+            eprintln!("WARN: defaults export {domain} failed: {e}");
+            false
+        }
+    };
     if ok {
-        let data = std::fs::read(&tmp).ok();
-        let _ = std::fs::remove_file(&tmp);
+        let data = match std::fs::read(&tmp) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                eprintln!("WARN: failed to read plist {tmp}: {e}");
+                None
+            }
+        };
+        if let Err(e) = std::fs::remove_file(&tmp) {
+            eprintln!("WARN: failed to remove temp plist {tmp}: {e}");
+        }
         data
     } else {
         None

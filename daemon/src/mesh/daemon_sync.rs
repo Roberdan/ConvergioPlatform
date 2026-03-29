@@ -123,12 +123,16 @@ pub(super) async fn handle_socket(
             }
         }
     });
-    let _ = out_tx
+    if out_tx
         .send(MeshSyncFrame::Heartbeat {
             node: state.node_id.clone(),
             ts: now_ts(),
         })
-        .await;
+        .await
+        .is_err()
+    {
+        tracing::debug!("heartbeat channel closed on connect");
+    }
     let sync_peer = Arc::new(RwLock::new(conn_id.clone()));
     loops::spawn_heartbeat_loop(out_tx.clone(), state.node_id.clone());
     if is_outbound {
@@ -152,12 +156,14 @@ pub(super) async fn handle_socket(
             consecutive_errors = consecutive_errors.saturating_add(1);
             let peer = sync_peer.read().await.clone();
             let err_str = err.to_string();
-            let _ = sync::record_sync_error(
+            if let Err(rec_err) = sync::record_sync_error(
                 &config.db_path,
                 config.crsqlite_path.as_deref(),
                 &peer,
                 &err_str,
-            );
+            ) {
+                tracing::error!("failed to record sync error for {peer}: {rec_err}");
+            }
             publish_event(&state, "sync_error", &peer, json!({ "error": err_str }));
             if consecutive_errors > 3 {
                 let delay = std::cmp::min(consecutive_errors as u64 * 2, 30);
@@ -169,7 +175,9 @@ pub(super) async fn handle_socket(
         }
     }
     drop(out_tx);
-    let _ = writer.await;
+    if let Err(e) = writer.await {
+        tracing::warn!("writer task panicked: {e}");
+    }
     Ok(())
 }
 

@@ -36,11 +36,18 @@ pub(super) fn read_local_changes_since(
     conn: &Connection,
     last_db_version: i64,
 ) -> rusqlite::Result<Vec<DeltaChange>> {
-    let local_site_id: Option<Vec<u8>> = conn
-        .query_row("SELECT site_id FROM crsql_site_id LIMIT 1", [], |r| {
-            r.get(0)
-        })
-        .ok();
+    let local_site_id: Option<Vec<u8>> = match conn.query_row(
+        "SELECT site_id FROM crsql_site_id LIMIT 1",
+        [],
+        |r| r.get(0),
+    ) {
+        Ok(id) => Some(id),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => {
+            tracing::warn!("crsql_site_id query failed (CRDT may be disabled): {e}");
+            None
+        }
+    };
     let mut stmt = conn.prepare(
         r#"SELECT "table", pk, cid, CAST(val AS TEXT), col_version, db_version, site_id, cl, seq
            FROM crsql_changes

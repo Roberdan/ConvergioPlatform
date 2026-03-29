@@ -93,12 +93,24 @@ async fn sync_stats(State(state): State<Arc<HttpState>>) -> Json<Value> {
     let db = state.db_path.clone();
     let crsql = state.crsqlite_path.clone();
     // Run DB query in blocking task
-    let result = tokio::task::spawn_blocking(move || {
-        let conn = crate::mesh::sync::open_persistent_sync_conn(&db, crsql.as_deref()).ok()?;
-        let mut stmt = conn.prepare(
+    let result = match tokio::task::spawn_blocking(move || {
+        let conn = match crate::mesh::sync::open_persistent_sync_conn(&db, crsql.as_deref()) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("sync_stats: DB open failed: {e}");
+                return Vec::new();
+            }
+        };
+        let mut stmt = match conn.prepare(
             "SELECT peer_name, total_sent, total_received, total_applied, last_sync_at, last_latency_ms, last_db_version, last_error FROM mesh_sync_stats"
-        ).ok()?;
-        let rows: Vec<Value> = stmt.query_map([], |row| {
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("sync_stats: prepare failed: {e}");
+                return Vec::new();
+            }
+        };
+        let rows_result = stmt.query_map([], |row| {
             Ok(json!({
                 "peer": row.get::<_, String>(0)?,
                 "total_sent": row.get::<_, i64>(1)?,
@@ -109,8 +121,20 @@ async fn sync_stats(State(state): State<Arc<HttpState>>) -> Json<Value> {
                 "last_db_version": row.get::<_, i64>(6)?,
                 "last_error": row.get::<_, Option<String>>(7)?,
             }))
-        }).ok()?.flatten().collect();
-        Some(rows)
-    }).await.ok().flatten().unwrap_or_default();
+        });
+        match rows_result {
+            Ok(rows) => rows.flatten().collect(),
+            Err(e) => {
+                tracing::warn!("sync_stats: query failed: {e}");
+                Vec::new()
+            }
+        }
+    }).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!("sync_stats: spawn_blocking failed: {e}");
+            Vec::new()
+        }
+    };
     Json(json!({ "sync_stats": result }))
 }

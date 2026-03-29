@@ -41,7 +41,9 @@ pub(super) fn spawn_sync_db_thread(config: &DaemonConfig) -> std::sync::mpsc::Se
                     return;
                 }
             };
-            let _ = sync::ensure_sync_schema_pub(&conn);
+            if let Err(e) = sync::ensure_sync_schema_pub(&conn) {
+                eprintln!("mesh-sync-db: schema init failed: {e}");
+            }
             while let Ok(cmd) = rx.recv() {
                 match cmd {
                     SyncDbCmd::CollectChanges { cursor, reply } => {
@@ -52,14 +54,18 @@ pub(super) fn spawn_sync_db_thread(config: &DaemonConfig) -> std::sync::mpsc::Se
                         };
                         let result = sync::collect_changes_with_conn(&conn, init_cursor)
                             .map(|(changes, checkpoint)| (changes, checkpoint, init_cursor));
-                        let _ = reply.send(result);
+                        if reply.send(result).is_err() {
+                            eprintln!("mesh-sync-db: reply channel closed for CollectChanges");
+                        }
                     }
                     SyncDbCmd::RecordSent {
                         peer,
                         count,
                         version,
                     } => {
-                        let _ = sync::record_sent_stats_with_conn(&conn, &peer, count, version);
+                        if let Err(e) = sync::record_sent_stats_with_conn(&conn, &peer, count, version) {
+                            eprintln!("mesh-sync-db: record_sent_stats failed for {peer}: {e}");
+                        }
                     }
                     SyncDbCmd::GetPeerCursor { peer, reply } => {
                         let cursor = conn
@@ -70,7 +76,9 @@ pub(super) fn spawn_sync_db_thread(config: &DaemonConfig) -> std::sync::mpsc::Se
                                 |r| r.get::<_, i64>(0),
                             )
                             .unwrap_or(0);
-                        let _ = reply.send(cursor);
+                        if reply.send(cursor).is_err() {
+                            eprintln!("mesh-sync-db: reply channel closed for GetPeerCursor");
+                        }
                     }
                 }
             }

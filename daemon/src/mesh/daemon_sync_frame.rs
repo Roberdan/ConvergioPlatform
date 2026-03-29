@@ -27,12 +27,14 @@ pub(super) async fn process_frame(
                 sync::open_persistent_sync_conn(&config.db_path, config.crsqlite_path.as_deref())
             {
                 let peer_name = resolve_peer_name(&config.peers_conf_path, node);
-                let _ = conn.execute(
+                if let Err(e) = conn.execute(
                     "INSERT OR REPLACE INTO peer_heartbeats (peer_name, last_seen) \
                      VALUES (?1, ?2) \
                      ON CONFLICT(peer_name) DO UPDATE SET last_seen = excluded.last_seen",
                     rusqlite::params![peer_name, ts],
-                );
+                ) {
+                    tracing::warn!("heartbeat DB insert for {peer_name} failed: {e}");
+                }
             }
             publish_event(state, "heartbeat", node, json!({ "ts": ts }));
         }
@@ -50,14 +52,18 @@ pub(super) async fn process_frame(
                 *sent_at_ms,
                 changes,
             )?;
-            let _ = out_tx
+            if out_tx
                 .send(MeshSyncFrame::Ack {
                     node: state.node_id.clone(),
                     applied: summary.applied,
                     latency_ms: summary.latency_ms,
                     last_db_version: summary.last_db_version,
                 })
-                .await;
+                .await
+                .is_err()
+            {
+                tracing::debug!("ack channel closed");
+            }
             relay_agent_activity_changes(state, node, changes);
             relay_ipc_changes(state, node, changes);
             publish_event(
@@ -111,10 +117,19 @@ pub(super) fn resolve_peer_name(peers_conf_path: &std::path::Path, node: &str) -
 
 pub(super) async fn maybe_ws_request_head(stream: &mut TcpStream) -> Option<String> {
     let mut probe = [0_u8; 2048];
-    let peeked = tokio::time::timeout(Duration::from_millis(150), stream.peek(&mut probe))
-        .await
-        .ok()?
-        .ok()?;
+    let peek_result = match tokio::time::timeout(
+        Duration::from_millis(150),
+        stream.peek(&mut probe),
+    )
+    .await
+    {
+        Ok(inner) => inner,
+        Err(_) => return None, // timeout — not a WS request
+    };
+    let peeked = match peek_result {
+        Ok(n) => n,
+        Err(_) => return None, // peek failed — not a WS request
+    };
     if peeked == 0 {
         return None;
     }
@@ -122,6 +137,12 @@ pub(super) async fn maybe_ws_request_head(stream: &mut TcpStream) -> Option<Stri
     if !is_ws_brain_request(&head) {
         return None;
     }
-    let read = stream.read(&mut probe).await.ok()?;
+    let read = match stream.read(&mut probe).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::warn!("WS probe read failed: {e}");
+            return None;
+        }
+    };
     Some(String::from_utf8_lossy(&probe[..read]).to_string())
 }

@@ -65,7 +65,9 @@ pub fn configure_dock() -> Result<()> {
     defaults_write("com.apple.dock", "autohide", "-bool", "true")?;
 
     // Restart dock to apply
-    let _ = Command::new("killall").args(["Dock"]).status();
+    if let Err(e) = Command::new("killall").args(["Dock"]).status() {
+        eprintln!("WARN: killall Dock failed: {e}");
+    }
     Ok(())
 }
 
@@ -82,7 +84,9 @@ pub fn configure_finder() -> Result<()> {
         "SCcf",
     )?;
 
-    let _ = Command::new("killall").args(["Finder"]).status();
+    if let Err(e) = Command::new("killall").args(["Finder"]).status() {
+        eprintln!("WARN: killall Finder failed: {e}");
+    }
     Ok(())
 }
 

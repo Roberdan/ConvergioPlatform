@@ -15,10 +15,16 @@ pub(crate) fn ssh_destination_legacy(peer: &super::peers::PeerConfig) -> String 
 }
 
 pub(crate) fn delegate_timeout() -> Duration {
-    let secs = std::env::var("DELEGATE_TIMEOUT")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_TIMEOUT_SECS);
+    let secs = match std::env::var("DELEGATE_TIMEOUT") {
+        Ok(v) => match v.parse::<u64>() {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("WARN: DELEGATE_TIMEOUT parse error '{v}': {e}, using default");
+                DEFAULT_TIMEOUT_SECS
+            }
+        },
+        Err(_) => DEFAULT_TIMEOUT_SECS,
+    };
     Duration::from_secs(secs)
 }
 

@@ -75,7 +75,9 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
                 }
             }
         });
-        tokio::signal::ctrl_c().await.ok();
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::warn!("ctrl_c signal handler failed: {e}");
+        }
         tracing::info!("daemon shutting down");
         return Ok(());
     }
@@ -123,7 +125,9 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
     match tokio::net::TcpListener::bind(&http_addr).await {
         Ok(listener) => {
             tokio::spawn(async move {
-                axum::serve(listener, http_router).await.ok();
+                if let Err(e) = axum::serve(listener, http_router).await {
+                    tracing::error!("HTTP API server crashed: {e}");
+                }
             });
         }
         Err(e) => {
@@ -136,7 +140,9 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
     let shutdown_trigger = shutdown.clone();
     let shutdown_state = state.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.ok();
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::warn!("ctrl_c signal handler failed: {e}");
+        }
         publish_event(
             &shutdown_state,
             "shutdown",
@@ -159,10 +165,12 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
                 local_config.crsqlite_path.as_deref(),
             ) {
                 let load_json = serde_json::to_string(&load).unwrap_or_default();
-                let _ = conn.execute(
+                if let Err(e) = conn.execute(
                     "INSERT OR REPLACE INTO peer_heartbeats (peer_name, last_seen, load_json) VALUES (?1, ?2, ?3)",
                     rusqlite::params![local_node, now_ts(), load_json],
-                );
+                ) {
+                    tracing::warn!("heartbeat DB insert failed: {e}");
+                }
             }
         }
     });
@@ -174,16 +182,22 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
                     .map_err(|e| MeshError::Network(format!("mesh accept failed: {e}")))?;
                 if let Err(err) = inbound_rate_limiter.check(remote) {
                     tracing::warn!("inbound connection rejected from {remote}: {err}");
-                    let _ = stream.shutdown().await;
+                    if let Err(e) = stream.shutdown().await {
+                        tracing::warn!("stream shutdown failed for {remote}: {e}");
+                    }
                     continue;
                 }
-                let _ = apply_socket_tuning(&stream);
+                if let Err(e) = apply_socket_tuning(&stream) {
+                    tracing::warn!("socket tuning failed for {remote}: {e}");
+                }
                 let cfg = config.clone();
                 let st = state.clone();
                 let limiter = inbound_rate_limiter.clone();
                 tokio::spawn(async move {
                     let conn_id = format!("inbound-{remote}");
-                    let _ = super::daemon_sync::handle_socket(stream, conn_id, st, cfg, false).await;
+                    if let Err(e) = super::daemon_sync::handle_socket(stream, conn_id, st, cfg, false).await {
+                        tracing::warn!("inbound connection from {remote} failed: {e}");
+                    }
                     limiter.release(remote);
                 });
             }

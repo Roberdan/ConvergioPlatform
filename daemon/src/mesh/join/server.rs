@@ -90,7 +90,9 @@ pub async fn serve_bundles(
 
                     // Signal shutdown after serving
                     if let Some(tx) = s.shutdown_tx.lock().await.take() {
-                        let _ = tx.send(());
+                        if tx.send(()).is_err() {
+                            tracing::debug!("bundle server shutdown receiver dropped");
+                        }
                     }
 
                     (

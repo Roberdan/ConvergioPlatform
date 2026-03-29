@@ -64,7 +64,14 @@ fn dirs_home() -> PathBuf {
 /// Reads ~/Library/Application Support/Code/User/settings.json.
 pub fn export_settings() -> Option<String> {
     let path = vscode_settings_path();
-    std::fs::read_to_string(path).ok()
+    match std::fs::read_to_string(&path) {
+        Ok(content) => Some(content),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            eprintln!("WARN: failed to read vscode settings at {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 /// Writes settings.json to `target_home/Library/Application Support/Code/User/settings.json`.

@@ -64,17 +64,19 @@ pub fn export_shell_config_from(home: &Path) -> Result<ShellConfig> {
         read_file_opt(&home.join("Library/Application Support/Code/User/keybindings.json"));
 
     // VSCode extensions list
-    let vscode_extensions = std::process::Command::new("code")
+    let vscode_extensions = match std::process::Command::new("code")
         .args(["--list-extensions"])
         .output()
-        .ok()
-        .map(|o| {
+    {
+        Ok(o) if o.status.success() => {
             String::from_utf8_lossy(&o.stdout)
                 .lines()
                 .map(|l| l.to_string())
                 .collect()
-        })
-        .unwrap_or_default();
+        }
+        Ok(_) => Vec::new(),
+        Err(_) => Vec::new(), // code CLI not available
+    };
 
     // Warp themes (yaml + png files)
     let warp_themes = read_dir_binary(&home.join(".warp/themes"));

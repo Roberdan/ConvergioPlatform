@@ -45,9 +45,21 @@ impl Selections {
 
 /// Exports everything available on the current machine.
 pub fn export_all(github_dir: &Path, runner_paths: &[String]) -> EnvBundle {
-    let brewfile = brew::export_brewfile().ok();
+    let brewfile = match brew::export_brewfile() {
+        Ok(bf) => Some(bf),
+        Err(e) => {
+            eprintln!("WARN: brew export failed: {e}");
+            None
+        }
+    };
 
-    let vscode_extensions = vscode::export_extensions().ok();
+    let vscode_extensions = match vscode::export_extensions() {
+        Ok(exts) => Some(exts),
+        Err(e) => {
+            eprintln!("WARN: vscode extensions export failed: {e}");
+            None
+        }
+    };
     let vscode_settings = vscode::export_settings();
 
     let repos = if github_dir.exists() {
@@ -56,7 +68,13 @@ pub fn export_all(github_dir: &Path, runner_paths: &[String]) -> EnvBundle {
         None
     };
 
-    let shell = shell::export_shell_config().ok();
+    let shell = match shell::export_shell_config() {
+        Ok(cfg) => Some(cfg),
+        Err(e) => {
+            eprintln!("WARN: shell config export failed: {e}");
+            None
+        }
+    };
 
     let runners = if !runner_paths.is_empty() {
         let found = runners::scan_runners(runner_paths);
@@ -89,35 +107,47 @@ pub fn import_all(
     if selections.brew {
         if let Some(ref bf) = bundle.brewfile {
             let all: Vec<String> = bf.formulae.keys().cloned().collect();
-            brew::install_brewfile(bf, &all).ok();
+            if let Err(e) = brew::install_brewfile(bf, &all) {
+                eprintln!("WARN: brew install failed: {e}");
+            }
         }
     }
 
     if selections.vscode {
         if let Some(ref exts) = bundle.vscode_extensions {
-            vscode::import_extensions(exts).ok();
+            if let Err(e) = vscode::import_extensions(exts) {
+                eprintln!("WARN: vscode extensions import failed: {e}");
+            }
         }
         if let Some(ref settings) = bundle.vscode_settings {
-            vscode::import_settings(settings, home).ok();
+            if let Err(e) = vscode::import_settings(settings, home) {
+                eprintln!("WARN: vscode settings import failed: {e}");
+            }
         }
     }
 
     if selections.repos {
         if let Some(ref repo_list) = bundle.repos {
             if let Some(target) = clone_target {
-                repos::clone_repos(repo_list, target).ok();
+                if let Err(e) = repos::clone_repos(repo_list, target) {
+                    eprintln!("WARN: repos clone failed: {e}");
+                }
             }
         }
     }
 
     if selections.shell {
         if let Some(ref cfg) = bundle.shell {
-            shell::import_shell_config(cfg, home).ok();
+            if let Err(e) = shell::import_shell_config(cfg, home) {
+                eprintln!("WARN: shell config import failed: {e}");
+            }
         }
     }
 
     if selections.macos {
-        macos::apply_all().ok();
+        if let Err(e) = macos::apply_all() {
+            eprintln!("WARN: macos defaults apply failed: {e}");
+        }
     }
 
     Ok(())

@@ -43,7 +43,14 @@ pub fn verify_hmac(secret: &[u8], nonce: &[u8], response: &[u8]) -> Result<bool,
 
 /// Load shared secret from peers.conf `[mesh]` section
 pub fn load_shared_secret(peers_conf: &Path) -> Option<Vec<u8>> {
-    let content = std::fs::read_to_string(peers_conf).ok()?;
+    let content = match std::fs::read_to_string(peers_conf) {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => {
+            eprintln!("WARN: failed to read peers.conf at {}: {e}", peers_conf.display());
+            return None;
+        }
+    };
     let mut in_mesh_section = false;
     for line in content.lines().map(str::trim) {
         if line.eq_ignore_ascii_case("[mesh]") {
@@ -106,7 +113,7 @@ mod tests {
         .unwrap();
         let secret = load_shared_secret(&tmp);
         assert_eq!(secret.as_deref(), Some(b"my-secret-key-42".as_slice()));
-        let _ = std::fs::remove_file(&tmp);
+        std::fs::remove_file(&tmp).expect("cleanup test file");
     }
 
     #[test]
@@ -114,7 +121,7 @@ mod tests {
         let tmp = std::env::temp_dir().join("test_peers_no_mesh.conf");
         std::fs::write(&tmp, "[peer1]\ntailscale_ip=100.1.2.3\n").unwrap();
         assert!(load_shared_secret(&tmp).is_none());
-        let _ = std::fs::remove_file(&tmp);
+        std::fs::remove_file(&tmp).expect("cleanup test file");
     }
 
     #[test]
@@ -122,7 +129,7 @@ mod tests {
         let tmp = std::env::temp_dir().join("test_peers_empty_secret.conf");
         std::fs::write(&tmp, "[mesh]\nshared_secret = \n").unwrap();
         assert!(load_shared_secret(&tmp).is_none());
-        let _ = std::fs::remove_file(&tmp);
+        std::fs::remove_file(&tmp).expect("cleanup test file");
     }
 
     #[test]

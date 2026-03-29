@@ -57,15 +57,19 @@ pub(super) async fn connect_peer_loop(peer: String, state: DaemonState, config: 
         match TcpStream::connect(&peer).await {
             Ok(stream) => {
                 backoff_secs = 3;
-                let _ = apply_socket_tuning(&stream);
-                let _ = super::daemon_sync::handle_socket(
+                if let Err(e) = apply_socket_tuning(&stream) {
+                    tracing::warn!("socket tuning failed for peer {peer}: {e}");
+                }
+                if let Err(e) = super::daemon_sync::handle_socket(
                     stream,
                     format!("peer-{peer}"),
                     state.clone(),
                     config.clone(),
                     true,
                 )
-                .await;
+                .await {
+                    tracing::warn!("peer connection {peer} ended with error: {e}");
+                }
             }
             Err(_) => {
                 tokio::time::sleep(Duration::from_secs(backoff_secs)).await;

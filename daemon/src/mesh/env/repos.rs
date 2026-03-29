@@ -68,11 +68,14 @@ pub fn scan_github_dir(path: &Path) -> Vec<RepoInfo> {
 }
 
 fn get_remote_url(repo_path: &Path) -> Option<String> {
-    let output = Command::new("git")
+    let output = match Command::new("git")
         .args(["remote", "get-url", "origin"])
         .current_dir(repo_path)
         .output()
-        .ok()?;
+    {
+        Ok(o) => o,
+        Err(_) => return None,
+    };
 
     if output.status.success() {
         Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -82,11 +85,14 @@ fn get_remote_url(repo_path: &Path) -> Option<String> {
 }
 
 fn get_current_branch(repo_path: &Path) -> Option<String> {
-    let output = Command::new("git")
+    let output = match Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(repo_path)
         .output()
-        .ok()?;
+    {
+        Ok(o) => o,
+        Err(_) => return None,
+    };
 
     if output.status.success() {
         let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();

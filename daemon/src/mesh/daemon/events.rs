@@ -15,12 +15,14 @@ pub fn now_ts() -> u64 {
 }
 
 pub fn publish_event(state: &DaemonState, kind: &str, node: &str, payload: Value) {
-    let _ = state.tx.send(MeshEvent {
+    if state.tx.send(MeshEvent {
         kind: kind.to_string(),
         node: node.to_string(),
         ts: now_ts(),
         payload,
-    });
+    }).is_err() {
+        tracing::trace!("no broadcast subscribers for mesh event '{kind}'");
+    }
 }
 
 pub fn relay_agent_activity_changes(state: &DaemonState, node: &str, changes: &[DeltaChange]) {

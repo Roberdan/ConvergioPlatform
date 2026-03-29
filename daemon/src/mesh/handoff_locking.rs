@@ -88,11 +88,17 @@ pub fn merge_plan_status(
         })?;
         for row in rows {
             let (task_id, r_status, completed_at, validated_at, validated_by) = row?;
-            let local_status: Option<String> = local
+            let local_status: Option<String> = match local
                 .query_row("SELECT status FROM tasks WHERE id=?1", [task_id], |rr| {
                     rr.get(0)
-                })
-                .ok();
+                }) {
+                Ok(s) => Some(s),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => {
+                    eprintln!("WARN: merge_plan_status: local task {task_id} query failed: {e}");
+                    None
+                }
+            };
             let Some(l_status) = local_status else {
                 continue;
             };

@@ -82,11 +82,17 @@ pub(super) fn spawn_delta_loop(
                 break; // DB thread died
             }
             // Wait for reply (blocking but the DB work is fast)
-            let db_result = tokio::task::spawn_blocking(move || reply_rx.recv())
-                .await
-                .ok()
-                .and_then(|r| r.ok())
-                .unwrap_or(Err(MeshError::Internal("DB thread unavailable".into())));
+            let db_result = match tokio::task::spawn_blocking(move || reply_rx.recv()).await {
+                Ok(Ok(res)) => res,
+                Ok(Err(e)) => {
+                    tracing::warn!("sync DB reply channel closed: {e}");
+                    Err(MeshError::Internal("DB thread unavailable".into()))
+                }
+                Err(e) => {
+                    tracing::warn!("sync DB spawn_blocking failed: {e}");
+                    Err(MeshError::Internal("DB thread unavailable".into()))
+                }
+            };
             match db_result {
                 Ok((changes, checkpoint, effective_cursor)) => {
                     if db_cursor < 0 {
@@ -117,11 +123,13 @@ pub(super) fn spawn_delta_loop(
                                 changes,
                             };
                             if out_tx.send(frame).await.is_ok() {
-                                let _ = db_tx.send(SyncDbCmd::RecordSent {
+                                if db_tx.send(SyncDbCmd::RecordSent {
                                     peer: peer_name.clone(),
                                     count: send_count,
                                     version: checkpoint,
-                                });
+                                }).is_err() {
+                                    tracing::warn!("sync DB thread closed, cannot record sent stats");
+                                }
                                 batch_window.clear();
                             } else {
                                 break;
@@ -146,11 +154,13 @@ pub(super) fn spawn_delta_loop(
                             changes: std::mem::take(&mut staged_changes),
                         };
                         if out_tx.send(frame).await.is_ok() {
-                            let _ = db_tx.send(SyncDbCmd::RecordSent {
+                            if db_tx.send(SyncDbCmd::RecordSent {
                                 peer: peer_name,
                                 count: send_count,
                                 version: last_db_version,
-                            });
+                            }).is_err() {
+                                tracing::warn!("sync DB thread closed, cannot record sent stats");
+                            }
                             batch_window.clear();
                         } else {
                             break;
@@ -188,11 +198,13 @@ async fn try_flush_if_staged_full(
         changes: std::mem::take(staged),
     };
     if out_tx.send(frame).await.is_ok() {
-        let _ = db_tx.send(SyncDbCmd::RecordSent {
+        if db_tx.send(SyncDbCmd::RecordSent {
             peer: peer_name.to_string(),
             count: send_count,
             version: last_db_version,
-        });
+        }).is_err() {
+            tracing::warn!("sync DB thread closed, cannot record flush stats");
+        }
         window.clear();
         Ok(())
     } else {

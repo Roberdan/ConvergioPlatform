@@ -3,7 +3,14 @@
 use std::path::{Path, PathBuf};
 
 pub(super) fn read_file_opt(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path).ok()
+    match std::fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            eprintln!("WARN: failed to read {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 pub(super) fn extract_aliases(zshrc: &str) -> Vec<String> {
@@ -19,7 +26,14 @@ pub(super) fn read_dir_binary(dir: &Path) -> Option<Vec<(String, Vec<u8>)>> {
         return None;
     }
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("WARN: failed to read dir {}: {e}", dir.display());
+            return None;
+        }
+    };
+    for entry in entries.flatten() {
         let p = entry.path();
         if p.is_file() {
             if let (Some(name), Ok(bytes)) = (
@@ -42,7 +56,14 @@ pub(super) fn read_claude_config(dir: &Path) -> Option<Vec<(String, String)>> {
         return None;
     }
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("WARN: failed to read claude config dir {}: {e}", dir.display());
+            return None;
+        }
+    };
+    for entry in entries.flatten() {
         let p = entry.path();
         if p.is_file() {
             let name = p
@@ -69,25 +90,46 @@ pub(super) fn create_tar_gz(dir: &Path) -> Option<Vec<u8>> {
     if !dir.is_dir() {
         return None;
     }
-    std::process::Command::new("tar")
+    match std::process::Command::new("tar")
         .args(["czf", "-", "-C", &dir.to_string_lossy(), "."])
         .output()
-        .ok()
-        .filter(|o| o.status.success() && !o.stdout.is_empty())
-        .map(|o| o.stdout)
+    {
+        Ok(o) if o.status.success() && !o.stdout.is_empty() => Some(o.stdout),
+        Ok(o) if !o.status.success() => {
+            eprintln!("WARN: tar failed for {}: exit {}", dir.display(), o.status);
+            None
+        }
+        Ok(_) => None, // empty output
+        Err(e) => {
+            eprintln!("WARN: tar command failed for {}: {e}", dir.display());
+            None
+        }
+    }
 }
 
 pub(super) fn export_plist(domain: &str) -> Option<Vec<u8>> {
     let tmp = format!("/tmp/_convergiomesh_{}.plist", domain.replace('.', "_"));
-    let ok = std::process::Command::new("defaults")
+    let ok = match std::process::Command::new("defaults")
         .args(["export", domain, &tmp])
         .status()
-        .ok()
-        .map(|s| s.success())
-        .unwrap_or(false);
+    {
+        Ok(s) => s.success(),
+        Err(e) => {
+            eprintln!("WARN: defaults export {domain} failed: {e}");
+            false
+        }
+    };
     if ok {
-        let data = std::fs::read(&tmp).ok();
-        let _ = std::fs::remove_file(&tmp);
+        let data = match std::fs::read(&tmp) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                eprintln!("WARN: failed to read plist {tmp}: {e}");
+                None
+            }
+        };
+        if let Err(e) = std::fs::remove_file(&tmp) {
+            eprintln!("WARN: failed to remove temp plist {tmp}: {e}");
+        }
         data
     } else {
         None

@@ -51,10 +51,13 @@ pub fn websocket_key(request: &str) -> Option<String> {
 }
 
 pub fn read_peers_conf(path: &PathBuf) -> Vec<String> {
-    fs::read_to_string(path)
-        .ok()
-        .map(|v| parse_peers_conf(&v))
-        .unwrap_or_default()
+    match fs::read_to_string(path) {
+        Ok(content) => parse_peers_conf(&content),
+        Err(e) => {
+            tracing::warn!("failed to read peers.conf at {}: {e}", path.display());
+            Vec::new()
+        }
+    }
 }
 
 pub fn load_peer_addrs(config: &DaemonConfig, bind_addr: &str) -> HashSet<String> {
@@ -148,11 +151,13 @@ pub fn detect_tailscale_ip() -> Option<String> {
     for cmd in CANDIDATES {
         if let Ok(output) = std::process::Command::new(cmd).arg("ip").arg("-4").output() {
             if output.status.success() {
-                return String::from_utf8(output.stdout)
-                    .ok()?
-                    .lines()
-                    .next()
-                    .map(|line| line.trim().to_string());
+                return match String::from_utf8(output.stdout) {
+                    Ok(s) => s.lines().next().map(|line| line.trim().to_string()),
+                    Err(e) => {
+                        tracing::warn!("tailscale ip output not UTF-8: {e}");
+                        None
+                    }
+                };
             }
         }
     }

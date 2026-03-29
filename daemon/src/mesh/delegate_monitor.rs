@@ -97,12 +97,14 @@ pub fn handle_delegate_complete(state: &ServerState, payload: &Value) -> Result<
         rusqlite::params![parsed.task_id],
     )
     .map_err(|e| MeshError::Db(format!("agent_runs update: {e}")))?;
-    let _ = state.ws_tx.send(json!({
+    if state.ws_tx.send(json!({
         "type": "delegate_complete",
         "task_id": parsed.task_id,
         "result": parsed.result,
         "output": parsed.output,
-    }));
+    })).is_err() {
+        tracing::debug!("no ws subscribers for delegate_complete");
+    }
     info!(
         "delegate_monitor: callback for task {} ({})",
         parsed.task_id, new_status
@@ -135,7 +137,15 @@ fn load_active_delegations(state: &ServerState) -> Result<Vec<Delegation>, MeshE
             })
         })
         .map_err(|e| MeshError::Db(format!("query: {e}")))?;
-    let mut delegations: Vec<Delegation> = rows.filter_map(|r| r.ok()).collect();
+    let mut delegations: Vec<Delegation> = rows
+        .filter_map(|r| match r {
+            Ok(d) => Some(d),
+            Err(e) => {
+                tracing::warn!("delegate_monitor: row read error: {e}");
+                None
+            }
+        })
+        .collect();
     for d in &mut delegations {
         d.peer_addr = resolve_peer_addr(&conn, &d.peer_name);
     }
@@ -144,14 +154,18 @@ fn load_active_delegations(state: &ServerState) -> Result<Vec<Delegation>, MeshE
 }
 
 fn resolve_peer_addr(conn: &rusqlite::Connection, peer_name: &str) -> String {
-    conn.query_row(
+    match conn.query_row(
         "SELECT peer_id FROM peer_heartbeats WHERE peer_id LIKE ?1 ORDER BY timestamp DESC LIMIT 1",
         rusqlite::params![format!("%{peer_name}%")],
         |row| row.get::<_, String>(0),
-    )
-    .ok()
-    .map(|id| format!("http://{id}:8420"))
-    .unwrap_or_default()
+    ) {
+        Ok(id) => format!("http://{id}:8420"),
+        Err(rusqlite::Error::QueryReturnedNoRows) => String::new(),
+        Err(e) => {
+            warn!("resolve_peer_addr for {peer_name}: {e}");
+            String::new()
+        }
+    }
 }
 
 async fn query_remote_agents(
@@ -218,13 +232,15 @@ fn update_delegation_status(
 }
 
 fn broadcast_status_change(state: &ServerState, delegation: &Delegation, new_status: &str) {
-    let _ = state.ws_tx.send(json!({
+    if state.ws_tx.send(json!({
         "type": "delegate_status_change",
         "task_id": delegation.task_id,
         "plan_id": delegation.plan_id,
         "peer": delegation.peer_name,
         "status": new_status,
-    }));
+    })).is_err() {
+        tracing::debug!("no ws subscribers for delegate_status_change");
+    }
 }
 
 #[cfg(test)]
