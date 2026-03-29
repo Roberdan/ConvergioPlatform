@@ -163,9 +163,10 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "INSERT OR IGNORE INTO plan_reviews_v2 (id, plan_id, spec_file, reviewer_agent, verdict, suggestions, raw_report, reviewed_at) SELECT id, plan_id, spec_file, reviewer_agent, verdict, suggestions, raw_report, reviewed_at FROM plan_reviews",
     "DROP TABLE IF EXISTS plan_reviews",
     "ALTER TABLE plan_reviews_v2 RENAME TO plan_reviews",
-    // Add updated_at to tasks and waves for timestamp-based sync
-    "ALTER TABLE tasks ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
-    "ALTER TABLE waves ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
+    // Add updated_at to tasks and waves for timestamp-based sync.
+    // SQLite ALTER TABLE cannot use function defaults — use NULL, filled by triggers.
+    "ALTER TABLE tasks ADD COLUMN updated_at DATETIME",
+    "ALTER TABLE waves ADD COLUMN updated_at DATETIME",
     // Timestamp-based sync metadata (replaces crsqlite CRDT sync checkpoints)
     "CREATE TABLE IF NOT EXISTS _sync_meta (
          peer       TEXT NOT NULL,
@@ -176,6 +177,11 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // Plan 748 — branch_name on plans for execution-context agent delegation
     "ALTER TABLE plans ADD COLUMN branch_name TEXT",
     // Add updated_at to tables that need timestamp-based sync replication
-    "ALTER TABLE knowledge_base ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
-    "ALTER TABLE notifications ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
+    "ALTER TABLE knowledge_base ADD COLUMN updated_at DATETIME",
+    "ALTER TABLE notifications ADD COLUMN updated_at DATETIME",
+    // Backfill updated_at from created_at for rows that predate the sync migration
+    "UPDATE tasks SET updated_at = COALESCE(completed_at, started_at, datetime('now')) WHERE updated_at IS NULL",
+    "UPDATE waves SET updated_at = COALESCE(completed_at, started_at, datetime('now')) WHERE updated_at IS NULL",
+    "UPDATE knowledge_base SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL",
+    "UPDATE notifications SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL",
 ];
