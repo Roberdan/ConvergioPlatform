@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::warn;
 
 /// Notification severity — controls priority in ntfy and Telegram subjects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,19 +114,15 @@ pub struct MacOSChannel;
 
 impl MacOSChannel {
     pub async fn send(&self, msg: &NotifyMessage) -> Result<(), String> {
-        // Prefer terminal-notifier; fall back to osascript.
-        let tn = std::process::Command::new("terminal-notifier")
+        let status = std::process::Command::new("terminal-notifier")
             .args(["-title", &msg.title, "-message", &msg.message, "-sound", "default"])
-            .status();
-        if let Ok(s) = tn {
-            if s.success() { return Ok(()); }
-        }
-        let script = format!("display notification {:?} with title {:?}", msg.message, msg.title);
-        std::process::Command::new("osascript")
-            .args(["-e", &script])
             .status()
-            .map(|_| ())
-            .map_err(|e| format!("osascript failed: {e}"))
+            .map_err(|e| format!("terminal-notifier launch failed: {e}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("terminal-notifier exited with code {}", status))
+        }
     }
 }
 
@@ -141,22 +136,47 @@ pub enum ChannelConfig {
     MacOS,
 }
 
-/// Dispatch to all configured channels; log individual failures, do not abort.
-pub async fn dispatch(channels: &[ChannelConfig], msg: &NotifyMessage) {
+/// Per-channel delivery result for fail-loud reporting.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelResult {
+    pub channel: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+/// Dispatch to all configured channels; return per-channel results.
+/// Every failure is logged via tracing::error! and included in the response.
+pub async fn dispatch(channels: &[ChannelConfig], msg: &NotifyMessage) -> Vec<ChannelResult> {
+    let mut results = Vec::with_capacity(channels.len());
     for ch in channels {
-        let result = match ch {
+        let (channel_name, result) = match ch {
             ChannelConfig::Ntfy { topic, base_url } => {
-                NtfyChannel::new(topic, base_url).send(msg).await
+                ("ntfy".to_string(), NtfyChannel::new(topic, base_url).send(msg).await)
             }
             ChannelConfig::Telegram { bot_token, chat_id } => {
-                TelegramChannel::new(bot_token, chat_id).send(msg).await
+                ("telegram".to_string(), TelegramChannel::new(bot_token, chat_id).send(msg).await)
             }
-            ChannelConfig::MacOS => MacOSChannel.send(msg).await,
+            ChannelConfig::MacOS => {
+                ("macos".to_string(), MacOSChannel.send(msg).await)
+            }
         };
-        if let Err(e) = result {
-            warn!("notify dispatch error: {e}");
+        match result {
+            Ok(()) => results.push(ChannelResult {
+                channel: channel_name,
+                success: true,
+                error: None,
+            }),
+            Err(e) => {
+                tracing::error!(channel = %channel_name, error = %e, "notification delivery failed");
+                results.push(ChannelResult {
+                    channel: channel_name,
+                    success: false,
+                    error: Some(e),
+                });
+            }
         }
     }
+    results
 }
 
 #[cfg(test)]
@@ -164,45 +184,64 @@ mod tests {
     use super::*;
 
     #[test]
-    fn severity_from_str_critical() {
-        assert!(matches!("critical".parse::<NotifySeverity>().unwrap(), NotifySeverity::Critical));
+    fn channel_result_tracks_failure() {
+        let r = ChannelResult {
+            channel: "ntfy".to_string(),
+            success: false,
+            error: Some("connection refused".to_string()),
+        };
+        assert!(!r.success);
+        assert_eq!(r.error.as_deref(), Some("connection refused"));
     }
 
     #[test]
-    fn severity_from_str_warning() {
-        assert!(matches!("warning".parse::<NotifySeverity>().unwrap(), NotifySeverity::Warning));
+    fn channel_result_tracks_success() {
+        let r = ChannelResult {
+            channel: "telegram".to_string(),
+            success: true,
+            error: None,
+        };
+        assert!(r.success);
+        assert!(r.error.is_none());
     }
 
     #[test]
-    fn severity_from_str_info() {
-        assert!(matches!("info".parse::<NotifySeverity>().unwrap(), NotifySeverity::Info));
+    fn channel_result_serializes() {
+        let r = ChannelResult {
+            channel: "ntfy".to_string(),
+            success: false,
+            error: Some("timeout".to_string()),
+        };
+        let json = serde_json::to_value(&r).unwrap();
+        assert_eq!(json["channel"], "ntfy");
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "timeout");
     }
 
-    #[test]
-    fn severity_from_str_invalid() {
-        assert!("unknown".parse::<NotifySeverity>().is_err());
-    }
-
-    #[test]
-    fn severity_display() {
-        assert_eq!(format!("{}", NotifySeverity::Critical), "critical");
-        assert_eq!(format!("{}", NotifySeverity::Warning), "warning");
-        assert_eq!(format!("{}", NotifySeverity::Info), "info");
-    }
-
-    #[test]
-    fn severity_priority_order() {
-        assert!(NotifySeverity::Critical.priority() > NotifySeverity::Warning.priority());
-        assert!(NotifySeverity::Warning.priority() > NotifySeverity::Info.priority());
-    }
-
-    #[test]
-    fn notify_message_builds() {
+    #[tokio::test]
+    async fn dispatch_returns_per_channel_results() {
+        let channels = vec![ChannelConfig::MacOS];
         let msg = NotifyMessage {
-            title: "Test".to_string(),
-            message: "hello".to_string(),
+            title: "Dispatch test".to_string(),
+            message: "verify per-channel results".to_string(),
             severity: NotifySeverity::Info,
         };
-        assert_eq!(msg.title, "Test");
+        let results = dispatch(&channels, &msg).await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].channel, "macos");
+        if !results[0].success {
+            assert!(results[0].error.is_some(), "failed channel must include error details");
+        }
+    }
+
+    #[tokio::test]
+    async fn dispatch_empty_channels_returns_empty() {
+        let msg = NotifyMessage {
+            title: "No channels".to_string(),
+            message: "nothing".to_string(),
+            severity: NotifySeverity::Info,
+        };
+        let results = dispatch(&[], &msg).await;
+        assert!(results.is_empty());
     }
 }

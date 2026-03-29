@@ -48,28 +48,41 @@ pub async fn handle_notify(
         (nid, native)
     };
 
-    // Attempt ntfy.sh push notification (best-effort, requires .await)
+    // Attempt ntfy.sh push notification (requires .await)
     let ntfy_cfg = super::ntfy::load_config();
-    let ntfy_ok = match super::ntfy::send(&ntfy_cfg, title, message, severity).await {
-        Ok(delivered) => delivered,
+    let ntfy_result = super::ntfy::send(&ntfy_cfg, title, message, severity).await;
+    let ntfy_ok = match &ntfy_result {
+        Ok(delivered) => *delivered,
         Err(e) => {
-            tracing::warn!("ntfy delivery failed: {e}");
+            tracing::error!(channel = "ntfy", error = %e, "notification delivery failed");
             false
         }
     };
 
     let delivered = native_ok || ntfy_ok;
 
+    // Build per-channel status report
+    let mut channels_status = vec![];
+    channels_status.push(json!({
+        "channel": "native",
+        "success": native_ok,
+        "error": if native_ok { None } else { Some("terminal-notifier failed or unavailable") },
+    }));
+    channels_status.push(match &ntfy_result {
+        Ok(true) => json!({"channel": "ntfy", "success": true, "error": null}),
+        Ok(false) => json!({"channel": "ntfy", "success": false, "error": "ntfy disabled"}),
+        Err(e) => json!({"channel": "ntfy", "success": false, "error": e.to_string()}),
+    });
+
     // Mark as delivered if any channel succeeded
     if delivered {
         let conn = state.get_conn()?;
-        if let Err(e) = conn.execute(
+        conn.execute(
             "UPDATE notification_queue SET status = 'delivered', \
              delivered_at = datetime('now') WHERE id = ?1",
             rusqlite::params![notif_id],
-        ) {
-            tracing::error!(notif_id, "notification delivery status update failed: {e}");
-        }
+        )
+        .map_err(|e| ApiError::internal(format!("notification status update failed: {e}")))?;
     }
 
     // Broadcast via WebSocket for real-time dashboard updates
@@ -83,12 +96,13 @@ pub async fn handle_notify(
         tracing::debug!("ws notification broadcast: {e}");
     }
 
+    let any_failed = channels_status.iter().any(|c| c["success"] == false);
     Ok(Json(json!({
-        "ok": true,
+        "ok": delivered,
         "id": notif_id,
-        "native_delivered": native_ok,
-        "ntfy_delivered": ntfy_ok,
         "status": if delivered { "delivered" } else { "pending" },
+        "channels": channels_status,
+        "partial_failure": delivered && any_failed,
     })))
 }
 
@@ -127,27 +141,32 @@ pub async fn handle_deliver(
     let conn = state.get_conn()?;
     let conn = &conn;
     let mut delivered = 0usize;
+    let mut errors: Vec<Value> = Vec::new();
 
     for id_val in ids {
         if let Some(id) = id_val.as_i64() {
-            let changed = conn
-                .execute(
-                    "UPDATE notification_queue SET status = 'delivered', \
-                     delivered_at = datetime('now') WHERE id = ?1 AND status = 'pending'",
-                    rusqlite::params![id],
-                )
-                .unwrap_or(0);
-            delivered += changed;
+            match conn.execute(
+                "UPDATE notification_queue SET status = 'delivered', \
+                 delivered_at = datetime('now') WHERE id = ?1 AND status = 'pending'",
+                rusqlite::params![id],
+            ) {
+                Ok(changed) => delivered += changed,
+                Err(e) => {
+                    tracing::error!(notification_id = id, error = %e, "deliver update failed");
+                    errors.push(json!({"id": id, "error": e.to_string()}));
+                }
+            }
         }
     }
 
     Ok(Json(json!({
-        "ok": true,
+        "ok": errors.is_empty(),
         "delivered": delivered,
+        "errors": errors,
     })))
 }
 
-/// Try to send a native OS notification (non-blocking, best-effort)
+/// Try to send a native OS notification — daemon-native only (no osascript).
 pub fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
     let icon = match severity {
         "error" => "❌",
@@ -159,49 +178,39 @@ pub fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
 
     #[cfg(target_os = "macos")]
     {
-        let result = std::process::Command::new("terminal-notifier")
-            .args([
-                "-title",
-                &full_title,
-                "-message",
-                message,
-                "-group",
-                "claude-core",
-            ])
+        match std::process::Command::new("terminal-notifier")
+            .args(["-title", &full_title, "-message", message, "-group", "claude-core"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn();
-        if result.is_ok() {
-            return true;
+            .spawn()
+        {
+            Ok(_) => true,
+            Err(e) => {
+                tracing::error!(channel = "native", error = %e, "terminal-notifier failed");
+                false
+            }
         }
-        // Fallback to osascript
-        let result = std::process::Command::new("osascript")
-            .args([
-                "-e",
-                &format!(
-                    "display notification \"{}\" with title \"{}\"",
-                    message.replace('"', "\\\""),
-                    full_title.replace('"', "\\\"")
-                ),
-            ])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn();
-        result.is_ok()
     }
 
     #[cfg(target_os = "linux")]
     {
-        let result = std::process::Command::new("notify-send")
+        match std::process::Command::new("notify-send")
             .args([&full_title, message])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn();
-        result.is_ok()
+            .spawn()
+        {
+            Ok(_) => true,
+            Err(e) => {
+                tracing::error!(channel = "native", error = %e, "notify-send failed");
+                false
+            }
+        }
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
+        tracing::error!(channel = "native", "no native notification tool available");
         false
     }
 }
