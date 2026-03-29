@@ -59,8 +59,10 @@ After generating the spec YAML, you MUST complete ALL steps before presenting to
 2.  Launch 1 review agent — MUST pass the EXACT spec file path:
     Agent(subagent_type="plan-reviewer", prompt="Review the spec at <EXACT_PATH>. FIRST ACTION: Read <EXACT_PATH>. Do NOT search for other spec files. Write review to /tmp/review-standard.md.")
 3.  Wait for review to complete
-4.  cvg review register standard /tmp/review-standard.md
-5.  cvg review check  ← MUST pass
+4.  cvg review register --plan-id <PLAN_ID> plan-reviewer proceed
+    (NOTE: create the plan FIRST with cvg plan create, then register the review with --plan-id.
+     --spec-file does NOT work without a plan_id. The reviewer_agent is "plan-reviewer", verdict is "proceed".)
+5.  cvg review check <PLAN_ID>  ← MUST pass
 6.  Apply ALL review fixes to spec YAML (blockers + advisories)
 7.  Verify spec: every task has verify[] array, effort 1-3, model, executor_agent, validator_agent, output_type
 8.  cvg plan create <project> "<name>" --source-file <spec>
