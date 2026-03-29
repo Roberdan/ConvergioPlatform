@@ -40,7 +40,7 @@ async fn handle_set_worktree(
 pub fn build_execution_context(conn: &Connection, plan_id: i64) -> Result<Value, ApiError> {
     let plan = query_one(
         conn,
-        "SELECT id, name, status, worktree_path, \
+        "SELECT id, name, status, worktree_path, branch_name, \
          description, tasks_total, tasks_done FROM plans WHERE id = ?1",
         rusqlite::params![plan_id],
     )?
@@ -48,8 +48,7 @@ pub fn build_execution_context(conn: &Connection, plan_id: i64) -> Result<Value,
 
     let plan_status = plan["status"].as_str().unwrap_or("unknown");
     let worktree = plan["worktree_path"].as_str().unwrap_or("");
-    // Derive branch from worktree path (convention: last segment = branch name)
-    let branch = worktree.split('/').last().unwrap_or("");
+    let branch = plan["branch_name"].as_str().unwrap_or("");
     let plan_name = plan["name"].as_str().unwrap_or("");
 
     let waves = query_rows(
