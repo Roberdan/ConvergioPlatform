@@ -13,7 +13,7 @@ pub mod whisper;
 #[cfg(feature = "voice")]
 pub use audio_capture::{AudioCapture, CaptureConfig};
 #[cfg(feature = "voice")]
-pub use pipeline::VoicePipeline;
+pub use pipeline::{PipelineEvent, VoicePipeline};
 pub use types::{VoiceConfig, VoiceError, VoiceState};
 
 #[cfg(all(test, feature = "voice"))]
