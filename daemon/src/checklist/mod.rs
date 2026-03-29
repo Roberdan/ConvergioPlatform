@@ -20,3 +20,7 @@ mod nasa_rules_tests;
 #[cfg(test)]
 #[path = "thor_gate_tests.rs"]
 mod thor_gate_tests;
+
+#[cfg(test)]
+#[path = "thor_gate_validate_all_tests.rs"]
+mod thor_gate_validate_all_tests;

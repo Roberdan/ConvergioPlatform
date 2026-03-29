@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// HTTP integration tests for plan review endpoints (register, check, reset, link-by-spec).
+// HTTP integration tests for plan review endpoints — register and check.
+// Remaining tests (reset, link-by-spec) are in api_plan_db_review_integration_tests2.rs.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -39,7 +40,7 @@ fn test_router() -> axum::Router {
     super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }
 
-async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
+pub(super) async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
     let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
     let resp = router.clone().oneshot(req).await.unwrap();
     let status = resp.status();
@@ -49,7 +50,7 @@ async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
     (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
 
-async fn post_json(router: &axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
+pub(super) async fn post_json(router: &axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
     let req = Request::builder()
         .uri(uri)
         .method("POST")
@@ -195,95 +196,4 @@ async fn review_check_after_registrations() {
     assert_eq!(j["total"], 2);
     assert_eq!(j["reviewer"], 1);
     assert_eq!(j["business"], 1);
-}
-
-// --- POST /api/plan-db/review/reset ---
-
-#[tokio::test]
-async fn review_reset_deletes_reviews() {
-    let r = test_router();
-    post_json(
-        &r,
-        "/api/plan-db/review/register",
-        serde_json::json!({
-            "plan_id": 1,
-            "reviewer_agent": "plan-reviewer",
-            "verdict": "reject"
-        }),
-    )
-    .await;
-
-    let (s, j) = post_json(
-        &r,
-        "/api/plan-db/review/reset",
-        serde_json::json!({"plan_id": 1}),
-    )
-    .await;
-    assert_eq!(s, StatusCode::OK);
-    assert_eq!(j["ok"], true);
-    assert!(j["deleted"].as_i64().unwrap() >= 1);
-
-    // Verify empty after reset
-    let (_, j) = get(&r, "/api/plan-db/review/check?plan_id=1").await;
-    assert_eq!(j["total"], 0);
-}
-
-#[tokio::test]
-async fn review_reset_missing_plan_id() {
-    let r = test_router();
-    let (s, _) = post_json(
-        &r,
-        "/api/plan-db/review/reset",
-        serde_json::json!({}),
-    )
-    .await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
-}
-
-// --- POST /api/plan-db/review/link-by-spec ---
-
-#[tokio::test]
-async fn review_link_by_spec() {
-    let r = test_router();
-    // Register review by spec_file (no plan_id)
-    post_json(
-        &r,
-        "/api/plan-db/review/register",
-        serde_json::json!({
-            "spec_file": "/workspace/plans/plan-750.yaml",
-            "reviewer_agent": "plan-reviewer",
-            "verdict": "proceed"
-        }),
-    )
-    .await;
-
-    // Link it to plan 1
-    let (s, j) = post_json(
-        &r,
-        "/api/plan-db/review/link-by-spec",
-        serde_json::json!({
-            "plan_id": 1,
-            "spec_file": "/workspace/plans/plan-750.yaml"
-        }),
-    )
-    .await;
-    assert_eq!(s, StatusCode::OK);
-    assert_eq!(j["ok"], true);
-    assert_eq!(j["linked"], 1);
-
-    // Verify it appears in plan 1 check
-    let (_, j) = get(&r, "/api/plan-db/review/check?plan_id=1").await;
-    assert_eq!(j["total"], 1);
-}
-
-#[tokio::test]
-async fn review_link_by_spec_missing_fields() {
-    let r = test_router();
-    let (s, _) = post_json(
-        &r,
-        "/api/plan-db/review/link-by-spec",
-        serde_json::json!({"plan_id": 1}),
-    )
-    .await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
 }

@@ -1,36 +1,13 @@
-// Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // CLI Commands enum — all top-level subcommands for claude-core / cvg.
 // Kept in a separate module so main.rs stays under 250 lines.
-
-use crate::cli_agent;
-use crate::cli_bus;
-use crate::cli_capability;
-use crate::cli_channel;
-use crate::cli_checkpoint;
-use crate::cli_delegation;
-use crate::cli_kernel;
-use crate::cli_reap;
-use crate::cli_repo;
-use crate::cli_domain;
-use crate::cli_kb;
-use crate::cli_lock;
-use crate::cli_memory;
-use crate::cli_ops;
-use crate::cli_plan;
-use crate::cli_project;
-use crate::cli_review;
-use crate::cli_run;
-use crate::cli_skill;
-use crate::cli_voice;
-use crate::cli_task;
-use crate::cli_wave;
-use crate::cli_who;
-use crate::cli_workspace;
+use crate::{
+    cli_agent, cli_bus, cli_capability, cli_channel, cli_checkpoint, cli_delegation, cli_domain,
+    cli_kb, cli_kernel, cli_lock, cli_memory, cli_ops, cli_plan, cli_project, cli_reap, cli_repo,
+    cli_review, cli_run, cli_skill, cli_task, cli_voice, cli_wave, cli_who, cli_workspace,
+};
 use crate::ipc_handler::{DaemonCommands, IpcCommands};
 use clap::Subcommand;
 use std::path::PathBuf;
-
-// cli_audit is referenced via Commands::Audit below; imported in main.rs dispatch.
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {

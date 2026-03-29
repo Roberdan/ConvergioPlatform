@@ -1,5 +1,6 @@
 pub mod api_routes;
 mod health;
+pub mod rate_limiter;
 
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 

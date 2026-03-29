@@ -1,6 +1,7 @@
 pub mod api;
 pub mod app;
 mod app_render;
+pub(crate) mod nav;
 pub mod chat_handler;
 pub mod chat_messages;
 pub mod claude_session;

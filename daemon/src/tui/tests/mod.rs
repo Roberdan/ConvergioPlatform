@@ -9,6 +9,8 @@ mod notifications;
 mod project_switcher;
 mod views;
 mod views_tree;
+mod views_tree_badges;
+mod views_tree_rollup;
 
 use super::{
     AgentOrgNode, BrainNode, ChatMessage, CostData, CostSummary, DeliverableInfo, KpiData,

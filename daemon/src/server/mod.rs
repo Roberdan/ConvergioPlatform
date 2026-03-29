@@ -1,5 +1,7 @@
 pub mod api_agent_catalog;
 mod api_agent_catalog_parse;
+mod api_agent_catalog_security;
+mod api_plan_db_evidence;
 pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_audit;
@@ -128,6 +130,8 @@ mod api_ipc_tests;
 #[cfg(test)]
 mod api_ipc_integration_tests;
 #[cfg(test)]
+mod api_ipc_integration_tests2;
+#[cfg(test)]
 mod api_ipc_intel_tests;
 #[cfg(test)]
 mod api_metrics_tests;
@@ -158,19 +162,27 @@ mod api_workspace_integration_tests;
 #[cfg(test)]
 mod api_delegation_tests;
 #[cfg(test)]
+mod api_delegation_unit_tests;
+#[cfg(test)]
 mod api_workspace_tests;
 #[cfg(test)]
 mod api_agent_control_tests;
 #[cfg(test)]
 mod api_capabilities_tests;
 #[cfg(test)]
+mod api_capabilities_tests2;
+#[cfg(test)]
 mod api_nightly_tests;
+#[cfg(test)]
+mod api_nightly_tests2;
 #[cfg(test)]
 mod api_telemetry_tests;
 #[cfg(test)]
 mod api_plan_db_lifecycle_integration_tests;
 #[cfg(test)]
 mod api_plan_db_review_integration_tests;
+#[cfg(test)]
+mod api_plan_db_review_integration_tests2;
 #[cfg(test)]
 mod api_plan_db_import_integration_tests;
 #[cfg(test)]

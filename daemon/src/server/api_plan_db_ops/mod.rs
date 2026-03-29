@@ -1,4 +1,5 @@
 pub(crate) mod handlers;
+pub(crate) mod kb;
 pub use handlers::router;
 
 #[cfg(test)]

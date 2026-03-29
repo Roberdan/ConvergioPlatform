@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Agent catalog CRUD: sync from .agent.md files, enable/disable, create, list.
+// Path-security helpers live in api_agent_catalog_security.rs.
 
+use super::api_agent_catalog_security::{assert_path_under, validate_agent_name};
 use super::state::{query_rows, ApiError, ServerState};
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
@@ -10,37 +12,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
-
-/// Validate agent name: only `[a-zA-Z0-9_-]` allowed.
-/// Rejects path traversal sequences like `../`, absolute paths, and shell metacharacters.
-fn validate_agent_name(name: &str) -> Result<(), ApiError> {
-    if name.is_empty() {
-        return Err(ApiError::bad_request("name is required"));
-    }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
-        return Err(ApiError::bad_request(
-            "name must match ^[a-zA-Z0-9_-]+$ (no path separators or special characters)",
-        ));
-    }
-    Ok(())
-}
-
-/// Verify that `child` is strictly inside `parent` after canonicalization.
-/// Prevents path traversal even when `name` passes the regex check.
-fn assert_path_under(parent: &Path, child: &Path) -> Result<(), ApiError> {
-    let canonical_parent = std::fs::canonicalize(parent)
-        .map_err(|e| ApiError::bad_request(format!("invalid target_dir: {e}")))?;
-    // child may not exist yet — canonicalize its parent directory instead
-    let child_dir = child.parent().unwrap_or(child);
-    let canonical_child_dir = std::fs::canonicalize(child_dir)
-        .map_err(|e| ApiError::bad_request(format!("invalid target path: {e}")))?;
-    if !canonical_child_dir.starts_with(&canonical_parent) {
-        return Err(ApiError::bad_request(
-            "resolved path escapes target_dir — request rejected",
-        ));
-    }
-    Ok(())
-}
 
 pub fn router() -> Router<ServerState> {
     Router::new()

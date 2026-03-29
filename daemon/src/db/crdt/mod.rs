@@ -5,6 +5,10 @@ mod sync;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+#[path = "crdt_feature_tests.rs"]
+mod crdt_feature_tests;
+
 #[cfg(feature = "crsqlite")]
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};

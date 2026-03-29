@@ -52,6 +52,7 @@ pub mod email;
 pub mod router;
 pub mod slack;
 pub mod telegram;
+mod telegram_types;
 
 #[cfg(test)]
 #[path = "tests.rs"]

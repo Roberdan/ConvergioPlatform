@@ -13,7 +13,7 @@ use super::chat_handler::{self, ChatState};
 use super::data::{MainView, TuiData};
 use super::input::{self, InteractiveState};
 use super::ws_client::WsClient;
-use super::api;
+use super::{api, nav};
 
 pub struct TuiApp {
     pub data: TuiData,
@@ -205,35 +205,12 @@ impl TuiApp {
         false
     }
 
-    fn switch_view(&mut self, n: u8) {
-        use MainView::*;
-        self.selected_index = 0;
-        // 0 = Deliverables (10th), 1-9 = ordered views
-        let views = [Deliverables, PlanKanban, Chat, TaskPipeline, MeshStatus,
-                     AgentOrgChart, BrainCanvas, CostCenter, EventStream, WorkspaceView];
-        self.active_view = views[(n as usize).min(9)];
+    pub fn switch_view(&mut self, n: u8) {
+        nav::switch_view(self, n);
     }
 
     pub fn list_len(&self) -> usize {
-        match self.active_view {
-            MainView::PlanKanban => if self.data.project_tree.plans.is_empty() {
-                self.data.plans.len()
-            } else {
-                crate::tui::views::project_tree::build_tree_lines(
-                    &self.data.project_tree, self.selected_index, &self.istate.expanded_masters,
-                ).1
-            },
-            MainView::TaskPipeline => self.data.pipeline.len(),
-            MainView::MeshStatus => self.data.mesh_nodes.len(),
-            MainView::AgentOrgChart => self.data.agents.len(),
-            MainView::BrainCanvas => self.data.brain_nodes.len(),
-            MainView::CostCenter => self.data.cost.by_model.len(),
-            MainView::EventStream => self.data.events.len(),
-            MainView::WorkspaceView => self.data.workspaces.len(),
-            MainView::Deliverables => self.data.deliverables.len(),
-            MainView::Chat => self.data.chat_messages.len(),
-            MainView::ProjectView => self.data.projects.len(),
-        }
+        nav::list_len(self)
     }
 
     pub async fn refresh_data(&mut self) {
@@ -241,7 +218,9 @@ impl TuiApp {
         self.last_fetch = Instant::now();
     }
 
-    pub fn http_client(&self) -> &Client { &self.client }
+    pub fn http_client(&self) -> &Client {
+        &self.client
+    }
 }
 
 impl Drop for TuiApp {

@@ -1,10 +1,11 @@
+pub(super) use super::service_helpers::{invalid_input, map_active_plan, map_in_progress_task};
+
 use super::{
     queries, ActivePlan, ExecutionTaskNode, ExecutionTree, ExecutionWaveNode, InProgressTask,
     PlanDb, StatusView, TaskStatus, UpdateTaskArgs, UpdateTaskResult, ValidateTaskArgs,
     ValidateTaskResult,
 };
 use rusqlite::params;
-use std::io::{Error as IoError, ErrorKind};
 
 impl PlanDb {
     pub fn status(&self, project_id: Option<&str>) -> rusqlite::Result<StatusView> {
@@ -231,30 +232,3 @@ impl PlanDb {
     }
 }
 
-fn map_active_plan(row: &rusqlite::Row<'_>) -> rusqlite::Result<ActivePlan> {
-    Ok(ActivePlan {
-        id: row.get(0)?,
-        project_id: row.get(1)?,
-        name: row.get(2)?,
-        status: row.get(3)?,
-        tasks_done: row.get(4)?,
-        tasks_total: row.get(5)?,
-    })
-}
-
-fn map_in_progress_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<InProgressTask> {
-    Ok(InProgressTask {
-        id: row.get(0)?,
-        project_id: row.get(1)?,
-        task_id: row.get(2)?,
-        title: row.get(3)?,
-        wave_id: row.get(4)?,
-    })
-}
-
-pub(crate) fn invalid_input(message: &str) -> rusqlite::Error {
-    rusqlite::Error::ToSqlConversionFailure(Box::new(IoError::new(
-        ErrorKind::InvalidInput,
-        message.to_string(),
-    )))
-}

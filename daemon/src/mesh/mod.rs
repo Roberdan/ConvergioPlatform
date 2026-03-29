@@ -2,6 +2,7 @@ pub mod auth;
 pub mod daemon;
 pub mod delegate;
 pub mod delegate_monitor;
+pub(crate) mod delegate_prompt;
 mod delegate_types;
 pub mod peer_resolver;
 pub mod error;

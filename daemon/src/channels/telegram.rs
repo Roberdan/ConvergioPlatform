@@ -1,9 +1,11 @@
 // Why: Plan 725 T2-01 — Telegram adapter implementing ChannelAdapter trait.
 // Uses Telegram Bot API with long-polling for bidirectional messaging.
 
+use super::telegram_types::{
+    SendMessageBody, TelegramResponse, TelegramUpdate, TelegramUser,
+};
 use super::{AsyncChannelResult, ChannelAdapter, ChannelError, ChannelHealth, ChannelMessage};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -17,60 +19,6 @@ pub struct TelegramAdapter {
     connected: bool,
     last_message_at: Option<DateTime<Utc>>,
     error_count: u64,
-}
-
-/// Telegram API response wrapper.
-#[derive(Debug, Deserialize)]
-struct TelegramResponse<T> {
-    ok: bool,
-    result: Option<T>,
-    description: Option<String>,
-}
-
-/// Telegram User from API.
-// Fields are deserialized from Telegram API response; not all are used in current logic.
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct TelegramUser {
-    id: i64,
-    is_bot: bool,
-    first_name: String,
-    username: Option<String>,
-}
-
-/// Telegram Chat from API.
-#[derive(Debug, Deserialize, Serialize)]
-struct TelegramChat {
-    id: i64,
-    #[serde(rename = "type")]
-    chat_type: Option<String>,
-}
-
-/// Telegram Message from API.
-// Fields are deserialized from Telegram API response; not all are used in current logic.
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct TelegramMsg {
-    message_id: i64,
-    date: i64,
-    chat: TelegramChat,
-    from: Option<TelegramUser>,
-    text: Option<String>,
-}
-
-/// Telegram Update from getUpdates.
-#[derive(Debug, Deserialize)]
-struct TelegramUpdate {
-    update_id: i64,
-    message: Option<TelegramMsg>,
-}
-
-/// Send message request body.
-#[derive(Debug, Serialize)]
-struct SendMessageBody {
-    chat_id: i64,
-    text: String,
-    parse_mode: String,
 }
 
 impl TelegramAdapter {

@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Integration tests for nightly jobs API (list, detail, create, trigger, toggle, config).
+// Integration tests for nightly jobs API — list, detail, create, trigger.
+// Toggle and config tests → api_nightly_tests2.rs.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -7,7 +8,7 @@ use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tower::ServiceExt;
 
-const SCHEMA: &str = "
+pub(super) const SCHEMA: &str = "
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS nightly_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +44,7 @@ CREATE TABLE IF NOT EXISTS plans (
 CREATE TABLE IF NOT EXISTS daemon_config (key TEXT PRIMARY KEY, value TEXT);
 ";
 
-const SEED: &str = "
+pub(super) const SEED: &str = "
 INSERT INTO nightly_job_definitions (name, description, schedule, script_path, project_id)
     VALUES ('mirrorbuddy-guardian', 'MirrorBuddy nightly check', '0 1 * * *',
             'scripts/nightly/mirrorbuddy-guardian.sh', 'mirrorbuddy');
@@ -54,7 +55,7 @@ INSERT INTO mesh_events (event_type, plan_id, source_peer, payload, status)
     VALUES ('plan_started', 742, 'm5max', '{\"plan_id\": 742}', 'pending');
 ";
 
-fn test_router() -> axum::Router {
+pub(super) fn test_router() -> axum::Router {
     static CTR: AtomicU64 = AtomicU64::new(0);
     let n = CTR.fetch_add(1, Ordering::SeqCst);
     let tmp = std::env::temp_dir().join(format!(
@@ -69,7 +70,7 @@ fn test_router() -> axum::Router {
     super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp, None)
 }
 
-async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
+pub(super) async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
     let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
     let resp = router.clone().oneshot(req).await.unwrap();
     let status = resp.status();
@@ -79,7 +80,7 @@ async fn get(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
     (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
 
-async fn post_json(router: &axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
+pub(super) async fn post_json(router: &axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
     let req = Request::builder()
         .uri(uri)
         .method("POST")
@@ -208,57 +209,4 @@ async fn nightly_job_trigger_custom_project() {
     .await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(j["project_id"], "convergio");
-}
-
-// --- POST /api/nightly/jobs/definitions/:id/toggle ---
-
-#[tokio::test]
-async fn nightly_def_toggle() {
-    let r = test_router();
-    let (s, j) = post_json(
-        &r,
-        "/api/nightly/jobs/definitions/1/toggle",
-        serde_json::json!({}),
-    )
-    .await;
-    assert_eq!(s, StatusCode::OK);
-    assert_eq!(j["ok"], true);
-    assert_eq!(j["id"], 1);
-    assert!(j["enabled"].is_boolean());
-}
-
-#[tokio::test]
-async fn nightly_def_toggle_not_found() {
-    let r = test_router();
-    let (s, _) = post_json(
-        &r,
-        "/api/nightly/jobs/definitions/9999/toggle",
-        serde_json::json!({}),
-    )
-    .await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
-}
-
-// --- GET /api/nightly/config/:project_id ---
-
-#[tokio::test]
-async fn nightly_config_get() {
-    let r = test_router();
-    let (s, j) = get(&r, "/api/nightly/config/mirrorbuddy").await;
-    assert_eq!(s, StatusCode::OK);
-    assert_eq!(j["ok"], true);
-    assert_eq!(j["project_id"], "mirrorbuddy");
-    assert!(j["definitions"].is_array());
-}
-
-// --- GET /api/events ---
-
-#[tokio::test]
-async fn events_list() {
-    let r = test_router();
-    let (s, j) = get(&r, "/api/events").await;
-    assert_eq!(s, StatusCode::OK);
-    assert!(j.is_array());
-    let arr = j.as_array().unwrap();
-    assert!(!arr.is_empty());
 }

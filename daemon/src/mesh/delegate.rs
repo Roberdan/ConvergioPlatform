@@ -2,6 +2,13 @@
 
 pub use super::delegate_types::{DelegateError, DelegateResult, DelegateStatus};
 
+// Re-export prompt helpers so existing callers (including tests) can access them.
+pub(crate) use super::delegate_prompt::{
+    delegate_timeout, parse_tokens_from_output, remote_worktree_dir, worktree_branch,
+};
+// Re-export for tests that use `crate::mesh::delegate::ssh_destination_legacy`.
+#[cfg(test)]
+pub(crate) use super::delegate_prompt::ssh_destination_legacy;
 use super::handoff::SshClient;
 use super::peer_resolver;
 use super::peers::PeersRegistry;
@@ -9,33 +16,8 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
-const DEFAULT_TIMEOUT_SECS: u64 = 30 * 60;
 const SSH_CONNECT_TIMEOUT_SECS: u64 = 15;
 const HEALTH_CHECK_RETRIES: u32 = 3;
-
-pub(crate) fn ssh_destination_legacy(peer: &super::peers::PeerConfig) -> String {
-    if !peer.ssh_alias.is_empty() {
-        peer.ssh_alias.clone()
-    } else {
-        format!("{}@{}", peer.user, peer.tailscale_ip)
-    }
-}
-
-pub(crate) fn delegate_timeout() -> Duration {
-    let secs = std::env::var("DELEGATE_TIMEOUT")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_TIMEOUT_SECS);
-    Duration::from_secs(secs)
-}
-
-pub(crate) fn worktree_branch(plan_id: i64, task_id: &str) -> String {
-    format!("delegate/plan-{plan_id}/{task_id}")
-}
-
-fn remote_worktree_dir(plan_id: i64, task_id: &str) -> String {
-    format!("$HOME/.claude/worktrees/delegate-plan-{plan_id}-{task_id}")
-}
 
 pub struct DelegateEngine {
     peers_conf_path: PathBuf,
@@ -225,26 +207,6 @@ impl DelegateEngine {
         .await
         .map_err(|e| DelegateError::AgentSpawn(format!("task join: {e}")))?
     }
-}
-
-/// Extract token count from progress markers (`[tokens: N]` or `tokens_used=N`).
-pub(crate) fn parse_tokens_from_output(output: &str) -> u64 {
-    for line in output.lines().rev() {
-        let t = line.trim();
-        if let Some(rest) = t.strip_prefix("[tokens:") {
-            if let Some(val) = rest.trim().strip_suffix(']') {
-                if let Ok(n) = val.trim().parse::<u64>() {
-                    return n;
-                }
-            }
-        }
-        if let Some(rest) = t.strip_prefix("tokens_used=") {
-            if let Ok(n) = rest.trim().parse::<u64>() {
-                return n;
-            }
-        }
-    }
-    0
 }
 
 #[cfg(test)]

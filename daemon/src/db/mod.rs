@@ -1,11 +1,13 @@
 mod cli;
 pub mod libsql_adapter;
+pub(crate) mod libsql_adapter_helpers;
 pub mod migrations;
 mod models;
 pub mod plan_hierarchy;
 mod queries;
 pub mod seed_agents;
 mod service;
+mod service_helpers;
 
 pub use models::{
     ActivePlan, ExecutionTaskNode, ExecutionTree, ExecutionWaveNode, InProgressTask, StatusView,

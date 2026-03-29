@@ -17,6 +17,7 @@ pub mod circuit_breaker;
 pub mod health;
 pub mod notify;
 pub mod reaper;
+pub mod reaper_scan;
 pub mod retry;
 pub mod watchdog;
 

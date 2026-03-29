@@ -3,6 +3,8 @@ mod lifecycle_validation;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_worktree;
 
 use super::state::ServerState;
 use axum::Router;

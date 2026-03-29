@@ -14,11 +14,16 @@ MAX_RETRIES=50
 RETRY=0
 
 plan_done() {
-	local ctx
-	ctx="$(curl -sf "${DAEMON_API}/api/plan-db/execution-context/${PLAN_ID}" 2>/dev/null || echo '{}')"
-	local status
-	status="$(echo "$ctx" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo 'unknown')"
-	[ "$status" = "completed" ] || [ "$status" = "cancelled" ]
+	# Check plan status directly via API — execution-context may be empty when plan is done.
+	# Plan states: todo|doing|done|cancelled (core-workflow.md)
+	local plan_json plan_status
+	plan_json="$(curl -sf "${DAEMON_API}/api/plan-db/json/${PLAN_ID}" 2>/dev/null || echo '{}')"
+	plan_status="$(echo "$plan_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo 'unknown')"
+	if [ "$plan_status" = "done" ] || [ "$plan_status" = "completed" ] || [ "$plan_status" = "cancelled" ]; then
+		echo "[RUNNER] Plan #${PLAN_ID} status: ${plan_status} — exiting cleanly."
+		return 0
+	fi
+	return 1
 }
 
 get_context() {
