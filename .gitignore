@@ -173,7 +173,6 @@ scripts/platform/cvg
 .claude/agent-memory/
 .claude/scripts
 .copilot-tracking/
-claude-config/agent-catalog/
 data/runs/
 data/*.bak-*
 
