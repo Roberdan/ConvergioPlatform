@@ -13,7 +13,12 @@ fn env_lock() -> &'static Mutex<()> {
 fn setup_db() -> Arc<Mutex<Connection>> {
     let conn = Connection::open_in_memory().expect("in-memory db");
     conn.execute_batch(
-        "CREATE TABLE mesh_sync_stats (
+        "CREATE TABLE peer_heartbeats (
+            peer_name TEXT PRIMARY KEY,
+            last_seen REAL NOT NULL,
+            load_json TEXT
+        );
+        CREATE TABLE mesh_sync_stats (
             peer_name TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
             last_sync TEXT,
@@ -63,24 +68,29 @@ fn test_interval_arg_overrides_env() {
 }
 
 #[test]
-fn test_query_active_peers_returns_non_unreachable() {
+fn test_query_active_peers_returns_recent_heartbeats() {
     use super::query_active_peers;
     let db = setup_db();
     {
         let conn = db.lock().expect("lock");
-        conn.execute_batch(
-            "INSERT INTO mesh_sync_stats (peer_name, status) VALUES
-             ('node-a', 'active'),
-             ('node-b', 'unreachable'),
-             ('node-c', 'degraded');",
-        )
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+        conn.execute_batch(&format!(
+            "INSERT INTO peer_heartbeats (peer_name, last_seen, load_json) VALUES
+             ('node-a', {now}, '{{\"tailscale_ip\":\"100.1.1.1\"}}'),
+             ('node-b', {old}, NULL),
+             ('node-c', {now}, '{{\"tailscale_ip\":\"100.2.2.2\"}}');",
+            now = now, old = now - 3600.0,
+        ))
         .expect("seed peers");
     }
     let peers = query_active_peers(&db).expect("query peers");
+    // node-a and node-c have tailscale_ip and recent heartbeat
     assert_eq!(peers.len(), 2);
-    assert!(peers.contains(&"node-a".to_string()));
-    assert!(peers.contains(&"node-c".to_string()));
-    assert!(!peers.contains(&"node-b".to_string()));
+    assert!(peers.iter().any(|u| u.contains("100.1.1.1")));
+    assert!(peers.iter().any(|u| u.contains("100.2.2.2")));
+    // node-b is too old (> 600s)
+    assert!(!peers.iter().any(|u| u.contains("node-b")));
 }
 
 #[test]
