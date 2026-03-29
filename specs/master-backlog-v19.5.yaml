@@ -1,0 +1,409 @@
+name: "Master Backlog — Post v19.5.0 Hardening"
+project: convergio
+description: >
+  Complete backlog from 29 Marzo 2026 audit session. 14 work items across
+  infrastructure, daemon, telemetry, DX, and cross-platform. Priority order.
+  Use copilot-plan-runner.sh for autonomous execution. Each wave is independent.
+
+# ============================================================
+# CONTEXT FOR FRESH CLAUDE SESSION
+# ============================================================
+#
+# You are picking up after a major audit + cleanup session (Plans 756-758).
+# What was done:
+#   - v19.3.0: 446→33 silent errors (.ok()/let_=) eliminated, 126K token waste removed
+#   - v19.4.0: 104→69 agents consolidated, 13→2 rule files, CLAUDE.md -32%
+#   - v19.5.0: Memory CRUD API endpoints, Ali multi-domain routing
+#
+# What STILL NEEDS FIXING (in priority order):
+#
+# ============================================================
+
+# =============================================
+# P0 — CRITICAL: DB SYNC BETWEEN NODES
+# =============================================
+# The mesh has 2 active nodes:
+#   - M5Max (100.89.245.79) — coordinator, main dev machine
+#   - M1 Pro (100.106.173.118) — kernel node, runs Jarvis/Qwen
+#
+# DB sync between them DOES NOT WORK. Symptoms:
+#   - Plans created on M1 Pro don't appear on M5Max and vice versa
+#   - Plan 748 was stuck "doing" because M1 Pro had stale DB
+#   - Delegation to M1 Pro fails because it has no plans/tasks
+#
+# Root causes identified:
+#   - background_sync_http.rs had double http:// in peer URLs (FIXED in 6242e908)
+#   - Peer resolver was using wrong Tailscale IP (FIXED in commit ee6cae3e)
+#   - SQLite ALTER TABLE with function defaults failed silently (FIXED in de639ed7)
+#   - sync-db.sh via rsync works but launchd cron may not be running on M1 Pro
+#   - The HTTP sync endpoint may not be processing changes correctly
+#
+# Files to investigate:
+#   - daemon/src/background_sync.rs — main sync loop
+#   - daemon/src/background_sync_http.rs — HTTP sync (fetch/send changes)
+#   - daemon/src/server/api_sync.rs — sync API endpoints
+#   - daemon/src/db/libsql_adapter.rs — timestamp-based sync adapter
+#   - scripts/kernel/sync-db.sh — rsync-based sync (fallback)
+#   - ~/.claude/config/peers.conf — peer registry
+#
+# HOW TO TEST:
+#   1. curl http://localhost:8420/api/health (M5Max)
+#   2. ssh roberdandev-m1Pro "curl http://localhost:8420/api/health" (M1 Pro)
+#   3. Create a test plan on M5Max, verify it appears on M1 Pro within 60s
+#   4. Create a test plan on M1 Pro, verify it appears on M5Max within 60s
+#   5. Verify: cvg plan list shows same plans on both nodes
+
+parallel_mode: standard
+
+waves:
+  # =============================================
+  # WAVE 1: DB SYNC FIX (HIGHEST PRIORITY)
+  # =============================================
+  - id: W1
+    name: "Fix DB Sync Between Mesh Nodes"
+    tasks:
+      - id: T1-01
+        do: >
+          CRITICAL: Fix database synchronization between M5Max and M1 Pro.
+
+          1. SSH to M1 Pro (ssh roberdandev-m1Pro) and verify:
+             - Daemon is running: curl http://localhost:8420/api/health
+             - DB exists: ls -la ~/.claude/data/dashboard.db
+             - DASHBOARD_DB env var set: echo $DASHBOARD_DB
+             - Tailscale connected: tailscale status | grep m5max
+
+          2. On M5Max, verify background sync is running:
+             - curl http://localhost:8420/api/sync/status (if endpoint exists)
+             - Check daemon logs for sync errors: grep -i sync /tmp/daemon*.log
+             - Verify peers.conf has correct IPs for both nodes
+
+          3. Debug the HTTP sync path:
+             - Read daemon/src/background_sync.rs — understand the sync loop
+             - Read daemon/src/background_sync_http.rs — understand fetch/send
+             - Read daemon/src/db/libsql_adapter.rs — understand timestamp sync
+             - Add tracing::info! at key points if missing
+             - Verify the sync actually runs (not just defined)
+
+          4. Fix whatever is broken:
+             - If sync loop isn't starting: wire it into daemon startup
+             - If peer resolution fails: fix resolve_best_addr()
+             - If HTTP fetch/send fails: fix the endpoint handlers
+             - If timestamp comparison is wrong: fix the adapter
+
+          5. Test end-to-end:
+             - Create plan on M5Max → verify on M1 Pro within 60s
+             - Create plan on M1 Pro → verify on M5Max within 60s
+             - Modify task status on one → verify propagated to other
+
+          6. If HTTP sync can't be fixed quickly, ensure rsync fallback works:
+             - Verify sync-db.sh runs correctly between nodes
+             - Verify launchd plist is installed on both nodes
+             - Test: bash scripts/kernel/sync-db.sh roberdandev-m1Pro
+
+          FAIL LOUD: If sync fails, the daemon MUST log the error clearly,
+          not silently continue with stale data.
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test sync 2>&1 | grep -v FAILED"
+          - "curl -s http://localhost:8420/api/health | grep -q ok"
+
+  # =============================================
+  # WAVE 2: DAEMON BUGS & RELIABILITY
+  # =============================================
+  - id: W2
+    name: "Daemon Reliability Fixes"
+    tasks:
+      - id: T2-01
+        do: >
+          Fix evidence gate cache bug. The evidence gate caches cargo_test results
+          and returns "cache hit: failed" even after the tree is clean and tests pass.
+          Requires daemon restart to clear — this is a bug.
+
+          1. Read daemon/src/kernel/verify_checks.rs and the evidence cache logic
+          2. Read daemon/src/server/api_plan_db_evidence.rs
+          3. The cache should invalidate when:
+             - git HEAD changes (new commit)
+             - git status changes (clean ↔ dirty)
+             - Daemon receives explicit cache clear
+          4. Add GET /api/evidence/clear endpoint to force cache reset
+          5. Add tests verifying cache invalidates on git commit
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test evidence 2>&1 | grep -v FAILED"
+
+      - id: T2-02
+        do: >
+          Fix Telegram bot. Jarvis kernel is running but Telegram doesn't work.
+
+          1. Check kernel Telegram module: daemon/src/kernel/telegram/
+          2. Verify CONVERGIO_TELEGRAM_TOKEN is set and valid
+          3. Test: curl -s "https://api.telegram.org/bot$CONVERGIO_TELEGRAM_TOKEN/getMe"
+          4. Check if long polling is actually running (not just defined)
+          5. Check daemon logs for Telegram errors
+          6. If token expired: document how to refresh (Keychain on M5Max, ~/.convergio/env on M1 Pro)
+          7. Test: send message to @ConvergioBot → verify response
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "test -n \"$CONVERGIO_TELEGRAM_TOKEN\""
+
+      - id: T2-03
+        do: >
+          Fix statusline hook that calls sqlite3 directly (violates NON-NEGOTIABLE rule)
+          and wastes ~30K tokens per 5-hour session.
+
+          1. Find the statusline configuration in .claude/settings.json or .claude/settings.local.json
+          2. Replace any sqlite3 calls with cvg CLI or daemon API calls
+          3. If statusline shows plan status: use curl http://localhost:8420/api/plan-db/list
+          4. If statusline shows agent count: use curl http://localhost:8420/api/agents
+          5. Verify: grep -r 'sqlite3' .claude/ should return 0 matches
+        type: fix
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "rg 'sqlite3' .claude/settings* 2>/dev/null | wc -l | xargs test 0 -eq"
+
+  # =============================================
+  # WAVE 3: NOTIFICATIONS & TELEMETRY
+  # =============================================
+  - id: W3
+    name: "Notifications & Telemetry"
+    tasks:
+      - id: T3-01
+        do: >
+          Enable and fix notification channels:
+
+          1. Read claude-config/config/notifications.conf — all channels are DISABLED
+          2. Enable Telegram channel (token is in env)
+          3. Enable ntfy.sh channel if configured
+          4. Verify /api/notify endpoint returns per-channel delivery status (fixed in Plan 756)
+          5. Test: curl -X POST http://localhost:8420/api/notify -d '{"title":"test","message":"ping"}'
+          6. Verify notification arrives on Telegram
+          7. Remove any remaining osascript references in notification pipeline
+        type: fix
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "rg 'osascript' daemon/src/ 2>/dev/null | wc -l | xargs test 0 -eq"
+
+      - id: T3-02
+        do: >
+          Add missing telemetry:
+
+          1. Notification delivery metrics: success/failure counter per channel
+          2. Sync metrics: last_sync_time, sync_errors, records_synced per peer
+          3. Persist metrics to DB (currently in-memory, lost on restart)
+          4. Add GET /api/metrics/notifications and /api/metrics/sync endpoints
+          5. Add tracing span IDs for distributed tracing across mesh nodes
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test metrics 2>&1 | grep -v FAILED"
+
+  # =============================================
+  # WAVE 4: DAEMON AS HUB
+  # =============================================
+  - id: W4
+    name: "Daemon as Central Hub"
+    tasks:
+      - id: T4-01
+        do: >
+          Add /api/delegate/spawn endpoint — daemon manages tmux worker sessions:
+
+          1. POST /api/delegate/spawn {task_id, model, worktree_path}
+             - Creates tmux window in "Convergio" session
+             - Runs copilot-worker.sh or claude with the task prompt
+             - Returns {session_id, window_name, pid}
+          2. GET /api/delegate/status — list active worker sessions
+             - Reads tmux list-windows, matches PIDs
+             - Returns [{task_id, pid, runtime_secs, status}]
+          3. DELETE /api/delegate/:session_id — kill a stuck worker
+          4. This replaces manual tmux commands in copilot-plan-runner.sh
+          5. Add tests (mock tmux commands in test env)
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test delegate 2>&1 | grep -v FAILED"
+          - "rg 'api_delegate' daemon/src/server/routes/ 2>/dev/null | wc -l | xargs test 0 -lt"
+
+      - id: T4-02
+        do: >
+          Add build/test endpoints to replace digest scripts:
+
+          1. POST /api/build — runs cargo build, streams output via SSE
+          2. POST /api/test — runs cargo test, streams output via SSE
+          3. GET /api/build/status — last build result + duration
+          4. GET /api/test/status — last test result + pass/fail counts
+          5. These replace build-digest.sh and test-digest.sh
+          6. Use tokio::process::Command for async execution
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test build_api 2>&1 | grep -v FAILED"
+
+  # =============================================
+  # WAVE 5: REMAINING CLEANUP
+  # =============================================
+  - id: W5
+    name: "Cleanup & Hardening"
+    tasks:
+      - id: T5-01
+        do: >
+          Annotate or fix the remaining 30 .ok() patterns in daemon/src/:
+          - For each .ok(): add comment "// intentional: <reason>" if legitimate
+          - Replace with proper error handling if NOT legitimate
+          - Target: every .ok() in non-test code has an inline justification
+          Run: rg '\.ok\(\)' daemon/src/ --glob '!*test*' to find them all.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+
+      - id: T5-02
+        do: >
+          Kill orphan copilot/claude processes and add auto-reaper:
+
+          1. Find and kill orphan processes: ps aux | grep -E 'copilot|claude' | grep -E 'yolo|skip-perm'
+          2. Add reaper logic to daemon monitor loop (daemon/src/kernel/monitor.rs):
+             - Every 5 minutes, check for copilot/claude processes older than 2 hours
+             - If process has no matching active task in DB → kill it
+             - Log the kill with tracing::warn!
+          3. Test with a mock process
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test reaper 2>&1 | grep -v FAILED"
+
+      - id: T5-03
+        do: >
+          Wire DS integration playbook into UI-touching agent prompts:
+
+          1. Read claude-config/reference/operational/ds-integration-playbook.md
+          2. Add @reference to this playbook in these agent files:
+             - sara-ux-ui-designer.md
+             - jony-creative-director.md
+             - nasra-app-builder.md (if exists)
+          3. Add a "UI Integration Rules" section to hard-enforcement.md:
+             - Imperative API pattern (useRef + useEffect + dynamic import + cleanup)
+             - Never AnimatePresence around DS container refs
+             - Always check .d.ts types, not mapping docs
+             - Cross-model audit required for UI work
+          4. Keep all files under 250 lines
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "grep -q 'ds-integration-playbook' claude-config/agents/design_ux/sara-ux-ui-designer.md"
+
+      - id: T5-04
+        do: >
+          Node self-provisioning: daemon verifies its own dependencies at startup.
+
+          1. Read daemon/src/server/api_node_readiness_checks.rs
+          2. Run ALL readiness checks at daemon startup (not just on API call)
+          3. If critical checks fail (DB, peers.conf): log ERROR and exit
+          4. If non-critical fail (models, Telegram token): log WARN and continue
+          5. Print a startup summary: "Node ready: kernel=yes, telegram=no, models=3/4"
+          6. This replaces manual "deploy-node.sh" verification
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test readiness 2>&1 | grep -v FAILED"
+
+  # =============================================
+  # WAVE 6: CLOSURE
+  # =============================================
+  - id: W6
+    name: "Closure"
+    tasks:
+      - id: TF-tests
+        do: >
+          Full verification:
+          1. cargo test --lib (all unit tests pass)
+          2. cargo test --test (all integration tests pass, except known pre-existing)
+          3. scripts/check-rust-wiring.sh (all modules wired)
+          4. curl /api/health on both nodes
+          5. curl /api/sync/status shows last successful sync
+          6. Send Telegram message, verify response
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo test --lib -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+          - "bash scripts/check-rust-wiring.sh"
+
+      - id: TF-doc
+        do: >
+          1. CHANGELOG.md — add entry for this version
+          2. TROUBLESHOOTING.md — add sections for sync, Telegram, evidence cache fixes
+          3. VERSION.md + Cargo.toml — bump to 20.0.0 (major: daemon-as-hub breaking change)
+          4. Update convergio-capabilities.md with new endpoints
+          5. ADR-0125: Daemon as central hub decision
+        type: documentation
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "head -3 CHANGELOG.md | grep -q '20.0.0'"
+          - "test -f docs/adr/ADR-0125-daemon-as-hub.md"
