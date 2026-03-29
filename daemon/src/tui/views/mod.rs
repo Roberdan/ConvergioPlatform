@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{MainView, PlanHierarchyContext, TuiData};
-use crate::tui::widgets::{self, ACCENT, MUTED, OK, TEXT_PRIMARY};
+use crate::tui::widgets::{self, ACCENT, MUTED};
 
 pub mod brain;
 pub mod chat;

@@ -1,7 +1,7 @@
 pub(super) use super::service_helpers::{invalid_input, map_active_plan, map_in_progress_task};
 
 use super::{
-    queries, ActivePlan, ExecutionTaskNode, ExecutionTree, ExecutionWaveNode, InProgressTask,
+    queries, ExecutionTaskNode, ExecutionTree, ExecutionWaveNode,
     PlanDb, StatusView, TaskStatus, UpdateTaskArgs, UpdateTaskResult, ValidateTaskArgs,
     ValidateTaskResult,
 };

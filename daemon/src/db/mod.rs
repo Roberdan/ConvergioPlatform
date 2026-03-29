@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 pub struct PlanDb {
     conn: Connection,
+    #[cfg_attr(not(feature = "crsqlite"), allow(dead_code))]
     db_path: Option<PathBuf>,
 }
 

@@ -21,6 +21,7 @@ harness = false
 
 [features]
 default = ["kernel"]
+crsqlite = []
 kernel = []
 __disabled_pending_api_migration = []
 

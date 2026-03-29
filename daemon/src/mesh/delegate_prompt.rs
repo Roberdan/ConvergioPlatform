@@ -5,6 +5,7 @@ use std::time::Duration;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 30 * 60;
 
+#[allow(dead_code)] // Referenced by delegate.rs re-export for test compatibility
 pub(crate) fn ssh_destination_legacy(peer: &super::peers::PeerConfig) -> String {
     if !peer.ssh_alias.is_empty() {
         peer.ssh_alias.clone()

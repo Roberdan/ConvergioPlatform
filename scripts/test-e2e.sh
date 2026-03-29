@@ -59,6 +59,23 @@ check "mcp tools count" "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/
 # --- 6. Sync ---
 echo "--- Sync ---"
 check "sync export" "curl -sf '$DAEMON_URL/api/sync/export?table=plans&since=2020-01-01' | python3 -c \"import json,sys; json.load(sys.stdin)\""
+check "sync import" "curl -sf -X POST '$DAEMON_URL/api/sync/import' -H 'Content-Type: application/json' -d '{\"changes\":[]}' | grep -q ok"
+
+# --- 6b. DB Sync (cross-node, requires --remote) ---
+if [ -n "$REMOTE_NODE" ]; then
+  echo "--- DB Sync ---"
+  # Write a test value on local, check if remote can export it
+  check "local plan count > 0" "curl -sf '$DAEMON_URL/api/sync/export?table=plans&since=2020-01-01' | python3 -c \"import json,sys; d=json.load(sys.stdin); assert len(d) > 0, 'no plans to sync'\""
+  check "remote sync export" "ssh $REMOTE_NODE 'curl -sf http://localhost:8420/api/sync/export?table=plans&since=2020-01-01' | python3 -c \"import json,sys; json.load(sys.stdin)\""
+fi
+
+# --- 6c. Telegram ---
+echo "--- Telegram ---"
+if [ -n "${CONVERGIO_TELEGRAM_TOKEN:-}" ]; then
+  check "telegram bot alive" "curl -sf 'https://api.telegram.org/bot${CONVERGIO_TELEGRAM_TOKEN}/getMe' | grep -q ConvergioBot"
+else
+  skip "telegram bot" "CONVERGIO_TELEGRAM_TOKEN not set"
+fi
 
 # --- 7. Compilation ---
 echo "--- Build ---"

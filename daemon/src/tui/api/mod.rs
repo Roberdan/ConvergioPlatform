@@ -20,7 +20,6 @@ pub use workspace::{fetch_workspaces, parse_workspaces_response};
 pub use plans::{fetch_plans, fetch_all_tasks, fetch_tasks};
 use reqwest::Client;
 use serde::Deserialize;
-use serde_json::Value;
 
 use crate::tui::{AgentOrgNode, KpiData, MeshNode};
 

@@ -68,7 +68,7 @@ use axum::http::{Request, StatusCode};
 use axum::middleware::{from_fn, from_fn_with_state, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, get_service};
-use axum::{Json, Router};
+use axum::Router;
 use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
