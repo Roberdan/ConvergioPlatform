@@ -97,12 +97,12 @@ impl TtsEngine {
             .unwrap_or(false)
     }
 
-    /// Returns `true` when Voxtral Mini is available via mlx-audio on Apple Silicon.
+    /// Returns `true` when Voxtral 4B TTS is available via mlx-audio on Apple Silicon.
     pub fn voxtral_available() -> bool {
-        // Probe: import mlx_audio TTS and check Voxtral model loads.
+        // Probe: import voxtral_tts model type (requires mlx-audio from git main, not PyPI 0.4.1).
         let python = crate::ipc::models::apple_fm::AppleFmBridge::resolve_python();
         std::process::Command::new(&python)
-            .args(["-c", "from mlx_audio.tts.generate import generate_audio; print('ok')"])
+            .args(["-c", "from mlx_audio.tts.models.voxtral_tts import voxtral_tts; print('ok')"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
