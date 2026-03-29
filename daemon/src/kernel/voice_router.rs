@@ -71,7 +71,7 @@ fn parse_llm_json(raw: &str, original_text: &str) -> Option<VoiceIntent> {
         "status_check" => Some(VoiceIntent::StatusCheck),
         "cost_query" => Some(VoiceIntent::CostQuery),
         "mute" => Some(VoiceIntent::Mute),
-        "unknown" | "ask_ali" => Some(VoiceIntent::AskAli { question: original_text.to_string() }),
+        "unknown" | "ask_ali" => Some(VoiceIntent::EscalateToAli { question: original_text.to_string() }),
         "plan_query" => Some(VoiceIntent::PlanQuery {
             plan_id: params
                 .and_then(|p| p.get("plan_id"))
@@ -120,8 +120,8 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
         let id = s.split_whitespace().filter_map(|t| t.parse::<u32>().ok()).next().unwrap_or(0);
         return VoiceIntent::PlanQuery { plan_id: id };
     }
-    // Anything the kernel can't handle → forward to Mistral with MCP tools
-    VoiceIntent::AskAli { question: text.to_string() }
+    // Anything the kernel can't handle → escalate to Ali (Claude Opus)
+    VoiceIntent::EscalateToAli { question: text.to_string() }
 }
 
 #[cfg(test)]

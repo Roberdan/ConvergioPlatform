@@ -3,7 +3,7 @@
     "convergio": {
       "command": "daemon/target/release/convergio-mcp-server",
       "env": {
-        "CONVERGIO_MCP_RING": "1",
+        "CONVERGIO_MCP_RING": "0",
         "CONVERGIO_DAEMON_URL": "http://localhost:8420"
       }
     }
