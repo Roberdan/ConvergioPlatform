@@ -23,8 +23,8 @@ Minimize per-session token cost while preserving agent behavior. Use `/optimize-
 
 ```bash
 wc -l ~/.claude/rules/*.md                              # Rules (ALL auto-load)
-grep -oE '@reference/operational/[a-z-]+\.md' ~/.claude/CLAUDE.md | while read r; do wc -l "$HOME/.claude/$r"; done  # @References (only @referenced)
-wc -l ~/.claude/CLAUDE.md {repo}/CLAUDE.md {repo}/.claude/CLAUDE.md  # CLAUDE.md
+grep -oE '@reference/operational/[a-z-]+\.md' {repo}/CLAUDE.md | while read r; do wc -l "{repo}/$r"; done  # @References (only @referenced)
+wc -l {repo}/CLAUDE.md  # CLAUDE.md (single source of truth at repo root)
 wc -l ~/.claude/projects/*/memory/MEMORY.md              # MEMORY
 find ~/.claude/agents -name "*.md" -not -path "*/archive/*" | wc -l   # Global agents
 find {repo}/.claude/agents -name "*.md" | wc -l          # Project agents

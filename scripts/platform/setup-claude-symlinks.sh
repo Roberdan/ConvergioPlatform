@@ -24,7 +24,8 @@ declare -A LINKS=(
   [agents]="../claude-config/agents"
   [rules]="../claude-config/rules"
   [reference]="../claude-config/reference"
-  [CLAUDE.md]="../claude-config/CLAUDE.md"
+  # CLAUDE.md: .claude/CLAUDE.md is a pointer file checked into git (not a symlink).
+  # Canonical content lives in root CLAUDE.md. No symlink needed.
 )
 
 for name in "${!LINKS[@]}"; do

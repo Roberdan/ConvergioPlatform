@@ -40,12 +40,12 @@ test_setup_runs() {
   fi
 }
 
-# --- Test 3: CLAUDE.md symlink ---
-test_claude_md_symlink() {
-  if [[ -L "$HOME/.claude/CLAUDE.md" ]]; then
-    tap_ok "CLAUDE.md symlink exists at ~/.claude/CLAUDE.md"
+# --- Test 3: CLAUDE.md at repo root ---
+test_claude_md_root() {
+  if [[ -f "$PLATFORM_DIR/CLAUDE.md" ]]; then
+    tap_ok "CLAUDE.md exists at repo root (single source of truth)"
   else
-    tap_fail "CLAUDE.md symlink missing at ~/.claude/CLAUDE.md"
+    tap_fail "CLAUDE.md missing at repo root"
   fi
 }
 
@@ -145,7 +145,7 @@ test_idempotency() {
 # --- Run all tests ---
 test_setup_executable
 test_setup_runs
-test_claude_md_symlink
+test_claude_md_root
 test_rules_symlink
 test_commands_symlink
 test_agents_symlink

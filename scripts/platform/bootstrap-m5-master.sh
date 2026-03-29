@@ -50,9 +50,8 @@ mkdir -p "$CLAUDE_DIR/data" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/agents" "$CLAUDE_DI
 ln -sf "$PLATFORM_DIR/data/dashboard.db" "$CLAUDE_DIR/data/dashboard.db"
 echo "  Symlink: .claude/data/dashboard.db -> ConvergioPlatform/data/"
 
-# Copy rules, agents, CLAUDE.md from M3
+# Copy rules, agents from M3 (CLAUDE.md lives at repo root, not .claude/)
 echo "  Copying rules and agents from M3..."
-scp "$M3_TS:.claude/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 scp -r "$M3_TS:.claude/rules/" "$CLAUDE_DIR/rules/" 2>/dev/null || true
 scp -r "$M3_TS:.claude/agents/" "$CLAUDE_DIR/agents/" 2>/dev/null || true
 scp -r "$M3_TS:.claude/reference/" "$CLAUDE_DIR/reference/" 2>/dev/null || true

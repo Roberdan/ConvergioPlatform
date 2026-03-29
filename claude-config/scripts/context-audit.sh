@@ -134,9 +134,8 @@ for proj_dir in "$GITHUB_DIR"/*/; do
 	[ -d "$proj_dir" ] || continue
 	PROJ=$(basename "$proj_dir")
 	CLAUDE_FILE=""
-	# Check both root and .claude/ locations
+	# Root CLAUDE.md is canonical; .claude/CLAUDE.md is a pointer only
 	[ -f "$proj_dir/CLAUDE.md" ] && CLAUDE_FILE="$proj_dir/CLAUDE.md"
-	[ -f "$proj_dir/.claude/CLAUDE.md" ] && CLAUDE_FILE="$proj_dir/.claude/CLAUDE.md"
 	if [ -z "$CLAUDE_FILE" ]; then
 		warn "$PROJ: no CLAUDE.md found"
 		continue

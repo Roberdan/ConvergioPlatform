@@ -8,7 +8,7 @@ Quick-start for AI agents integrating with ConvergioPlatform IPC.
 |------|-------|-----|
 | Daemon running | `curl -s localhost:8420/api/ipc/status` | `./daemon/start.sh` |
 | DASHBOARD_DB set | `echo $DASHBOARD_DB` | `export DASHBOARD_DB=/path/to/data/dashboard.db` |
-| setup.sh completed | `test -L ~/.claude/CLAUDE.md` | `./setup.sh` |
+| setup.sh completed | `test -f CLAUDE.md` | `./setup.sh` |
 | Scripts on PATH | `which agent-bridge.sh` | `export PATH="$HOME/.claude/scripts:$PATH"` |
 
 ## 2. Agent Registration

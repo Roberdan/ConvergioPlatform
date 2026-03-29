@@ -112,7 +112,7 @@ Per `~/.claude/rules/testing-standards.md`:
 
 ### 9a. Constitution
 
-- Read `CLAUDE.md` (worktree root + `~/.claude/CLAUDE.md`) + `~/.claude/rules/*.md`
+- Read `CLAUDE.md` (repo root — single source of truth) + `~/.claude/rules/*.md`
 - Verify new/changed code follows ALL conventions
 - Max 250 lines/file: `for f in {changed_files}; do wc -l "$f"; done` (use Read tool to inspect results)
 - Check prohibited patterns: `grep -rn 'deferred-item\|fix-marker\|@ts-ignore' {changed_files}`

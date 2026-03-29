@@ -157,7 +157,7 @@ claude-config/scripts/copilot
 .claude/agents
 .claude/rules
 .claude/reference
-.claude/CLAUDE.md
+# .claude/CLAUDE.md is now a tracked pointer file (see root CLAUDE.md)
 
 # Circular symlinks (bug guard — toggle creates these accidentally)
 claude-config/agents/agents
