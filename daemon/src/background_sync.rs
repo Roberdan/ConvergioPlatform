@@ -160,7 +160,7 @@ pub fn sync_table_with_peer(
     };
 
     // Update sync checkpoint
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let meta = SyncMeta {
         peer: peer_addr.to_string(),
         table_name: table.to_string(),

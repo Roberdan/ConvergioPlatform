@@ -88,11 +88,14 @@ pub fn export_changes_since(
 
     let col_list = columns.join(", ");
     let query = if let Some(since_ts) = since {
+        // Normalize: SQLite datetime('now') uses space separator, RFC3339 uses T.
+        // Replace T with space so string comparison works consistently.
+        let normalized = since_ts.replace('T', " ");
         let sql = format!(
-            "SELECT id, {col_list} FROM \"{table_name}\" WHERE updated_at > ?1 ORDER BY id"
+            "SELECT id, {col_list} FROM \"{table_name}\" WHERE REPLACE(updated_at,'T',' ') > ?1 ORDER BY id"
         );
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![since_ts], |row| {
+        let rows = stmt.query_map(params![normalized], |row| {
             row_to_change(row, table_name, &columns)
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
