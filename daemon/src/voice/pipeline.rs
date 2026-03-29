@@ -20,7 +20,11 @@ pub struct VoicePipeline {
 impl VoicePipeline {
     pub fn new(config: VoiceConfig) -> Self {
         let vad = VoiceActivityDetector::new(config.vad_threshold);
-        let wake = WakeWordDetector::new(&config.wake_word);
+        let wake = WakeWordDetector::new(
+            &config.wake_word,
+            config.vad_threshold,
+            &config.whisper_model,
+        );
         let whisper = WhisperEngine::new(&config.whisper_model, config.prefer_local);
         let tts = TtsEngine::new();
         Self {
@@ -77,7 +81,7 @@ impl VoicePipeline {
 
         // Step 3: Wake word check (if not yet activated).
         if !self.wake_detected {
-            if self.wake_detector.check(&transcription.text)? {
+            if self.wake_detector.check_text(&transcription.text)? {
                 self.wake_detected = true;
             }
             self.state = VoiceState::Listening;

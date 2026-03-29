@@ -1,41 +1,63 @@
-use super::types::VoiceError;
+use super::types::{AudioFrame, VoiceError};
+use super::vad::VoiceActivityDetector;
+use super::whisper::WhisperEngine;
 
-/// Lightweight keyword spotter for wake word detection.
-/// Compares transcribed text against the configured wake word.
+/// Wake word detector using VAD + Whisper micro-transcription.
+///
+/// Instead of matching against pre-transcribed text, this detector owns a
+/// VAD and WhisperEngine internally. Raw audio frames are fed in; when VAD
+/// emits a speech segment the detector runs a fast Whisper micro-transcription
+/// and checks the result for the wake word. This keeps wake word detection
+/// lightweight — only short bursts are transcribed, not full utterances.
 pub struct WakeWordDetector {
     wake_word: String,
-    /// Number of consecutive detections required to trigger.
-    trigger_count: u32,
-    current_count: u32,
+    vad: VoiceActivityDetector,
+    whisper: WhisperEngine,
+    detected: bool,
 }
 
 impl WakeWordDetector {
-    pub fn new(wake_word: &str) -> Self {
+    pub fn new(wake_word: &str, vad_threshold: f32, whisper_model: &str) -> Self {
         Self {
             wake_word: wake_word.to_lowercase(),
-            trigger_count: 1,
-            current_count: 0,
+            vad: VoiceActivityDetector::new(vad_threshold),
+            whisper: WhisperEngine::new(whisper_model, true),
+            detected: false,
         }
     }
 
-    /// Check if the transcribed text contains the wake word.
-    pub fn check(&mut self, text: &str) -> Result<bool, VoiceError> {
+    /// Process a raw audio frame through VAD → Whisper micro-transcription.
+    /// Returns `true` when the wake word is detected in a speech segment.
+    pub fn process_frame(&mut self, frame: &AudioFrame) -> Result<bool, VoiceError> {
+        let segment = self.vad.process(frame)?;
+        let Some(segment) = segment else {
+            return Ok(false);
+        };
+
+        // Micro-transcribe the short speech burst.
+        let transcription = self.whisper.transcribe(&segment)?;
+        let found = self.check_text(&transcription.text)?;
+        if found {
+            self.detected = true;
+        }
+        Ok(found)
+    }
+
+    /// Check transcribed text for the wake word (case-insensitive substring).
+    /// Exposed for pipeline use when transcription is already available.
+    pub fn check_text(&mut self, text: &str) -> Result<bool, VoiceError> {
         let normalised = text.to_lowercase();
-        if normalised.contains(&self.wake_word) {
-            self.current_count += 1;
-            if self.current_count >= self.trigger_count {
-                self.current_count = 0;
-                return Ok(true);
-            }
-        } else {
-            self.current_count = 0;
-        }
-        Ok(false)
+        Ok(normalised.contains(&self.wake_word))
     }
 
-    /// Reset detection state.
+    /// Reset detection state and internal VAD.
     pub fn reset(&mut self) {
-        self.current_count = 0;
+        self.detected = false;
+        self.vad.reset();
+    }
+
+    pub fn is_detected(&self) -> bool {
+        self.detected
     }
 
     pub fn wake_word(&self) -> &str {
