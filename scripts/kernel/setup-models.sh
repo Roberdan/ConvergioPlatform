@@ -13,13 +13,13 @@ REQUIRED_GB=35
 CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}"
 
 # Required models (name → HF repo)
-# Voxtral-Mini bf16 is primary TTS backend (see daemon/src/kernel/tts.rs)
+# Voxtral 4B TTS is primary TTS backend (see daemon/src/kernel/tts.rs)
 declare -A REQUIRED_MODELS=(
   ["Mistral-7B-Instruct-4bit"]="mlx-community/Mistral-7B-Instruct-v0.3-4bit"
   ["Qwen2.5-7B-Instruct-4bit"]="mlx-community/Qwen2.5-7B-Instruct-4bit"
   ["Codestral-22B-4bit"]="mlx-community/Codestral-22B-v0.1-4bit"
   ["Whisper-small"]="mlx-community/whisper-small"
-  ["Voxtral-Mini-bf16"]="mlx-community/Voxtral-Mini-3B-2507-bf16"
+  ["Voxtral-4B-TTS-4bit"]="mlx-community/Voxtral-4B-TTS-2603-mlx-4bit"
 )
 
 # Optional models — absence is a warning, not an error
@@ -54,9 +54,9 @@ check_prereqs() {
 
   # mlx-audio (required for Voxtral and Qwen3 TTS backends)
   if ! python3 -c "import mlx_audio" &>/dev/null 2>&1; then
-    log "mlx-audio not found — installing via pip..."
-    pip3 install --quiet mlx-audio || \
-      python3 -m pip install --quiet mlx-audio || \
+    log "mlx-audio not found — installing from git main (PyPI lacks voxtral_tts)..."
+    pip3 install --quiet git+https://github.com/Blaizzy/mlx-audio.git || \
+      python3 -m pip install --quiet git+https://github.com/Blaizzy/mlx-audio.git || \
       warn "Failed to install mlx-audio. Neural TTS backends will be unavailable."
   fi
 
