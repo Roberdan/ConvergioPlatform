@@ -1,5 +1,21 @@
 # Changelog
 
+## [19.3.0] - 29 Marzo 2026
+
+### Changed
+- Fail-loud policy: eliminated 413 of 446 silent `.ok()` and `let _ =` error-swallowing patterns across daemon (Plan 756 W1)
+- Notification system returns actual per-channel delivery status, not hardcoded success (Plan 756 W2)
+- Consolidated 3 CLAUDE.md copies to single source of truth at repo root (Plan 756 W3)
+
+### Added
+- Automated Rust module wiring check (`scripts/check-rust-wiring.sh`) with PostToolUse hook (Plan 756 W3)
+- ADR-0124: Fail-loud policy documenting the architectural decision
+
+### Removed
+- `claude-config/agent-catalog/` — 85 duplicate agent files (126K tokens recovered) (Plan 756 W2)
+- 9 reference-only files moved from `agents/` to `docs/reference/agent-protocols/` (Plan 756 W2)
+- osascript fallback from notification handlers (Plan 756 W2)
+
 ## [19.2.0] - 29 Marzo 2026
 
 ### Added

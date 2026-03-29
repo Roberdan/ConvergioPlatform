@@ -1,5 +1,18 @@
 # Troubleshooting
 
+## Silent Error Patterns (fail-loud policy, ADR-0124)
+
+**Problem: errors silently swallowed, tasks appear "done" but aren't**
+- Symptom: task marked done but feature doesn't work; no errors in logs
+- Cause: `.ok()` or `let _ =` patterns dropping errors without logging
+- Fix: Plan 756 eliminated 413 of 446 patterns. Remaining 33 are annotated with `// intentional: <reason>`
+- Prevention: `cargo clippy -- -W clippy::let_underscore_drop`; wiring check hook catches new `.rs` files without `mod` declaration
+
+**Problem: notification endpoint returns success but message not delivered**
+- Symptom: `POST /api/notify` returns `{"ok": true}` but no notification arrives
+- Cause: (FIXED in Plan 756) handler returned hardcoded success regardless of delivery result
+- Fix: endpoint now returns per-channel status: `{"ok": true, "channels": {"telegram": "sent", "ntfy": "error: timeout"}}`
+
 ## Daemon / cvg CLI
 
 **cvg not found**
