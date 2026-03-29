@@ -139,11 +139,14 @@ async fn relay_llm_to_sse(
             }
             StreamChunk::Error(msg) => {
                 warn!("LLM stream error for session {session_id}: {msg}");
-                let _ = tx
+                if let Err(e) = tx
                     .send(Ok(Event::default()
                         .event("chat")
                         .data(json!({"type": "error", "message": msg}).to_string())))
-                    .await;
+                    .await
+                {
+                    warn!("chat error event send failed: {e}");
+                }
                 break;
             }
         };
@@ -162,11 +165,14 @@ async fn relay_llm_to_sse(
     }
 
     // Send final done event
-    let _ = tx
+    if let Err(e) = tx
         .send(Ok(Event::default()
             .event("chat")
             .data(json!({"type": "done"}).to_string())))
-        .await;
+        .await
+    {
+        tracing::debug!("chat done event send (client disconnected): {e}");
+    }
 }
 
 /// Save the assistant reply into chat_messages and update session timestamp.

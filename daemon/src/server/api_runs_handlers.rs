@@ -78,11 +78,13 @@ pub async fn update_run(
 
     // Broadcast status change so dashboard updates in real time
     if let Some(status) = new_status {
-        let _ = state.ws_tx.send(json!({
+        if let Err(e) = state.ws_tx.send(json!({
             "type": "run_update",
             "run_id": id,
             "status": status,
-        }));
+        })) {
+            tracing::debug!("ws run_update broadcast: {e}");
+        }
     }
 
     // Re-fetch from state to include plan_name and delegation_cost
@@ -108,11 +110,13 @@ pub async fn pause_run(
     }
 
     // Broadcast pause so dashboard updates in real time
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "run_update",
         "run_id": id,
         "status": "paused",
-    }));
+    })) {
+        tracing::debug!("ws run_update broadcast: {e}");
+    }
 
     get_run(State(state), Path(id)).await
 }
@@ -136,11 +140,13 @@ pub async fn resume_run(
     }
 
     // Broadcast resume so dashboard updates in real time
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "run_update",
         "run_id": id,
         "status": "running",
-    }));
+    })) {
+        tracing::debug!("ws run_update broadcast: {e}");
+    }
 
     get_run(State(state), Path(id)).await
 }

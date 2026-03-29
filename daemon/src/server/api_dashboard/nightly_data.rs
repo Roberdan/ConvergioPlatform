@@ -13,7 +13,10 @@ pub async fn api_optimize_signals() -> Json<Value> {
     }
     let entries: Vec<Value> = content
         .lines()
-        .filter_map(|l| serde_json::from_str(l).ok())
+        .filter_map(|l| match serde_json::from_str(l) {
+            Ok(v) => Some(v),
+            Err(_) => None,
+        })
         .collect();
     let count = entries.len();
     let mut type_counts: HashMap<String, (i64, Vec<Value>)> = HashMap::new();
@@ -63,9 +66,13 @@ pub async fn api_optimize_clear() -> Json<Value> {
             .append(true)
             .open(&archive)
         {
-            let _ = f.write_all(content.as_bytes());
+            if let Err(e) = f.write_all(content.as_bytes()) {
+                tracing::warn!("session learnings archive write failed: {e}");
+            }
         }
-        let _ = std::fs::write(&src, "");
+        if let Err(e) = std::fs::write(&src, "") {
+            tracing::warn!("session learnings truncate failed: {e}");
+        }
     }
     Json(json!({"ok": true, "archived": !content.is_empty()}))
 }

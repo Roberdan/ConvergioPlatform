@@ -165,11 +165,13 @@ async fn create_deliverable(
     .map_err(|e| ApiError::internal(format!("create deliverable failed: {e}")))?;
 
     let id = conn.last_insert_rowid();
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "deliverable_update",
         "deliverable_id": id,
         "status": "pending",
-    }));
+    })) {
+        tracing::debug!("ws deliverable_update broadcast: {e}");
+    }
 
     Ok(Json(json!({"id": id, "output_path": output_path})))
 }

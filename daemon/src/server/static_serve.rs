@@ -18,7 +18,9 @@ pub(super) async fn run_router(bind_addr: &str, router: Router) -> Result<(), Ap
 
 pub(super) async fn shutdown_signal() {
     let ctrl_c = async {
-        let _ = tokio::signal::ctrl_c().await;
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::warn!("ctrl_c signal handler failed: {e}");
+        }
     };
 
     #[cfg(unix)]

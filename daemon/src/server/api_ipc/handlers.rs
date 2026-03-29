@@ -195,12 +195,14 @@ pub async fn api_ipc_send(
         ).map_err(|e| ApiError::internal(format!("message insert failed: {e}")))?;
     }
 
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "ipc_message",
         "channel": channel,
         "sender": body.sender_name,
         "content": body.content,
-    }));
+    })) {
+        tracing::debug!("ws ipc_message broadcast (no subscribers): {e}");
+    }
 
     Ok(Json(json!({ "ok": true })))
 }

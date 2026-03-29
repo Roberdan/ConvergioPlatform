@@ -103,24 +103,26 @@ pub fn fetch_repo_stats(nwo: &str) -> Value {
     serde_json::from_slice(&out.stdout).unwrap_or(json!({}))
 }
 
+/// Run a gh CLI command and parse JSON output. Logs failures instead of silencing.
+fn gh_json_output(args: &[&str]) -> Option<Value> {
+    match std::process::Command::new("gh").args(args).output() {
+        Ok(o) if o.status.success() => match serde_json::from_slice(&o.stdout) {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::debug!("gh json parse failed: {e}"); None }
+        },
+        Ok(o) => { tracing::debug!("gh command failed: exit {}", o.status); None }
+        Err(e) => { tracing::debug!("gh command spawn failed: {e}"); None }
+    }
+}
+
 /// Fetch live commit/PR stats via `gh api`
 pub fn fetch_live_stats(nwo: &str) -> Value {
     // Open PRs
-    let open_prs = std::process::Command::new("gh")
-        .args([
-            "pr", "list", "--repo", nwo, "--state", "open", "--json", "number", "--limit", "100",
-        ])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                serde_json::from_slice::<Value>(&o.stdout).ok()
-            } else {
-                None
-            }
-        })
-        .and_then(|v| v.as_array().map(|a| a.len() as i64))
-        .unwrap_or(0);
+    let open_prs = gh_json_output(&[
+        "pr", "list", "--repo", nwo, "--state", "open", "--json", "number", "--limit", "100",
+    ])
+    .and_then(|v| v.as_array().map(|a| a.len() as i64))
+    .unwrap_or(0);
 
     // Today's date as ISO string
     let now = std::time::SystemTime::now()
@@ -128,73 +130,46 @@ pub fn fetch_live_stats(nwo: &str) -> Value {
         .unwrap_or_default();
     let secs = now.as_secs();
     let days_since_epoch = secs / 86400;
-    // Simple date calc (good enough for UTC today)
     let today_epoch_start = days_since_epoch * 86400;
     let today = format_epoch_date(today_epoch_start);
     let week_ago = format_epoch_date(today_epoch_start - 7 * 86400);
 
     // Commits today on default branch
-    let commits_today = std::process::Command::new("gh")
-        .args([
-            "api",
-            &format!("repos/{nwo}/commits?since={today}T00:00:00Z&per_page=100"),
-            "--jq",
-            "length",
-        ])
+    let commits_api = format!("repos/{nwo}/commits?since={today}T00:00:00Z&per_page=100");
+    let commits_today = match std::process::Command::new("gh")
+        .args(["api", &commits_api, "--jq", "length"])
         .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                String::from_utf8(o.stdout).ok()
-            } else {
-                None
-            }
-        })
-        .and_then(|s| s.trim().parse::<i64>().ok())
-        .unwrap_or(0);
+    {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .trim()
+            .parse::<i64>()
+            .unwrap_or(0),
+        Ok(o) => { tracing::debug!("gh commits query failed: exit {}", o.status); 0 }
+        Err(e) => { tracing::debug!("gh commits query failed: {e}"); 0 }
+    };
 
     // Merged PRs in last 7 days for velocity
-    let merged_week = std::process::Command::new("gh")
-        .args([
-            "pr", "list", "--repo", nwo, "--state", "merged", "--json", "mergedAt", "--limit",
-            "100",
-        ])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                serde_json::from_slice::<Value>(&o.stdout).ok()
-            } else {
-                None
-            }
+    let merged_week = gh_json_output(&[
+        "pr", "list", "--repo", nwo, "--state", "merged", "--json", "mergedAt", "--limit", "100",
+    ])
+    .and_then(|v| {
+        v.as_array().map(|a| {
+            a.iter()
+                .filter(|pr| {
+                    pr.get("mergedAt")
+                        .and_then(|d| d.as_str())
+                        .map(|d| d >= format!("{week_ago}T00:00:00Z").as_str())
+                        .unwrap_or(false)
+                })
+                .count() as f64
         })
-        .and_then(|v| {
-            v.as_array().map(|a| {
-                a.iter()
-                    .filter(|pr| {
-                        pr.get("mergedAt")
-                            .and_then(|d| d.as_str())
-                            .map(|d| d >= format!("{week_ago}T00:00:00Z").as_str())
-                            .unwrap_or(false)
-                    })
-                    .count() as f64
-            })
-        })
-        .unwrap_or(0.0);
+    })
+    .unwrap_or(0.0);
     let velocity = merged_week / 7.0;
 
-    // Lines changed this week (from GitHub code_frequency stats — weekly granularity)
-    let lines_changed: i64 = std::process::Command::new("gh")
-        .args(["api", &format!("repos/{nwo}/stats/code_frequency")])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                serde_json::from_slice::<Value>(&o.stdout).ok()
-            } else {
-                None
-            }
-        })
+    // Lines changed this week (from GitHub code_frequency stats)
+    let code_freq_api = format!("repos/{nwo}/stats/code_frequency");
+    let lines_changed: i64 = gh_json_output(&["api", &code_freq_api])
         .and_then(|v| v.as_array().and_then(|a| a.last().cloned()))
         .map(|week| {
             let add = week.get(1).and_then(|v| v.as_i64()).unwrap_or(0);

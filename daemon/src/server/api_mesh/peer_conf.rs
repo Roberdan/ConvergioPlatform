@@ -39,13 +39,10 @@ pub(crate) fn detect_local_identity() -> (String, String) {
     let hostname = {
         #[cfg(unix)]
         {
-            std::process::Command::new("hostname")
-                .arg("-s")
-                .output()
-                .ok()
-                .and_then(|o| String::from_utf8(o.stdout).ok())
-                .map(|s| s.trim().to_lowercase())
-                .unwrap_or_default()
+            match std::process::Command::new("hostname").arg("-s").output() {
+                Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_lowercase(),
+                Err(_) => String::new(),
+            }
         }
         #[cfg(windows)]
         {
@@ -69,14 +66,13 @@ pub(crate) fn detect_local_identity() -> (String, String) {
     let ts_ip = ts_candidates
         .iter()
         .find_map(|cmd| {
-            std::process::Command::new(cmd)
-                .args(["ip", "-4"])
-                .output()
-                .ok()
-                .filter(|o| o.status.success())
-                .and_then(|o| String::from_utf8(o.stdout).ok())
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty())
+            match std::process::Command::new(cmd).args(["ip", "-4"]).output() {
+                Ok(o) if o.status.success() => {
+                    let s = String::from_utf8_lossy(&o.stdout).trim().to_owned();
+                    if s.is_empty() { None } else { Some(s) }
+                }
+                _ => None,
+            }
         })
         .unwrap_or_default();
     (hostname, ts_ip)

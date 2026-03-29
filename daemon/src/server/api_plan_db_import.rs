@@ -45,7 +45,7 @@ async fn handle_import(
         "DELETE FROM waves WHERE plan_id = ?1 AND tasks_total = 0",
         rusqlite::params![plan_id],
     )
-    .ok(); // best-effort cleanup
+    .unwrap_or_else(|e| { tracing::warn!("orphan wave cleanup for plan {plan_id}: {e}"); 0 });
 
     // Use transaction so partial failures don't leave orphan waves
     conn.execute_batch("SAVEPOINT import_spec")
@@ -54,7 +54,9 @@ async fn handle_import(
     let result = do_import(conn, plan_id, &project_id, &mut waves);
     match result {
         Ok(r) => {
-            conn.execute_batch("RELEASE import_spec").ok();
+            if let Err(e) = conn.execute_batch("RELEASE import_spec") {
+                tracing::warn!("import savepoint release failed: {e}");
+            }
             Ok(Json(json!({
                 "ok": true,
                 "plan_id": plan_id,
@@ -65,8 +67,12 @@ async fn handle_import(
         Err(e) => {
             // ROLLBACK TO restores state but keeps the savepoint active;
             // RELEASE is required to remove it from the savepoint stack.
-            conn.execute_batch("ROLLBACK TO import_spec").ok();
-            conn.execute_batch("RELEASE import_spec").ok();
+            if let Err(re) = conn.execute_batch("ROLLBACK TO import_spec") {
+                tracing::error!("import rollback failed: {re}");
+            }
+            if let Err(re) = conn.execute_batch("RELEASE import_spec") {
+                tracing::warn!("import savepoint release after rollback: {re}");
+            }
             Err(e)
         }
     }

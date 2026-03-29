@@ -72,12 +72,14 @@ async fn handle_emit_event(
         .map_err(|e| ApiError::internal(format!("rowid failed: {e}")))?;
 
     // Broadcast event via WebSocket
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "coordinator_event",
         "id": event_id,
         "event_type": event_type,
         "payload": payload,
-    }));
+    })) {
+        tracing::debug!("ws coordinator_event broadcast: {e}");
+    }
 
     Ok(Json(json!({
         "ok": true,

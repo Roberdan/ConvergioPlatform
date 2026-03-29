@@ -9,9 +9,10 @@ pub(super) fn home() -> String {
 }
 
 pub(super) fn gethostname() -> String {
-    std::process::Command::new("hostname").arg("-s").output().ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string()).unwrap_or_default()
+    match std::process::Command::new("hostname").arg("-s").output() {
+        Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        Err(e) => { tracing::warn!("hostname command failed: {e}"); String::new() }
+    }
 }
 
 /// Parse peers.conf → (role, capabilities) for this node.
@@ -76,9 +77,13 @@ pub(super) fn check_python_venv() -> Check {
 
 pub(super) fn check_db_path(db: &std::path::Path) -> Check {
     if !db.exists() { return Check::fail("db_exists", format!("not found: {}", db.display())); }
-    let result = rusqlite::Connection::open(db).ok()
-        .and_then(|c| c.query_row("PRAGMA integrity_check", [], |r| r.get::<_,String>(0)).ok())
-        .unwrap_or_else(|| "error".into());
+    let result = match rusqlite::Connection::open(db) {
+        Ok(c) => match c.query_row("PRAGMA integrity_check", [], |r| r.get::<_,String>(0)) {
+            Ok(v) => v,
+            Err(e) => { tracing::warn!("db integrity check failed: {e}"); "error".into() }
+        },
+        Err(e) => { tracing::warn!("db open for integrity check failed: {e}"); "error".into() }
+    };
     if result == "ok" { Check::pass("db_exists", format!("integrity_check=ok ({})", db.display())) }
     else { Check::fail("db_exists", format!("PRAGMA integrity_check failed: {result}")) }
 }
@@ -121,15 +126,16 @@ pub(super) fn check_disk_space(path: &str) -> Check {
 
 pub(super) fn check_models_downloaded() -> Check {
     let hub = format!("{}/.cache/huggingface/hub", home());
-    let found = std::fs::read_dir(&hub).ok().map(|entries| {
-        entries.flatten()
+    let found = match std::fs::read_dir(&hub) {
+        Ok(entries) => entries.flatten()
             .filter(|f| {
                 let name = f.file_name().to_string_lossy().to_lowercase();
                 name.contains("mistral") || name.contains("whisper") || name.contains("voxtral") || name.contains("qwen")
             })
             .map(|f| f.file_name().to_string_lossy().to_string())
-            .collect::<Vec<_>>()
-    }).unwrap_or_default();
+            .collect::<Vec<_>>(),
+        Err(e) => { tracing::debug!("models dir read failed {hub}: {e}"); Vec::new() }
+    };
     if found.is_empty() {
         Check::fail("models_downloaded", format!("no MLX models in {hub}"))
     } else {
@@ -171,9 +177,11 @@ pub(super) fn check_role_capabilities() -> Check {
         }
     }
     let cache = format!("{}/.cache/huggingface", home());
-    if std::fs::read_dir(&cache).ok()
-        .and_then(|e| e.flatten().find(|f| f.file_name().to_string_lossy().to_lowercase().contains("mistral")))
-        .is_none() { missing.push("mistral model"); }
+    let has_mistral = match std::fs::read_dir(&cache) {
+        Ok(e) => e.flatten().any(|f| f.file_name().to_string_lossy().to_lowercase().contains("mistral")),
+        Err(_) => false,
+    };
+    if !has_mistral { missing.push("mistral model"); }
     if !std::env::var("CONVERGIO_TELEGRAM_TOKEN").map(|v| !v.is_empty()).unwrap_or(false) {
         missing.push("CONVERGIO_TELEGRAM_TOKEN");
     }

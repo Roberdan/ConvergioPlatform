@@ -5,7 +5,10 @@ use std::collections::HashMap;
 /// Resolve peer name to tailscale_ip from peers.conf
 pub fn resolve_peer_ip(home: &str, peer: &str) -> Option<String> {
     let path = format!("{home}/.claude/config/peers.conf");
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
     let mut in_section = false;
     for line in content.lines() {
         let trimmed = line.split('#').next().unwrap_or("").trim();
@@ -79,7 +82,7 @@ mod tests {
             .await
             .expect("preflight");
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-        fs::remove_file(db).ok();
+        let _ = fs::remove_file(db);
     }
 
     #[tokio::test]
@@ -111,6 +114,6 @@ mod tests {
             .query_row("SELECT status FROM plans WHERE id=2", [], |row| row.get(0))
             .expect("status");
         assert_eq!(status, "doing");
-        fs::remove_file(db).ok();
+        let _ = fs::remove_file(db);
     }
 }

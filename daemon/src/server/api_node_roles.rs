@@ -35,7 +35,7 @@ async fn list_roles(State(state): State<ServerState>) -> Json<serde_json::Value>
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e.to_string()})),
     };
     // Ensure table exists
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "CREATE TABLE IF NOT EXISTS node_roles (
             node TEXT PRIMARY KEY,
             role TEXT NOT NULL DEFAULT 'executor',
@@ -43,7 +43,10 @@ async fn list_roles(State(state): State<ServerState>) -> Json<serde_json::Value>
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
         [],
-    );
+    ) {
+        tracing::error!("node_roles table create failed: {e}");
+        return Json(serde_json::json!({"ok": false, "error": e.to_string()}));
+    }
     let mut stmt = conn
         .prepare("SELECT node, role, capabilities, updated_at FROM node_roles ORDER BY node")
         .unwrap();
@@ -58,7 +61,10 @@ async fn list_roles(State(state): State<ServerState>) -> Json<serde_json::Value>
             }))
         })
         .unwrap()
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("node_roles row decode: {e}"); None }
+        })
         .collect();
     Json(serde_json::json!({"ok": true, "roles": roles}))
 }
@@ -71,7 +77,7 @@ async fn assign_role(
         Ok(c) => c,
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e.to_string()})),
     };
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "CREATE TABLE IF NOT EXISTS node_roles (
             node TEXT PRIMARY KEY,
             role TEXT NOT NULL DEFAULT 'executor',
@@ -79,7 +85,10 @@ async fn assign_role(
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
         [],
-    );
+    ) {
+        tracing::error!("node_roles table create failed: {e}");
+        return Json(serde_json::json!({"ok": false, "error": e.to_string()}));
+    }
     let caps = body.capabilities.unwrap_or_default().join(",");
     let result = conn.execute(
         "INSERT INTO node_roles (node, role, capabilities, updated_at)

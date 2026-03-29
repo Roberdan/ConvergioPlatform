@@ -42,7 +42,10 @@ pub(crate) fn validate_peer(peer: &str, known_peers: &HashSet<String>) -> Messag
 pub(super) fn read_peer_conf(peer: &str) -> Option<std::collections::HashMap<String, String>> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     let path = std::path::PathBuf::from(home).join(".claude/config/peers.conf");
-    let text = std::fs::read_to_string(path).ok()?;
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return None,
+    };
     let mut found = false;
     let mut map = std::collections::HashMap::new();
     for line in text.lines() {
@@ -71,14 +74,20 @@ pub(super) fn read_peer_conf(peer: &str) -> Option<std::collections::HashMap<Str
 }
 
 pub(crate) fn tailscale_resolve(peer: &str) -> Option<(String, bool, bool)> {
-    let output = std::process::Command::new("tailscale")
+    let output = match std::process::Command::new("tailscale")
         .args(["status", "--json"])
         .output()
-        .ok()?;
+    {
+        Ok(o) => o,
+        Err(e) => { tracing::debug!("tailscale status failed: {e}"); return None; }
+    };
     if !output.status.success() {
         return None;
     }
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let json: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+        Ok(v) => v,
+        Err(e) => { tracing::debug!("tailscale status parse failed: {e}"); return None; }
+    };
     let conf = read_peer_conf(peer);
     let conf_ip = conf.as_ref().and_then(|c| c.get("tailscale_ip").cloned());
     let conf_dns = conf.as_ref().and_then(|c| c.get("dns_name").cloned());

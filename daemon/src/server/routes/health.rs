@@ -30,15 +30,15 @@ pub async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Va
     let db_ok = conn_result.is_ok();
     let (table_count, agent_activity_ok, peer_count) = match conn_result {
         Ok(conn) => {
-            let tables = super::super::state::query_one(
+            let tables = match super::super::state::query_one(
                 &conn,
                 "SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table'",
                 [],
-            )
-            .ok()
-            .flatten()
-            .and_then(|v| v.get("c").and_then(serde_json::Value::as_i64))
-            .unwrap_or(0);
+            ) {
+                Ok(Some(v)) => v.get("c").and_then(serde_json::Value::as_i64).unwrap_or(0),
+                Ok(None) => 0,
+                Err(e) => { tracing::warn!("health table count query failed: {e}"); 0 }
+            };
             let aa_ok = conn.prepare("SELECT 1 FROM agent_activity LIMIT 0").is_ok();
             let peers =
                 super::super::state::query_one(&conn, "SELECT COUNT(*) AS c FROM peer_heartbeats", [])

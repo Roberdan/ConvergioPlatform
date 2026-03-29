@@ -40,10 +40,13 @@ fn refresh_live_sessions(state: &ServerState) {
     }
     let db_path = state.db_path.clone();
     std::thread::spawn(move || {
-        let _ = Command::new(scanner)
+        if let Err(e) = Command::new(scanner)
             .arg("scan")
             .env("PLAN_DB", &db_path)
-            .output();
+            .output()
+        {
+            tracing::warn!("session scanner failed: {e}");
+        }
     });
 }
 

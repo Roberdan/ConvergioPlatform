@@ -204,13 +204,14 @@ pub async fn plan_start_sse(
         .unwrap_or_else(|| "copilot".to_string());
 
     let conn = state.get_conn()?;
-    let status: Option<String> = conn
-        .query_row(
-            "SELECT status FROM plans WHERE id=?1",
-            rusqlite::params![plan_id],
-            |row| row.get(0),
-        )
-        .ok();
+    let status: Option<String> = match conn.query_row(
+        "SELECT status FROM plans WHERE id=?1",
+        rusqlite::params![plan_id],
+        |row| row.get(0),
+    ) {
+        Ok(v) => Some(v),
+        Err(e) => { tracing::debug!("plan status query for {plan_id}: {e}"); None }
+    };
     let first_connect = status.as_deref() != Some("doing");
     if first_connect {
         conn.execute(

@@ -121,20 +121,26 @@ async fn handle_pty(mut socket: WebSocket, params: PtyParams, state: ServerState
     let params = match validate_pty_params(params) {
         Ok(p) => p,
         Err(err) => {
-            let _ = socket
+            if let Err(e) = socket
                 .send(Message::Text(format!("Invalid PTY params: {err}")))
-                .await;
+                .await
+            {
+                tracing::warn!("ws pty error send failed: {e}");
+            }
             return;
         }
     };
     let prev = ACTIVE_SESSIONS.fetch_add(1, Ordering::SeqCst);
     if prev >= MAX_PTY_SESSIONS {
         ACTIVE_SESSIONS.fetch_sub(1, Ordering::SeqCst);
-        let _ = socket
+        if let Err(e) = socket
             .send(Message::Text(format!(
                 "Max PTY sessions ({MAX_PTY_SESSIONS}) reached"
             )))
-            .await;
+            .await
+        {
+            tracing::warn!("ws pty limit send failed: {e}");
+        }
         return;
     }
     let _guard = SessionGuard;
@@ -151,9 +157,12 @@ async fn handle_pty(mut socket: WebSocket, params: PtyParams, state: ServerState
     {
         Ok(c) => c,
         Err(e) => {
-            let _ = socket
+            if let Err(we) = socket
                 .send(Message::Text(format!("Spawn error: {e}")))
-                .await;
+                .await
+            {
+                tracing::warn!("ws pty spawn error send failed: {we}");
+            }
             return;
         }
     };
@@ -205,11 +214,15 @@ async fn handle_pty(mut socket: WebSocket, params: PtyParams, state: ServerState
                 }
             }
             _ = tokio::time::sleep_until(last_activity + IDLE_TIMEOUT) => {
-                let _ = socket.send(Message::Text("Session timed out (5min idle)".into())).await;
+                if let Err(e) = socket.send(Message::Text("Session timed out (5min idle)".into())).await {
+                    tracing::debug!("ws pty timeout send failed: {e}");
+                }
                 break;
             }
         }
     }
     drop(stdin);
-    let _ = child.kill().await;
+    if let Err(e) = child.kill().await {
+        tracing::debug!("pty child kill: {e}");
+    }
 }

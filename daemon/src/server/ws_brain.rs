@@ -12,7 +12,9 @@ pub fn broadcast_brain_event(state: &ServerState, event_type: &str, payload: Val
         "event_type": event_type,
         "payload": payload,
     });
-    let _ = state.ws_tx.send(event);
+    if let Err(e) = state.ws_tx.send(event) {
+        tracing::debug!("ws brain broadcast (no subscribers): {e}");
+    }
 }
 
 /// Broadcast agent_update: current list of registered IPC agents.
@@ -34,18 +36,17 @@ pub fn broadcast_brain_agent_update(state: &ServerState) {
 /// Broadcast task_update: fired when a task status changes.
 /// Includes the task_id, new status, and owning plan_id for targeted UI updates.
 pub fn broadcast_brain_task_update(state: &ServerState, task_id: i64, status: &str) {
-    let plan_id = state
-        .get_conn()
-        .ok()
-        .and_then(|conn| {
-            conn.query_row(
-                "SELECT plan_id FROM tasks WHERE id = ?1",
-                rusqlite::params![task_id],
-                |r| r.get::<_, i64>(0),
-            )
-            .ok()
-        })
-        .unwrap_or(0);
+    let plan_id = match state.get_conn() {
+        Ok(conn) => match conn.query_row(
+            "SELECT plan_id FROM tasks WHERE id = ?1",
+            rusqlite::params![task_id],
+            |r| r.get::<_, i64>(0),
+        ) {
+            Ok(pid) => pid,
+            Err(e) => { tracing::warn!("ws_brain plan_id query for task {task_id}: {e}"); 0 }
+        },
+        Err(e) => { tracing::warn!("ws_brain get_conn failed: {e}"); 0 }
+    };
     broadcast_brain_event(
         state,
         "task_update",

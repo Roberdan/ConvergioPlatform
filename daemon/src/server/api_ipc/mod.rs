@@ -62,7 +62,7 @@ pub fn ensure_ipc_schema(state: &ServerState) -> Result<(), super::state::ApiErr
         super::state::ApiError::internal(format!("ipc schema init failed: {err}"))
     })?;
     // Drop CRDT triggers on IPC tables — IPC is local-only, not replicated
-    let _ = conn.execute_batch(
+    if let Err(e) = conn.execute_batch(
         "DROP TRIGGER IF EXISTS ipc_agents__crsql_itrig;
          DROP TRIGGER IF EXISTS ipc_agents__crsql_utrig;
          DROP TRIGGER IF EXISTS ipc_agents__crsql_dtrig;
@@ -81,7 +81,9 @@ pub fn ensure_ipc_schema(state: &ServerState) -> Result<(), super::state::ApiErr
          DROP TRIGGER IF EXISTS ipc_worktrees__crsql_itrig;
          DROP TRIGGER IF EXISTS ipc_worktrees__crsql_utrig;
          DROP TRIGGER IF EXISTS ipc_worktrees__crsql_dtrig;",
-    );
+    ) {
+        tracing::warn!("ipc crdt trigger cleanup failed: {e}");
+    }
     Ok(())
 }
 

@@ -45,7 +45,9 @@ pub fn stream_chat(provider: Provider, model: &str, messages: Vec<ChatMessage>) 
             Provider::LiteLLM => stream_litellm(&tx, &model, &messages).await,
         };
         if let Err(e) = result {
-            let _ = tx.send(StreamChunk::Error(e.to_string())).await;
+            if let Err(send_err) = tx.send(StreamChunk::Error(e.to_string())).await {
+                tracing::warn!("llm error chunk send failed: {send_err}");
+            }
         }
     });
     Box::pin(ReceiverStream::new(rx))

@@ -83,7 +83,10 @@ pub async fn api_ipc_route_history(
             }))
         })
         .map_err(|e| ApiError::internal(format!("query: {e}")))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("ipc route history row decode: {e}"); None }
+        })
         .collect();
     Ok(Json(json!({ "history": entries })))
 }

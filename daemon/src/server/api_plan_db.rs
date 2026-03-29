@@ -185,13 +185,14 @@ async fn handle_task_update(
     // Broadcast task_done to Ali orchestrator
     if status == "done" {
         if let Some(ref ipc) = state.ipc_engine {
-            let plan_id: Option<i64> = conn
-                .query_row(
-                    "SELECT plan_id FROM tasks WHERE id = ?1",
-                    rusqlite::params![task_id],
-                    |row| row.get(0),
-                )
-                .ok();
+            let plan_id: Option<i64> = match conn.query_row(
+                "SELECT plan_id FROM tasks WHERE id = ?1",
+                rusqlite::params![task_id],
+                |row| row.get(0),
+            ) {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("plan_id lookup for task {task_id}: {e}"); None }
+            };
             if let Some(pid) = plan_id {
                 let content = serde_json::json!({
                     "type": "task_done",
@@ -199,7 +200,9 @@ async fn handle_task_update(
                     "plan_id": pid,
                 })
                 .to_string();
-                let _ = ipc.broadcast("api", &content, "event", Some("#orchestration"));
+                if let Err(e) = ipc.broadcast("api", &content, "event", Some("#orchestration")) {
+                    tracing::warn!("ipc task_done broadcast failed: {e}");
+                }
             }
         }
     }

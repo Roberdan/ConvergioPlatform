@@ -39,11 +39,13 @@ async fn interrupt_agent(
         Err(e) => return Json(serde_json::json!({"ok": false, "error": e.to_string()})),
     };
     // Record interrupt event
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "INSERT INTO ipc_messages (sender, recipient, content, msg_type, created_at)
          VALUES ('kernel', ?1, ?2, 'INTERRUPT', datetime('now'))",
         rusqlite::params![body.agent_name, body.reason],
-    );
+    ) {
+        tracing::error!(agent = %body.agent_name, "ipc interrupt insert failed: {e}");
+    }
     // Mark agent as interrupted in agent_activity
     let updated = conn.execute(
         "UPDATE agent_activity SET status='interrupted', notes=?2
@@ -85,11 +87,13 @@ async fn reschedule_task(
         ],
     ).unwrap_or(0);
     // Log delegation
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "INSERT INTO delegation_log (plan_id, executor_agent, task_id, cost_estimate, timestamp)
          SELECT plan_id, ?2, id, 0, datetime('now') FROM tasks WHERE id=?1",
         rusqlite::params![body.task_id, format!("reschedule-{}", body.to_node)],
-    );
+    ) {
+        tracing::error!(task_id = body.task_id, "delegation log insert failed: {e}");
+    }
 
     tracing::info!(
         task_id = body.task_id,

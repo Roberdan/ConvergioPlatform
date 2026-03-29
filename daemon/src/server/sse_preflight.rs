@@ -92,9 +92,10 @@ fn heartbeat_check(conn: &Conn, peer_name: &str) -> MessageResult<()> {
     let mut stmt = conn
         .prepare(sql)
         .map_err(|e| format!("heartbeat query: {e}"))?;
-    let last_seen: Option<i64> = stmt
-        .query_row(rusqlite::params![peer_name], |row| row.get(0))
-        .ok();
+    let last_seen: Option<i64> = match stmt.query_row(rusqlite::params![peer_name], |row| row.get(0)) {
+        Ok(v) => Some(v),
+        Err(e) => { tracing::debug!("heartbeat query for {peer_name}: {e}"); None }
+    };
     match last_seen {
         None => Err(format!("no heartbeat recorded for {peer_name}").into()),
         Some(ts) => {
@@ -115,10 +116,13 @@ fn heartbeat_check(conn: &Conn, peer_name: &str) -> MessageResult<()> {
 /// Query plan status from DB. Returns (status_string, is_actionable).
 pub fn plan_status_check(conn: &Conn, plan_id: &str) -> (String, bool) {
     let sql = "SELECT status FROM plans WHERE id = ?1";
-    let status: Option<String> = conn
-        .prepare(sql)
-        .ok()
-        .and_then(|mut s| s.query_row(rusqlite::params![plan_id], |r| r.get(0)).ok());
+    let status: Option<String> = match conn.prepare(sql) {
+        Ok(mut s) => match s.query_row(rusqlite::params![plan_id], |r| r.get(0)) {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::debug!("plan_status_check query for {plan_id}: {e}"); None }
+        },
+        Err(e) => { tracing::warn!("plan_status_check prepare failed: {e}"); None }
+    };
     match status {
         Some(ref s) if s == "todo" || s == "doing" => (format!("#{plan_id} is '{s}'"), true),
         Some(s) => (format!("#{plan_id} is '{s}' (not actionable)"), false),

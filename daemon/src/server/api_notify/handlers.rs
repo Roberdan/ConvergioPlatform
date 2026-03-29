@@ -63,21 +63,25 @@ pub async fn handle_notify(
     // Mark as delivered if any channel succeeded
     if delivered {
         let conn = state.get_conn()?;
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "UPDATE notification_queue SET status = 'delivered', \
              delivered_at = datetime('now') WHERE id = ?1",
             rusqlite::params![notif_id],
-        );
+        ) {
+            tracing::error!(notif_id, "notification delivery status update failed: {e}");
+        }
     }
 
     // Broadcast via WebSocket for real-time dashboard updates
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "notification",
         "id": notif_id,
         "severity": severity,
         "title": title,
         "message": message,
-    }));
+    })) {
+        tracing::debug!("ws notification broadcast: {e}");
+    }
 
     Ok(Json(json!({
         "ok": true,

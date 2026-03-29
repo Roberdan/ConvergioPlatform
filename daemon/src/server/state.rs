@@ -40,7 +40,9 @@ impl ServerState {
     pub fn new(db_path: PathBuf, crsqlite_path: Option<String>) -> Self {
         let ipc = Arc::new(crate::ipc::IpcEngine::new(db_path.clone()));
         if let Ok(conn) = ipc.open_conn() {
-            let _ = crate::ipc::ensure_ipc_schema(&conn);
+            if let Err(e) = crate::ipc::ensure_ipc_schema(&conn) {
+                tracing::error!("ipc schema init failed: {e}");
+            }
         }
         Self::with_ipc_engine(db_path, crsqlite_path, ipc)
     }

@@ -93,7 +93,10 @@ async fn handle_triage(
             })
         })
         .map_err(|e| ApiError::internal(format!("query: {e}")))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("agent triage row decode: {e}"); None }
+        })
         .collect();
 
     // Tokenize problem description

@@ -50,11 +50,13 @@ pub async fn approve_deliverable(
         Some(&now),
     )?;
 
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "deliverable_update",
         "deliverable_id": id,
         "status": "approved",
-    }));
+    })) {
+        tracing::debug!("ws deliverable_update broadcast: {e}");
+    }
 
     get_deliverable(State(state), Path(id)).await
 }
@@ -128,11 +130,13 @@ pub async fn version_deliverable(
 
     let new_id = conn.last_insert_rowid();
 
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "deliverable_update",
         "deliverable_id": new_id,
         "status": "pending",
-    }));
+    })) {
+        tracing::debug!("ws deliverable_update broadcast: {e}");
+    }
 
     Ok(Json(json!({
         "id": new_id,

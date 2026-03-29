@@ -78,9 +78,13 @@ pub(crate) fn run_post_complete_cleanup(plan_id: i64, wt_paths: &[String]) {
             if name.to_string_lossy().starts_with(&prefix) {
                 let path = entry.path();
                 if path.is_dir() {
-                    let _ = std::fs::remove_dir_all(&path);
+                    if let Err(e) = std::fs::remove_dir_all(&path) {
+                        tracing::warn!("plan {plan_id}: temp dir cleanup failed {}: {e}", path.display());
+                    }
                 } else {
-                    let _ = std::fs::remove_file(&path);
+                    if let Err(e) = std::fs::remove_file(&path) {
+                        tracing::warn!("plan {plan_id}: temp file cleanup failed {}: {e}", path.display());
+                    }
                 }
             }
         }
@@ -94,7 +98,9 @@ pub(crate) fn run_post_complete_cleanup(plan_id: i64, wt_paths: &[String]) {
                 .args(["worktree", "remove", "--force", path])
                 .output();
             if rm_result.is_err() || !rm_result.unwrap().status.success() {
-                let _ = std::fs::remove_dir_all(p);
+                if let Err(e) = std::fs::remove_dir_all(p) {
+                    tracing::warn!("plan {plan_id}: worktree dir cleanup failed {path}: {e}");
+                }
             }
             tracing::info!("plan {plan_id}: cleaned worktree {path}");
         }

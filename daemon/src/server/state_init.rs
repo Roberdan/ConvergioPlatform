@@ -92,7 +92,9 @@ pub fn init_db_and_pool(
     crsqlite_path: &Option<String>,
 ) -> Pool<SqliteConnectionManager> {
     if let Ok(conn) = Connection::open(db_path) {
-        let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
+        if let Err(e) = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;") {
+            eprintln!("[migration] PRAGMA init failed: {e}");
+        }
         #[cfg(feature = "crsqlite")]
         if let Some(ref ext) = crsqlite_path {
             if let Err(e) = crate::db::crdt::load_crsqlite(&conn, ext) {

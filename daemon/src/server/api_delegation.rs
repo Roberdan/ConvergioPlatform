@@ -95,14 +95,15 @@ async fn handle_get_progress(
     ensure_schema(&conn)
         .map_err(|e| ApiError::internal(format!("schema init failed: {e}")))?;
 
-    let row: Option<(String, Option<String>, Option<String>, String)> = conn
-        .query_row(
-            "SELECT status, current_task, output_summary, updated_at
-             FROM delegation_progress WHERE delegation_id = ?1",
-            rusqlite::params![delegation_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .ok();
+    let row: Option<(String, Option<String>, Option<String>, String)> = match conn.query_row(
+        "SELECT status, current_task, output_summary, updated_at
+         FROM delegation_progress WHERE delegation_id = ?1",
+        rusqlite::params![delegation_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+    ) {
+        Ok(v) => Some(v),
+        Err(e) => { tracing::debug!("delegation progress query for {delegation_id}: {e}"); None }
+    };
 
     match row {
         None => Err(ApiError::not_found(format!(
@@ -152,7 +153,10 @@ async fn handle_get_by_plan(
             }))
         })
         .map_err(|e| ApiError::internal(format!("query failed: {e}")))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("delegation row decode: {e}"); None }
+        })
         .collect();
 
     Ok(Json(json!({

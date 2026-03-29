@@ -67,12 +67,14 @@ async fn handle_heartbeat(
     .map_err(|e| ApiError::internal(format!("heartbeat failed: {e}")))?;
 
     // Also update host_heartbeats if the table exists
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "INSERT OR REPLACE INTO host_heartbeats \
          (hostname, last_seen, status, metadata) \
          VALUES (?1, datetime('now'), 'online', ?2)",
         rusqlite::params![peer_name, serde_json::to_string(&load).unwrap_or_default()],
-    );
+    ) {
+        tracing::warn!(peer = peer_name, "host_heartbeats update failed: {e}");
+    }
 
     Ok(Json(json!({
         "ok": true,

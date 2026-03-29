@@ -59,7 +59,9 @@ fn handle_add_node(peer: &str, qs: &HashMap<String, String>) -> Json<Value> {
     match std::fs::OpenOptions::new().append(true).open(&conf_path) {
         Ok(mut f) => {
             use std::io::Write;
-            let _ = f.write_all(entry.as_bytes());
+            if let Err(e) = f.write_all(entry.as_bytes()) {
+                return Json(json!({"ok": false, "error": format!("write peers.conf: {e}")}));
+            }
             Json(json!({"ok": true, "output": format!("Added {peer} ({ip}) to peers.conf")}))
         }
         Err(e) => Json(json!({"error": format!("Failed to write peers.conf: {e}")})),

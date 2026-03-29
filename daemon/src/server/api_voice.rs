@@ -122,7 +122,9 @@ async fn handle_test() -> impl IntoResponse {
         pipeline.stop();
         // Restore previous state if it was active.
         if prev == VoiceState::Listening {
-            let _ = pipeline.start();
+            if let Err(e) = pipeline.start() {
+                tracing::warn!("voice pipeline restart failed: {e}");
+            }
         }
         Json(json!({
             "ok": ok,

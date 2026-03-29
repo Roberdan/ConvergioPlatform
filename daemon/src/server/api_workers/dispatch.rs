@@ -104,7 +104,7 @@ async fn handle_exec(
 
     // Log event
     let conn = state.get_conn()?;
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "INSERT INTO coordinator_events (event_type, payload, source_node) \
          VALUES ('remote_exec', ?1, ?2)",
         rusqlite::params![
@@ -113,7 +113,9 @@ async fn handle_exec(
                 .map(|h| h.to_string_lossy().to_string())
                 .unwrap_or_default(),
         ],
-    );
+    ) {
+        tracing::warn!("coordinator remote_exec event insert failed: {e}");
+    }
 
     Ok(Json(json!({
         "ok": output.status.success(),
@@ -163,7 +165,7 @@ async fn handle_delegate(
     }
 
     // Log delegation event
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "INSERT INTO coordinator_events (event_type, payload, source_node) \
          VALUES ('plan_delegated', ?1, ?2)",
         rusqlite::params![
@@ -172,7 +174,9 @@ async fn handle_delegate(
                 .map(|h| h.to_string_lossy().to_string())
                 .unwrap_or_default(),
         ],
-    );
+    ) {
+        tracing::warn!("coordinator plan_delegated event insert failed: {e}");
+    }
 
     // Return stream URL for SSE progress monitoring
     let stream_url = format!(

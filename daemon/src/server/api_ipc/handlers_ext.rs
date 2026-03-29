@@ -56,11 +56,13 @@ pub async fn api_ipc_agents_register(
     )
     .map_err(|e| ApiError::internal(format!("agent register failed: {e}")))?;
 
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "agent_registered",
         "agent_id": body.agent_id,
         "host": body.host,
-    }));
+    })) {
+        tracing::debug!("ws agent_registered broadcast (no subscribers): {e}");
+    }
 
     // Push live agent list + session state to brain viz
     broadcast_brain_agent_update(&state);
@@ -81,11 +83,13 @@ pub async fn api_ipc_agents_unregister(
     )
     .map_err(|e| ApiError::internal(format!("agent unregister failed: {e}")))?;
 
-    let _ = state.ws_tx.send(json!({
+    if let Err(e) = state.ws_tx.send(json!({
         "type": "agent_unregistered",
         "agent_id": body.agent_id,
         "host": body.host,
-    }));
+    })) {
+        tracing::debug!("ws agent_unregistered broadcast (no subscribers): {e}");
+    }
 
     // Push updated agent list + session state to brain viz
     broadcast_brain_agent_update(&state);

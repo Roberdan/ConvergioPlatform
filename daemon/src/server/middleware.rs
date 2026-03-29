@@ -9,17 +9,21 @@ use std::sync::OnceLock;
 use tower_http::cors::CorsLayer;
 
 pub fn cors_layer() -> CorsLayer {
-    let origins = env::var("CONVERGIO_CORS_ORIGINS")
-        .ok()
-        .map(|value| {
-            value
+    let origins = match env::var("CONVERGIO_CORS_ORIGINS") {
+        Ok(value) => {
+            let parsed: Vec<_> = value
                 .split(',')
                 .map(str::trim)
                 .filter(|origin| !origin.is_empty())
-                .filter_map(|origin| axum::http::HeaderValue::from_str(origin).ok())
-                .collect::<Vec<_>>()
-        })
-        .filter(|parsed| !parsed.is_empty())
+                .filter_map(|origin| match axum::http::HeaderValue::from_str(origin) {
+                    Ok(hv) => Some(hv),
+                    Err(e) => { tracing::warn!("invalid CORS origin '{origin}': {e}"); None }
+                })
+                .collect();
+            if parsed.is_empty() { None } else { Some(parsed) }
+        }
+        Err(_) => None,
+    }
         .unwrap_or_else(|| {
             vec![
                 axum::http::HeaderValue::from_static("http://localhost:8420"),
@@ -67,10 +71,9 @@ pub fn set_dev_mode(enabled: bool) {
 }
 
 fn get_auth_token() -> &'static Option<String> {
-    AUTH_TOKEN.get_or_init(|| {
-        env::var("CONVERGIO_AUTH_TOKEN")
-            .ok()
-            .filter(|t| !t.is_empty())
+    AUTH_TOKEN.get_or_init(|| match env::var("CONVERGIO_AUTH_TOKEN") {
+        Ok(t) if !t.is_empty() => Some(t),
+        _ => None,
     })
 }
 
@@ -119,7 +122,10 @@ pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
     let auth_header = req
         .headers()
         .get("authorization")
-        .and_then(|v| v.to_str().ok());
+        .and_then(|v| match v.to_str() {
+            Ok(s) => Some(s),
+            Err(e) => { tracing::debug!("auth header not valid UTF-8: {e}"); None }
+        });
 
     if check_bearer(auth_header) {
         next.run(req).await
