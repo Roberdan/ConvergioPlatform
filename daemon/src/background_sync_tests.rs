@@ -1,8 +1,9 @@
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::{resolve_interval_secs, spawn_sync_loop, sync_table_with_peer};
+use super::{resolve_interval_secs, spawn_sync_loop, sync_checkpoint_now, sync_table_with_peer};
 use crate::db_path_from_env;
+use crate::server::sync_runtime_status::SyncRuntimeStatusHolder;
 
 /// Serialise all env-var-mutating tests to prevent parallel interference.
 static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -217,6 +218,8 @@ fn test_db_path_from_env_uses_dashboard_db() {
 fn test_sync_table_with_peer_handles_unreachable_peer() {
     // sync_table_with_peer should return 0 when the peer is unreachable
     // (HTTP request fails). No panic expected.
+    let runtime_status = SyncRuntimeStatusHolder::new_daemon_first();
+    runtime_status.reset();
     let conn = Connection::open_in_memory().expect("db");
     conn.execute_batch(
         "CREATE TABLE tasks (
@@ -236,6 +239,14 @@ fn test_sync_table_with_peer_handles_unreachable_peer() {
     // Use a non-routable address to ensure HTTP fails fast
     let applied = sync_table_with_peer(&conn, "192.0.2.1:9999", "tasks");
     assert_eq!(applied, 0, "unreachable peer should yield 0 applied");
+    let snapshot = runtime_status.snapshot();
+    assert!(!snapshot.healthy, "unreachable peer must mark runtime unhealthy");
+    let last_error = snapshot.last_error.unwrap_or_default();
+    assert!(
+        last_error.contains("send changes failed") || last_error.contains("fetch failed"),
+        "expected fail-loud runtime error for unreachable peer, got {:?}",
+        last_error
+    );
 }
 
 #[test]
@@ -248,4 +259,12 @@ fn test_db_path_from_env_fallback_to_home() {
         "fallback must resolve to ~/.claude/data/dashboard.db, got: {}",
         path.display()
     );
+}
+
+#[test]
+fn checkpoint_timestamp_uses_sortable_utc_rfc3339() {
+    let ts = sync_checkpoint_now();
+    assert_eq!(ts.len(), 20, "expected YYYY-MM-DDTHH:MM:SSZ format");
+    assert_eq!(ts.chars().nth(10), Some('T'));
+    assert!(ts.ends_with('Z'));
 }

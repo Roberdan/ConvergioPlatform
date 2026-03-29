@@ -9,12 +9,17 @@ use crate::background_sync_http::{
     resolve_best_addr, send_changes_to_peer,
 };
 use crate::db::libsql_adapter::{self, SyncMeta};
+use crate::server::sync_runtime_status::SyncRuntimeStatusHolder;
 
 /// Default sync interval in seconds when CONVERGIO_SYNC_INTERVAL_SECS is unset.
 const DEFAULT_INTERVAL_SECS: u64 = 30;
 
 /// Tables eligible for timestamp-based sync. Must have `id` + `updated_at`.
 const SYNC_TABLES: &[&str] = &["tasks", "plans", "waves", "knowledge_base", "notifications"];
+
+fn sync_checkpoint_now() -> String {
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
 
 /// Resolve sync interval: explicit arg > env var > 30s default.
 pub fn resolve_interval_secs(override_secs: Option<u64>) -> u64 {
@@ -110,9 +115,13 @@ pub fn sync_table_with_peer(
     peer_addr: &str,
     table: &str,
 ) -> usize {
+    let runtime_status = SyncRuntimeStatusHolder::new_daemon_first();
     let since = match libsql_adapter::get_sync_meta(conn, peer_addr, table) {
         Ok(meta) => meta.map(|m| m.last_sync_at),
         Err(e) => {
+            runtime_status.mark_error(format!(
+                "sync meta lookup failed for {table} on {peer_addr}: {e}"
+            ));
             tracing::warn!("sync_table get_sync_meta {table}/{peer_addr}: {e}");
             None
         }
@@ -126,6 +135,7 @@ pub fn sync_table_with_peer(
     ) {
         Ok(c) => c,
         Err(e) => {
+            runtime_status.mark_error(format!("export failed for {table} on {peer_addr}: {e}"));
             warn!(peer = %peer_addr, table, error = %e, "export failed");
             return 0;
         }
@@ -133,6 +143,9 @@ pub fn sync_table_with_peer(
 
     if !local_changes.is_empty() {
         if let Err(e) = send_changes_to_peer(peer_addr, &local_changes) {
+            runtime_status.mark_error(format!(
+                "send changes failed for {table} on {peer_addr}: {e}"
+            ));
             error!(peer = %peer_addr, error = %e, "send changes failed — aborting sync tick to prevent data loss");
             return 0;
         }
@@ -146,6 +159,7 @@ pub fn sync_table_with_peer(
     ) {
         Ok(c) => c,
         Err(e) => {
+            runtime_status.mark_error(format!("fetch failed for {table} on {peer_addr}: {e}"));
             warn!(peer = %peer_addr, table, error = %e, "fetch changes failed");
             return 0;
         }
@@ -154,20 +168,25 @@ pub fn sync_table_with_peer(
     let applied = match libsql_adapter::apply_changes(conn, &remote_changes) {
         Ok(n) => n,
         Err(e) => {
+            runtime_status.mark_error(format!("apply failed for {table} on {peer_addr}: {e}"));
             warn!(peer = %peer_addr, table, error = %e, "apply changes failed");
             return 0;
         }
     };
 
     // Update sync checkpoint
-    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let meta = SyncMeta {
         peer: peer_addr.to_string(),
         table_name: table.to_string(),
-        last_sync_at: now,
+        last_sync_at: sync_checkpoint_now(),
     };
     if let Err(e) = libsql_adapter::upsert_sync_meta(conn, &meta) {
+        runtime_status.mark_error(format!(
+            "checkpoint upsert failed for {table} on {peer_addr}: {e}"
+        ));
         warn!(peer = %peer_addr, table, error = %e, "upsert sync meta failed");
+    } else {
+        runtime_status.mark_success(meta.last_sync_at.clone());
     }
 
     info!(
@@ -191,6 +210,7 @@ pub fn spawn_sync_loop(
     } else {
         resolve_interval_secs(None)
     };
+    let runtime_status = SyncRuntimeStatusHolder::new_daemon_first();
 
     tokio::spawn(async move {
         info!(
@@ -208,12 +228,14 @@ pub fn spawn_sync_loop(
             let peers = match query_active_peers(&db) {
                 Ok(p) => p,
                 Err(e) => {
+                    runtime_status.mark_error(format!("peer query failed: {e}"));
                     warn!("background_sync: failed to query peers: {e}");
                     continue;
                 }
             };
 
             if peers.is_empty() {
+                runtime_status.mark_error("no reachable peers".to_string());
                 error!("background_sync: no reachable peers — sync is NOT running");
                 continue;
             }
@@ -235,6 +257,10 @@ pub fn spawn_sync_loop(
                     c
                 }
                 Err(e) => {
+                    runtime_status.mark_error(format!(
+                        "cannot open sync DB at {}: {e}",
+                        db_path.display()
+                    ));
                     error!("background_sync: cannot open DB at {}: {e}", db_path.display());
                     continue;
                 }
