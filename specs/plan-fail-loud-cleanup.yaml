@@ -1,0 +1,242 @@
+name: "Fail-Loud Foundation & Token Cleanup"
+project: convergio
+description: >
+  Eliminate 446 silent error patterns (.ok() + let _ =) in daemon,
+  fix notification system to fail-loud, delete 85 duplicate agent files (126K tokens),
+  consolidate 3 CLAUDE.md copies to 1, add automated Rust wiring safety net.
+parallel_mode: standard
+
+waves:
+  - id: W1
+    name: "Silent Error Elimination — Server & API"
+    tasks:
+      - id: T1-01
+        do: >
+          Fix all silent .ok() and let _ = patterns in daemon/src/server/ (largest module, ~194 files).
+          For each occurrence in non-test files:
+          - DB writes: replace with ? or map_err + tracing::error! + return error
+          - WebSocket sends: replace with if let Err(e) = ... { tracing::warn!(...) }
+          - HTTP responses: never return ok:true when operation failed
+          Do NOT touch test files. Run cargo check + cargo test after each module batch.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+          - "rg '\\.ok\\(\\)' daemon/src/server/ --glob '!*test*' -c 2>/dev/null | awk -F: '{sum+=$2} END {print sum}' | xargs test 15 -gt"
+          - "rg 'let _\\s*=' daemon/src/server/ --glob '!*test*' -c 2>/dev/null | awk -F: '{sum+=$2} END {print sum}' | xargs test 15 -gt"
+
+      - id: T1-02
+        do: >
+          Fix all silent .ok() and let _ = patterns in daemon/src/mesh/ (~95 files).
+          Same rules as T1-01: propagate errors with ? or log explicitly with tracing::error/warn.
+          Mesh operations are critical — network failures MUST be surfaced, never swallowed.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+          - "rg '\\.ok\\(\\)' daemon/src/mesh/ --glob '!*test*' -c 2>/dev/null | awk -F: '{sum+=$2} END {print sum}' | xargs test 10 -gt"
+          - "rg 'let _\\s*=' daemon/src/mesh/ --glob '!*test*' -c 2>/dev/null | awk -F: '{sum+=$2} END {print sum}' | xargs test 10 -gt"
+
+      - id: T1-03
+        do: >
+          Fix all silent .ok() and let _ = patterns in remaining daemon/src/ modules:
+          kernel/, ipc/, db/, tui/, workspace/, resilience/, memory/, voice/, inference/,
+          security/, capabilities/, channels/, orchestrator/, checklist/, artifacts/, hooks/, lock/, digest/.
+          Same rules: propagate or log, never swallow. Run cargo check + cargo test after.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+          - "rg '\\.ok\\(\\)' daemon/src/ --glob '!*test*' --glob '!*server*' --glob '!*mesh*' -c 2>/dev/null | awk -F: '{sum+=$2} END {print sum}' | xargs test 10 -gt"
+          - "rg 'let _\\s*=' daemon/src/ --glob '!*test*' --glob '!*server*' --glob '!*mesh*' -c 2>/dev/null | awk -F: '{sum+=$2} END {print sum}' | xargs test 10 -gt"
+
+  - id: W2
+    name: "Notifications Fail-Loud & Token Cleanup"
+    tasks:
+      - id: T2-01
+        do: >
+          Fix daemon notification system to be fail-loud:
+          1. In daemon/src/server/api_notify/handlers.rs: return actual delivery status per channel,
+             not hardcoded "ok": true. Response must include which channels succeeded/failed.
+          2. In daemon/src/resilience/notify.rs: replace silent error logging with proper Result
+             propagation. Every delivery failure must be traceable.
+          3. Remove osascript fallback from both files — daemon-native only.
+          4. Add tracing::error! for every delivery failure with channel name + error details.
+          5. Add tests verifying that failed delivery returns error status.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+          - "rg 'osascript' daemon/src/ | wc -l | xargs test 0 -eq"
+          - "rg '\"ok\":\\s*true' daemon/src/server/api_notify/ | wc -l | xargs test 0 -eq"
+
+      - id: T2-02
+        do: >
+          Delete claude-config/agent-catalog/ directory entirely (85 duplicate files, ~126K tokens wasted).
+          These are exact copies of files in claude-config/agents/.
+          After deletion, verify all agent references in .claude/settings.json and CLAUDE.md
+          still point to valid paths in claude-config/agents/.
+          Update any script or config that references agent-catalog/ to use agents/ instead.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "test ! -d claude-config/agent-catalog"
+          - "test -d claude-config/agents"
+          - "rg 'agent-catalog' claude-config/ .claude/ scripts/ 2>/dev/null | grep -v '.git' | wc -l | xargs test 0 -eq"
+
+      - id: T2-03
+        do: >
+          Move 9 reference-only agent files from claude-config/agents/ to docs/reference/agent-protocols/:
+          - ali-ipc-protocol.md
+          - ali-cross-repo-protocol.md
+          - otto-performance-playbooks.md
+          - dario-debugger-playbooks.md
+          - anna-executive-assistant-workflows.md
+          - execution-discipline-details.md
+          - plan-business-advisor-output-schemas.md
+          - strategic-planner-git.md
+          - strategic-planner-templates.md
+          The files are located in subdirectories of claude-config/agents/:
+          - claude-config/agents/reference/ (7 files: ali-ipc-protocol, ali-cross-repo-protocol,
+            otto-performance-playbooks, dario-debugger-playbooks, anna-executive-assistant-workflows,
+            execution-discipline-details, plan-business-advisor-output-schemas)
+          - claude-config/agents/core_utility/ (2 files: strategic-planner-git, strategic-planner-templates)
+          These are documentation, not executable agents. Moving them prevents them from being
+          loaded as agent definitions and saves ~3,200 tokens per agent listing.
+          Update any @ references that pointed to old paths.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "test -d docs/reference/agent-protocols"
+          - "find claude-config/agents -name 'ali-ipc-protocol.md' | wc -l | xargs test 0 -eq"
+          - "find claude-config/agents -name 'strategic-planner-git.md' | wc -l | xargs test 0 -eq"
+          - "ls docs/reference/agent-protocols/*.md | wc -l | xargs test 9 -eq"
+
+  - id: W3
+    name: "Documentation & Safety Nets"
+    tasks:
+      - id: T3-01
+        do: >
+          Consolidate CLAUDE.md to single source of truth:
+          1. Root ./CLAUDE.md is canonical (checked into git, visible to all tools)
+          2. Replace .claude/CLAUDE.md content with a single line: see root CLAUDE.md
+             (Claude Code auto-loads root CLAUDE.md, .claude/CLAUDE.md is redundant)
+          3. Delete claude-config/CLAUDE.md (third copy)
+          4. Verify all @ references in root CLAUDE.md resolve correctly
+          5. Update any CI/hook that references the other copies
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "wc -l CLAUDE.md | awk '{if($1 > 20) exit 0; else exit 1}'"
+          - "wc -l .claude/CLAUDE.md | awk '{if($1 < 10) exit 0; else exit 1}'"
+          - "test ! -f claude-config/CLAUDE.md"
+
+      - id: T3-02
+        do: >
+          Create automated Rust wiring check script at scripts/check-rust-wiring.sh:
+          1. For each directory in daemon/src/ that has a mod.rs or lib.rs:
+             - List all .rs files in that directory (excluding mod.rs itself and test files)
+             - Parse mod.rs for `mod X` and `pub mod X` declarations
+             - Report any .rs file whose stem is not declared
+          2. Exit 1 if any unwired files found, exit 0 if clean
+          3. Wire this into .claude/settings.json as PostToolUse hook for Write tool
+             when the file path matches daemon/src/**/*.rs
+          4. Also wire it into the existing post-edit-rust-check that runs cargo check
+          Must handle: feature-gated modules (#[cfg(feature = "voice")] mod voice),
+          nested directories, files that are #[path = "..."] referenced.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -x scripts/check-rust-wiring.sh"
+          - "bash scripts/check-rust-wiring.sh && echo PASS"
+          - "rg 'check-rust-wiring' .claude/settings.json"
+
+  - id: W4
+    name: "Closure"
+    tasks:
+      - id: TF-tests
+        do: >
+          Run full test suite: cd daemon && cargo test.
+          Verify zero .ok() regressions introduced.
+          Run scripts/check-rust-wiring.sh — must pass.
+          Verify notification endpoint returns proper errors.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo test -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+          - "bash scripts/check-rust-wiring.sh"
+          - "rg '\\.ok\\(\\)' daemon/src/ --glob '!*test*' -c 2>/dev/null | awk -F: '{sum+=$2} END {if(sum>35) exit 1}'"
+          - "rg 'let _\\s*=' daemon/src/ --glob '!*test*' -c 2>/dev/null | awk -F: '{sum+=$2} END {if(sum>35) exit 1}'"
+          - "cd daemon && cargo clippy -- -W clippy::let_underscore_drop 2>&1 | grep -c 'error' | grep '^0$'"
+
+      - id: TF-doc
+        do: >
+          Update documentation:
+          1. CHANGELOG.md — add entry for this version (fail-loud, cleanup, wiring check)
+          2. TROUBLESHOOTING.md — add section on silent error patterns and how they were fixed
+          3. ADR — write docs/adr/ADR-0124-fail-loud-policy.md documenting the decision
+          4. VERSION.md — bump to next minor
+          5. Verify all @ references in CLAUDE.md resolve
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "head -1 CHANGELOG.md | grep -q '##'"
+          - "test -f docs/adr/ADR-0124-fail-loud-policy.md"
+          - "grep -q 'fail-loud' TROUBLESHOOTING.md"
+
+      - id: TF-pr
+        do: >
+          Create PR with all changes. Title: "feat: fail-loud foundation — eliminate 446 silent errors, cleanup 126K token waste"
+          Body: summary of all changes, test evidence, before/after metrics.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "gh pr list --state open --head fail-loud-cleanup | grep -q fail-loud"
