@@ -93,15 +93,6 @@ pub fn resolve_best_addr(
     None
 }
 
-/// Detect local Tailscale IP via `tailscale ip -4`. Used to skip self-sync.
-pub fn detect_local_tailscale_ip() -> Option<String> {
-    std::process::Command::new("tailscale")
-        .args(["ip", "-4"]).output().ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-}
-
 /// Path to peers.conf: CONVERGIO_PEERS_CONF env var → ~/.claude/config/peers.conf.
 pub fn peers_conf_path_from_env() -> String {
     std::env::var("CONVERGIO_PEERS_CONF").unwrap_or_else(|_| {
