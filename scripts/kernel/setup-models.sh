@@ -9,21 +9,24 @@ set -euo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 
-REQUIRED_GB=30
+REQUIRED_GB=35
 CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}"
 
 # Required models (name → HF repo)
+# Voxtral-Mini bf16 is primary TTS backend (see daemon/src/kernel/tts.rs)
 declare -A REQUIRED_MODELS=(
   ["Mistral-7B-Instruct-4bit"]="mlx-community/Mistral-7B-Instruct-v0.3-4bit"
   ["Qwen2.5-7B-Instruct-4bit"]="mlx-community/Qwen2.5-7B-Instruct-4bit"
   ["Codestral-22B-4bit"]="mlx-community/Codestral-22B-v0.1-4bit"
   ["Whisper-small"]="mlx-community/whisper-small"
+  ["Voxtral-Mini-bf16"]="mlx-community/Voxtral-Mini-3B-2507-bf16"
 )
 
 # Optional models — absence is a warning, not an error
+# Qwen3-TTS is secondary TTS backend (see daemon/src/kernel/tts.rs)
 declare -A OPTIONAL_MODELS=(
   ["Mistral-Small-3.1-4bit"]="mlx-community/Mistral-Small-3.1-24B-Instruct-2503-4bit"
-  ["Voxtral-Mini-4bit"]="mlx-community/Voxtral-Mini-3B-2507-4bit"
+  ["Qwen3-TTS-CustomVoice-bf16"]="mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16"
 )
 
 DOWNLOADED=()
@@ -47,6 +50,14 @@ check_prereqs() {
   # pip
   if ! command -v pip3 &>/dev/null && ! python3 -m pip --version &>/dev/null 2>&1; then
     die "pip not found. Install pip before running this script."
+  fi
+
+  # mlx-audio (required for Voxtral and Qwen3 TTS backends)
+  if ! python3 -c "import mlx_audio" &>/dev/null 2>&1; then
+    log "mlx-audio not found — installing via pip..."
+    pip3 install --quiet mlx-audio || \
+      python3 -m pip install --quiet mlx-audio || \
+      warn "Failed to install mlx-audio. Neural TTS backends will be unavailable."
   fi
 
   # huggingface-cli

@@ -1,9 +1,44 @@
 use super::types::{AudioFrame, SpeechSegment, VoiceError};
 
-/// Voice Activity Detection using energy-based detection.
-/// Detects speech onset within ~50ms (800 samples at 16kHz).
+/// Aggressiveness level returned by threshold mapping (testable without PartialEq on VadMode).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VadAggressiveness {
+    Quality,
+    LowBitrate,
+    Aggressive,
+    VeryAggressive,
+}
+
+impl VadAggressiveness {
+    fn to_webrtc(self) -> webrtc_vad::VadMode {
+        match self {
+            Self::Quality => webrtc_vad::VadMode::Quality,
+            Self::LowBitrate => webrtc_vad::VadMode::LowBitrate,
+            Self::Aggressive => webrtc_vad::VadMode::Aggressive,
+            Self::VeryAggressive => webrtc_vad::VadMode::VeryAggressive,
+        }
+    }
+}
+
+/// Map VAD threshold (0.0–1.0) to aggressiveness level.
+/// Lower threshold = more permissive (Quality), higher = stricter (VeryAggressive).
+pub fn threshold_to_vad_mode(threshold: f32) -> VadAggressiveness {
+    let t = threshold.clamp(0.0, 1.0);
+    if t < 0.25 {
+        VadAggressiveness::Quality
+    } else if t < 0.5 {
+        VadAggressiveness::LowBitrate
+    } else if t < 0.75 {
+        VadAggressiveness::Aggressive
+    } else {
+        VadAggressiveness::VeryAggressive
+    }
+}
+
+/// Voice Activity Detection backed by libwebrtc's VAD (webrtc-vad crate).
+/// Detects speech onset within ~10ms frames at 16kHz.
 pub struct VoiceActivityDetector {
-    threshold: f32,
+    vad: webrtc_vad::Vad,
     min_speech_ms: u64,
     min_silence_ms: u64,
     in_speech: bool,
@@ -14,8 +49,11 @@ pub struct VoiceActivityDetector {
 
 impl VoiceActivityDetector {
     pub fn new(threshold: f32) -> Self {
+        let aggressiveness = threshold_to_vad_mode(threshold);
+        let mut vad = webrtc_vad::Vad::new_with_rate(webrtc_vad::SampleRate::Rate16kHz);
+        vad.set_mode(aggressiveness.to_webrtc());
         Self {
-            threshold: threshold.clamp(0.0, 1.0),
+            vad,
             min_speech_ms: 100,
             min_silence_ms: 300,
             in_speech: false,
@@ -26,9 +64,12 @@ impl VoiceActivityDetector {
     }
 
     /// Process an audio frame. Returns a SpeechSegment when speech ends.
+    /// Frame must be 10ms (160), 20ms (320), or 30ms (480) samples at 16kHz.
     pub fn process(&mut self, frame: &AudioFrame) -> Result<Option<SpeechSegment>, VoiceError> {
-        let energy = compute_energy(&frame.samples);
-        let is_voice = energy > self.threshold;
+        let is_voice = self
+            .vad
+            .is_voice_segment(&frame.samples)
+            .map_err(|_| VoiceError::VadError("invalid frame size for webrtc-vad".into()))?;
 
         if is_voice {
             if !self.in_speech {
@@ -76,12 +117,7 @@ impl VoiceActivityDetector {
     }
 }
 
-/// Compute RMS energy of audio samples, normalized to [0.0, 1.0].
-fn compute_energy(samples: &[i16]) -> f32 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let sum: f64 = samples.iter().map(|s| (*s as f64) * (*s as f64)).sum();
-    let rms = (sum / samples.len() as f64).sqrt();
-    (rms / i16::MAX as f64) as f32
-}
+// SAFETY: webrtc_vad::Vad wraps a C fvad struct (single-owner, no shared state).
+// The raw *mut Fvad prevents auto-Send, but the struct is only accessed via &mut self
+// and each VoiceActivityDetector owns its fvad instance exclusively.
+unsafe impl Send for VoiceActivityDetector {}

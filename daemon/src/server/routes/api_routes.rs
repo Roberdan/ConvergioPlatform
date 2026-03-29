@@ -97,6 +97,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/kernel/status",
     "/api/node/readiness",
     "/api/node/roles",
+    "/api/voice/status",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",
@@ -178,6 +179,9 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/node/assign-role",
     "/api/agent/interrupt",
     "/api/task/reschedule",
+    "/api/voice/start",
+    "/api/voice/stop",
+    "/api/voice/test",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",

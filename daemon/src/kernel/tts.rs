@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// TTS integration for kernel messages — macOS `say` fallback, Voxtral MLX future target.
-// Pattern: AppleFmBridge subprocess model (see ipc/models/apple_fm.rs).
+// TTS: Voxtral MLX primary, Qwen3 secondary, macOS `say` fallback (AppleFmBridge subprocess).
 
 pub use crate::kernel::tts_templates::KernelTemplates;
 
@@ -19,18 +18,29 @@ pub enum TtsError {
     Template(String),
 }
 
-/// Supported TTS backend strategies.
+/// Supported TTS backend strategies (priority: Voxtral > Qwen3 > macOS Say).
 #[derive(Debug, Clone, PartialEq)]
 pub enum TtsBackend {
+    /// Voxtral Mini via mlx-audio — primary neural voice backend.
+    VoxtralMlx,
     /// Qwen3-TTS via mlx-audio — neural voice, Italian, female (Vivian).
     Qwen3Tts,
     /// macOS built-in `say` command — zero deps fallback.
     MacOsSay,
-    /// Voxtral MLX (future) — replace when mlx-audio supports it.
-    VoxtralMlx,
 }
 
-/// TTS engine — wraps macOS `say` as practical fallback; Voxtral MLX as future target.
+impl TtsBackend {
+    /// Human-readable name for logging and status display.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::VoxtralMlx => "Voxtral Mini MLX",
+            Self::Qwen3Tts => "Qwen3 TTS Vivian",
+            Self::MacOsSay => "macOS Say",
+        }
+    }
+}
+
+/// TTS engine — Voxtral MLX primary, Qwen3 secondary, macOS `say` fallback.
 ///
 /// Uses phrase caching to avoid re-synthesis of repeated kernel messages.
 /// Latency target: <2 s for 20 words.
@@ -52,16 +62,17 @@ impl Default for TtsEngine {
 
 impl TtsEngine {
     pub fn new() -> Self {
-        let backend = if Self::qwen3_tts_available() {
-            TtsBackend::Qwen3Tts
-        } else if Self::voxtral_available() {
+        // Priority: Voxtral > Qwen3 > macOS Say.
+        let backend = if Self::voxtral_available() {
             TtsBackend::VoxtralMlx
+        } else if Self::qwen3_tts_available() {
+            TtsBackend::Qwen3Tts
         } else {
             TtsBackend::MacOsSay
         };
         let model_name = match &backend {
+            TtsBackend::VoxtralMlx => "voxtral-mini-mlx".to_string(),
             TtsBackend::Qwen3Tts => "qwen3-tts-vivian".to_string(),
-            TtsBackend::VoxtralMlx => "voxtral-mlx".to_string(),
             TtsBackend::MacOsSay => "macos-say-alice".to_string(),
         };
         Self {
@@ -85,11 +96,12 @@ impl TtsEngine {
             .unwrap_or(false)
     }
 
-    /// Returns `true` when the Voxtral MLX CLI is reachable on Apple Silicon.
+    /// Returns `true` when Voxtral 4B TTS is available via mlx-audio on Apple Silicon.
     pub fn voxtral_available() -> bool {
-        // Probe: `python -m voxtral.generate --help` exits 0 when installed.
-        std::process::Command::new("python")
-            .args(["-m", "voxtral.generate", "--help"])
+        // Probe: import voxtral_tts model type (requires mlx-audio from git main, not PyPI 0.4.1).
+        let python = crate::ipc::models::apple_fm::AppleFmBridge::resolve_python();
+        std::process::Command::new(&python)
+            .args(["-c", "from mlx_audio.tts.models.voxtral_tts import voxtral_tts; print('ok')"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
@@ -121,9 +133,9 @@ impl TtsEngine {
 
         let start = Instant::now();
         let wav = match self.backend {
+            TtsBackend::VoxtralMlx => self.speak_via_voxtral(text, locale)?,
             TtsBackend::Qwen3Tts => self.speak_via_qwen3(text, locale)?,
             TtsBackend::MacOsSay => self.speak_via_say(text, locale)?,
-            TtsBackend::VoxtralMlx => self.speak_via_voxtral(text, locale)?,
         };
         let elapsed = start.elapsed();
         tracing::info!(
@@ -195,24 +207,30 @@ impl TtsEngine {
             .map_err(|e| TtsError::SubprocessFailed(format!("read wav: {e}")))
     }
 
-    fn speak_via_voxtral(&self, text: &str, _locale: &str) -> Result<Vec<u8>, TtsError> {
-        // Placeholder — wire real Voxtral MLX CLI when model is verified.
-        // Shape mirrors AppleFmBridge.run_subprocess pattern.
-        let wav_path = self.temp_wav_path();
-        let output = std::process::Command::new("python")
+    fn speak_via_voxtral(&self, text: &str, locale: &str) -> Result<Vec<u8>, TtsError> {
+        let wav_dir = self.temp_wav_path();
+        let voice = if locale.starts_with("it") { "it_female" } else { "it_male" };
+        let python = crate::ipc::models::apple_fm::AppleFmBridge::resolve_python();
+        let status = std::process::Command::new(&python)
             .args([
-                "-m", "voxtral.generate",
+                "-m", "mlx_audio.tts.generate",
+                "--model", "mlx-community/Voxtral-4B-TTS-2603-mlx-4bit",
                 "--text", text,
-                "--output", wav_path.to_str().unwrap_or("/tmp/convergio_tts.wav"),
+                "--voice", voice,
+                "--output_path", wav_dir.to_str().unwrap_or("/tmp/convergio_tts"),
             ])
-            .output()
-            .map_err(|e| TtsError::Unavailable(e.to_string()))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(TtsError::SubprocessFailed(stderr));
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map_err(|e| TtsError::SubprocessFailed(e.to_string()))?;
+        if !status.success() {
+            return Err(TtsError::SubprocessFailed(
+                "voxtral-tts exited with error".into(),
+            ));
         }
-        std::fs::read(&wav_path)
+        // mlx-audio saves to <output_path>/audio_000.wav
+        let audio_path = wav_dir.join("audio_000.wav");
+        std::fs::read(&audio_path)
             .map_err(|e| TtsError::SubprocessFailed(format!("read wav: {e}")))
     }
 

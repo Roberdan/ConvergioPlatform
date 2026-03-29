@@ -6,6 +6,7 @@ use thiserror::Error;
 pub enum VoiceState {
     Idle,
     Listening,
+    WakeDetected,
     Processing,
     Speaking,
 }
@@ -15,6 +16,7 @@ impl std::fmt::Display for VoiceState {
         match self {
             Self::Idle => write!(f, "idle"),
             Self::Listening => write!(f, "listening"),
+            Self::WakeDetected => write!(f, "wake_detected"),
             Self::Processing => write!(f, "processing"),
             Self::Speaking => write!(f, "speaking"),
         }
