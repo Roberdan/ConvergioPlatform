@@ -1,5 +1,17 @@
 # Changelog
 
+## [19.4.0] - 29 Marzo 2026
+
+### Changed
+- Consolidated 104 agent definitions to 69 (-34%), merged 10 duplicates, compressed prompts (Plan 757 W1)
+- Consolidated 13 rule files to 2: hard-enforcement.md (~10 rules) + best-practices.md (Plan 757 W2)
+- Optimized CLAUDE.md from 163 to 110 lines (-32%) (Plan 757 W2)
+- Evidence gate cargo_test timeout increased to 180s (was 90s)
+
+### Removed
+- 35 redundant/duplicate agent definitions (Plan 757 W1)
+- 11 rule files replaced by tiered system (Plan 757 W2)
+
 ## [19.3.0] - 29 Marzo 2026
 
 ### Changed
