@@ -1,6 +1,5 @@
-// Tests for F-07: side-effect naming convention.
-// All DB-writing public functions must use write_ prefix.
-// These tests call the renamed functions to enforce convention at compile time.
+// Tests for F-07: DB write functions naming convention.
+// These tests verify update_task and validate_task return correct status transitions.
 
 use crate::db::{PlanDb, TaskStatus, UpdateTaskArgs, ValidateTaskArgs};
 
@@ -81,24 +80,24 @@ fn insert_plan_with_task(db: &PlanDb, task_status: &str) {
         .expect("tasks");
 }
 
-/// F-07: write_task_status must write to DB and return the status transition.
+/// F-07: update_task must write to DB and return the status transition.
 #[test]
-fn write_task_status_transitions_pending_to_in_progress() {
+fn update_task_transitions_pending_to_in_progress() {
     let db = PlanDb::open_in_memory().expect("db");
     seed_schema(&db);
     insert_plan_with_task(&db, "pending");
 
     let args = UpdateTaskArgs::default();
     let result = db
-        .write_task_status(100, TaskStatus::InProgress, &args)
-        .expect("write_task_status");
+        .update_task(100, TaskStatus::InProgress, &args)
+        .expect("update_task");
     assert_eq!(result.old_status, "pending");
     assert_eq!(result.new_status, "in_progress");
 }
 
-/// F-07: write_task_validated must mark a submitted task as done.
+/// F-07: validate_task must mark a submitted task as done.
 #[test]
-fn write_task_validated_transitions_submitted_to_done() {
+fn validate_task_transitions_submitted_to_done() {
     let db = PlanDb::open_in_memory().expect("db");
     seed_schema(&db);
     insert_plan_with_task(&db, "submitted");
@@ -109,8 +108,8 @@ fn write_task_validated_transitions_submitted_to_done() {
         ..ValidateTaskArgs::default()
     };
     let result = db
-        .write_task_validated(&args)
-        .expect("write_task_validated");
+        .validate_task(&args)
+        .expect("validate_task");
     assert_eq!(result.old_status, "submitted");
     assert_eq!(result.new_status, "done");
 }

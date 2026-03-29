@@ -82,6 +82,9 @@ pub mod ws;
 pub mod ws_brain;
 pub mod ws_pty;
 
+pub mod api_decisions;
+pub mod api_repositories;
+
 #[cfg(test)]
 mod api_voice_tests;
 #[cfg(test)]
@@ -192,6 +195,8 @@ mod api_plan_db_import_integration_tests;
 mod state_init_tests;
 #[cfg(test)]
 mod ws_pty_tests;
+#[cfg(test)]
+mod api_cli_integration_tests_ipc;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

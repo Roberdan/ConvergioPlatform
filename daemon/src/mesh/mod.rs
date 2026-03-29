@@ -25,3 +25,12 @@ pub mod peers;
 pub mod profiles;
 pub mod qr;
 pub mod token;
+
+// Node provisioning / migration modules
+pub mod brew;
+mod daemon_sync_auth;
+pub mod macos;
+pub mod repos;
+pub mod runners;
+pub mod shell;
+pub mod vscode;
