@@ -129,4 +129,4 @@ Pass all gathered context to planner. Do NOT re-ask questions already answered.
 - Constitution: `CONSTITUTION.md`
 - Legal notice: `LEGAL_NOTICE.md`
 - Planner skill: `@commands/planner.md`
-- Enforcement rules: `@rules/enforcement.md`
+- Enforcement rules: `@rules/hard-enforcement.md`
