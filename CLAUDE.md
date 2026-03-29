@@ -139,7 +139,7 @@ Daemon `:8420` message bus. `convergio-bus.sh send|who` | Protocol: `{type:DONE|
 |---|---|
 | code | thor (10 gates) |
 | document | doc-validator (5) |
-| analysis | strategy-validator (4) |
+| analysis | plan-reviewer (6) |
 | design | design-validator (4) |
 | legal | compliance-validator (4) |
 

@@ -187,7 +187,7 @@
                 },
                 "validator_agent": {
                   "type": "string",
-                  "enum": ["thor", "doc-validator", "strategy-validator", "design-validator", "compliance-validator"],
+                  "enum": ["thor", "doc-validator", "plan-reviewer", "design-validator", "compliance-validator"],
                   "default": "thor",
                   "description": "Agent that validates this task output"
                 },

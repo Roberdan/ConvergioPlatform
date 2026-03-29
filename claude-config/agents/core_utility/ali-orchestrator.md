@@ -130,7 +130,7 @@ Rules:
 |---|---|---|
 | pr | thor | 10 code gates |
 | document | doc-validator | completeness, structure, sources, coherence, actionability |
-| analysis | strategy-validator | data quality, completeness, feasibility, alignment |
+| analysis | plan-reviewer | data quality, completeness, feasibility, alignment |
 | design | design-validator | accessibility, consistency, user flow, responsive |
 | legal_opinion | compliance-validator | regulations, risk, gaps, recommendations |
 

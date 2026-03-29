@@ -1,10 +1,10 @@
 ---
 name: plan-reviewer
-description: Independent plan quality reviewer. Fresh context, zero planner bias. Validates requirements coverage, feature completeness, and adds value the requester missed.
+description: Independent plan quality reviewer and strategy validator. Fresh context, zero planner bias. Validates requirements coverage, feature completeness, strategy coherence, and adds value the requester missed.
 tools: ["Read", "Grep", "Glob", "Bash"]
 color: "#2E86AB"
 model: opus
-version: "1.3.0"
+version: "2.0.0"
 context_isolation: true
 memory: project
 maxTurns: 25
@@ -144,8 +144,22 @@ Task(agent_type="plan-reviewer", prompt="Review plan {plan_id}. Spec: {spec}. Pr
 claude --agent plan-reviewer --prompt "PLAN REVIEW\nPlan:{plan_id}\nSPEC:{spec}\nPROMPT:{prompt}\nPROJECT:{project}"
 ```
 
+### Gate 6: Strategy Validation (from strategy-validator)
+
+For deliverables with `output_type: analysis` (market analyses, business plans, OKR proposals, competitive assessments):
+
+| # | Gate | Criteria | Evidence |
+|---|---|---|---|
+| S1 | Data Quality | Sources cited, methodology clear, sample size adequate | Check references |
+| S2 | Completeness | All requested dimensions covered, no gaps | Compare vs F-xx |
+| S3 | Feasibility | Recommendations actionable with available resources | Check assumptions |
+| S4 | Alignment | Conclusions align with stated goals, no scope drift | Compare intro vs conclusions |
+
+If ALL pass → set `validated_by = 'plan-reviewer'`. If ANY fail → specific fix instructions.
+
 ## Changelog
 
+- **2.0.0** (2026-03-29): Consolidated strategy-validator into plan-reviewer (Plan 757)
 - **1.3.0** (2026-02-28): Added merge metadata coherence check in Gate 3
 - **1.2.0** (2026-02-27): Add LSP find-references for code verification
 - **1.1.0** (2026-02-24): Add Cross-Platform Invocation section

@@ -391,7 +391,7 @@ waves:
              b. For each task, if validator_agent is missing:
                 - output_type=pr → 'thor'
                 - output_type=document → 'doc-validator'
-                - output_type=analysis → 'strategy-validator'
+                - output_type=analysis → 'plan-reviewer'
                 - output_type=design → 'design-validator'
                 - output_type=legal_opinion → 'compliance-validator'
                 - default → 'thor'

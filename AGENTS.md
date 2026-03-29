@@ -11,7 +11,7 @@
 | baccio-tech-architect | System design, DDD, Clean Architecture | opus | v1.0 |
 | dario-debugger | Systematic root-cause analysis and debugging | sonnet | v1.0 |
 | marco-devops-engineer | CI/CD, IaC, Kubernetes, cloud automation | sonnet | v1.0 |
-| omri-data-scientist | ML, statistical analysis, predictive modeling | sonnet | v1.0 |
+| omri-data-scientist | ML, analytics, decision architecture, ecosystem intelligence | sonnet | v2.0 |
 | otto-performance-optimizer | Profiling, bottleneck analysis, system tuning | sonnet | v1.0 |
 | paolo-best-practices-enforcer | Coding standards, quality gates, engineering excellence | sonnet | v1.0 |
 | rex-code-reviewer | Design patterns, code quality, security review | sonnet | v1.0 |
@@ -28,17 +28,15 @@
 | matteo-strategic-business-architect | Business model design, competitive positioning | sonnet | v1.0 |
 | satya-board-of-directors | Board-level advisory and governance | opus | v1.0 |
 | sam-startupper | Startup strategy, product-market fit | sonnet | v1.0 |
-| michael-vc | Venture capital analysis and investment lens | sonnet | v1.0 |
-| wiz-investor-venture-capital | VC due diligence and portfolio strategy | sonnet | v1.0 |
+| wiz-investor-venture-capital | VC analysis, due diligence, portfolio strategy | haiku | v2.0 |
 
 ## Product & Project Management
 
 | Agent | Role | Model | Protocol |
 |-------|------|-------|----------|
-| davide-project-manager | Project delivery and stakeholder management | sonnet | v1.0 |
+| davide-project-manager | Project delivery, stakeholder management, GTM strategy | sonnet | v2.0 |
 | luke-program-manager | Program-level coordination and roadmaps | sonnet | v1.0 |
 | marcello-pm | Product management and feature prioritization | sonnet | v1.0 |
-| oliver-pm | Product operations and backlog management | sonnet | v1.0 |
 | wanda-workflow-orchestrator | Workflow design and process orchestration | sonnet | v1.0 |
 | taskmaster-strategic-task-decomposition-master | Task decomposition and planning | haiku | v1.0 |
 
@@ -56,11 +54,7 @@
 
 | Agent | Role | Model | Protocol |
 |-------|------|-------|----------|
-| angela-da | Data analysis and business intelligence | sonnet | v1.0 |
-| ava-analytics-insights-virtuoso | Advanced analytics and insight generation | sonnet | v1.0 |
 | diana-performance-dashboard | Performance dashboards and KPI tracking | sonnet | v1.0 |
-| ethan-da | Data engineering and pipeline analysis | sonnet | v1.0 |
-| evan-ic6da | IC6-level data architecture | sonnet | v1.0 |
 | fiona-market-analyst | Market research and competitive analysis | sonnet | v1.0 |
 
 ## Legal & Compliance
@@ -92,7 +86,6 @@
 | behice-cultural-coach | Cross-cultural coaching and diversity | sonnet | v1.0 |
 | coach-team-coach | Team coaching and performance enablement | sonnet | v1.0 |
 | giulia-hr-talent-acquisition | HR, recruiting, and talent strategy | sonnet | v1.0 |
-| riccardo-storyteller | Narrative strategy and storytelling | sonnet | v1.0 |
 
 ## Research & Knowledge
 
@@ -122,13 +115,12 @@
 | doc-validator | Documentation quality validation | sonnet | v1.0 |
 | plan-business-advisor | Business viability review for plans | opus | v1.0 |
 | plan-post-mortem | Post-plan retrospective and learnings | opus | v1.0 |
-| plan-reviewer | Pre-execution plan review (1x per plan) | opus | v1.0 |
+| plan-reviewer | Pre-execution plan review + strategy validation | opus | v2.0 |
 | po-prompt-optimizer | Prompt engineering and optimization | haiku | v1.0 |
 | sentinel-ecosystem-guardian | Ecosystem health and drift detection | opus | v1.0 |
-| strategic-planner | Plan creation, wave structuring, TDD spec | opus | v1.0 |
-| strategy-validator | Strategy coherence validation | sonnet | v1.0 |
+| strategic-planner | Plan creation, wave structuring, TDD spec, Thor gates | opus | v4.2 |
 | task-executor | TDD task execution with F-xx verification | sonnet | v1.0 |
-| thor-quality-assurance-guardian | Wave-level QA validation (10 gates) | sonnet | v1.0 |
+| thor-quality-assurance-guardian | Wave-level QA validation (10 gates, inlined) | sonnet | v6.0 |
 | wanda-workflow-orchestrator | Workflow orchestration | sonnet | v1.0 |
 | xavier-coordination-patterns | Multi-agent coordination patterns | sonnet | v1.0 |
 | Convergio | Platform control plane expert | sonnet | v1.0 |

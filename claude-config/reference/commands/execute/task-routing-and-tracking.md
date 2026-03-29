@@ -53,7 +53,7 @@ ORDER BY task_id;
 | `model` | Model to use (claude-sonnet-4.6, gpt-5, etc) |
 | `executor_agent` | `task-executor` (claude) or `task-executor-copilot` (copilot) |
 | `output_type` | `pr` (code), `document`, `analysis`, `design`, `legal_opinion` |
-| `validator_agent` | Who validates: `thor`, `doc-validator`, `strategy-validator`, etc |
+| `validator_agent` | Who validates: `thor`, `doc-validator`, `plan-reviewer`, etc |
 | `test_criteria` | JSON with `verify[]` array — commands Thor runs to validate |
 
 ## Dispatch

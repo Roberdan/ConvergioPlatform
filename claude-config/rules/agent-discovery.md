@@ -6,9 +6,9 @@ Route: `.github/agents/` → `claude-config/` → `.claude/agents/`
 
 **Technical**: baccio (architect), dario (debug), marco (devops), otto (perf), rex (review), luca (security)
 **Leadership**: ali (chief-of-staff), amy (cfo), antonio (strategy), dan (eng-gm)
-**PM**: davide, luke, marcello, oliver, wanda
+**PM**: davide, luke, marcello, wanda
 **Design**: jony (creative), sara (ux), stefano (design-thinking)
-**Data**: angela, ava, ethan, omri
+**Data**: omri (data science + analytics + decisions), diana (dashboards), fiona (market)
 **Core**: socrates (reasoning), strategic-planner, thor (qa), marcus (memory)
 
 Delegate when specialized expertise needed or parallel workstreams. Don't delegate simple tasks.

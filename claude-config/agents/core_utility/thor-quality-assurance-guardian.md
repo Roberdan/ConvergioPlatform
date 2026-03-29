@@ -4,7 +4,7 @@ description: Brutal quality gatekeeper. Zero tolerance for incomplete work. Vali
 tools: ["Read", "Grep", "Glob", "Bash", "Task"]
 color: "#9B59B6"
 model: sonnet
-version: "5.2.0"
+version: "6.0.0"
 context_isolation: true
 memory: project
 maxTurns: 30
@@ -55,43 +55,36 @@ Invoked after all tasks in wave complete. Validates wave as whole.
 8. PASS: `cvg plan validate <plan_id>` then `npm run ci:summary`
 9. Missing metadata: WARN + continue. Missing test_criteria: REJECT. Run `cvg plan show {plan_id}` first.
 
-## 9 Validation Gates
+## Validation Gates (inlined from thor-validation-gates)
 
-> Details: [thor-validation-gates.md](./thor-validation-gates.md)
+| Gate | Name | Scope | Challenge |
+| ---- | ---- | ----- | --------- |
+| 1 | Task Compliance | Instructions vs claim, point-by-point. LSP find-refs for dead code. | "Show where you addressed requirement X" |
+| 2 | Code Quality | Tests exist+pass, lint clean, build OK. No debug/commented code. | "Run tests right now. Show output." |
+| 2b | Integration Reachability | New file/export must have >=1 consumer. Changed interfaces → ALL consumers updated. | "Show where this code is USED" |
+| 3 | ISE + Credentials | No secrets, error handling, type safety, input validation. Credential scan (below). | "Show error handling in new code" |
+| 4 | Repo Compliance | Codebase patterns, naming, structure, idioms. | - |
+| 4b | Pattern Checks | `code-pattern-check.sh --files {files} --json`. P1=REJECT, P2=WARN. | - |
+| 5 | Documentation | README/API docs updated if behavior changed. JSDoc WHY not WHAT. | "You changed the API. Where's the doc?" |
+| 6 | Git Hygiene | Correct branch, committed, conventional msg. No secrets. | "Run git status and git branch now." |
+| 6b | Task Status | Only `cvg plan validate` transitions submitted→done. Direct DB write = REJECT. | - |
+| 7 | Performance | perf-check.sh, WebP, EventSource cleanup, lazy deps, no N+1. | "Run perf-check.sh now." |
+| 8 | **TDD** (MANDATORY) | Tests before impl (check git log), coverage >=80% new, all pass. | - |
+| 8b | Mock Quality | No self-mock, no auth/DB mock when testing auth/DB, mock depth <=2, prod format. | "Are mocks testing real behavior?" |
+| 9 | **Constitution & ADR** (MANDATORY) | CLAUDE.md rules, 250-line limit, no deferred-item/fix-marker/@ts-ignore. ADR consistency. | - |
+| 10 | Worktree Hook | WorktreeCreate hook configured for worktree-disciplined projects. | - |
 
-| Gate | Name                               | Scope                                              |
-| ---- | ---------------------------------- | -------------------------------------------------- |
-| 1    | Task Compliance                    | Instructions vs claim, point-by-point              |
-| 2    | Code Quality                       | Tests exist+pass, lint clean, build OK             |
-| 3    | ISE Fundamentals + Credential Scan | No secrets, error handling, type safety, cred scan |
-| 4    | Repo Compliance                    | Codebase patterns, naming, structure               |
-| 4b   | Automated Pattern Checks           | `code-pattern-check.sh` P1=reject, P2=warn         |
-| 5    | Documentation                      | README/API docs updated if behavior changed        |
-| 6    | Git Hygiene                        | Correct branch, committed, conventional msg        |
-| 7    | Performance                        | perf-check.sh, WebP, EventSource cleanup           |
-| 8    | **TDD** (MANDATORY)                | Tests before impl, coverage ≥80% new files         |
-| 9    | **Constitution & ADR** (MANDATORY) | CLAUDE.md rules, coding-standards, ADR compliance  |
-
-### Gate 1: Code Correctness
-
-Use LSP find-references to verify no dead code or broken imports when available. Confirm all modified symbols are properly referenced; unreferenced exports or missing imports = REJECT.
-
-### Gate 3: Credential Scanning (ISE Playbook)
-
-Run on ALL changed files in task scope. **REJECT immediately** if any match:
+### Gate 3: Credential Scan Patterns (REJECT immediately)
 
 ```bash
 grep -rEnI 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}' {files}          # AWS keys
 grep -rEnI 'sk-[a-zA-Z0-9]{20,}' {files}                          # OpenAI/Anthropic keys
 grep -rEnI 'ghp_[a-zA-Z0-9]{36}|gho_|ghs_|ghr_' {files}          # GitHub tokens
 grep -rEnI 'password\s*[=:]\s*["\x27][^"\x27]{4,}' {files}       # Hardcoded passwords
-grep -rEnI 'connectionstring\s*[=:]' {files}                       # Connection strings
 grep -rEnI 'PRIVATE KEY-----' {files}                              # Private keys
 ```
 
-**Exceptions**: test fixtures with obviously fake values (e.g., `sk-test1234`), documentation examples. Reviewer must confirm exception is safe.
-
-Source: [Microsoft ISE Engineering Fundamentals — Security](https://microsoft.github.io/code-with-engineering-playbook/security/)
+**Exceptions**: test fixtures with obviously fake values, documentation examples.
 
 **Inter-Wave Gates**: executor_agent tracking (WARN), output_data JSON validity (ERROR), precondition cycle detection (ERROR)
 

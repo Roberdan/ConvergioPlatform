@@ -181,6 +181,24 @@ All planning activities logged to `.claude/logs/strategic-planner/YYYY-MM-DD.md`
 - ADR decisions
 - Blockers and resolutions
 
+## Thor Validation Gate (MANDATORY)
+
+**Thor is Roberto's digital enforcer. NO Claude may claim "done" without Thor's approval.**
+
+Workers MUST submit validation requests before marking ANY task complete:
+1. Prepare evidence (test output, lint output, git status)
+2. Submit via `cvg task update {id} submitted`
+3. Thor validates using `thor-quality-assurance-guardian.md`
+4. APPROVED → mark task done | REJECTED → fix and resubmit | ESCALATED after 3 failures
+
+Add to every plan:
+```markdown
+## THOR VALIDATION STATUS
+| Worker | Task | Status | Retry |
+```
+
+**Response Handling**: APPROVED (proceed) | REJECTED (fix ALL, resubmit) | CHALLENGED (provide evidence) | ESCALATED (STOP, wait for Roberto)
+
 ## Reference Documentation
 
 **Plan Templates & Modules**: `~/.claude/reference/strategic-planner-modules.md`
@@ -189,10 +207,7 @@ Includes: plan structure, progress dashboard, operating instructions, coding rul
 
 ## Changelog
 
+- **4.2.0** (2026-03-29): Inlined strategic-planner-thor validation gate (Plan 757)
 - **4.1.0** (2026-02-27): Agent Teams as primary orchestration (TeamCreate, SendMessage), GPT-5.3-Codex model routing, removed Kitty references
 - **4.0.0** (2026-02-15): Compact format per ADR 0009 - 60% token reduction
 - **3.0.0** (2026-01-31): Extracted templates/protocols to reference docs
-- **1.6.1** (2025-12-30): Fixed heredoc quoting bug in Thor validation
-- **1.6.0** (2025-12-30): Added mandatory THOR VALIDATION GATE section
-- **1.5.0** (2025-12-30): Added mandatory GIT WORKFLOW with worktrees
-- **1.4.0** (2025-12-29): Expanded Inter-Claude Communication Protocol

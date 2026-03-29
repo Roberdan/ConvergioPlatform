@@ -20,7 +20,7 @@ Run when the user requests a plan, says "plan this", or invokes `/planner`. Acce
 6. Final wave must include: `TF-tests` → `TF-doc` → `TF-pr` → `TF-deploy-verify`.
 7. Include integration/wiring tasks for any new interfaces.
 8. Supported task types: `code`, `research`, `strategy`, `design`, `legal`, `marketing`, `analysis`, `planning`, `communication`.
-9. Validator per domain: Thor for `pr`; `doc-validator`, `strategy-validator`, `design-validator`, `compliance-validator` for others.
+9. Validator per domain: Thor for `pr`; `doc-validator`, `plan-reviewer`, `design-validator`, `compliance-validator` for others.
 
 ### Phase 3: Review
 

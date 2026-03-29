@@ -11,7 +11,7 @@ After ALL tasks in a wave are `submitted` (MANDATORY — coordinator MUST call t
 3. Thor reads `validator_agent` — uses domain-specific gates:
    - `output_type: pr` → Thor 10 code gates
    - `output_type: document` → doc-validator (completeness, structure, sources)
-   - `output_type: analysis` → strategy-validator (data quality, feasibility)
+   - `output_type: analysis` → plan-reviewer (data quality, feasibility)
    - `output_type: design` → design-validator (a11y, consistency)
    - `output_type: legal_opinion` → compliance-validator (regulations, gaps)
 4. If ALL pass → tasks promoted to `done`, wave marked `done`

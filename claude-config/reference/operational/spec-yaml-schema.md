@@ -63,7 +63,7 @@ waves:
 |-------------|-----------|
 | pr, review | thor |
 | document, presentation | doc-validator |
-| analysis, plan | strategy-validator |
+| analysis, plan | plan-reviewer |
 | design | design-validator |
 | legal_opinion | compliance-validator |
 
