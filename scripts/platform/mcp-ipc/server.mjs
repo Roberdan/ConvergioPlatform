@@ -114,6 +114,13 @@ const TOOLS = [
   // ── Checkpoints ──
   { name: 'convergio_checkpoint_save', description: 'Save plan checkpoint', inputSchema: obj({ plan_id: num('Plan ID') }, ['plan_id']) },
   { name: 'convergio_checkpoint_restore', description: 'Restore plan checkpoint', inputSchema: obj({ plan_id: num('Plan ID') }, ['plan_id']) },
+
+  // ── UI Builder (nasra-app-builder) ──
+  { name: 'convergio_ui_analyze', description: 'Analyze a repo backend: discover API endpoints, types, auth, realtime. Returns structured API surface.', inputSchema: obj({ repo_path: str('Absolute path to repo'), probe: { type: 'boolean', description: 'Probe running endpoints (default false)' } }, ['repo_path']) },
+  { name: 'convergio_ui_map', description: 'Map analyzed API surface to convergio-design components using CKB. Returns page/component mapping spec.', inputSchema: obj({ api_surface: { type: 'object', description: 'API surface from convergio_ui_analyze' }, ckb_path: str('Path to ckb.json (optional, auto-detected)') }, ['api_surface']) },
+  { name: 'convergio_ui_generate', description: 'Generate/scaffold Next.js + Tauri app from component mapping. Mode: scaffold (new) or augment (existing).', inputSchema: obj({ mapping: { type: 'object', description: 'Mapping from convergio_ui_map' }, target_path: str('Target repo path'), mode: str('scaffold | augment') }, ['mapping', 'target_path', 'mode']) },
+  { name: 'convergio_ui_fix', description: 'Analyze existing UI and fix DS alignment. Detects anti-patterns and replaces with proper convergio-design usage.', inputSchema: obj({ repo_path: str('Path to repo with existing UI') }, ['repo_path']) },
+  { name: 'convergio_ui_validate', description: 'Validate UI against convergio-design best practices. Returns score, issues, and component coverage.', inputSchema: obj({ repo_path: str('Path to repo to validate') }, ['repo_path']) },
 ];
 
 // -- Route handlers --
@@ -191,6 +198,145 @@ const H = {
   // Checkpoints
   convergio_checkpoint_save: (a) => post('/api/plan-db/checkpoint/save', a),
   convergio_checkpoint_restore: (a) => get(`/api/plan-db/checkpoint/restore?plan_id=${a.plan_id}`),
+
+  // UI Builder — these are agent-orchestrated tools, not direct daemon calls.
+  // They return structured guidance for the nasra-app-builder agent.
+  convergio_ui_analyze: async (a) => {
+    const { repo_path, probe } = a;
+    const { execSync } = await import('node:child_process');
+    const { existsSync, readFileSync } = await import('node:fs');
+    const result = { endpoints: [], types: [], auth_model: 'unknown', realtime: [] };
+
+    // Detect OpenAPI spec
+    try {
+      const specs = execSync(`find "${repo_path}" -maxdepth 3 \\( -name 'openapi.*' -o -name 'swagger.*' \\) 2>/dev/null`, { encoding: 'utf8' }).trim();
+      if (specs) result.openapi_spec = specs.split('\n')[0];
+    } catch { /* no spec found */ }
+
+    // Detect routes by language
+    const patterns = [
+      { lang: 'rust', glob: '*.rs', pat: '\\.(get|post|put|delete|route)\\(' },
+      { lang: 'typescript', glob: '*.ts', pat: '(router|app)\\.(get|post|put|delete)\\(' },
+      { lang: 'python', glob: '*.py', pat: '@(app|router)\\.(get|post|put|delete)' },
+    ];
+    for (const { lang, glob, pat } of patterns) {
+      try {
+        const hits = execSync(`grep -rn '${pat}' "${repo_path}" --include='${glob}' 2>/dev/null | head -50`, { encoding: 'utf8' }).trim();
+        if (hits) result.endpoints.push({ language: lang, routes: hits.split('\n').length, sample: hits.substring(0, 500) });
+      } catch { /* no matches */ }
+    }
+
+    // Detect Next.js API routes
+    try {
+      const nextRoutes = execSync(`find "${repo_path}/src/app/api" -name 'route.ts' -o -name 'route.js' 2>/dev/null`, { encoding: 'utf8' }).trim();
+      if (nextRoutes) result.endpoints.push({ language: 'nextjs', routes: nextRoutes.split('\n').length, sample: nextRoutes.substring(0, 500) });
+    } catch { /* no next routes */ }
+
+    // Detect type files
+    try {
+      const typeFiles = execSync(`find "${repo_path}" -maxdepth 4 -name '*types*.ts' -o -name '*api*.ts' 2>/dev/null | head -10`, { encoding: 'utf8' }).trim();
+      if (typeFiles) result.types = typeFiles.split('\n');
+    } catch { /* no type files */ }
+
+    // Detect WebSocket/SSE
+    try {
+      const ws = execSync(`grep -rn 'WebSocket\\|EventSource\\|SSE\\|ws://' "${repo_path}/src" --include='*.ts' --include='*.tsx' 2>/dev/null | head -10`, { encoding: 'utf8' }).trim();
+      if (ws) result.realtime = ws.split('\n').map(l => l.trim());
+    } catch { /* no realtime */ }
+
+    return result;
+  },
+
+  convergio_ui_map: async (a) => {
+    const { api_surface, ckb_path } = a;
+    const { readFileSync, existsSync } = await import('node:fs');
+    const { execSync } = await import('node:child_process');
+
+    // Find CKB
+    let ckbFile = ckb_path;
+    if (!ckbFile) {
+      try {
+        ckbFile = execSync('find /Users/Roberdan/GitHub/convergio-design -name ckb.json -path "*/dist/knowledge/*" 2>/dev/null | head -1', { encoding: 'utf8' }).trim();
+      } catch { /* not found */ }
+    }
+    if (!ckbFile || !existsSync(ckbFile)) return { error: 'CKB not found. Run generate-ckb.mjs in convergio-design first.' };
+
+    const ckb = JSON.parse(readFileSync(ckbFile, 'utf8'));
+    return {
+      ckb_version: ckb.version,
+      package_version: ckb.packageVersion,
+      available_components: ckb.webComponents.length,
+      available_modules: Object.keys(ckb.tsModules).length,
+      composition_rules: ckb.compositionRules.map(r => ({ id: r.id, pattern: r.pattern, components: r.components })),
+      mapping_hints: ckb.mappingHints.map(h => ({ id: h.id, apiPattern: h.apiPattern, suggestedComponent: h.suggestedComponent })),
+      themes: ckb.themes.map(t => t.id),
+      message: 'Use composition_rules and mapping_hints to match api_surface endpoints to components. The nasra-app-builder agent has detailed protocols for this mapping.',
+    };
+  },
+
+  convergio_ui_generate: async (a) => {
+    return {
+      status: 'delegated',
+      message: 'UI generation is an agent-level operation. Use the nasra-app-builder agent with mode=' + a.mode + ' on target_path=' + a.target_path + '. The agent handles file creation, DS integration, Tauri setup, and PR workflow.',
+      agent: 'nasra-app-builder',
+      mode: a.mode,
+      target: a.target_path,
+    };
+  },
+
+  convergio_ui_fix: async (a) => {
+    const { execSync } = await import('node:child_process');
+    const issues = [];
+
+    // Detect anti-patterns
+    try {
+      const noTokenImport = execSync(`grep -rL '@convergio/design-elements' "${a.repo_path}/src" --include='*.css' 2>/dev/null | head -5`, { encoding: 'utf8' }).trim();
+      if (noTokenImport) issues.push({ type: 'missing-elements-import', files: noTokenImport.split('\n'), severity: 'high' });
+    } catch { /* ok */ }
+
+    try {
+      const hardcodedColors = execSync(`grep -rn '#[0-9a-fA-F]\\{6\\}' "${a.repo_path}/src" --include='*.css' --include='*.tsx' 2>/dev/null | grep -v 'node_modules' | head -20`, { encoding: 'utf8' }).trim();
+      if (hardcodedColors) issues.push({ type: 'hardcoded-colors', count: hardcodedColors.split('\n').length, severity: 'medium' });
+    } catch { /* ok */ }
+
+    try {
+      const noWC = execSync(`grep -rn 'mn-' "${a.repo_path}/src" --include='*.tsx' --include='*.ts' 2>/dev/null | wc -l`, { encoding: 'utf8' }).trim();
+      if (parseInt(noWC) < 5) issues.push({ type: 'no-ds-components', message: 'Very few or no convergio-design components used', severity: 'critical' });
+    } catch { /* ok */ }
+
+    return { issues, message: 'Use nasra-app-builder agent to fix these issues. Mode: fix.' };
+  },
+
+  convergio_ui_validate: async (a) => {
+    const { execSync } = await import('node:child_process');
+    const result = { score: 0, issues: [], components_used: [], suggestions: [] };
+
+    // Count DS component usage
+    try {
+      const wcUsage = execSync(`grep -roh 'mn-[a-z-]*' "${a.repo_path}/src" --include='*.tsx' --include='*.html' 2>/dev/null | sort -u`, { encoding: 'utf8' }).trim();
+      result.components_used = wcUsage ? wcUsage.split('\n') : [];
+    } catch { /* ok */ }
+
+    // Check CSS token imports
+    try {
+      execSync(`grep -q '@convergio/design-tokens' "${a.repo_path}/src/app/globals.css" 2>/dev/null`);
+      result.score += 20;
+    } catch { result.issues.push('Missing @convergio/design-tokens CSS import'); }
+
+    try {
+      execSync(`grep -q '@convergio/design-elements/css' "${a.repo_path}/src/app/globals.css" 2>/dev/null`);
+      result.score += 20;
+    } catch { result.issues.push('Missing @convergio/design-elements CSS import'); }
+
+    // Score by component count
+    result.score += Math.min(60, result.components_used.length * 4);
+
+    if (result.components_used.length < 5) result.suggestions.push('Consider using more DS components. Run convergio_ui_map to see available components.');
+    if (!result.components_used.includes('mn-header-shell')) result.suggestions.push('Use mn-header-shell for the app header');
+    if (!result.components_used.includes('mn-data-table')) result.suggestions.push('Use mn-data-table for data lists');
+
+    return result;
+  },
 };
 
 // -- MCP Server --
