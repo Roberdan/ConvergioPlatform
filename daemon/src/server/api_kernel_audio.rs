@@ -25,6 +25,7 @@ pub fn router() -> Router<ServerState> {
 /// Receives raw WAV bytes in the request body and plays them locally via `afplay`.
 /// The temp WAV file is deleted after playback.
 /// Returns 202 Accepted immediately (fire-and-forget on a Tokio task).
+    #[tracing::instrument(skip_all)]
 async fn handle_play(body: Bytes) -> impl IntoResponse {
     if body.is_empty() {
         warn!("kernel.audio.play: received empty body — rejected");
@@ -56,6 +57,7 @@ struct ActiveNodeBody {
 /// Writes `active_node` and `active_node_set_at` into the `kernel_config` table so that
 /// `audio::resolve_active_node` routes TTS playback to the requesting node.
 /// Response: `{"ok": true, "active_node": "<hostname>"}`
+    #[tracing::instrument(skip_all)]
 async fn handle_active_node(
     State(state): State<ServerState>,
     Json(body): Json<ActiveNodeBody>,

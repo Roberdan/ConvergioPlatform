@@ -68,6 +68,7 @@ pub fn handle_tool_call(
         "cvg_restart_node" => restart_node(daemon_url, token, args),
         "cvg_assign_role" => assign_role(daemon_url, token, args),
         "cvg_interrupt_agent" => interrupt_agent(daemon_url, token, args),
+        "cvg_invoke_agent" => crate::mcp_server::invoke_agent::invoke_agent(args),
         "cvg_reschedule_task" => reschedule_task(daemon_url, token, args),
         _ => Err(McpError::InvalidParams("unknown tool name")),
     }
@@ -188,10 +189,13 @@ fn cost_summary(daemon_url: &str, token: Option<&str>) -> Result<Value, McpError
         .iter()
         .filter(|p| p.get("status").and_then(|s| s.as_str()) == Some("doing"))
         .count();
+    // Include API telemetry metrics (best-effort; omit on failure)
+    let api_metrics = http_get(&format!("{daemon_url}/api/telemetry"), token).ok();
     Ok(json!({
         "total_cost": total_cost,
         "active_plans": active,
         "total_plans": plans.len(),
+        "api_telemetry": api_metrics,
     }))
 }
 

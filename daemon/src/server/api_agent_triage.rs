@@ -68,6 +68,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/agents/scaffold", post(handle_scaffold))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_triage(
     State(state): State<ServerState>,
     Json(body): Json<TriageRequest>,
@@ -160,6 +161,7 @@ async fn handle_triage(
 }
 
 /// POST /api/agents/scaffold — generate an agent .md template from metadata.
+    #[tracing::instrument(skip_all)]
 async fn handle_scaffold(Json(body): Json<ScaffoldRequest>) -> Result<Json<Value>, ApiError> {
     if body.name.trim().is_empty() {
         return Err(ApiError::bad_request("name is required"));

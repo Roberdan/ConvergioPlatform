@@ -66,31 +66,93 @@ fn default_type() -> String {
 pub fn parse_waves(body: &Value) -> Result<Vec<WaveSpec>, ApiError> {
     // If "waves" array is provided directly
     if let Some(waves_val) = body.get("waves") {
-        return serde_json::from_value::<Vec<WaveSpec>>(waves_val.clone())
-            .map_err(|e| ApiError::bad_request(format!("invalid waves: {e}")));
+        return parse_wave_array(waves_val, "body.waves");
     }
 
     // If "spec" is provided as a string (YAML), parse it
     if let Some(spec_str) = body.get("spec").and_then(Value::as_str) {
-        let parsed: Value = serde_yaml::from_str(spec_str)
-            .map_err(|e| ApiError::bad_request(format!("YAML parse failed: {e}")))?;
+        let parsed: Value = serde_yaml::from_str(spec_str).map_err(|e| {
+            let loc = format_yaml_location(&e);
+            ApiError::bad_request(format!(
+                "YAML parse error{loc}: {e}. Hint: check indentation and quoting."
+            ))
+        })?;
         if let Some(waves_val) = parsed.get("waves") {
-            return serde_json::from_value::<Vec<WaveSpec>>(waves_val.clone())
-                .map_err(|e| ApiError::bad_request(format!("invalid waves in spec: {e}")));
+            return parse_wave_array(waves_val, "spec.waves");
         }
-        return Err(ApiError::bad_request("spec missing 'waves' key"));
+        // serde_yaml parses into serde_json::Value via our pipeline
+        let keys: Vec<String> = parsed
+            .as_object()
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default();
+        return Err(ApiError::bad_request(format!(
+            "spec missing 'waves' key. Found top-level keys: [{}]. \
+             Expected: waves: [{{id, name, tasks: [...]}}]",
+            keys.join(", ")
+        )));
     }
 
     // If "spec" is a JSON object
     if let Some(spec_obj) = body.get("spec") {
         if let Some(waves_val) = spec_obj.get("waves") {
-            return serde_json::from_value::<Vec<WaveSpec>>(waves_val.clone())
-                .map_err(|e| ApiError::bad_request(format!("invalid waves in spec: {e}")));
+            return parse_wave_array(waves_val, "spec.waves");
         }
-        return Err(ApiError::bad_request("spec missing 'waves' key"));
+        return Err(ApiError::bad_request(
+            "spec object missing 'waves' key. Expected: {\"waves\": [{...}]}",
+        ));
     }
 
     Err(ApiError::bad_request(
-        "missing 'waves' or 'spec' in request body",
+        "missing 'waves' or 'spec' in request body. \
+         Use: {\"plan_id\": N, \"spec\": \"<yaml string>\"} or \
+         {\"plan_id\": N, \"waves\": [...]}. \
+         Run `cvg plan template` for a complete example.",
     ))
+}
+
+/// Parse a waves array with detailed per-wave error messages.
+fn parse_wave_array(waves_val: &Value, path: &str) -> Result<Vec<WaveSpec>, ApiError> {
+    let arr = waves_val.as_array().ok_or_else(|| {
+        ApiError::bad_request(format!("{path} must be an array, got {}", value_type(waves_val)))
+    })?;
+    if arr.is_empty() {
+        return Err(ApiError::bad_request(format!("{path} is empty — at least one wave required")));
+    }
+    for (i, wave) in arr.iter().enumerate() {
+        if wave.get("id").is_none() {
+            return Err(ApiError::bad_request(format!(
+                "{path}[{i}] missing required field 'id'"
+            )));
+        }
+        if wave.get("name").is_none() && wave.get("title").is_none() {
+            return Err(ApiError::bad_request(format!(
+                "{path}[{i}] missing required field 'name' (or alias 'title')"
+            )));
+        }
+    }
+    serde_json::from_value::<Vec<WaveSpec>>(waves_val.clone()).map_err(|e| {
+        ApiError::bad_request(format!(
+            "invalid wave/task structure in {path}: {e}. \
+             Run `cvg plan template` for the expected format."
+        ))
+    })
+}
+
+fn value_type(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+fn format_yaml_location(e: &serde_yaml::Error) -> String {
+    if let Some(loc) = e.location() {
+        format!(" at line {}, column {}", loc.line(), loc.column())
+    } else {
+        String::new()
+    }
 }

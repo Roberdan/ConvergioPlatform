@@ -13,6 +13,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/plans/:plan_id/validate", post(handle_plan_validate))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_plan_validate(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -61,6 +62,7 @@ async fn handle_plan_validate(
     ))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_plan_cancel(
     State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,
@@ -95,6 +97,7 @@ async fn handle_plan_cancel(
     ))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_plan_reset(
     State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,
@@ -127,6 +130,7 @@ async fn handle_plan_reset(
     ))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_plan_move(
     State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,

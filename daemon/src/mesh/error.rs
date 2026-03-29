@@ -50,3 +50,7 @@ impl From<rmp_serde::decode::Error> for MeshError {
         MeshError::Serialization(e.to_string())
     }
 }
+
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

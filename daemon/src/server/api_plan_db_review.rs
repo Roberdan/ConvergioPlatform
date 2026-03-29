@@ -28,6 +28,7 @@ const VALID_VERDICTS: &[&str] = &["proceed", "revise", "reject"];
 ///   2. Pre-plan by spec:  body must contain `spec_file` (string path)
 ///
 /// Body: {plan_id?, spec_file?, reviewer_agent, verdict, suggestions?, raw_report?}
+    #[tracing::instrument(skip_all)]
 async fn handle_review_register(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -98,6 +99,7 @@ struct ReviewCheckQuery {
 }
 
 /// GET /api/plan-db/review/check?plan_id=N — count reviews by reviewer type
+    #[tracing::instrument(skip_all)]
 async fn handle_review_check(
     State(state): State<ServerState>,
     Query(params): Query<ReviewCheckQuery>,
@@ -165,6 +167,7 @@ async fn handle_review_check(
 
 /// POST /api/plan-db/review/reset — delete all reviews for a plan
 /// Body: {plan_id}
+    #[tracing::instrument(skip_all)]
 async fn handle_review_reset(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -196,6 +199,7 @@ async fn handle_review_reset(
 /// Links all unlinked plan_reviews that match `spec_file` to the new `plan_id`.
 ///
 /// Body: { plan_id: i64, spec_file: String }
+    #[tracing::instrument(skip_all)]
 async fn handle_review_link_by_spec(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

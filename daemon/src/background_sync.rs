@@ -1,17 +1,21 @@
-/// Background CRDT sync loop — periodically syncs with active mesh peers.
+/// Background sync loop — periodically syncs with active mesh peers via HTTP.
 ///
-/// Spawned once at daemon startup by T3b-01. Queries mesh_sync_stats for live
-/// peers and calls `PlanDb::sync_with_peer` for each. Skips ticks silently when
-/// the DB lock is contended or no peers are available.
+/// Spawned once at daemon startup. Queries mesh_sync_stats for live peers and
+/// uses the timestamp-based `libsql_adapter` to export/import changes over HTTP.
+/// Skips ticks silently when the DB lock is contended or no peers are available.
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-use crate::db::PlanDb;
+use crate::background_sync_http::{fetch_changes_from_peer, send_changes_to_peer};
+use crate::db::libsql_adapter::{self, SyncMeta};
 
 /// Default sync interval in seconds when CONVERGIO_SYNC_INTERVAL_SECS is unset.
 const DEFAULT_INTERVAL_SECS: u64 = 30;
+
+/// Tables eligible for timestamp-based sync. Must have `id` + `updated_at`.
+const SYNC_TABLES: &[&str] = &["tasks", "plans", "waves"];
 
 /// Resolve the effective sync interval.
 ///
@@ -62,37 +66,93 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
     Ok(peers)
 }
 
-/// Sync with a single peer using a PlanDb wrapping the shared connection.
+/// Sync a single table with a remote peer via HTTP.
 ///
-/// `PlanDb` holds its own `Connection` so we open a short-lived in-memory
-/// instance here only to mirror the shared connection's CRDT change log.
-/// The actual SSH-based sync is driven by the peer string.
+/// 1. Read local _sync_meta for the last sync timestamp with this peer+table.
+/// 2. Export local changes since that timestamp.
+/// 3. POST them to the peer's /api/sync/import.
+/// 4. GET the peer's /api/sync/export?table=X&since=Y.
+/// 5. Apply the remote changes locally.
+/// 6. Update _sync_meta with current timestamp.
 ///
-/// Returns the number of changes applied from the remote, or 0 on failure.
-fn sync_one_peer(plan_db: &PlanDb, peer: &str) -> usize {
-    match plan_db.sync_with_peer(peer) {
-        Ok(summary) => {
-            info!(
-                peer = %summary.peer,
-                sent = summary.sent,
-                received = summary.received,
-                applied = summary.applied,
-                "background_sync: tick complete"
-            );
-            summary.applied
-        }
+/// Returns the number of remote changes applied, or 0 on failure.
+pub fn sync_table_with_peer(
+    conn: &Connection,
+    peer_addr: &str,
+    table: &str,
+) -> usize {
+    let since = libsql_adapter::get_sync_meta(conn, peer_addr, table)
+        .ok()
+        .flatten()
+        .map(|m| m.last_sync_at);
+
+    // Export local changes and send to peer
+    let local_changes = match libsql_adapter::export_changes_since(
+        conn,
+        table,
+        since.as_deref(),
+    ) {
+        Ok(c) => c,
         Err(e) => {
-            warn!(peer = %peer, error = %e, "background_sync: sync_with_peer failed");
-            0
+            warn!(peer = %peer_addr, table, error = %e, "export failed");
+            return 0;
+        }
+    };
+
+    if !local_changes.is_empty() {
+        if let Err(e) = send_changes_to_peer(peer_addr, &local_changes) {
+            warn!(peer = %peer_addr, error = %e, "send changes failed");
         }
     }
+
+    // Fetch remote changes from peer
+    let remote_changes = match fetch_changes_from_peer(
+        peer_addr,
+        table,
+        since.as_deref(),
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(peer = %peer_addr, table, error = %e, "fetch changes failed");
+            return 0;
+        }
+    };
+
+    let applied = match libsql_adapter::apply_changes(conn, &remote_changes) {
+        Ok(n) => n,
+        Err(e) => {
+            warn!(peer = %peer_addr, table, error = %e, "apply changes failed");
+            return 0;
+        }
+    };
+
+    // Update sync checkpoint
+    let now = chrono::Utc::now().to_rfc3339();
+    let meta = SyncMeta {
+        peer: peer_addr.to_string(),
+        table_name: table.to_string(),
+        last_sync_at: now,
+    };
+    if let Err(e) = libsql_adapter::upsert_sync_meta(conn, &meta) {
+        warn!(peer = %peer_addr, table, error = %e, "upsert sync meta failed");
+    }
+
+    info!(
+        peer = %peer_addr,
+        table,
+        sent = local_changes.len(),
+        received = remote_changes.len(),
+        applied,
+        "background_sync: table sync complete"
+    );
+    applied
 }
 
 /// Spawn the background sync loop.
 ///
 /// Each `interval_secs` tick:
 /// 1. Lock the DB to read active peers from mesh_sync_stats.
-/// 2. For each peer, open a PlanDb view and call sync_with_peer.
+/// 2. For each peer+table, export/import changes via HTTP.
 /// 3. Log results via tracing; skip tick silently on lock contention.
 ///
 /// The returned `JoinHandle` can be aborted to stop the loop.
@@ -128,20 +188,25 @@ pub fn spawn_sync_loop(
                 continue;
             }
 
-            // Open PlanDb backed by the real dashboard DB so CRDT changes are
-            // read from and written to persistent storage. Using in-memory here
-            // would silently discard all sync results.
+            // Open a connection to the real dashboard DB for sync operations.
             let db_path = crate::db_path_from_env();
-            let plan_db = match PlanDb::open_path(&db_path, None) {
-                Ok(db) => db,
+            let conn = match Connection::open(&db_path) {
+                Ok(c) => {
+                    let _ = c.execute_batch(
+                        "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
+                    );
+                    c
+                }
                 Err(e) => {
-                    warn!("background_sync: cannot open PlanDb at {}: {e}", db_path.display());
+                    warn!("background_sync: cannot open DB at {}: {e}", db_path.display());
                     continue;
                 }
             };
 
             for peer in &peers {
-                sync_one_peer(&plan_db, peer);
+                for table in SYNC_TABLES {
+                    sync_table_with_peer(&conn, peer, table);
+                }
             }
         }
     })

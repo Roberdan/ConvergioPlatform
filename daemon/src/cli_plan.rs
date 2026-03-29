@@ -16,6 +16,7 @@ pub enum PlanCommands {
         api_url: String,
     },
     /// Show execution tree for a plan
+    #[command(alias = "execution-tree")]
     Tree {
         /// Plan ID
         plan_id: i64,
@@ -126,6 +127,8 @@ pub enum PlanCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Print example spec YAML template with all supported fields
+    Template,
 }
 
 pub async fn handle(cmd: PlanCommands) -> Result<(), crate::cli_error::CliError> {

@@ -12,6 +12,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// POST /api/plan-db/import — bulk import waves+tasks from JSON/YAML spec
+    #[tracing::instrument(skip_all)]
 async fn handle_import(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

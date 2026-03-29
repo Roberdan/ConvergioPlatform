@@ -7,6 +7,12 @@ use crate::kernel::verify::EvidenceCheck;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
 
+// Re-export hardening primitives so callers use a single import path.
+pub use crate::kernel::verify_hardening::{
+    git_head_sha, reap_build_processes, EvidenceCache, EVIDENCE_CACHE,
+    EVIDENCE_MUTEX,
+};
+
 pub(crate) fn run_cargo_check(worktree: Option<&str>) -> EvidenceCheck {
     run_command_with_timeout("cargo_check", "cargo", &["check"], worktree, 60)
 }

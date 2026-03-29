@@ -252,4 +252,9 @@ pub enum Commands {
         #[command(subcommand)]
         command: cli_kernel::KernelCommands,
     },
+    /// Print all available cvg commands grouped by domain
+    #[command(alias = "commands")]
+    Cheatsheet,
+    /// List all daemon HTTP API endpoints
+    Api,
 }

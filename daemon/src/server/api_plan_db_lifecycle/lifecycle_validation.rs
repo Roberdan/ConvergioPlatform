@@ -25,6 +25,82 @@ pub(super) fn check_all_tasks_done(conn: &Connection, plan_id: i64) -> Result<()
     Ok(())
 }
 
+/// Collect all worktree paths (plan + waves) for cleanup after completion.
+pub(crate) fn worktree_cleanup_paths(conn: &Connection, plan_id: i64) -> Vec<String> {
+    let mut paths = Vec::new();
+
+    // Plan-level worktree
+    if let Ok(Some(p)) = query_one(
+        conn,
+        "SELECT worktree_path AS p FROM plans WHERE id = ?1",
+        rusqlite::params![plan_id],
+    ) {
+        if let Some(s) = p.get("p").and_then(Value::as_str) {
+            if !s.is_empty() {
+                paths.push(s.to_string());
+            }
+        }
+    }
+
+    // Wave-level worktrees
+    let mut stmt = conn
+        .prepare("SELECT worktree_path FROM waves WHERE plan_id = ?1 AND worktree_path IS NOT NULL AND worktree_path != ''")
+        .unwrap_or_else(|_| conn.prepare("SELECT 1 WHERE 0").unwrap());
+    if let Ok(rows) = stmt.query_map(rusqlite::params![plan_id], |row| {
+        row.get::<_, String>(0)
+    }) {
+        for row in rows.flatten() {
+            if !row.is_empty() {
+                paths.push(row);
+            }
+        }
+    }
+
+    paths
+}
+
+/// Run git worktree prune, delete stale branches, and clean temp files.
+/// Runs in a background task — failures are logged, never block the response.
+pub(crate) fn run_post_complete_cleanup(plan_id: i64, wt_paths: &[String]) {
+    // 1. git worktree prune
+    if let Err(e) = std::process::Command::new("git")
+        .args(["worktree", "prune"])
+        .output()
+    {
+        tracing::warn!("plan {plan_id}: worktree prune failed: {e}");
+    }
+
+    // 2. Remove plan-specific temp files matching /tmp/convergio-plan-{id}*
+    let prefix = format!("convergio-plan-{plan_id}");
+    if let Ok(entries) = std::fs::read_dir("/tmp") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with(&prefix) {
+                let path = entry.path();
+                if path.is_dir() {
+                    let _ = std::fs::remove_dir_all(&path);
+                } else {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+        }
+    }
+
+    // 3. Delete stale worktree directories that still exist on disk
+    for path in wt_paths {
+        let p = std::path::Path::new(path);
+        if p.exists() && p.is_dir() {
+            let rm_result = std::process::Command::new("git")
+                .args(["worktree", "remove", "--force", path])
+                .output();
+            if rm_result.is_err() || !rm_result.unwrap().status.success() {
+                let _ = std::fs::remove_dir_all(p);
+            }
+            tracing::info!("plan {plan_id}: cleaned worktree {path}");
+        }
+    }
+}
+
 /// Verify all non-code deliverables linked to done tasks are approved.
 /// Returns `Ok(())` or `Err` with a descriptive message.
 pub(super) fn check_deliverables_approved(conn: &Connection, plan_id: i64) -> Result<(), ApiError> {

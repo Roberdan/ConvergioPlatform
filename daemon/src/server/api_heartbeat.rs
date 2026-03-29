@@ -15,6 +15,7 @@ pub fn router() -> Router<ServerState> {
 
 /// POST /api/heartbeat — extended heartbeat with task/agent counts
 /// Body: {peer_name, load_json?, capabilities?, task_count?, agent_count?}
+    #[tracing::instrument(skip_all)]
 async fn handle_heartbeat(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -81,6 +82,7 @@ async fn handle_heartbeat(
 }
 
 /// GET /api/heartbeat/status — all peer heartbeat statuses
+    #[tracing::instrument(skip_all)]
 async fn handle_heartbeat_status(
     State(state): State<ServerState>,
 ) -> Result<Json<Value>, ApiError> {
@@ -127,6 +129,7 @@ async fn handle_heartbeat_status(
 }
 
 /// GET /api/watchdog/status — self-healing watchdog status
+    #[tracing::instrument(skip_all)]
 async fn handle_watchdog_status(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -168,6 +171,7 @@ async fn handle_watchdog_status(State(state): State<ServerState>) -> Result<Json
 }
 
 /// GET /api/watchdog/diagnostics — detailed diagnostics
+    #[tracing::instrument(skip_all)]
 async fn handle_diagnostics(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;

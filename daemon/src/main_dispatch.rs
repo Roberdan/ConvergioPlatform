@@ -21,7 +21,8 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
             args,
         } => {
             let path = db_path.unwrap_or_else(ipc_handler::default_db_path);
-            let db = match convergio_core::db::PlanDb::open_path(&path, crsqlite_path) {
+            let _ = crsqlite_path; // crsqlite removed; sync via timestamp adapter
+            let db = match convergio_core::db::PlanDb::open_path(&path) {
                 Ok(db) => db,
                 Err(err) => {
                     eprintln!("db open failed: {err}");
@@ -78,19 +79,12 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
             if let Some(ref p) = db_path {
                 std::env::set_var("DASHBOARD_DB", p);
             }
-            // Auto-resolve crsqlite path if not explicitly provided
-            let crsqlite_path = crsqlite_path.or_else(|| {
-                let resolved = convergio_core::db::resolve_crsqlite_path(None);
-                if resolved != "crsqlite" && std::path::Path::new(&resolved).exists() {
-                    Some(resolved)
-                } else {
-                    None
-                }
-            });
+            // crsqlite removed — sync via timestamp-based adapter (libsql_adapter)
+            let _ = crsqlite_path;
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(convergio_core::background::run_pause_bridge(db_path));
             if let Err(e) =
-                ipc_handler::run_serve(bind, static_dir, crsqlite_path, dev_mode, mesh).await
+                ipc_handler::run_serve(bind, static_dir, None, dev_mode, mesh).await
             {
                 eprintln!("{e}");
                 return ExitCode::from(2);
@@ -243,9 +237,10 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         }
         Commands::Repo { command } => exit_on_err(cli_repo::handle(command).await),
         Commands::Kernel { command } => cli_kernel::dispatch(command).await,
+        Commands::Cheatsheet => { crate::cli_cheatsheet::print_cheatsheet(); ExitCode::SUCCESS }
+        Commands::Api => { crate::cli_api_list::print_api_list(); ExitCode::SUCCESS }
     }
 }
-
 fn exit_on_err(result: Result<(), CliError>) -> ExitCode {
     if let Err(e) = result {
         eprintln!("{e}");

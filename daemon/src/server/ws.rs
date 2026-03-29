@@ -24,6 +24,7 @@ pub async fn ws_brain(ws: WebSocketUpgrade, State(state): State<ServerState>) ->
     .into_response()
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<Value>, init_message: Value) {
     if socket
         .send(Message::Text(init_message.to_string()))

@@ -1,5 +1,4 @@
 use super::{PlanDb, TaskStatus, UpdateTaskArgs, ValidateTaskArgs};
-use crate::db::crdt::CrdtChange;
 
 impl PlanDb {
     pub fn run_subcommand(&self, args: &[String]) -> rusqlite::Result<String> {
@@ -9,7 +8,7 @@ impl PlanDb {
     pub fn run_subcommand_with_input(
         &self,
         args: &[String],
-        input: Option<&str>,
+        #[allow(unused_variables)] input: Option<&str>,
     ) -> rusqlite::Result<String> {
         let command = args
             .first()
@@ -57,9 +56,11 @@ impl PlanDb {
                 Ok(serde_json::to_string_pretty(&self.execution_tree(plan_id)?)
                     .map_err(json_error)?)
             }
+            #[cfg(feature = "crsqlite")]
             "export-changes" => {
                 Ok(serde_json::to_string_pretty(&self.export_changes()?).map_err(json_error)?)
             }
+            #[cfg(feature = "crsqlite")]
             "apply-changes" => {
                 let payload = input.ok_or_else(|| {
                     super::service::invalid_input("apply-changes requires stdin JSON")
@@ -69,6 +70,7 @@ impl PlanDb {
                 let applied = self.apply_changes(&changes)?;
                 Ok(format!("[OK] applied {applied} CRDT changes"))
             }
+            #[cfg(feature = "crsqlite")]
             "sync" => {
                 let peer = args
                     .get(1)
@@ -77,6 +79,12 @@ impl PlanDb {
                 Ok(format!(
                     "[OK] synced with {} (sent {}, received {}, applied {})",
                     summary.peer, summary.sent, summary.received, summary.applied
+                ))
+            }
+            #[cfg(not(feature = "crsqlite"))]
+            "export-changes" | "apply-changes" | "sync" => {
+                Err(super::service::invalid_input(
+                    "crsqlite CRDT sync is disabled — use timestamp-based sync (libsql_adapter) instead",
                 ))
             }
             _ => Err(super::service::invalid_input("unsupported subcommand")),

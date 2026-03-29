@@ -44,20 +44,66 @@ mod tests {
     }
 
     #[test]
-    fn ssh_destination_prefers_alias() {
+    fn ssh_destination_legacy_prefers_alias() {
         let peer = test_peer("mac-dev-ts", "alice", "100.64.0.1");
-        assert_eq!(ssh_destination(&peer), "mac-dev-ts");
+        assert_eq!(ssh_destination_legacy(&peer), "mac-dev-ts");
     }
 
     #[test]
-    fn ssh_destination_fallback_to_ip() {
+    fn ssh_destination_legacy_fallback_to_ip() {
         let peer = test_peer("", "bob", "100.64.0.2");
-        assert_eq!(ssh_destination(&peer), "bob@100.64.0.2");
+        assert_eq!(ssh_destination_legacy(&peer), "bob@100.64.0.2");
     }
 
     #[test]
     fn delegate_timeout_default() {
         std::env::remove_var("DELEGATE_TIMEOUT");
         assert_eq!(delegate_timeout(), Duration::from_secs(1800));
+    }
+
+    // ── Additional tests ─────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_tokens_bracket_with_spaces() {
+        let output = "  [tokens:   12345  ]\n";
+        assert_eq!(parse_tokens_from_output(output), 12345);
+    }
+
+    #[test]
+    fn parse_tokens_equals_with_trailing_whitespace() {
+        let output = "tokens_used=  500  \n";
+        assert_eq!(parse_tokens_from_output(output), 500);
+    }
+
+    #[test]
+    fn parse_tokens_prefers_last_occurrence() {
+        let output = "[tokens: 100]\n[tokens: 200]\n";
+        // Iterates in reverse, so picks last line first
+        assert_eq!(parse_tokens_from_output(output), 200);
+    }
+
+    #[test]
+    fn parse_tokens_empty_string() {
+        assert_eq!(parse_tokens_from_output(""), 0);
+    }
+
+    #[test]
+    fn parse_tokens_malformed_bracket() {
+        assert_eq!(parse_tokens_from_output("[tokens: notanumber]"), 0);
+    }
+
+    #[test]
+    fn worktree_branch_special_chars() {
+        assert_eq!(
+            worktree_branch(999, "T12-05"),
+            "delegate/plan-999/T12-05"
+        );
+    }
+
+    #[test]
+    fn delegate_engine_new() {
+        let engine = DelegateEngine::new(std::path::PathBuf::from("/tmp/peers.conf"));
+        // Just verifying construction doesn't panic
+        let _ = engine;
     }
 }

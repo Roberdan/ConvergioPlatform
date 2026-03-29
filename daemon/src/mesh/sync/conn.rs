@@ -16,6 +16,7 @@ pub fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Conn
          PRAGMA busy_timeout=5000;
          PRAGMA cache_size=-2000;",
     )?;
+    #[cfg(feature = "crsqlite")]
     if let Some(ext) = crsqlite_ext {
         match (|| -> Result<(), MeshError> {
             unsafe { conn.load_extension_enable() }?;
@@ -32,6 +33,8 @@ pub fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Conn
             }
         }
     }
+    #[cfg(not(feature = "crsqlite"))]
+    let _ = crsqlite_ext; // suppress unused warning
     Ok(conn)
 }
 

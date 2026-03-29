@@ -121,34 +121,5 @@ impl NightModeConfig {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sandbox_generates_hardened_docker_args() {
-        let cfg = SandboxConfig::default();
-        let args = cfg.to_docker_args();
-        assert!(args.contains(&"--security-opt=no-new-privileges".into()));
-        assert!(args.contains(&"--cap-drop=ALL".into()));
-        assert!(args.contains(&"--pids-limit=256".into()));
-        assert!(args.contains(&"--cpus=2".into()));
-    }
-
-    #[test]
-    fn night_mode_crosses_midnight() {
-        let cfg = NightModeConfig::default(); // 22-06
-        assert!(cfg.is_active_at_hour(23));
-        assert!(cfg.is_active_at_hour(3));
-        assert!(!cfg.is_active_at_hour(12));
-        assert!(!cfg.is_active_at_hour(8));
-    }
-
-    #[test]
-    fn night_mode_disabled() {
-        let cfg = NightModeConfig {
-            enabled: false,
-            ..Default::default()
-        };
-        assert!(!cfg.is_active_at_hour(23));
-    }
-}
+#[path = "sandbox_tests.rs"]
+mod tests;

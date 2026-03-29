@@ -118,20 +118,5 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{text_frame, websocket_accept};
-
-    #[test]
-    fn websocket_accept_matches_rfc_example() {
-        let actual = websocket_accept("dGhlIHNhbXBsZSBub25jZQ==");
-        assert_eq!(actual, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
-    }
-
-    #[test]
-    fn text_frame_writes_fin_opcode_and_payload() {
-        let frame = text_frame("mesh");
-        assert_eq!(frame[0], 0x81);
-        assert_eq!(frame[1], 4);
-        assert_eq!(&frame[2..], b"mesh");
-    }
-}
+#[path = "ws_tests.rs"]
+mod tests;

@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 
 /// POST /api/plan-db/agent/start — register agent activity
 /// Body: {agent_id, agent_type, description?, task_db_id?, plan_id?, model?, host?}
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_agent_start(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -53,6 +54,7 @@ pub(super) async fn handle_agent_start(
 
 /// POST /api/plan-db/agent/complete — mark agent done
 /// Body: {agent_id, tokens_in?, tokens_out?, cost_usd?, status?}
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_agent_complete(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

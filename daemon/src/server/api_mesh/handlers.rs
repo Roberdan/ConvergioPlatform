@@ -6,6 +6,7 @@ use axum::Json;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+#[tracing::instrument(skip_all)]
 pub(crate) async fn handle_delegate_cancel(
     axum::extract::Path(delegation_id): axum::extract::Path<String>,
 ) -> Json<Value> {

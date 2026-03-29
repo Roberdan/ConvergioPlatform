@@ -4,10 +4,12 @@ pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_audit;
 pub mod api_capabilities;
+pub mod api_channels;
 pub mod api_delegation;
 pub mod api_chat;
 pub mod api_coordinator;
 pub mod api_crdt;
+pub mod api_sync;
 pub mod api_dashboard;
 pub mod api_deliverables;
 pub mod api_deliverables_handlers;
@@ -15,6 +17,7 @@ pub mod api_domain;
 pub mod api_evolution;
 pub mod api_github;
 pub mod api_github_handlers;
+pub mod api_health_deep;
 pub mod api_heartbeat;
 pub mod api_heartbeat_handlers;
 pub mod api_ideas;
@@ -33,6 +36,7 @@ pub mod api_peers_ext;
 pub mod api_plan_db;
 pub mod api_plan_db_agents;
 pub mod api_plan_db_checkpoint;
+pub mod api_plan_db_execution_context;
 pub mod api_plan_db_import;
 pub mod api_plan_db_import_defaults;
 pub mod api_plan_db_import_parsers;
@@ -67,6 +71,7 @@ pub mod sse_preflight;
 pub mod sse_stream;
 pub mod state;
 pub mod state_init;
+pub mod telemetry;
 pub mod state_init_canon;
 mod state_init_migrations;
 pub mod static_serve;
@@ -79,9 +84,15 @@ mod api_agent_catalog_tests;
 #[cfg(test)]
 mod api_agents_brain_tests;
 #[cfg(test)]
+mod api_channels_tests;
+#[cfg(test)]
+mod api_health_deep_tests;
+#[cfg(test)]
 mod api_agents_legacy_tests;
 #[cfg(test)]
 mod api_agents_tests;
+#[cfg(test)]
+mod api_cli_integration_tests;
 #[cfg(test)]
 mod api_audit_tests;
 #[cfg(test)]
@@ -115,6 +126,10 @@ mod api_ingest_tests;
 #[cfg(test)]
 mod api_ipc_tests;
 #[cfg(test)]
+mod api_ipc_integration_tests;
+#[cfg(test)]
+mod api_ipc_intel_tests;
+#[cfg(test)]
 mod api_metrics_tests;
 #[cfg(test)]
 mod api_openclaw_tests;
@@ -122,6 +137,8 @@ mod api_openclaw_tests;
 mod api_peers_tests;
 #[cfg(test)]
 mod api_plan_db_checkpoint_tests;
+#[cfg(test)]
+mod api_plan_db_execution_context_tests;
 #[cfg(test)]
 mod api_plan_db_query_tests;
 #[cfg(test)]
@@ -142,6 +159,20 @@ mod api_workspace_integration_tests;
 mod api_delegation_tests;
 #[cfg(test)]
 mod api_workspace_tests;
+#[cfg(test)]
+mod api_agent_control_tests;
+#[cfg(test)]
+mod api_capabilities_tests;
+#[cfg(test)]
+mod api_nightly_tests;
+#[cfg(test)]
+mod api_telemetry_tests;
+#[cfg(test)]
+mod api_plan_db_lifecycle_integration_tests;
+#[cfg(test)]
+mod api_plan_db_review_integration_tests;
+#[cfg(test)]
+mod api_plan_db_import_integration_tests;
 #[cfg(test)]
 mod state_init_tests;
 #[cfg(test)]

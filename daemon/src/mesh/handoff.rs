@@ -19,3 +19,7 @@ pub use handoff_ssh::{pull_db_from_peer, SshClient};
 #[cfg(test)]
 #[path = "handoff_tests.rs"]
 mod handoff_tests;
+
+#[cfg(test)]
+#[path = "handoff_locking_tests.rs"]
+mod handoff_locking_tests;

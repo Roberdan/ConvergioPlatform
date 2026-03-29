@@ -1,8 +1,43 @@
-// Tests for cli_delegation status display formatting.
-// Why: Verify table rendering and field extraction from API responses.
+// Tests for cli_delegation: formatting, command parsing, start/cancel variants.
+// Why: Verify table rendering, field extraction, and new delegation subcommands.
 
 use super::*;
+use clap::Parser;
 use serde_json::json;
+
+/// Wrapper for clap parsing tests — mirrors main CLI structure.
+#[derive(Parser)]
+struct TestCli {
+    #[command(subcommand)]
+    cmd: DelegationCommands,
+}
+
+fn parse_delegation(args: &[&str]) -> DelegationCommands {
+    let mut full = vec!["cvg"];
+    full.extend_from_slice(args);
+    TestCli::parse_from(full).cmd
+}
+
+#[test]
+fn parse_start_command() {
+    let cmd = parse_delegation(&["start", "742", "--peer", "macProM1"]);
+    match cmd {
+        DelegationCommands::Start { plan_id, peer } => {
+            assert_eq!(plan_id, 742);
+            assert_eq!(peer, "macProM1");
+        }
+        _ => panic!("expected Start variant"),
+    }
+}
+
+#[test]
+fn parse_cancel_command() {
+    let cmd = parse_delegation(&["cancel", "742"]);
+    match cmd {
+        DelegationCommands::Cancel { plan_id } => assert_eq!(plan_id, 742),
+        _ => panic!("expected Cancel variant"),
+    }
+}
 
 #[test]
 fn format_progress_row_all_fields() {

@@ -4,6 +4,7 @@ use axum::extract::{Path, State};
 use axum::Json;
 use serde_json::{json, Value};
 
+    #[tracing::instrument(skip_all)]
 pub async fn handle_github_stats(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,

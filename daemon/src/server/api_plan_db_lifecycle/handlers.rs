@@ -1,6 +1,9 @@
 use super::super::plan_lifecycle_guards;
 use super::super::state::{ApiError, ServerState};
-use super::lifecycle_validation::{check_all_tasks_done, check_deliverables_approved};
+use super::lifecycle_validation::{
+    check_all_tasks_done, check_deliverables_approved, run_post_complete_cleanup,
+    worktree_cleanup_paths,
+};
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
@@ -17,6 +20,7 @@ pub fn router() -> Router<ServerState> {
 
 /// POST /api/plan-db/create — create a new plan
 /// Body: {project_id, name, source_file?, description?, parent_plan_id?}
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_create(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -66,6 +70,7 @@ pub(super) async fn handle_create(
 }
 
 /// POST /api/plan-db/start/:plan_id — set status=doing, started_at=now
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_start(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -110,6 +115,7 @@ pub(super) async fn handle_start(
 /// For non-code plans (all tasks output_type != 'pr'), completion requires
 /// all deliverables approved. Mixed plans require both PRs merged AND
 /// non-code deliverables approved.
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_complete(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -135,6 +141,12 @@ pub(super) async fn handle_complete(
         )));
     }
 
+    // Auto-cleanup worktrees and temp files after plan completion
+    let wt_paths = worktree_cleanup_paths(conn, plan_id);
+    tokio::spawn(async move {
+        run_post_complete_cleanup(plan_id, &wt_paths);
+    });
+
     Ok(Json(json!({
         "ok": true,
         "plan_id": plan_id,
@@ -144,6 +156,7 @@ pub(super) async fn handle_complete(
 
 /// POST /api/plan-db/cancel/:plan_id — cancel plan + all pending tasks
 /// Body: {reason?}
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_cancel(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -201,6 +214,7 @@ pub(super) async fn handle_cancel(
 }
 
 /// POST /api/plan-db/approve/:plan_id — set status=approved (from draft)
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_approve(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,

@@ -28,6 +28,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// POST /api/plan-db/wave/create — Body: {plan_id, wave_id, name}
+    #[tracing::instrument(skip_all)]
 pub async fn handle_wave_create(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -60,6 +61,7 @@ pub async fn handle_wave_create(
 
 /// POST /api/plan-db/wave/update — update wave status
 /// Body: {wave_id, status, notes?}
+    #[tracing::instrument(skip_all)]
 pub async fn handle_wave_update(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -162,6 +164,7 @@ fn default_limit() -> i64 {
 }
 
 /// GET /api/plan-db/kb-search?q=term — search knowledge_base table
+    #[tracing::instrument(skip_all)]
 pub async fn handle_kb_search(
     State(state): State<ServerState>,
     Query(params): Query<KbSearchQuery>,
@@ -208,6 +211,7 @@ pub async fn handle_kb_search(
 
 /// POST /api/plan-db/kb-write — insert or update a knowledge_base entry
 /// Body: {domain, title, content, tags?, confidence?}
+    #[tracing::instrument(skip_all)]
 pub async fn handle_kb_write(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

@@ -7,6 +7,19 @@ use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
 pub enum DelegationCommands {
+    /// Delegate a plan to a mesh peer for execution
+    Start {
+        /// Plan ID to delegate
+        plan_id: i64,
+        /// Target peer name (from peers.conf or mesh status)
+        #[arg(long)]
+        peer: String,
+    },
+    /// Cancel an active delegation
+    Cancel {
+        /// Plan ID to cancel delegation for
+        plan_id: i64,
+    },
     /// Show delegation status for a plan (peer, status, task, last update, output)
     Status {
         /// Plan ID to inspect (alias: --plan)
@@ -69,12 +82,38 @@ pub fn format_progress_table(body: &serde_json::Value) -> String {
 }
 
 async fn fetch_progress(api_url: &str, plan_id: i64) -> Result<serde_json::Value, CliError> {
-    let url = format!("{api_url}/api/delegation/{plan_id}/progress");
+    let url = format!("{api_url}/api/delegation/by-plan/{plan_id}");
     cli_http::get_and_return(&url).await.map_err(api_err)
 }
 
 pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliError> {
     match cmd {
+        DelegationCommands::Start { plan_id, peer } => {
+            let url = format!("{api_url}/api/mesh/delegate");
+            let body = serde_json::json!({"plan_id": plan_id, "peer": peer});
+            cli_http::post_and_print(&url, &body, true).await?;
+            println!("Delegation started: plan {plan_id} → {peer}");
+            Ok(())
+        }
+        DelegationCommands::Cancel { plan_id } => {
+            // List active delegations and cancel matching plan
+            let url = format!("{api_url}/api/delegation/by-plan/{plan_id}");
+            let body = cli_http::get_and_return(&url).await.map_err(api_err)?;
+            let del_id = body["delegations"]
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|d| d["delegation_id"].as_str())
+                .unwrap_or("");
+            if del_id.is_empty() {
+                println!("No active delegation found for plan {plan_id}");
+                return Ok(());
+            }
+            let cancel_url = format!("{api_url}/api/mesh/delegate/{del_id}/cancel");
+            let cancel_body = serde_json::json!({"plan_id": plan_id});
+            cli_http::post_and_print(&cancel_url, &cancel_body, true).await?;
+            println!("Delegation cancelled: plan {plan_id}");
+            Ok(())
+        }
         DelegationCommands::Status {
             plan,
             plan_id,

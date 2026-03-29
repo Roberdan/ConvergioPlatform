@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Unit tests for convergio-mcp-server: ring enforcement, tool registry, protocol parsing.
-// Follows TDD: tests written before implementation to define expected contracts.
+// Tests for convergio-mcp-server: ring enforcement, tool registry, protocol, invoke_agent.
 
 #[cfg(test)]
 mod tests {
@@ -10,8 +9,6 @@ mod tests {
     use crate::mcp_server::security::{check_ring_access, McpError};
     use crate::mcp_server::tools::list_tools;
     use crate::capabilities::ring::Ring;
-
-    // ── Ring enforcement ──────────────────────────────────────────────────────
 
     #[test]
     fn ring_core_can_access_all() {
@@ -56,19 +53,17 @@ mod tests {
         }
     }
 
-    // ── Tool registry ─────────────────────────────────────────────────────────
-
     #[test]
-    fn list_tools_ring0_returns_14_tools() {
+    fn list_tools_ring0_returns_all_tools() {
         let tools = list_tools(Ring::Core);
-        assert_eq!(tools.len(), 17, "Ring 0 must expose all 17 tools, got {}", tools.len());
+        assert_eq!(tools.len(), 18, "Ring 0 must expose all 18 tools, got {}", tools.len());
     }
 
     #[test]
-    fn list_tools_ring1_returns_15_tools() {
-        // Ring 1 (Trusted) sees all tools except cvg_restart_node (Ring 0 only).
+    fn list_tools_ring1_returns_16_tools() {
+        // Ring 1 (Trusted) sees all tools except cvg_restart_node + cvg_assign_role (Ring 0).
         let tools = list_tools(Ring::Trusted);
-        assert_eq!(tools.len(), 15, "Ring 1 must expose 15 tools, got {}", tools.len());
+        assert_eq!(tools.len(), 16, "Ring 1 must expose 16 tools, got {}", tools.len());
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(!names.contains(&"cvg_restart_node"), "restart_node is ring-0 only");
     }
@@ -126,8 +121,6 @@ mod tests {
         }
     }
 
-    // ── Protocol parsing ──────────────────────────────────────────────────────
-
     #[test]
     fn parse_valid_initialize_request() {
         let raw = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}"#;
@@ -182,8 +175,6 @@ mod tests {
         assert_eq!(err.get("code").and_then(|v| v.as_i64()), Some(-32601));
     }
 
-    // ── Integration: McpServer handle_request ────────────────────────────────
-
     #[test]
     fn handle_initialize_returns_server_info() {
         use crate::mcp_server::McpServer;
@@ -209,7 +200,7 @@ mod tests {
         let tools = v.get("result").and_then(|r| r.get("tools")).expect("tools/list must return tools");
         assert!(tools.is_array(), "tools must be an array");
         let arr = tools.as_array().unwrap();
-        assert_eq!(arr.len(), 15, "ring 1 must see 15 tools (restart_node is ring-0 only)");
+        assert_eq!(arr.len(), 16, "ring 1 must see 16 tools (restart_node+assign_role are ring-0)");
     }
 
     #[test]
@@ -245,5 +236,15 @@ mod tests {
         let v: Value = serde_json::from_str(&resp_str).unwrap();
         // Must return error, not crash. Code -32002 (daemon unreachable) or -32003 (daemon error).
         assert!(v.get("error").is_some(), "unreachable daemon must return error, not panic");
+    }
+
+    #[test]
+    fn invoke_agent_ring_visibility() {
+        let trusted = list_tools(Ring::Trusted);
+        let names: Vec<&str> = trusted.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&"cvg_invoke_agent"), "must exist for ring 1");
+        let community = list_tools(Ring::Community);
+        let names: Vec<&str> = community.iter().map(|t| t.name.as_str()).collect();
+        assert!(!names.contains(&"cvg_invoke_agent"), "must NOT be visible to ring 2");
     }
 }

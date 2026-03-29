@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo
-//! Tracking API — hooks write token_usage, agent_activity, session_state, compaction.
-//! Replaces direct sqlite3 calls in 5 hook scripts with HTTP POST endpoints.
+//! Tracking API — token usage, agent activity, session state, compaction.
 use super::state::{ApiError, ServerState};
 use axum::extract::State;
 use axum::routing::post;
@@ -18,6 +17,7 @@ pub fn router() -> Router<ServerState> {
 /// POST /api/tracking/tokens — insert a token_usage row.
 /// Body: {agent, model, input_tokens, output_tokens, cost_usd,
 ///        project_id?, plan_id?, wave_id?, task_id?, execution_host?}
+    #[tracing::instrument(skip_all)]
 async fn handle_tokens(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -84,10 +84,8 @@ async fn handle_tokens(
     })))
 }
 
-/// POST /api/tracking/agent-activity — insert or update an agent_activity row.
-/// Upserts on agent_id (unique). Body: {agent_id, action, status?, plan_id?,
-/// task_db_id?, model?, tokens_in?, tokens_out?, tokens_total?, cost_usd?,
-/// description?, started_at?, completed_at?, duration_s?, host?, metadata?}
+/// POST /api/tracking/agent-activity — upsert agent_activity row by agent_id.
+    #[tracing::instrument(skip_all)]
 async fn handle_agent_activity(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -176,6 +174,7 @@ async fn handle_agent_activity(
 
 /// POST /api/tracking/session-state — insert or replace a session_state key.
 /// Body: {key, value}
+    #[tracing::instrument(skip_all)]
 async fn handle_session_state(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -205,6 +204,7 @@ async fn handle_session_state(
 /// POST /api/tracking/compaction — log a context compaction event.
 /// Body: {session_id?, event_type?, context?}
 /// Writes to compaction_log table (created on first use if absent).
+    #[tracing::instrument(skip_all)]
 async fn handle_compaction(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

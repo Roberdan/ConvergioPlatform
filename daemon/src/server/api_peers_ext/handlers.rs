@@ -13,6 +13,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/peers/coordinator — return current coordinator node
+    #[tracing::instrument(skip_all)]
 pub async fn handle_coordinator(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -57,6 +58,7 @@ pub async fn handle_coordinator(State(state): State<ServerState>) -> Result<Json
 }
 
 /// GET /api/mesh/topology — active connections graph
+    #[tracing::instrument(skip_all)]
 pub async fn handle_topology(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -129,6 +131,7 @@ pub async fn handle_topology(State(state): State<ServerState>) -> Result<Json<Va
 }
 
 /// GET /api/mesh/ping/:peer — measure RTT to peer
+    #[tracing::instrument(skip_all)]
 pub async fn handle_ping(
     State(state): State<ServerState>,
     Path(peer): Path<String>,
@@ -166,6 +169,7 @@ pub async fn handle_ping(
 }
 
 /// GET /api/mesh/diagnostics — overall mesh health
+    #[tracing::instrument(skip_all)]
 pub async fn handle_diagnostics(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;

@@ -27,6 +27,7 @@ fn checkpoint_path(plan_id: i64) -> PathBuf {
 
 /// POST /api/plan-db/checkpoint/save — serialize current plan state to JSON file
 /// Body: {plan_id}
+    #[tracing::instrument(skip_all)]
 async fn handle_checkpoint_save(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -96,6 +97,7 @@ struct CheckpointRestoreQuery {
 }
 
 /// GET /api/plan-db/checkpoint/restore?plan_id=N — read checkpoint file for context injection
+    #[tracing::instrument(skip_all)]
 async fn handle_checkpoint_restore(
     State(_state): State<ServerState>,
     Query(params): Query<CheckpointRestoreQuery>,

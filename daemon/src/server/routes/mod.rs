@@ -1,4 +1,5 @@
 pub mod api_routes;
+mod health;
 
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
@@ -8,15 +9,18 @@ use super::api_agent_triage;
 use super::api_agents;
 use super::api_audit;
 use super::api_capabilities;
+use super::api_channels;
 use super::api_delegation;
 use super::api_chat;
 use super::api_coordinator;
 use super::api_crdt;
+use super::api_sync;
 use super::api_dashboard;
 use super::api_deliverables;
 use super::api_domain;
 use super::api_evolution;
 use super::api_github;
+use super::api_health_deep;
 use super::api_heartbeat;
 use super::api_ideas;
 use super::api_ingest;
@@ -31,6 +35,7 @@ use super::api_peers;
 use super::api_peers_ext;
 use super::api_plan_db;
 use super::api_plan_db_checkpoint;
+use super::api_plan_db_execution_context;
 use super::api_plan_db_import;
 use super::api_plan_db_lifecycle;
 use super::api_plan_db_ops;
@@ -51,6 +56,7 @@ use super::mesh_provision;
 use super::middleware as server_mw;
 use super::sse;
 use super::state::ServerState;
+use super::telemetry;
 use super::ws;
 use super::ws_pty;
 use api_routes::{endpoint_category, RateLimiter};
@@ -113,6 +119,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_plan_db_ops::router())
         .merge(api_plan_db_review::router())
         .merge(api_plan_db_checkpoint::router())
+        .merge(api_plan_db_execution_context::router())
         .merge(api_project_tree::router())
         .merge(api_node_readiness::router())
         .merge(api_node_roles::router())
@@ -130,7 +137,10 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_domain::router())
         .merge(api_openclaw::router())
         .merge(api_crdt::router())
+        .merge(api_sync::router())
         .merge(api_capabilities::router())
+        .merge(api_channels::router())
+        .merge(api_health_deep::router())
         .merge(api_kernel_audio::router())
         .merge(api_memory::router())
         .merge(api_workspace::router())
@@ -160,7 +170,8 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .route("/ws/dashboard", get(ws::ws_dashboard))
         .route("/ws/pty", get(ws_pty::ws_pty))
         .route("/api/mesh/provision", get(mesh_provision::provision_all))
-        .route("/api/health", get(api_health))
+        .route("/api/health", get(health::api_health))
+        .route("/api/telemetry", get(health::api_telemetry))
         .layer(from_fn_with_state(rate_limiter, basic_rate_limit))
         .layer(from_fn(server_mw::require_auth))
         .layer(from_fn(server_mw::set_cache_headers))
@@ -178,6 +189,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
                 .no_zstd(),
         )
         .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(from_fn(telemetry::telemetry_layer))
         .with_state(state)
         .fallback_service(get_service(static_files))
 }
@@ -206,59 +218,3 @@ async fn basic_rate_limit(
     next.run(request).await
 }
 
-async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Value> {
-    // Cache health response for 5 seconds to avoid repeated DB queries
-    static CACHE: std::sync::OnceLock<tokio::sync::Mutex<(std::time::Instant, serde_json::Value)>> =
-        std::sync::OnceLock::new();
-    let cache = CACHE.get_or_init(|| {
-        tokio::sync::Mutex::new((
-            std::time::Instant::now() - Duration::from_secs(10),
-            serde_json::json!({}),
-        ))
-    });
-
-    let mut guard = cache.lock().await;
-    if guard.0.elapsed() < Duration::from_secs(5) {
-        // Update only uptime (cheap)
-        let mut cached = guard.1.clone();
-        cached["uptime_secs"] = serde_json::json!(state.started_at.elapsed().as_secs());
-        return Json(cached);
-    }
-
-    let uptime_secs = state.started_at.elapsed().as_secs();
-    let conn_result = state.get_conn();
-    let db_ok = conn_result.is_ok();
-    let (table_count, agent_activity_ok, peer_count) = match conn_result {
-        Ok(conn) => {
-            let tables = super::state::query_one(
-                &conn,
-                "SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table'",
-                [],
-            )
-            .ok()
-            .flatten()
-            .and_then(|v| v.get("c").and_then(serde_json::Value::as_i64))
-            .unwrap_or(0);
-            let aa_ok = conn.prepare("SELECT 1 FROM agent_activity LIMIT 0").is_ok();
-            let peers =
-                super::state::query_one(&conn, "SELECT COUNT(*) AS c FROM peer_heartbeats", [])
-                    .ok()
-                    .flatten()
-                    .and_then(|v| v.get("c").and_then(serde_json::Value::as_i64))
-                    .unwrap_or(0);
-            (tables, aa_ok, peers)
-        }
-        Err(_) => (0, false, 0),
-    };
-    let result = serde_json::json!({
-        "ok": db_ok && agent_activity_ok,
-        "db": db_ok,
-        "tables": table_count,
-        "agent_activity": agent_activity_ok,
-        "peers": peer_count,
-        "uptime_secs": uptime_secs,
-        "version": env!("CARGO_PKG_VERSION"),
-    });
-    *guard = (std::time::Instant::now(), result.clone());
-    Json(result)
-}

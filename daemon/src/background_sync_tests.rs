@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::{resolve_interval_secs, spawn_sync_loop};
+use super::{resolve_interval_secs, spawn_sync_loop, sync_table_with_peer};
 use crate::db_path_from_env;
 
 /// Serialise all env-var-mutating tests to prevent parallel interference.
@@ -90,6 +90,31 @@ fn test_db_path_from_env_uses_dashboard_db() {
     let path = db_path_from_env();
     std::env::remove_var("DASHBOARD_DB");
     assert_eq!(path.to_str().unwrap(), "/tmp/test-convergio.db");
+}
+
+#[test]
+fn test_sync_table_with_peer_handles_unreachable_peer() {
+    // sync_table_with_peer should return 0 when the peer is unreachable
+    // (HTTP request fails). No panic expected.
+    let conn = Connection::open_in_memory().expect("db");
+    conn.execute_batch(
+        "CREATE TABLE tasks (
+           id INTEGER PRIMARY KEY,
+           title TEXT NOT NULL,
+           status TEXT NOT NULL DEFAULT 'pending',
+           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE _sync_meta (
+           peer TEXT NOT NULL,
+           table_name TEXT NOT NULL,
+           last_sync_at TEXT NOT NULL,
+           PRIMARY KEY (peer, table_name)
+         );",
+    )
+    .expect("schema");
+    // Use a non-routable address to ensure HTTP fails fast
+    let applied = sync_table_with_peer(&conn, "192.0.2.1:9999", "tasks");
+    assert_eq!(applied, 0, "unreachable peer should yield 0 applied");
 }
 
 #[test]

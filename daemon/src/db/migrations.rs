@@ -59,6 +59,7 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     ensure_execution_runs(conn)?;
     ensure_domain_skill_map(conn)?;
     ensure_mesh_sync_stats_columns(conn)?;
+    ensure_sync_meta(conn)?;
     ensure_runs_dir();
     Ok(())
 }
@@ -150,6 +151,26 @@ fn ensure_mesh_sync_stats_columns(conn: &Connection) -> rusqlite::Result<()> {
         eprintln!("[migrations] added mesh_sync_stats.status");
     }
 
+    Ok(())
+}
+
+/// Create the `_sync_meta` table used by the timestamp-based sync adapter.
+///
+/// Tracks the last sync timestamp per peer+table pair so background_sync
+/// only transfers rows modified since the last successful sync.
+/// Idempotent: skips if the table already exists.
+fn ensure_sync_meta(conn: &Connection) -> rusqlite::Result<()> {
+    if !table_exists(conn, "_sync_meta")? {
+        conn.execute_batch(
+            "CREATE TABLE _sync_meta (
+                peer       TEXT NOT NULL,
+                table_name TEXT NOT NULL,
+                last_sync_at TEXT NOT NULL,
+                PRIMARY KEY (peer, table_name)
+            )",
+        )?;
+        eprintln!("[migrations] created _sync_meta table");
+    }
     Ok(())
 }
 

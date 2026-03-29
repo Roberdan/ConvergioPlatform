@@ -10,6 +10,7 @@ pub fn router() -> Router<ServerState> {
     Router::new().route("/api/project/:id/tree", get(handle_project_tree))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_project_tree(
     State(state): State<ServerState>,
     Path(project_id): Path<String>,

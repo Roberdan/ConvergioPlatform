@@ -5,9 +5,11 @@ mod sync;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "crsqlite")]
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "crsqlite")]
 pub use migration::mark_required_tables;
 pub use sync::io_as_sql_error;
 
@@ -93,6 +95,11 @@ pub fn required_crdt_tables() -> Vec<&'static str> {
     REQUIRED_CRDT_TABLES.to_vec()
 }
 
+/// Load the crsqlite extension into a connection.
+///
+/// Only available when the `crsqlite` feature is enabled. When disabled,
+/// sync is handled by the timestamp-based `libsql_adapter` module instead.
+#[cfg(feature = "crsqlite")]
 pub fn load_crsqlite(conn: &Connection, extension: &str) -> rusqlite::Result<()> {
     unsafe { conn.load_extension_enable()? };
     unsafe { conn.load_extension(extension, None::<&str>) }?;

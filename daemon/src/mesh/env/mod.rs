@@ -124,36 +124,5 @@ pub fn import_all(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_selections_all() {
-        let sel = Selections::all();
-        assert!(sel.brew && sel.vscode && sel.repos && sel.shell && sel.macos && sel.runners);
-    }
-
-    #[test]
-    fn test_env_bundle_default() {
-        let bundle = EnvBundle::default();
-        assert!(bundle.brewfile.is_none());
-        assert!(bundle.repos.is_none());
-    }
-
-    #[test]
-    fn test_export_all_nonexistent_github_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let github_dir = tmp.path().join("nonexistent");
-        let bundle = export_all(&github_dir, &[]);
-        assert!(bundle.repos.is_none());
-    }
-
-    #[test]
-    fn test_export_all_empty_github_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let bundle = export_all(tmp.path(), &[]);
-        // Empty dir → Some([]) from scan
-        assert!(bundle.repos.is_some());
-        assert_eq!(bundle.repos.unwrap().len(), 0);
-    }
-}
+#[path = "../env_tests.rs"]
+mod tests;
