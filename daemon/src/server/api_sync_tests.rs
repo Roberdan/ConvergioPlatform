@@ -215,3 +215,12 @@ async fn import_rejects_empty_changes() {
     assert_eq!(status, StatusCode::OK, "expected 200: {body}");
     assert_eq!(body["applied"], 0);
 }
+
+#[tokio::test]
+async fn status_endpoint_available() {
+    let router = test_router();
+    let (status, body) = get_json(router, "/api/sync/status").await;
+    assert_eq!(status, StatusCode::OK, "expected 200: {body}");
+    assert_eq!(body["transport_mode"], "daemon-http");
+    assert_eq!(body["fallback_policy"], "manual-rsync-only");
+}
