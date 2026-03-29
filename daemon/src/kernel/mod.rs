@@ -9,9 +9,11 @@ pub mod engine_context;
 pub mod tools;
 pub mod monitor;
 pub mod monitor_checks;
+pub mod monitor_peer_tracker;
 #[cfg(test)]
 mod monitor_checks_tests;
 pub mod recover;
+pub mod recover_escalation;
 pub mod reports;
 pub mod stt;
 pub mod telegram;
@@ -36,11 +38,15 @@ mod api_ask_tests;
 #[cfg(test)]
 mod engine_tests;
 #[cfg(test)]
+mod monitor_peer_tracker_tests;
+#[cfg(test)]
 mod monitor_tests;
 #[cfg(test)]
 mod monitor_tests_db;
 #[cfg(test)]
 mod recover_tests;
+#[cfg(test)]
+mod recover_escalation_tests;
 #[cfg(test)]
 mod stt_tests;
 #[cfg(test)]

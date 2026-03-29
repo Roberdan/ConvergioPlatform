@@ -46,12 +46,12 @@ pub mod handlers {
                 let engine_clone = Arc::new(KernelEngine::new(config.clone()));
                 let daemon_url = std::env::var("DAEMON_URL")
                     .unwrap_or_else(|_| "http://localhost:8420".to_string());
-                tracing::info!("kernel: spawning Telegram poll loop for chat_id={chat_id}");
+                tracing::info!("jarvis: spawning Telegram poll loop for chat_id={chat_id}");
                 crate::kernel::telegram_poll::spawn_telegram_poll(
                     token, chat_id, daemon_url, engine_clone,
                 );
             } else {
-                tracing::info!("kernel: Telegram not configured (no CONVERGIO_TELEGRAM_TOKEN)");
+                tracing::info!("jarvis: Telegram not configured (no CONVERGIO_TELEGRAM_TOKEN)");
             }
 
             state
@@ -72,6 +72,7 @@ pub mod handlers {
 
     #[derive(Debug, Serialize)]
     pub struct StatusResponse {
+        pub name: String,
         pub models_loaded: u32,
         pub ram_gb: f64,
         pub uptime_secs: u64,
@@ -82,6 +83,7 @@ pub mod handlers {
     impl From<KernelStatus> for StatusResponse {
         fn from(s: KernelStatus) -> Self {
             Self {
+                name: "Jarvis".to_string(),
                 models_loaded: s.models_loaded,
                 ram_gb: s.ram_gb,
                 uptime_secs: s.uptime_secs,
@@ -236,15 +238,13 @@ pub mod handlers {
         }
     }
 
-    /// Timestamp helper — ISO 8601 UTC.
+    /// Timestamp helper — Unix epoch seconds (no chrono dependency).
     #[allow(dead_code)]
     fn now_iso() -> String {
         let secs = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        // Minimal ISO 8601 without chrono dependency (seconds granularity).
-        let epoch_offset = secs;
-        format!("{epoch_offset}")
+        format!("{secs}")
     }
 }

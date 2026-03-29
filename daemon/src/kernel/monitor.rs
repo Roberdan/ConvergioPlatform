@@ -150,7 +150,7 @@ pub fn classify_readiness_results(pool: &Pool<SqliteConnectionManager>, peer_nam
                 let detail = c["detail"].as_str().unwrap_or("check failed");
                 let sev = if CRITICAL_CHECKS.contains(&name) { critical = true; "critical" } else { "warn" };
                 store_kernel_event(pool, &source, &format!("{name}: {detail}"), sev);
-                warn!("kernel.monitor [{}] readiness:{} {}: {}", sev, peer_name, name, detail);
+                warn!("jarvis.monitor [{}] readiness:{} {}: {}", sev, peer_name, name, detail);
             }
         }
     }
@@ -162,7 +162,7 @@ pub async fn check_peer_readiness(pool: &Pool<SqliteConnectionManager>, peer_url
     let peer_name = peer_name_from_url(peer_url);
     let source = format!("readiness:{peer_name}");
     let client = Client::builder().timeout(HTTP_TIMEOUT).build().unwrap_or_default();
-    let warn_event = |msg: String| { store_kernel_event(pool, &source, &msg, "warn"); warn!("kernel.monitor {source} {msg}"); };
+    let warn_event = |msg: String| { store_kernel_event(pool, &source, &msg, "warn"); warn!("jarvis.monitor {source} {msg}"); };
     match client.get(format!("{peer_url}/api/node/readiness")).send().await {
         Err(e) => warn_event(format!("unreachable: {e}")),
         Ok(r) if !r.status().is_success() => warn_event(format!("HTTP {}", r.status())),
@@ -175,11 +175,11 @@ pub async fn check_peer_readiness(pool: &Pool<SqliteConnectionManager>, peer_url
 
 pub fn store_kernel_event(pool: &Pool<SqliteConnectionManager>, source: &str, msg: &str, severity: &str) {
     match pool.get() {
-        Err(e) => warn!("kernel.monitor: db conn: {e}"),
+        Err(e) => warn!("jarvis.monitor: db conn: {e}"),
         Ok(conn) => { let _ = conn.execute(
             "INSERT INTO kernel_events (severity, source, message, action_taken) VALUES (?1,?2,?3,'none')",
             rusqlite::params![severity, source, msg],
-        ).map_err(|e| warn!("kernel.monitor: insert: {e}")); }
+        ).map_err(|e| warn!("jarvis.monitor: insert: {e}")); }
     }
 }
 
@@ -193,7 +193,7 @@ pub fn classify_and_store(pool: &Pool<SqliteConnectionManager>, results: &[Kerne
                 critical = true; "critical"
             } else { "warn" };
             store_kernel_event(pool, &r.check_name, msg, sev);
-            warn!("kernel.monitor [{}] {}: {}", sev, r.check_name, msg);
+            warn!("jarvis.monitor [{}] {}: {}", sev, r.check_name, msg);
         }
     }
     critical
@@ -211,13 +211,26 @@ pub async fn run_and_store_cycle(pool: &Pool<SqliteConnectionManager>, config: &
     all.push(detect_stale_locks(300));
     all.push(detect_compaction_risk(0, config.compaction_token_limit));
     let critical = classify_and_store(pool, &all);
-    if critical { info!("kernel.monitor: CRITICAL — communicate stub (wired W2/W3)"); }
+    if critical { info!("jarvis.monitor: CRITICAL — communicate stub (wired W2/W3)"); }
+}
+
+/// Check whether the Telegram long-poll background task is still alive.
+///
+/// Pass the `JoinHandle` returned by `spawn_telegram_poll`. If the task has
+/// exited (crash or early return) this returns a failing check result so the
+/// monitor loop can surface and log the event.
+pub fn check_telegram_poll_alive(handle: &tokio::task::JoinHandle<()>) -> KernelCheckResult {
+    if handle.is_finished() {
+        KernelCheckResult::fail("telegram_poll_alive", "Telegram poll task has exited")
+    } else {
+        KernelCheckResult::pass("telegram_poll_alive")
+    }
 }
 
 /// Spawn background monitor loop (30s poll, 5min readiness check).
 pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorConfig) {
     tokio::spawn(async move {
-        info!("kernel.monitor: started (poll every {}s)", POLL_INTERVAL.as_secs());
+        info!("jarvis.monitor: started (poll every {}s)", POLL_INTERVAL.as_secs());
         let mut last_readiness_check: Option<Instant> = None;
         loop { // UNBOUNDED: event loop
             tokio::time::sleep(POLL_INTERVAL).await;
@@ -225,7 +238,7 @@ pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorCo
             let should_check = last_readiness_check
                 .map(|t| t.elapsed() >= READINESS_INTERVAL).unwrap_or(true);
             if should_check && !config.peer_urls.is_empty() {
-                info!("kernel.monitor: running node readiness check on {} peers", config.peer_urls.len());
+                info!("jarvis.monitor: running node readiness check on {} peers", config.peer_urls.len());
                 for peer_url in &config.peer_urls { check_peer_readiness(&pool, peer_url).await; }
                 last_readiness_check = Some(Instant::now());
             }

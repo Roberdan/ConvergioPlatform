@@ -8,7 +8,7 @@
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Daemon (Rust) | daemon/ | Control plane: HTTP API (:8420), mesh, IPC, kernel |
-| Kernel | daemon/src/kernel/ | Local LLM (Qwen 7B), monitor, verify, recover, TTS, Telegram |
+| Kernel | daemon/src/kernel/ | Jarvis — Local LLM (Qwen 7B), monitor, verify, recover, TTS, Telegram |
 | MCP Server | daemon/src/mcp_server/ | Expose daemon as MCP tools for any LLM client |
 | Evolution Engine | evolution/ | Self-improvement: observe → measure → propose → experiment |
 | CLI | `cvg` | All operations: plans, tasks, waves, agents, mesh, kernel |

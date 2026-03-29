@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. MPL-2.0. -->
 # ConvergioPlatform
 
-Unified AI orchestration platform: Rust daemon + kernel (Qwen 7B local) + mesh + 89 agents + Telegram + Siri.
+Unified AI orchestration platform: Rust daemon + kernel/Jarvis (Qwen 7B local) + mesh + 89 agents + Telegram + Siri.
 
 **Full capabilities**: @reference/operational/convergio-capabilities.md (MUST READ for any non-trivial task)
 

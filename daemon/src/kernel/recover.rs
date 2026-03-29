@@ -83,23 +83,23 @@ pub async fn recover(
 ) -> Result<(), String> {
     match severity {
         Severity::Critical => {
-            info!("kernel.recover: CRITICAL — starting recovery chain");
+            info!("jarvis.recover: CRITICAL — starting recovery chain");
             run_critical_chain(cfg).await
         }
         Severity::Warn => {
             let cycles = consecutive_cycles.unwrap_or(0);
             if cycles >= 3 {
-                warn!("kernel.recover: WARN sustained {} cycles (>=90s) — notifying", cycles);
+                warn!("jarvis.recover: WARN sustained {} cycles (>=90s) — notifying", cycles);
                 log_kernel_event("sustained WARN", cycles);
                 communicate("Sustained WARN: kernel health degraded", Severity::Warn, cfg).await;
             } else {
-                info!("kernel.recover: WARN cycle {} — logging only", cycles);
+                info!("jarvis.recover: WARN cycle {} — logging only", cycles);
                 log_kernel_event("WARN", cycles);
             }
             Ok(())
         }
         Severity::Ok => {
-            info!("kernel.recover: OK — no action needed");
+            info!("jarvis.recover: OK — no action needed");
             Ok(())
         }
     }
@@ -116,7 +116,7 @@ pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig
             NotifyChannel::Ntfy => {
                 if cfg.dry_run {
                     info!(
-                        "kernel.recover: [dry_run] ntfy POST skipped — topic={} msg={}",
+                        "jarvis.recover: [dry_run] ntfy POST skipped — topic={} msg={}",
                         cfg.ntfy_topic, message
                     );
                 } else {
@@ -126,7 +126,7 @@ pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig
             NotifyChannel::Local => {
                 if cfg.dry_run {
                     info!(
-                        "kernel.recover: [dry_run] audio skipped — severity={severity} msg={message}"
+                        "jarvis.recover: [dry_run] audio skipped — severity={severity} msg={message}"
                     );
                 } else {
                     // TTS speak + play on active node
@@ -139,7 +139,7 @@ pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig
             NotifyChannel::Telegram => {
                 // Why: replaced W3 stub with real Telegram send_text (Plan 729 T3-01).
                 super::telegram::communicate(message, severity.clone(), cfg.dry_run).await
-                    .unwrap_or_else(|e| warn!("kernel.recover: telegram communicate failed: {e}"));
+                    .unwrap_or_else(|e| warn!("jarvis.recover: telegram communicate failed: {e}"));
             }
         }
     }
@@ -148,7 +148,7 @@ pub async fn communicate(message: &str, severity: Severity, cfg: &RecoveryConfig
 /// Execute the full CRITICAL recovery chain.
 async fn run_critical_chain(cfg: &RecoveryConfig) -> Result<(), String> {
     if cfg.dry_run {
-        info!("kernel.recover: [dry_run] skipping checkpoint+restart+reap");
+        info!("jarvis.recover: [dry_run] skipping checkpoint+restart+reap");
     } else {
         run_checkpoint();
         ssh_restart_peer();
@@ -162,14 +162,14 @@ async fn run_critical_chain(cfg: &RecoveryConfig) -> Result<(), String> {
 /// Run `cvg checkpoint save <plan_id>` — plan_id sourced from env KERNEL_PLAN_ID.
 fn run_checkpoint() {
     let plan_id = std::env::var("KERNEL_PLAN_ID").unwrap_or_else(|_| "0".to_string());
-    info!("kernel.recover: running cvg checkpoint save {plan_id}");
+    info!("jarvis.recover: running cvg checkpoint save {plan_id}");
     match Command::new("cvg").args(["checkpoint", "save", &plan_id]).output() {
-        Ok(o) if o.status.success() => info!("kernel.recover: checkpoint saved"),
+        Ok(o) if o.status.success() => info!("jarvis.recover: checkpoint saved"),
         Ok(o) => warn!(
-            "kernel.recover: checkpoint failed: {}",
+            "jarvis.recover: checkpoint failed: {}",
             String::from_utf8_lossy(&o.stderr)
         ),
-        Err(e) => warn!("kernel.recover: checkpoint exec error: {e}"),
+        Err(e) => warn!("jarvis.recover: checkpoint exec error: {e}"),
     }
 }
 
@@ -177,62 +177,62 @@ fn run_checkpoint() {
 fn ssh_restart_peer() {
     let peer = std::env::var("KERNEL_PEER_SSH").unwrap_or_default();
     if peer.is_empty() {
-        warn!("kernel.recover: KERNEL_PEER_SSH not set — skipping SSH peer restart");
+        warn!("jarvis.recover: KERNEL_PEER_SSH not set — skipping SSH peer restart");
         return;
     }
-    info!("kernel.recover: SSH restart peer daemon on {peer}");
+    info!("jarvis.recover: SSH restart peer daemon on {peer}");
     // Reuse the handoff_ssh SshClient pattern via a fresh Command invocation.
     // Full mesh SSH integration is in daemon/src/mesh/handoff_ssh.rs.
     match Command::new("ssh")
         .args([&peer, "systemctl", "--user", "restart", "convergio-daemon"])
         .output()
     {
-        Ok(o) if o.status.success() => info!("kernel.recover: peer daemon restarted"),
+        Ok(o) if o.status.success() => info!("jarvis.recover: peer daemon restarted"),
         Ok(o) => warn!(
-            "kernel.recover: peer restart failed: {}",
+            "jarvis.recover: peer restart failed: {}",
             String::from_utf8_lossy(&o.stderr)
         ),
-        Err(e) => warn!("kernel.recover: ssh exec error: {e}"),
+        Err(e) => warn!("jarvis.recover: ssh exec error: {e}"),
     }
 }
 
 /// Run `cvg reap` to clean zombie processes.
 fn run_reap() {
-    info!("kernel.recover: running cvg reap");
+    info!("jarvis.recover: running cvg reap");
     match Command::new("cvg").arg("reap").output() {
-        Ok(o) if o.status.success() => info!("kernel.recover: reap complete"),
+        Ok(o) if o.status.success() => info!("jarvis.recover: reap complete"),
         Ok(o) => warn!(
-            "kernel.recover: reap failed: {}",
+            "jarvis.recover: reap failed: {}",
             String::from_utf8_lossy(&o.stderr)
         ),
-        Err(e) => warn!("kernel.recover: reap exec error: {e}"),
+        Err(e) => warn!("jarvis.recover: reap exec error: {e}"),
     }
 }
 
 /// POST to ntfy.sh with a plain-text message body.
 async fn post_ntfy(topic: &str, message: &str, severity: &Severity) {
     let url = format!("https://ntfy.sh/{topic}");
-    info!("kernel.recover: posting to ntfy topic={topic}");
+    info!("jarvis.recover: posting to ntfy topic={topic}");
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
     {
         Ok(c) => c,
         Err(e) => {
-            warn!("kernel.recover: failed to build reqwest client: {e}");
+            warn!("jarvis.recover: failed to build reqwest client: {e}");
             return;
         }
     };
     let body = format!("[{severity}] {message}");
     match client.post(&url).body(body).send().await {
-        Ok(resp) => info!("kernel.recover: ntfy response status={}", resp.status()),
-        Err(e) => warn!("kernel.recover: ntfy POST failed: {e}"),
+        Ok(resp) => info!("jarvis.recover: ntfy response status={}", resp.status()),
+        Err(e) => warn!("jarvis.recover: ntfy POST failed: {e}"),
     }
 }
 
 /// Log an event to kernel_events (tracing only; DB write is additive in W2).
 fn log_kernel_event(label: &str, cycles: u32) {
-    info!("kernel.recover: kernel_event label={label} consecutive_cycles={cycles}");
+    info!("jarvis.recover: kernel_event label={label} consecutive_cycles={cycles}");
 }
 /// Parse "local,telegram,ntfy" → Vec<NotifyChannel>.
 fn parse_channels(raw: &str) -> Vec<NotifyChannel> {
@@ -242,7 +242,7 @@ fn parse_channels(raw: &str) -> Vec<NotifyChannel> {
             "local" => Some(NotifyChannel::Local),
             "telegram" => Some(NotifyChannel::Telegram),
             other => {
-                warn!("kernel.recover: unknown channel '{other}' — skipped");
+                warn!("jarvis.recover: unknown channel '{other}' — skipped");
                 None
             }
         })

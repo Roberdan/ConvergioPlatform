@@ -185,7 +185,7 @@ pub async fn communicate(
     dry_run: bool,
 ) -> Result<(), String> {
     if dry_run {
-        info!("kernel.telegram: [dry_run] communicate skipped — severity={severity} msg={message}");
+        info!("jarvis.telegram: [dry_run] communicate skipped — severity={severity} msg={message}");
         return Ok(());
     }
 
@@ -208,13 +208,13 @@ pub async fn communicate(
             (Some(tok), Some(cid)) => {
                 // Quiet hours → text only; otherwise also send voice if TTS available
                 if let Err(e) = send_text(tok, cid, message, None).await {
-                    warn!("kernel.telegram: sendMessage failed: {e}");
+                    warn!("jarvis.telegram: sendMessage failed: {e}");
                 } else {
-                    info!("kernel.telegram: sendMessage ok");
+                    info!("jarvis.telegram: sendMessage ok");
                 }
             }
             _ => warn!(
-                "kernel.telegram: CONVERGIO_TELEGRAM_TOKEN or CONVERGIO_TELEGRAM_CHAT_ID not set"
+                "jarvis.telegram: CONVERGIO_TELEGRAM_TOKEN or CONVERGIO_TELEGRAM_CHAT_ID not set"
             ),
         }
     }
@@ -225,7 +225,7 @@ pub async fn communicate(
         if let Ok(audio) = tts.speak(message, "it-IT") {
             crate::kernel::audio::play_local(&audio).await;
         } else {
-            warn!("kernel.telegram: TTS failed for local audio");
+            warn!("jarvis.telegram: TTS failed for local audio");
         }
     }
 

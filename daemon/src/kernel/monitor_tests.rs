@@ -179,4 +179,27 @@ mod tests {
         // No port in URL — should still return the host portion.
         assert_eq!(peer_name_from_url("http://mynode/"), "mynode");
     }
+
+    // --- check_telegram_poll_alive ---
+
+    #[tokio::test]
+    async fn telegram_poll_alive_passes_for_running_task() {
+        use crate::kernel::monitor::check_telegram_poll_alive;
+        let handle = tokio::spawn(async { tokio::time::sleep(std::time::Duration::from_secs(60)).await });
+        let result = check_telegram_poll_alive(&handle);
+        assert!(result.ok, "running task should pass");
+        assert_eq!(result.check_name, "telegram_poll_alive");
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn telegram_poll_alive_fails_for_finished_task() {
+        use crate::kernel::monitor::check_telegram_poll_alive;
+        let handle = tokio::spawn(async {});
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let result = check_telegram_poll_alive(&handle);
+        assert!(!result.ok, "finished task should fail");
+        assert!(result.details.is_some());
+        assert_eq!(result.check_name, "telegram_poll_alive");
+    }
 }

@@ -69,7 +69,7 @@ pub fn build_status_reply(
     cost: &str,
 ) -> String {
     format!(
-        "*Convergio Status*\nPiani attivi: {active_plans}\nTask in coda: {queued_tasks}\nMesh: {mesh}\nCosto oggi: {cost}"
+        "*Jarvis Status*\nPiani attivi: {active_plans}\nTask in coda: {queued_tasks}\nMesh: {mesh}\nCosto oggi: {cost}"
     )
 }
 
@@ -85,7 +85,7 @@ pub fn spawn_telegram_poll(
     engine: Arc<KernelEngine>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        info!("telegram_poll: starting for chat_id={chat_id}");
+        info!("jarvis.telegram: starting for chat_id={chat_id}");
         run_poll_loop(&token, chat_id, &daemon_url, &engine).await;
     })
 }
@@ -125,9 +125,9 @@ async fn run_poll_loop(
                         }
                         let reply = process_text(text, daemon_url, engine).await;
                         if let Err(e) = send_message(&client, &base, chat_id, &reply).await {
-                            warn!("telegram_poll: send_message failed: {e}");
+                            warn!("jarvis.telegram: send_message failed: {e}");
                         } else {
-                            debug!("telegram_poll: replied to update_id={}", api_upd.update_id);
+                            debug!("jarvis.telegram: replied to update_id={}", api_upd.update_id);
                         }
                         last_reply = Instant::now();
                     }
@@ -136,7 +136,7 @@ async fn run_poll_loop(
                 }
             }
             Err(e) => {
-                warn!("telegram_poll: getUpdates error: {e}");
+                warn!("jarvis.telegram: getUpdates error: {e}");
                 sleep(Duration::from_secs(5)).await; // backoff on error only
             }
         }
@@ -146,7 +146,7 @@ async fn run_poll_loop(
 
 async fn process_text(text: &str, daemon_url: &str, engine: &KernelEngine) -> String {
     let intent = classify_intent(text, engine);
-    debug!(?intent, text, "telegram_poll: classified intent");
+    debug!(?intent, text, "jarvis.telegram: classified intent");
     // route_intent uses reqwest::blocking which deadlocks inside tokio runtime.
     // Wrap in spawn_blocking to run on a dedicated thread pool.
     let daemon = daemon_url.to_string();
@@ -154,7 +154,7 @@ async fn process_text(text: &str, daemon_url: &str, engine: &KernelEngine) -> St
     match tokio::task::spawn_blocking(move || route_intent(intent_clone, &daemon)).await {
         Ok(response) => response,
         Err(e) => {
-            warn!("telegram_poll: spawn_blocking failed: {e}");
+            warn!("jarvis.telegram: spawn_blocking failed: {e}");
             "Errore interno del kernel.".to_string()
         }
     }
