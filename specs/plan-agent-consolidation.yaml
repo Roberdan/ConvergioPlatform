@@ -1,0 +1,149 @@
+name: "Agent Consolidation & Rule Simplification"
+project: convergio
+description: >
+  Consolidate 104 agent definitions to ~60 (merge duplicates, compress prompts,
+  remove bloat). Reduce 94 NON-NEGOTIABLE rules to ~10 hard enforcement + best
+  practices. Optimize all prompts for token efficiency.
+parallel_mode: standard
+
+waves:
+  - id: W1
+    name: "Agent Deduplication & Compression"
+    tasks:
+      - id: T1-01
+        do: >
+          Merge duplicate agent definitions in claude-config/agents/:
+          1. michael-vc + wiz-investor-venture-capital → single vc-analyst agent (keep best of both)
+          2. oliver-pm into davide-project-manager (oliver is lightweight subset)
+          3. angela-da + ethan-da + ava-analytics-insights-virtuoso into omri-data-scientist (expand omri)
+          4. Delete evan-ic6da (generic career coaching, not a real agent capability)
+          5. Delete riccardo-storyteller (narrative pattern better as skill/prompt template)
+          6. Merge strategic-planner-thor into strategic-planner (remove separate file)
+          7. Merge thor-validation-gates into thor-quality-assurance-guardian
+          8. Merge strategy-validator into plan-reviewer
+          For each merge: combine best content from both, keep under 250 lines, update
+          any references in .claude/settings.json or CLAUDE.md.
+          Delete the redundant files after merge.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "test ! -f claude-config/agents/specialized_experts/michael-vc.md"
+          - "test ! -f claude-config/agents/business_operations/oliver-pm.md"
+          - "test ! -f claude-config/agents/specialized_experts/riccardo-storyteller.md"
+          - "test ! -f claude-config/agents/core_utility/strategic-planner-thor.md"
+          - "find claude-config/agents -name '*.md' -not -path '*/reference/*' | wc -l | xargs test 80 -gt"
+
+      - id: T1-02
+        do: >
+          Compress all remaining agent definitions to be token-efficient:
+          1. For each agent file in claude-config/agents/ (excluding reference/):
+             - Remove redundant boilerplate (repeated security/ethics sections)
+             - Use tables instead of prose for capabilities
+             - Remove examples that duplicate Claude's built-in knowledge
+             - Keep under 150 lines (target 100 for simple agents)
+          2. Focus on: what makes THIS agent unique vs generic Claude
+          3. Remove any agent that just wraps a generic prompt with no domain specificity
+          Estimate: ~30% token reduction across all agent definitions.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "find claude-config/agents -name '*.md' -not -path '*/reference/*' -exec wc -l {} + | tail -1 | awk '{if($1 < 8000) exit 0; else exit 1}'"
+          - "find claude-config/agents -name '*.md' -not -path '*/reference/*' | wc -l | xargs test 70 -gt"
+
+  - id: W2
+    name: "Rule Simplification"
+    tasks:
+      - id: T2-01
+        do: >
+          Restructure claude-config/rules/ from 13 files with 94 NON-NEGOTIABLE rules
+          to a tiered system:
+          1. Create rules/hard-enforcement.md (~10 rules, hook-enforced):
+             - No secrets in code
+             - No sqlite3 direct access
+             - Agent identity (cvg agent start/complete)
+             - cargo check on .rs edits
+             - Evidence before done (kernel gate)
+             - Max 250 lines/file
+             - New .rs file = wire mod.rs same commit
+             - Fail-loud (no silent .ok())
+             - Conventional commits
+             - Test before done
+          2. Create rules/best-practices.md (everything else as SUGGESTED, not ENFORCED):
+             - TDD order, mock boundaries, integration test patterns
+             - Documentation standards, ADR format
+             - Code style details, naming conventions
+             - Lean coordinator protocol
+             - Persuasion guardrails (good advice but not blocking)
+          3. Delete the 13 individual rule files and replace with these 2
+          4. Update all @ references in CLAUDE.md
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "test -f claude-config/rules/hard-enforcement.md"
+          - "test -f claude-config/rules/best-practices.md"
+          - "find claude-config/rules -name '*.md' | wc -l | xargs test 5 -gt"
+          - "wc -l claude-config/rules/hard-enforcement.md | awk '{if($1 < 80) exit 0; else exit 1}'"
+
+      - id: T2-02
+        do: >
+          Optimize root CLAUDE.md for minimum token footprint:
+          1. Remove information that is derivable from code (module counts, file lists)
+          2. Use tables exclusively — no prose descriptions
+          3. Remove duplicate references (capabilities already in convergio-capabilities.md)
+          4. Target: under 120 lines, under 3000 tokens
+          5. Keep all @ references working
+          6. Keep all NON-NEGOTIABLE markers only for the ~10 hard rules
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "wc -l CLAUDE.md | awk '{if($1 < 130) exit 0; else exit 1}'"
+
+  - id: W3
+    name: "Closure"
+    tasks:
+      - id: TF-tests
+        do: >
+          Verify everything works after consolidation:
+          1. cd daemon && cargo check (rules didn't break Rust code)
+          2. All @ references in CLAUDE.md resolve to existing files
+          3. Agent definitions are well-formed (have frontmatter with name, description, model)
+          4. No broken references in .claude/settings.json
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+
+      - id: TF-doc
+        do: >
+          Update CHANGELOG.md with consolidation changes.
+          Bump VERSION.md to 19.4.0.
+          Update daemon/Cargo.toml version.
+        type: documentation
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "head -3 CHANGELOG.md | grep -q '19.4.0'"
+          - "cat VERSION.md | grep -q '19.4.0'"

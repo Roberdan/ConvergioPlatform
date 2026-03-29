@@ -5,7 +5,8 @@ use std::time::Duration;
 use tracing::{error, info, warn};
 
 use crate::background_sync_http::{
-    fetch_changes_from_peer, peers_conf_path_from_env, resolve_best_addr, send_changes_to_peer,
+    detect_local_tailscale_ip, fetch_changes_from_peer, peers_conf_path_from_env,
+    resolve_best_addr, send_changes_to_peer,
 };
 use crate::db::libsql_adapter::{self, SyncMeta};
 
@@ -39,32 +40,26 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
         )
     })?;
 
-    let peers_conf_path = peers_conf_path_from_env();
-    let conf_content = match std::fs::read_to_string(&peers_conf_path) {
-        Ok(c) => c,
-        Err(e) => {
-            error!("background_sync: cannot read peers.conf at {peers_conf_path}: {e}");
-            return Ok(Vec::new());
-        }
-    };
+    let conf_path = peers_conf_path_from_env();
+    let conf_content = std::fs::read_to_string(&conf_path).map_err(|e| {
+        error!("background_sync: cannot read {conf_path}: {e}");
+        rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
+            Some(format!("peers.conf: {e}")),
+        )
+    })?;
     let conf = crate::server::api_mesh::peer_conf::parse_peers_conf(&conf_content);
-
     let mut stmt = conn.prepare_cached(
-        "SELECT DISTINCT peer_name FROM peer_heartbeats \
-         WHERE last_seen > unixepoch() - 600",
+        "SELECT DISTINCT peer_name FROM peer_heartbeats WHERE last_seen > unixepoch() - 600",
     )?;
-    let online_names: Vec<String> = stmt
-        .query_map([], |row| row.get(0))?
-        .filter_map(|r| match r {
-            Ok(v) => Some(v),
-            Err(e) => { tracing::warn!("background_sync peer row: {e}"); None }
-        })
-        .collect();
-
+    let online_names: Vec<String> = stmt.query_map([], |row| row.get(0))?
+        .filter_map(|r| r.ok()).collect();
     if online_names.is_empty() {
         info!("background_sync: no peers with recent heartbeat");
         return Ok(Vec::new());
     }
+
+    let local_ts_ip = detect_local_tailscale_ip();
 
     let mut addrs = Vec::new();
     for name in &online_names {
@@ -72,12 +67,16 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
             Some(p) => p,
             None => {
                 error!(
-                    "background_sync: peer '{name}' online (heartbeat) but NOT in peers.conf — \
-                     check that peer_heartbeats.peer_name matches peers.conf section name"
+                    "background_sync: peer '{name}' online but NOT in peers.conf"
                 );
                 continue;
             }
         };
+        if let Some(ts_ip) = peer.get("tailscale_ip") {
+            if Some(ts_ip.as_str()) == local_ts_ip.as_deref() {
+                continue;
+            }
+        }
         match resolve_best_addr(name, peer) {
             Some(addr) => {
                 info!("background_sync: peer {name} → {addr}");
@@ -85,7 +84,7 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
             }
             None => {
                 error!(
-                    "background_sync: peer '{name}' has no reachable address — \
+                    "background_sync: peer '{name}' unreachable — \
                      tried thunderbolt_ip={:?}, tailscale_ip={:?}",
                     peer.get("thunderbolt_ip"),
                     peer.get("tailscale_ip"),
@@ -192,12 +191,10 @@ pub fn spawn_sync_loop(
             effective_secs
         );
         let mut ticker = tokio::time::interval(Duration::from_secs(effective_secs));
-        // Skip the immediate first tick — let the server finish binding.
-        ticker.tick().await;
+        ticker.tick().await; // skip first tick — let server finish binding
 
-        loop { // UNBOUNDED: event loop
+        loop {
             ticker.tick().await;
-
             let peers = match query_active_peers(&db) {
                 Ok(p) => p,
                 Err(e) => {
