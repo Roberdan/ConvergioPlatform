@@ -1,7 +1,7 @@
 # Convergio Platform — Complete Capability Reference
 
 > Single source of truth for what Convergio can do. Load this in every agent session.
-> Updated: 29 Marzo 2026 | v18.5.0+
+> Updated: 29 Marzo 2026 | v19.1.0
 
 ## Core Architecture
 
@@ -46,7 +46,7 @@
 - `scripts/mesh/deploy-node.sh <node> --kernel` — one-command deploy
 - `scripts/kernel/sync-db.sh <source> <target>` — safe DB rsync
 
-### Kernel (Local LLM on M1 Pro)
+### Jarvis — Kernel (Local LLM on M1 Pro)
 - `cvg kernel status/start/stop/logs/test/here/say`
 - Qwen 2.5 7B — context-stuffed intelligent answers
 - Monitor loop (30s) — health, stall detection, rate limits
@@ -55,11 +55,15 @@
 - TTS — macOS say (Siri voices via Shortcuts)
 - STT — Whisper (planned)
 - Telegram bidirectional — text + voice, long polling
+- Telegram poll health check: detect and report dead poll task
+- Peer failure tracker: 3-strike consecutive failure alerts for remote nodes
+- Deterministic problem triage: auto-fix daemon crash, DB lock, stale worktrees, high FD count
 
 ### Ali Escalation
 - "ali dimmi..." via Telegram/API → Claude CLI (Sonnet/Opus) subprocess
 - Full system context injected automatically
 - Fallback to Qwen local if Claude CLI unavailable
+- Unknown problems: creates micro-plans and launches copilot-plan-runner automatically
 
 ### Telegram Bot (@ConvergioBot)
 - Inbound text: any message → classify intent → respond

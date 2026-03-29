@@ -1,12 +1,28 @@
 # Next Session — Convergio Platform
 
 **Last updated**: 29 Marzo 2026
-**Current version**: 19.0.0
+**Current version**: 19.1.0
 **Platform readiness**: 10/10
 
 ---
 
-## What Was Done (Plan 742 — Plan X v2 Hardening)
+## What Was Done (Plan 745 — Jarvis Self-Healing Kernel)
+
+### W1: Jarvis Identity + Self-Healing Core
+- Kernel renamed to Jarvis across log prefixes, Telegram responses, /api/kernel/status
+- Telegram poll health check: detects and reports dead poll task
+- Peer failure tracker: 3-strike consecutive failure alerts for remote nodes
+- Ali escalation: unknown problems create micro-plans and launch copilot-plan-runner
+- Deterministic problem triage: auto-fix daemon crash, DB lock, stale worktrees, high FD count
+
+### W2: Documentation (in progress)
+- Version bump to 19.1.0 (minor: new features)
+- CHANGELOG 19.1.0 entry added
+- convergio-capabilities.md update pending
+
+---
+
+## Previous: Plan 742 — Plan X v2 Hardening
 
 ### W1: libSQL Migration
 - Replaced crsqlite CRDT with timestamp-based sync adapter over HTTP
@@ -46,14 +62,14 @@
 
 | Dimension | Status |
 |-----------|--------|
-| Daemon version | 19.0.0 |
+| Daemon version | 19.1.0 |
 | Sync model | Timestamp-based (crsqlite gated, not default) |
 | Peer resolver | Centralized, 3-stage fuzzy match |
 | Evidence gate | Hardened (mutex + SHA cache) |
 | Delegation | Unified via cvg + execution-context API |
 | Test coverage | ~80-90% on mesh, IPC, API modules |
 | MCP server | 18 tools (invoke_agent added) |
-| Kernel (M1 Pro) | Active — Qwen 7B loaded |
+| Jarvis (M1 Pro) | Active — Qwen 7B loaded, self-healing enabled |
 | Mesh | Active — M1 Pro + MacBook Pro synced |
 
 ---

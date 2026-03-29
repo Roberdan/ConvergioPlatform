@@ -1,5 +1,14 @@
 # Changelog
 
+## [19.1.0] - 29 Marzo 2026
+
+### Added
+- Jarvis identity: kernel renamed to Jarvis across log prefixes, Telegram responses, and /api/kernel/status
+- Telegram poll health check: detect and report dead poll task
+- Peer failure tracker: 3-strike consecutive failure alerts for remote nodes
+- Ali escalation: unknown problems create micro-plans and launch copilot-plan-runner
+- Deterministic problem triage: auto-fix daemon crash, DB lock, stale worktrees, high FD count
+
 ## [19.0.0] - 2026-03-29
 
 ### Breaking

@@ -62,7 +62,7 @@ fn test_extract_text_message_no_message_ignored() {
 #[test]
 fn test_build_status_reply_format() {
     let reply = build_status_reply(2, 5, "2/2", "$42");
-    assert!(reply.contains("*Convergio Status*"), "missing header: {reply}");
+    assert!(reply.contains("*Jarvis Status*"), "missing header: {reply}");
     assert!(reply.contains("Piani attivi:"), "missing piani attivi: {reply}");
     assert!(reply.contains("Task in coda:"), "missing task in coda: {reply}");
     assert!(reply.contains("Mesh:"), "missing mesh: {reply}");
