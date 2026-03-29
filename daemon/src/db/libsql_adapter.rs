@@ -136,25 +136,31 @@ pub fn apply_changes(
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        // Check if row exists and get its updated_at
-        let existing: Option<String> = conn
+        // Check if row exists and get its updated_at (may be NULL for old rows)
+        let row_exists: bool = conn
             .query_row(
-                &format!(
-                    "SELECT updated_at FROM \"{}\" WHERE id = ?1",
-                    change.table_name
-                ),
+                &format!("SELECT COUNT(*) FROM \"{}\" WHERE id = ?1", change.table_name),
+                params![change.pk],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) > 0;
+        let local_ts: Option<String> = if row_exists {
+            conn.query_row(
+                &format!("SELECT COALESCE(updated_at, '') FROM \"{}\" WHERE id = ?1", change.table_name),
                 params![change.pk],
                 |row| row.get(0),
-            )
-            .optional()?;
+            ).ok()
+        } else {
+            None
+        };
 
-        match existing {
-            Some(local_ts) if local_ts >= remote_updated.to_string() => {
+        match local_ts {
+            Some(ref ts) if !ts.is_empty() && *ts >= remote_updated.to_string() => {
                 // Local is same or newer — skip
                 continue;
             }
             Some(_) => {
-                // Remote is newer — update
+                // Remote is newer or local has NULL updated_at — update
                 let columns = get_column_names(conn, &change.table_name)?;
                 let sets: Vec<String> = columns
                     .iter()

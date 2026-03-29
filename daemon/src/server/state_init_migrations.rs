@@ -179,7 +179,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // Add updated_at to tables that need timestamp-based sync replication
     "ALTER TABLE knowledge_base ADD COLUMN updated_at DATETIME",
     "ALTER TABLE notifications ADD COLUMN updated_at DATETIME",
-    // Backfill updated_at from created_at for rows that predate the sync migration
+    // Backfill updated_at for ALL sync tables — rows without updated_at break replication
+    "UPDATE plans SET updated_at = COALESCE(completed_at, started_at, created_at, datetime('now')) WHERE updated_at IS NULL",
     "UPDATE tasks SET updated_at = COALESCE(completed_at, started_at, datetime('now')) WHERE updated_at IS NULL",
     "UPDATE waves SET updated_at = COALESCE(completed_at, started_at, datetime('now')) WHERE updated_at IS NULL",
     "UPDATE knowledge_base SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL",
