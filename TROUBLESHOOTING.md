@@ -210,6 +210,11 @@ cvg repo sync           # checks each repo path exists + health endpoint respond
 - Cause: pre-v19 runner called `set -e` and exited on first non-zero CLI return.
 - Fix: upgrade runner script. v19 removes `set -e`, protects CLI launch, only resets in_progress tasks.
 
+**copilot-plan-runner shows "Next: none" despite pending tasks**
+- Symptom: runner logs `Wave: ? | Next: none | Thor: false` even though tasks are pending.
+- Cause: execution-context API queries `branch_name` from plans table, but column was missing (added in v19.1.0+).
+- Fix: rebuild daemon (`cargo build --release`), restart. Migration auto-adds `branch_name`. Then set it: `curl -X POST localhost:8420/api/plan-db/set-worktree/<plan_id> -H 'Content-Type: application/json' -d '{"worktree_path":"/path","branch_name":"feat/branch"}'`.
+
 ## macOS / Terminal
 
 **PTY terminal rejects session name**
