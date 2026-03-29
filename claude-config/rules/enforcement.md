@@ -33,6 +33,14 @@ Edit/Write during plan → `Skill(execute)` | Done without tests → show output
 
 DB → `cvg task update {id} done` | Thor → `cvg task validate {id} {plan}` | Checkpoint → `cvg checkpoint save` | Compaction → `cvg checkpoint restore`
 
+## Cascading Fix Threshold (NON-NEGOTIABLE)
+
+3 consecutive fixes for same issue where each introduces new problem → STOP. Explain root cause, propose clean rebuild/architectural change, wait for approval. Band-aid chains = REJECTED.
+
+## Plan Pre-Execution Validation (NON-NEGOTIABLE)
+
+Before executing ANY plan task: 1) Verify referenced file paths exist (or marked "to create") 2) Verify CLI commands/scripts exist and are executable 3) Verify `test_criteria` is non-empty and runnable 4) Verify wave dependencies exist 5) Verify `gh auth status` + `cvg` in PATH. Block execution until all pass.
+
 ## NON-NEGOTIABLE Rules
 
 **Plan closure**: All PRs MERGED. Worktrees clean. Docs updated.

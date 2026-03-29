@@ -26,6 +26,10 @@ Empty unexpected data → `console.warn` + visible UI. Silent `return null` = BU
 
 Done = ALL requirements + ALL verify + ALL touched files clean. REJECTED: "Out of scope" | Deferred | TODO/FIXME/stubs | Suppress lint | "Pre-existing"
 
+## Rust Module Wiring (NON-NEGOTIABLE)
+
+New `.rs` file → MUST add `mod` or `pub mod` in parent `mod.rs`/`lib.rs` SAME commit. Update route/module count constants. `cargo check` MUST pass before marking done.
+
 ## Limits
 
 Max 250 lines/file | CLAUDE.md: 4000 tok | rules: 2000 tok | skills/agents: 1500 tok

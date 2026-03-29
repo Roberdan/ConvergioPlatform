@@ -24,7 +24,7 @@ Compliance: GDPR. Gender-neutral. Blocklist/allowlist. RFC 2606. MPL-2.0.
 
 ## Core Rules (NON-NEGOTIABLE)
 
-1. Verify before claim. 2. Act, don't suggest. 3. Minimum complexity. 4. Plan started = plan finished. 5. "done" = evidence. 6. Max 250 lines/file. 7. Compaction preservation.
+1. Verify before claim. 2. Act, don't suggest. 3. Minimum complexity. 4. Plan started = plan finished. 5. "done" = evidence. 6. Max 250 lines/file. 7. Compaction preservation. 8. 3 consecutive failed fixes → STOP, propose rebuild. 9. New .rs file → wire mod.rs same commit. 10. Pre-flight auth check before agent dispatch.
 
 ## Agent Identity (NON-NEGOTIABLE)
 

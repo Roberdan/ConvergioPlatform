@@ -45,6 +45,12 @@
           {
             "type": "command",
             "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"WARNING: $FILE has $LINES lines (max 250). Split this file.\" >&2; fi; fi"
+          },
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/scripts/platform/post-edit-rust-check.sh\"",
+            "timeout": 30,
+            "statusMessage": "Rust cargo check"
           }
         ]
       }
@@ -65,6 +71,12 @@
           {
             "type": "command",
             "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null); if [ -n \"$ROOT\" ] && [ -x \"$ROOT/scripts/platform/agent-bridge.sh\" ]; then \"$ROOT/scripts/platform/agent-bridge.sh\" --register 2>/dev/null; fi"
+          },
+          {
+            "type": "command",
+            "command": "FAIL=0; gh auth status >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT FAIL: gh auth expired. Run: gh auth login\"}'; FAIL=1; }; command -v cvg >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT FAIL: cvg not in PATH\"}'; FAIL=1; }; curl -sf http://localhost:8420/api/health >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT WARN: daemon not running on :8420\"}'; }; exit 0",
+            "timeout": 10,
+            "statusMessage": "Pre-flight auth check"
           }
         ]
       }
