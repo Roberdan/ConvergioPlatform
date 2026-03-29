@@ -50,11 +50,12 @@ fn reset_clears_state() {
 
 #[test]
 fn threshold_maps_to_vad_mode() {
+    use std::mem::discriminant;
     // Low threshold = Quality (most permissive).
-    assert_eq!(threshold_to_vad_mode(0.1), webrtc_vad::VadMode::Quality);
-    assert_eq!(threshold_to_vad_mode(0.3), webrtc_vad::VadMode::LowBitrate);
-    assert_eq!(threshold_to_vad_mode(0.6), webrtc_vad::VadMode::Aggressive);
-    assert_eq!(threshold_to_vad_mode(0.9), webrtc_vad::VadMode::VeryAggressive);
+    assert!(discriminant(&threshold_to_vad_mode(0.1)) == discriminant(&webrtc_vad::VadMode::Quality));
+    assert!(discriminant(&threshold_to_vad_mode(0.3)) == discriminant(&webrtc_vad::VadMode::LowBitrate));
+    assert!(discriminant(&threshold_to_vad_mode(0.6)) == discriminant(&webrtc_vad::VadMode::Aggressive));
+    assert!(discriminant(&threshold_to_vad_mode(0.9)) == discriminant(&webrtc_vad::VadMode::VeryAggressive));
 }
 
 #[test]

@@ -49,9 +49,9 @@ pub struct VoiceActivityDetector {
 
 impl VoiceActivityDetector {
     pub fn new(threshold: f32) -> Self {
-        let mode = threshold_to_vad_mode(threshold);
+        let aggressiveness = threshold_to_vad_mode(threshold);
         let mut vad = webrtc_vad::Vad::new_with_rate(webrtc_vad::SampleRate::Rate16kHz);
-        vad.set_mode(mode);
+        vad.set_mode(aggressiveness.to_webrtc());
         Self {
             vad,
             min_speech_ms: 100,
