@@ -174,20 +174,22 @@ pub fn apply_changes(
                 applied += 1;
             }
             None => {
-                // Row does not exist — insert
+                // Row does not exist — insert.
+                // Use COALESCE to avoid NOT NULL violations when JSON field is missing/null.
                 let columns = get_column_names(conn, &change.table_name)?;
                 let mut col_names = vec!["id".to_string()];
                 let mut placeholders = vec!["?1".to_string()];
-                for (_i, col) in columns.iter().enumerate() {
+                for col in columns.iter() {
                     if *col == "id" {
                         continue;
                     }
                     col_names.push(format!("\"{col}\""));
-                    placeholders
-                        .push(format!("json_extract(?2, '$.{col}')"));
+                    placeholders.push(format!(
+                        "COALESCE(json_extract(?2, '$.{col}'), '')"
+                    ));
                 }
                 let sql = format!(
-                    "INSERT INTO \"{}\" ({}) VALUES ({})",
+                    "INSERT OR REPLACE INTO \"{}\" ({}) VALUES ({})",
                     change.table_name,
                     col_names.join(", "),
                     placeholders.join(", ")
