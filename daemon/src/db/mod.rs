@@ -1,6 +1,7 @@
 mod cli;
 pub mod libsql_adapter;
 pub(crate) mod libsql_adapter_helpers;
+pub(crate) mod libsql_adapter_task_sync;
 pub mod migrations;
 mod models;
 pub mod plan_hierarchy;

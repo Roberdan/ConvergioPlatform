@@ -20,15 +20,15 @@ Modes:
   plan-m5-to-m1  Create plan locally, prove it appears on remote node within timeout.
   plan-m1-to-m5  Create plan remotely, prove it appears on local node within timeout.
   task-roundtrip Update one task status locally, prove remote observes same status.
-  all            Run all modes in sequence (task-roundtrip needs --plan-id and --task-id).
+  all            Run all modes in sequence (auto-creates a probe task when needed).
 
 Options:
   --peer <user@host>      Remote SSH target (default: roberdandev@100.106.173.118)
   --mode <mode>           One of: plan-m5-to-m1, plan-m1-to-m5, task-roundtrip, all
   --timeout <seconds>     Replication timeout per mode (default: 60)
   --project-id <id>       Project ID for probe plan creation (default: convergio)
-  --plan-id <id>          Existing plan ID for task-roundtrip mode
-  --task-id <id>          Existing task DB ID for task-roundtrip mode
+  --plan-id <id>          Existing plan ID for task-roundtrip mode (optional)
+  --task-id <id>          Existing task DB ID for task-roundtrip mode (optional)
   --task-status <status>  Target status for task-roundtrip (default: in_progress)
   --skip-preflight        Skip scripts/test-sync-preflight.sh
   -h, --help              Show this help text
@@ -123,6 +123,56 @@ create_remote_probe_plan() {
     fail "Unable to create remote probe plan on $PEER"
 }
 
+wait_for_remote_task_presence() {
+  local plan_id="$1"
+  local task_id="$2"
+  local start now
+  start="$(date +%s)"
+  while true; do
+    if ssh -o BatchMode=yes -o ConnectTimeout=10 "$PEER" \
+      "curl -fsS '$REMOTE_DAEMON_URL/api/plan-db/json/$plan_id' | jq -e '.tasks[] | select(.id == $task_id)'" \
+      >/dev/null 2>&1; then
+      return 0
+    fi
+    now="$(date +%s)"
+    if (( now - start >= TIMEOUT_SECS )); then
+      fail "Task $task_id in plan $plan_id did not appear on remote within ${TIMEOUT_SECS}s"
+    fi
+    sleep 2
+  done
+}
+
+create_local_task_probe() {
+  local plan_name spec_file plan_id task_id
+  plan_name="sync-task-probe-$(date -u +%Y%m%dT%H%M%SZ)"
+  plan_id="$(cvg plan create "$PROJECT_ID" "$plan_name" | jq -er '.plan_id')" || \
+    fail "Unable to create local task probe plan"
+  spec_file="$(mktemp "${TMPDIR:-/tmp}/sync-task-probe.XXXXXX.yaml")"
+  cat >"$spec_file" <<EOF
+waves:
+  - id: "W1"
+    name: "Task Probe"
+    tasks:
+      - id: "TR-01"
+        title: "Replicate task status between nodes"
+        type: test
+        priority: P1
+        description: "Temporary probe task for daemon sync harness."
+        output_type: pr
+        validator_agent: thor
+        effort_level: 1
+        verify:
+          - "true"
+        test_criteria: "Task status is visible on the peer node."
+EOF
+  cvg plan import "$plan_id" "$spec_file" >/dev/null || \
+    fail "Unable to import task probe spec into plan $plan_id"
+  rm -f "$spec_file"
+  task_id="$(cvg plan show "$plan_id" | jq -er '.tasks[] | select(.task_id == "TR-01") | .id')" || \
+    fail "Unable to locate imported task probe in plan $plan_id"
+  echo "$plan_id:$task_id"
+}
+
 run_plan_m5_to_m1() {
   check_daemon_first_policy
   local plan_id
@@ -163,8 +213,15 @@ wait_for_remote_task_status() {
 
 run_task_roundtrip() {
   check_daemon_first_policy
-  [[ -n "$PLAN_ID" ]] || fail "--plan-id is required for task-roundtrip mode"
-  [[ -n "$TASK_ID" ]] || fail "--task-id is required for task-roundtrip mode"
+  if [[ -z "$PLAN_ID" || -z "$TASK_ID" ]]; then
+    local probe_ids
+    probe_ids="$(create_local_task_probe)"
+    PLAN_ID="${probe_ids%%:*}"
+    TASK_ID="${probe_ids##*:}"
+    log "Created local task probe plan $PLAN_ID with task $TASK_ID"
+    wait_for_remote_plan "$PLAN_ID"
+    wait_for_remote_task_presence "$PLAN_ID" "$TASK_ID"
+  fi
   run_cmd cvg task update "$TASK_ID" "$TASK_STATUS" --summary "sync harness probe"
   wait_for_remote_task_status "$PLAN_ID" "$TASK_ID" "$TASK_STATUS"
   log "✅ task-roundtrip replicated task $TASK_ID status '$TASK_STATUS' within ${TIMEOUT_SECS}s"

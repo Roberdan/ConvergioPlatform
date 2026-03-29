@@ -10,6 +10,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use super::libsql_adapter_helpers::{get_column_names, row_to_change};
+use super::libsql_adapter_task_sync::normalise_task_sync_change;
 
 /// Metadata tracking the last successful sync point per peer per table.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,6 +177,7 @@ pub fn apply_changes(
             }
             Some(_) => {
                 // Remote is newer or local has NULL updated_at — update
+                let change_data = normalise_task_sync_change(conn, change, row_exists)?;
                 let columns = get_column_names(conn, &change.table_name)?;
                 let sets: Vec<String> = columns
                     .iter()
@@ -190,13 +192,14 @@ pub fn apply_changes(
                     change.table_name,
                     sets.join(", ")
                 );
-                let json_str = change.data.to_string();
+                let json_str = change_data.to_string();
                 conn.execute(&sql, params![change.pk, json_str])?;
                 applied += 1;
             }
             None => {
                 // Row does not exist — insert.
                 // Use COALESCE to avoid NOT NULL violations when JSON field is missing/null.
+                let change_data = normalise_task_sync_change(conn, change, row_exists)?;
                 let columns = get_column_names(conn, &change.table_name)?;
                 let mut col_names = vec!["id".to_string()];
                 let mut placeholders = vec!["?1".to_string()];
@@ -215,7 +218,7 @@ pub fn apply_changes(
                     col_names.join(", "),
                     placeholders.join(", ")
                 );
-                let json_str = change.data.to_string();
+                let json_str = change_data.to_string();
                 conn.execute(&sql, params![change.pk, json_str])?;
                 applied += 1;
             }
@@ -231,3 +234,7 @@ mod tests;
 #[cfg(test)]
 #[path = "libsql_adapter_sync_tests.rs"]
 mod sync_tests;
+
+#[cfg(test)]
+#[path = "libsql_adapter_thor_guard_tests.rs"]
+mod thor_guard_tests;
