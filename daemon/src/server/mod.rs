@@ -153,6 +153,18 @@ mod api_delegation_tests;
 #[cfg(test)]
 mod api_workspace_tests;
 #[cfg(test)]
+mod api_agent_control_tests;
+#[cfg(test)]
+mod api_capabilities_tests;
+#[cfg(test)]
+mod api_nightly_tests;
+#[cfg(test)]
+mod api_plan_db_lifecycle_integration_tests;
+#[cfg(test)]
+mod api_plan_db_review_integration_tests;
+#[cfg(test)]
+mod api_plan_db_import_integration_tests;
+#[cfg(test)]
 mod state_init_tests;
 #[cfg(test)]
 mod ws_pty_tests;
