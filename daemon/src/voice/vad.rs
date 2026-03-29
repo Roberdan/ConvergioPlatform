@@ -1,17 +1,37 @@
 use super::types::{AudioFrame, SpeechSegment, VoiceError};
 
-/// Map VAD threshold (0.0–1.0) to webrtc-vad aggressiveness mode.
+/// Aggressiveness level returned by threshold mapping (testable without PartialEq on VadMode).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VadAggressiveness {
+    Quality,
+    LowBitrate,
+    Aggressive,
+    VeryAggressive,
+}
+
+impl VadAggressiveness {
+    fn to_webrtc(self) -> webrtc_vad::VadMode {
+        match self {
+            Self::Quality => webrtc_vad::VadMode::Quality,
+            Self::LowBitrate => webrtc_vad::VadMode::LowBitrate,
+            Self::Aggressive => webrtc_vad::VadMode::Aggressive,
+            Self::VeryAggressive => webrtc_vad::VadMode::VeryAggressive,
+        }
+    }
+}
+
+/// Map VAD threshold (0.0–1.0) to aggressiveness level.
 /// Lower threshold = more permissive (Quality), higher = stricter (VeryAggressive).
-pub fn threshold_to_vad_mode(threshold: f32) -> webrtc_vad::VadMode {
+pub fn threshold_to_vad_mode(threshold: f32) -> VadAggressiveness {
     let t = threshold.clamp(0.0, 1.0);
     if t < 0.25 {
-        webrtc_vad::VadMode::Quality
+        VadAggressiveness::Quality
     } else if t < 0.5 {
-        webrtc_vad::VadMode::LowBitrate
+        VadAggressiveness::LowBitrate
     } else if t < 0.75 {
-        webrtc_vad::VadMode::Aggressive
+        VadAggressiveness::Aggressive
     } else {
-        webrtc_vad::VadMode::VeryAggressive
+        VadAggressiveness::VeryAggressive
     }
 }
 
