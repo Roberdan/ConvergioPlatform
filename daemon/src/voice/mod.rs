@@ -39,3 +39,7 @@ mod pipeline_tests;
 #[cfg(test)]
 #[path = "whisper_tests.rs"]
 mod whisper_tests;
+
+#[cfg(all(test, feature = "voice"))]
+#[path = "integration_tests.rs"]
+mod integration_tests;

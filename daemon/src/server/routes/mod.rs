@@ -27,6 +27,7 @@ use super::api_ideas;
 use super::api_ingest;
 use super::api_ipc;
 use super::api_kernel_audio;
+use super::api_voice;
 use super::api_memory;
 use super::api_mesh;
 use super::api_metrics;
@@ -143,6 +144,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_channels::router())
         .merge(api_health_deep::router())
         .merge(api_kernel_audio::router())
+        .merge(api_voice::router())
         .merge(api_memory::router())
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())

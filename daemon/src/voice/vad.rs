@@ -116,3 +116,8 @@ impl VoiceActivityDetector {
         self.in_speech
     }
 }
+
+// SAFETY: webrtc_vad::Vad wraps a C fvad struct (single-owner, no shared state).
+// The raw *mut Fvad prevents auto-Send, but the struct is only accessed via &mut self
+// and each VoiceActivityDetector owns its fvad instance exclusively.
+unsafe impl Send for VoiceActivityDetector {}

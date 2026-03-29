@@ -27,6 +27,7 @@ pub mod api_ideas_handlers;
 pub mod api_ingest;
 pub mod api_ipc;
 pub mod api_kernel_audio;
+pub mod api_voice;
 pub mod api_memory;
 pub mod api_mesh;
 pub mod api_metrics;
@@ -81,6 +82,8 @@ pub mod ws;
 pub mod ws_brain;
 pub mod ws_pty;
 
+#[cfg(test)]
+mod api_voice_tests;
 #[cfg(test)]
 mod api_agent_catalog_tests;
 #[cfg(test)]
