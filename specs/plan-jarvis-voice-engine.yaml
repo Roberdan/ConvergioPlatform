@@ -1,474 +1,337 @@
-name: "Jarvis Voice Engine — Voxtral TTS + Wake Word + Rust Voice Pipeline"
-project: convergio
-parallel_mode: standard
-description: |
-  Full voice interaction system for Convergio kernel:
-  "Hey Convergio" wake word → voice capture → STT → brain → TTS → play.
-  Voxtral 4B TTS as primary, Rust-native audio pipeline (cpal + whisper-rs + webrtc-vad).
-  Python only for TTS subprocess. Runs on M1 Pro 16GB.
-
-requirements:
-  - F-01: Voxtral TTS as primary backend via mlx_audio.tts.generate subprocess
-  - F-02: Only it_male and it_female voices in TTS code
-  - F-03: TTS priority Voxtral > Qwen3 > macOS say
-  - "F-04: Hey Convergio wake word detection in Rust"
-  - F-05: Audio capture via cpal crate, no SoX/rec subprocess
-  - F-06: Improved VAD with webrtc-vad crate
-  - F-07: Native Rust STT via whisper-rs (whisper.cpp bindings)
-  - F-08: Full conversation loop wake > record > STT > brain > TTS > play
-  - F-09: All Rust except TTS subprocess
-  - F-10: Runs on M1 Pro 16GB alongside Qwen 7B + Voxtral + Whisper
-  - F-11: Setup script for mlx-audio git main + Voxtral model
-
-acceptance_invariants:
-  - "cd daemon && cargo check --features kernel,voice"
-  - "cd daemon && cargo test -- kernel::tts"
-  - "cd daemon && cargo test -- voice::"
-  - "grep -q 'Voxtral-4B-TTS-2603' daemon/src/kernel/tts.rs"
-  - "grep -q 'cpal' daemon/Cargo.toml"
-  - "grep -q 'whisper-rs' daemon/Cargo.toml"
-  - "grep -q 'it_male' daemon/src/kernel/tts.rs"
-  - "! grep -q 'casual_male' daemon/src/kernel/tts.rs"
-
 waves:
-  - id: W1
+  - id: "W1"
     name: "Voxtral TTS + TtsEngine Cleanup"
-    description: "Fix Voxtral stub, reorder TTS priority, remove voice/tts.rs duality, setup script"
+    estimated_hours: 8
     tasks:
-      - id: T1-01
-        do: |
+      - id: "T1-01"
+        title: "Implement Voxtral TTS backend and reorder priority"
+        type: feature
+        priority: P0
+        description: |
           Implement speak_via_voxtral() in daemon/src/kernel/tts.rs.
-          Replace the placeholder (lines 198-217) with real mlx-audio invocation:
-          - Use same pattern as speak_via_qwen3() (lines 172-196)
-          - Command: python -m mlx_audio.tts.generate --model mlx-community/Voxtral-4B-TTS-2603-mlx-4bit --text TEXT --voice VOICE --output_path DIR
-          - Voice selection: use "it_female" for Italian locale, "it_male" as alternative
-          - Fix voxtral_available(): change probe from "python -m voxtral.generate --help" to checking mlx_audio import with voxtral model support. Use same pattern as qwen3_tts_available() but import voxtral_tts model class.
-          - Use AppleFmBridge::resolve_python() for python path
-          - Output: read audio_000.wav from output dir (same as qwen3)
-          Reorder TTS priority in TtsEngine::new() (line 55-61):
-          - Voxtral first, then Qwen3, then macOS say
-          Remove all voice references except it_male and it_female.
-          Update model_name strings.
-          Update existing tests in tts_tests.rs for new priority order.
-        type: code
-        output_type: pr
+          Replace placeholder (lines 198-217) with real mlx-audio invocation.
+          Same pattern as speak_via_qwen3: python -m mlx_audio.tts.generate
+          --model mlx-community/Voxtral-4B-TTS-2603-mlx-4bit --text TEXT --voice VOICE --output_path DIR.
+          Voice: it_female for Italian, it_male as alt. Fix voxtral_available() probe.
+          Use AppleFmBridge::resolve_python(). Reorder priority: Voxtral > Qwen3 > macOS say.
+          Remove all voices except it_male and it_female. Update tts_tests.rs.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 2
-        test_criteria: |
-          - cargo test -- kernel::tts (all tests pass)
-          - New test: voxtral backend produces correct subprocess command args
-          - New test: TTS priority order is Voxtral > Qwen3 > MacOsSay
-          - New test: only it_male/it_female voice strings
-          - grep confirms Voxtral-4B-TTS-2603 in tts.rs
+        output_type: pr
+        validator_agent: thor
+        effort_level: 2
+        files:
+          - daemon/src/kernel/tts.rs
+          - daemon/src/kernel/tts_tests.rs
         verify:
           - "cd daemon && cargo check"
           - "cd daemon && cargo test -- kernel::tts"
-          - "grep -q 'mlx_audio.tts.generate' daemon/src/kernel/tts.rs"
           - "grep -q 'Voxtral-4B-TTS-2603' daemon/src/kernel/tts.rs"
-          - "! grep -q 'casual_male\\|cheerful_female\\|fr_female\\|neutral_female' daemon/src/kernel/tts.rs"
+          - "grep -q 'mlx_audio.tts.generate' daemon/src/kernel/tts.rs"
+        test_criteria: "cargo test -- kernel::tts passes. Voxtral is primary backend."
 
-      - id: T1-02
-        do: |
-          Update scripts/kernel/setup-models.sh:
-          1. Install mlx-audio from git main: pip install git+https://github.com/Blaizzy/mlx-audio.git
-             (PyPI 0.4.1 does NOT include voxtral_tts — PR #607 merged 27 Mar 2026, unreleased)
-          2. Download Voxtral TTS model via python import
-          3. Add verification: generate test audio with it_female voice
-          4. Remove old Voxtral-Mini-3B-2507-4bit from OPTIONAL_MODELS (superseded by TTS model)
-          5. Keep existing Qwen/Mistral/Whisper downloads
-        type: code
-        output_type: pr
+      - id: "T1-02"
+        title: "Update setup-models.sh for Voxtral TTS"
+        type: feature
+        priority: P1
+        description: |
+          Update scripts/kernel/setup-models.sh: install mlx-audio from git main
+          (pip install git+https://github.com/Blaizzy/mlx-audio.git), download Voxtral model,
+          add verification, remove old Voxtral-Mini-3B-2507-4bit entry.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 1
-        test_criteria: |
-          - bash -n validates script syntax
-          - grep confirms Voxtral-4B-TTS-2603 and Blaizzy/mlx-audio
-          - Old Voxtral-Mini-3B entry removed
+        output_type: pr
+        validator_agent: thor
+        effort_level: 1
+        files:
+          - scripts/kernel/setup-models.sh
         verify:
           - "bash -n scripts/kernel/setup-models.sh"
           - "grep -q 'Voxtral-4B-TTS-2603' scripts/kernel/setup-models.sh"
           - "grep -q 'Blaizzy/mlx-audio' scripts/kernel/setup-models.sh"
-          - "! grep -q 'Voxtral-Mini-3B-2507' scripts/kernel/setup-models.sh"
+        test_criteria: "Script valid. Voxtral model download and mlx-audio git install present."
 
-      - id: T1-03
-        do: |
-          Resolve TtsEngine type duality between voice/tts.rs and kernel/tts.rs.
-          daemon/src/voice/tts.rs (52 lines) is a macOS-say-only wrapper.
-          daemon/src/kernel/tts.rs (233 lines) is the real TtsEngine with Voxtral/Qwen3/Say.
-          Action:
-          1. Remove daemon/src/voice/tts.rs
-          2. Update daemon/src/voice/mod.rs: remove "pub mod tts" line
-          3. Update daemon/src/voice/pipeline.rs: change import from super::tts::TtsEngine
-             to crate::kernel::tts::TtsEngine. Fix any API differences at call sites.
-          4. Update any other files in voice/ that import voice::tts
-          5. Update voice/pipeline_tests.rs if it references the old TtsEngine
-          6. Verify cargo check passes with both kernel and voice features
-        type: code
-        output_type: pr
+      - id: "T1-03"
+        title: "Remove voice/tts.rs duality — use kernel TtsEngine"
+        type: fix
+        priority: P0
+        description: |
+          Remove daemon/src/voice/tts.rs (52 lines, macOS-say-only duplicate).
+          Update voice/mod.rs: remove pub mod tts. Update voice/pipeline.rs:
+          change import to crate::kernel::tts::TtsEngine. Fix call sites.
+          Update pipeline_tests.rs if needed.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 1
-        test_criteria: |
-          - cargo check --features kernel passes
-          - daemon/src/voice/tts.rs no longer exists
-          - voice/mod.rs has no "pub mod tts" line
-          - pipeline.rs imports from crate::kernel::tts
+        output_type: pr
+        validator_agent: thor
+        effort_level: 1
+        files:
+          - daemon/src/voice/tts.rs
+          - daemon/src/voice/mod.rs
+          - daemon/src/voice/pipeline.rs
         verify:
           - "cd daemon && cargo check"
           - "! test -f daemon/src/voice/tts.rs"
-          - "! grep -q 'pub mod tts' daemon/src/voice/mod.rs"
           - "grep -q 'crate::kernel::tts' daemon/src/voice/pipeline.rs"
+        test_criteria: "voice/tts.rs deleted. pipeline.rs uses kernel TtsEngine. cargo check passes."
 
-  - id: W2
+  - id: "W2"
     name: "Cargo Dependencies"
-    description: "Add cpal, webrtc-vad, whisper-rs, hound, ringbuf crates under voice feature flag"
+    depends_on: "W1"
+    estimated_hours: 4
     tasks:
-      - id: T2-01
-        do: |
-          Add new dependencies to daemon/Cargo.toml under a "voice" feature flag:
-          - cpal (cross-platform audio capture)
-          - webrtc-vad (voice activity detection, C bindings)
-          - whisper-rs with metal feature (whisper.cpp Rust bindings, Metal GPU)
-          - hound (WAV read/write in Rust)
-          - ringbuf (lock-free ring buffer for audio frames)
-          Feature definition: voice = ["dep:cpal", "dep:webrtc-vad", "dep:whisper-rs", "dep:hound", "dep:ringbuf"]
-          DO NOT add "voice" to default features — keep it opt-in (CI machines without audio hardware).
-          Check exact latest versions on crates.io with cargo search before adding.
-          Verify: cargo check --features voice compiles.
-        type: code
-        output_type: pr
+      - id: "T2-01"
+        title: "Add cpal, webrtc-vad, whisper-rs, hound, ringbuf under voice feature"
+        type: feature
+        priority: P1
+        description: |
+          Add to daemon/Cargo.toml: cpal, webrtc-vad, whisper-rs (with metal feature),
+          hound, ringbuf as optional deps. Feature voice = [...]. NOT in default features
+          (CI without audio hardware). Check crates.io for latest versions.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 1
-        test_criteria: |
-          - cargo check --features voice succeeds
-          - All 5 crates in Cargo.toml
-          - Feature "voice" defined but NOT in default
+        output_type: pr
+        validator_agent: thor
+        effort_level: 1
+        files:
+          - daemon/Cargo.toml
         verify:
           - "cd daemon && cargo check --features voice"
           - "grep -q 'cpal' daemon/Cargo.toml"
           - "grep -q 'whisper-rs' daemon/Cargo.toml"
           - "grep -q 'webrtc-vad' daemon/Cargo.toml"
-          - "! grep -q 'voice' daemon/Cargo.toml | grep default"
+        test_criteria: "cargo check --features voice succeeds. All 5 crates listed."
 
-  - id: W3
+  - id: "W3"
     name: "Module Rewrites — VAD + Whisper + AudioCapture + WakeWord"
-    description: "Rewrite voice modules with new crates. Feature-gate pipeline.rs during transition."
+    depends_on: "W2"
+    estimated_hours: 16
     tasks:
-      - id: T3-01
-        do: |
-          FIRST: Feature-gate daemon/src/voice/pipeline.rs compilation.
-          Add #[cfg(feature = "voice_pipeline")] to the module declaration in voice/mod.rs.
-          This prevents compilation breakage while we rewrite vad/whisper/wake_word with new APIs.
-          The voice_pipeline feature does NOT exist yet — this is intentional to disable the module.
-          Then rewrite daemon/src/voice/vad.rs to use webrtc-vad:
-          - Use webrtc_vad::Vad with Aggressiveness::VeryAggressive (mode 3)
-          - Accept 16kHz, 16-bit mono PCM frames (30ms chunks = 480 samples)
-          - Method: is_speech(frame: &[i16]) -> bool
-          - Keep VadConfig struct, add aggressiveness field
-          - Fallback: if webrtc-vad init fails, fall back to energy-based (keep old code)
-          - Feature-gate with #[cfg(feature = "voice")]
-          - Rewrite voice/vad_tests.rs: silence detection, speech detection with synthetic frames
-          Wire in voice/mod.rs.
-        type: code
-        output_type: pr
+      - id: "T3-01"
+        title: "Feature-gate pipeline.rs and rewrite vad.rs with webrtc-vad"
+        type: feature
+        priority: P1
+        description: |
+          FIRST: Add #[cfg(feature = "voice_pipeline")] to pipeline module in voice/mod.rs
+          to prevent compilation breakage during API rewrites.
+          Then rewrite daemon/src/voice/vad.rs with webrtc-vad: Aggressiveness::VeryAggressive,
+          16kHz mono i16 frames (30ms = 480 samples), is_speech() method.
+          Energy-based fallback if init fails. Rewrite vad_tests.rs.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 2
-        test_criteria: |
-          - cargo test -- voice::vad (new tests pass)
-          - cargo check --features voice succeeds (pipeline.rs disabled)
-          - VAD detects silence correctly
-          - VAD struct initializes
+        output_type: pr
+        validator_agent: thor
+        effort_level: 2
+        files:
+          - daemon/src/voice/vad.rs
+          - daemon/src/voice/mod.rs
         verify:
           - "cd daemon && cargo test -- voice::vad"
           - "cd daemon && cargo check --features voice"
+        test_criteria: "VAD tests pass. cargo check --features voice succeeds with pipeline disabled."
 
-      - id: T3-02
-        do: |
-          Rewrite daemon/src/voice/whisper.rs to use whisper-rs for native Rust STT.
-          - Load whisper.cpp model via whisper_rs::WhisperContext
-          - Model path: resolve from env WHISPER_MODEL_PATH or default ~/.cache/whisper/ggml-small.bin
-          - Method: transcribe(audio: &[f32], sample_rate: u32) -> Result<Transcription, VoiceError>
-          - Audio must be 16kHz mono f32
-          - Return text + detected language + confidence
-          - Feature-gate with #[cfg(feature = "voice")]
-          - Timeout: 30s max (tokio timeout wrapper)
-          - Enable Metal GPU via whisper-rs metal feature
-          Update voice/types.rs if Transcription struct needs changes.
-          Rewrite voice/whisper_tests.rs: model-not-found error, struct initialization.
-          Wire in voice/mod.rs.
-        type: code
-        output_type: pr
+      - id: "T3-02"
+        title: "Rewrite whisper.rs with whisper-rs native Rust STT"
+        type: feature
+        priority: P1
+        description: |
+          Rewrite daemon/src/voice/whisper.rs with whisper-rs (whisper.cpp bindings).
+          Load model via WhisperContext. Resolve path from env or default.
+          transcribe(audio: &[f32], sample_rate: u32) -> Result<Transcription>.
+          Metal GPU, 30s timeout. Rewrite whisper_tests.rs.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 3
-        test_criteria: |
-          - cargo test -- voice::whisper (tests pass)
-          - cargo check --features voice succeeds
-          - Transcription struct complete
-          - Model-not-found returns error not panic
+        output_type: pr
+        validator_agent: thor
+        effort_level: 3
+        files:
+          - daemon/src/voice/whisper.rs
+          - daemon/src/voice/types.rs
         verify:
           - "cd daemon && cargo test -- voice::whisper"
           - "cd daemon && cargo check --features voice"
+        test_criteria: "Whisper tests pass. Model-not-found returns error not panic."
 
-      - id: T3-03
-        do: |
-          Create daemon/src/voice/audio_capture.rs — Rust-native audio capture using cpal.
-          - Use cpal::default_input_device() for microphone
-          - Stream config: 16kHz, mono, i16
-          - Use ringbuf for lock-free producer/consumer between cpal callback and consumer
-          - Struct AudioCapture: new(), start(), stop(), take_frames() -> Vec<i16>
-          - Async-compatible: tokio::task::spawn_blocking for cpal callback
-          - Error handling: DeviceNotFound, StreamError, PermissionDenied (macOS TCC)
-          - Graceful TCC denial: log warning, return PermissionDenied error (don't panic)
-          - Feature-gate with #[cfg(feature = "voice")]
-          Wire in voice/mod.rs (pub mod audio_capture).
-          Write tests: AudioCapture::new() doesn't panic, start/stop lifecycle.
-          Use #[ignore] for tests requiring hardware (microphone).
-          Keep under 250 lines.
-        type: code
-        output_type: pr
+      - id: "T3-03"
+        title: "Create audio_capture.rs with cpal for Rust-native mic capture"
+        type: feature
+        priority: P1
+        description: |
+          Create daemon/src/voice/audio_capture.rs using cpal. 16kHz mono i16.
+          ringbuf for lock-free producer/consumer. AudioCapture struct with start/stop/take_frames.
+          Graceful macOS TCC permission denial. Under 250 lines. Wire in mod.rs.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 2
-        test_criteria: |
-          - cargo test -- voice::audio_capture
-          - cargo check --features voice
-          - Under 250 lines
-          - TCC denial handled gracefully
+        output_type: pr
+        validator_agent: thor
+        effort_level: 2
+        files:
+          - daemon/src/voice/audio_capture.rs
+          - daemon/src/voice/mod.rs
         verify:
           - "cd daemon && cargo check --features voice"
           - "cd daemon && cargo test -- voice::audio_capture"
-          - "wc -l daemon/src/voice/audio_capture.rs | awk '{if($1>250) exit 1}'"
+        test_criteria: "AudioCapture compiles. Tests pass. Under 250 lines."
 
-      - id: T3-04
-        do: |
-          Rewrite daemon/src/voice/wake_word.rs — proper keyword detection.
-          Approach: VAD + Whisper micro-transcription.
-          - When VAD detects speech start, buffer 1-2 seconds of audio
-          - Run whisper-rs on the short buffer (fast, ~200ms for 1-2s audio)
-          - Check if transcription contains "hey convergio" (fuzzy: Levenshtein distance <= 3)
-          - Fast rejection: buffer < 0.5s or > 3s → skip
-          Struct WakeWordDetector:
-            - new(config: WakeWordConfig, whisper: Arc<WhisperEngine>) -> Self
-            - feed_audio(frames: &[i16]) -> Option<WakeWordEvent>
-            - WakeWordEvent { confidence: f32, timestamp_ms: u64 }
-          WakeWordConfig: keyword (default "hey convergio"), sensitivity (0.0-1.0), max_buffer_secs
-          Feature-gate with #[cfg(feature = "voice")].
-          Rewrite voice/wake_word_tests.rs: silence produces no event, config defaults.
-          Wire in voice/mod.rs.
-        type: code
-        output_type: pr
+      - id: "T3-04"
+        title: "Rewrite wake_word.rs with VAD + Whisper micro-transcription"
+        type: feature
+        priority: P1
+        description: |
+          Rewrite daemon/src/voice/wake_word.rs. Buffer 1-2s on VAD speech detect,
+          run whisper-rs, fuzzy match hey convergio (Levenshtein <= 3).
+          WakeWordDetector with feed_audio() -> Option<WakeWordEvent>.
+          Rewrite wake_word_tests.rs.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 3
-        test_criteria: |
-          - cargo test -- voice::wake_word
-          - cargo check --features voice
-          - Silence frames produce no detection
-          - Default keyword is "hey convergio"
+        output_type: pr
+        validator_agent: thor
+        effort_level: 3
+        files:
+          - daemon/src/voice/wake_word.rs
+          - daemon/src/voice/mod.rs
         verify:
           - "cd daemon && cargo test -- voice::wake_word"
           - "cd daemon && cargo check --features voice"
-          - "grep -q 'hey convergio' daemon/src/voice/wake_word.rs"
+        test_criteria: "Wake word tests pass. Default keyword is hey convergio."
 
-  - id: W4
+  - id: "W4"
     name: "Voice Pipeline + State Machine"
-    description: "Rewrite pipeline.rs using all W3 modules. Full conversation loop."
-    depends_on: [W3]
+    depends_on: "W3"
+    estimated_hours: 8
     tasks:
-      - id: T4-01
-        do: |
-          Rewrite daemon/src/voice/pipeline.rs — full conversation loop.
-          Remove the #[cfg(feature = "voice_pipeline")] gate added in T3-01 (re-enable compilation).
-          Update voice/mod.rs: restore normal pipeline module declaration with #[cfg(feature = "voice")].
-          State machine:
-          - Idle: AudioCapture running, feeding frames to WakeWordDetector
-          - WakeDetected: Wake word found, switch to recording mode
-          - Listening: VAD active, buffering speech until 1.5s silence = end
-          - Processing: whisper-rs STT → voice_router classify → kernel engine response
-          - Speaking: TtsEngine::speak (Voxtral) → audio::play_local
-          - Back to Idle
-          Update voice/types.rs: add WakeDetected to VoiceState enum.
-          Struct VoicePipeline:
-            - new(config, tts: Arc<Mutex<TtsEngine>>, engine: Arc<Mutex<KernelEngine>>) -> Self
-            - run(self) -> JoinHandle (tokio task, runs forever)
-            - shutdown via tokio::sync::watch channel
-          Imports:
-            - TtsEngine from crate::kernel::tts (NOT voice::tts — removed in T1-03)
-            - KernelEngine from crate::kernel::engine
-            - WhisperEngine from voice::whisper
-            - VadDetector from voice::vad
-            - WakeWordDetector from voice::wake_word
-            - AudioCapture from voice::audio_capture
-          Rewrite voice/pipeline_tests.rs for new state machine.
-          Keep under 250 lines — split helpers into voice/pipeline_helpers.rs if needed.
-        type: code
-        output_type: pr
+      - id: "T4-01"
+        title: "Rewrite pipeline.rs — full conversation loop with all W3 modules"
+        type: feature
+        priority: P0
+        description: |
+          Remove voice_pipeline feature gate. Restore normal #[cfg(feature = "voice")] on pipeline.
+          State machine: Idle > WakeDetected > Listening > Processing > Speaking > Idle.
+          Add WakeDetected to VoiceState in types.rs.
+          Use: kernel::tts::TtsEngine, kernel::engine::KernelEngine, voice::whisper,
+          voice::vad, voice::wake_word, voice::audio_capture.
+          VoicePipeline::run() spawns tokio task. Shutdown via watch channel.
+          Rewrite pipeline_tests.rs. Under 250 lines, split to pipeline_helpers.rs if needed.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 3
-        test_criteria: |
-          - cargo test -- voice::pipeline
-          - cargo check --features voice,kernel
-          - State transitions correct: Idle→WakeDetected→Listening→Processing→Speaking→Idle
-          - VoiceState has WakeDetected variant
-          - Under 250 lines
+        output_type: pr
+        validator_agent: thor
+        effort_level: 3
+        files:
+          - daemon/src/voice/pipeline.rs
+          - daemon/src/voice/types.rs
+          - daemon/src/voice/mod.rs
         verify:
           - "cd daemon && cargo test -- voice::pipeline"
           - "cd daemon && cargo check --features voice,kernel"
-          - "wc -l daemon/src/voice/pipeline.rs | awk '{if($1>250) exit 1}'"
           - "grep -q 'WakeDetected' daemon/src/voice/types.rs"
+        test_criteria: "Pipeline tests pass. State transitions correct. Under 250 lines."
 
-  - id: W5
+  - id: "W5"
     name: "API Wiring + Integration Tests"
-    description: "Wire pipeline into daemon, API endpoints, integration tests"
-    depends_on: [W4]
+    depends_on: "W4"
+    estimated_hours: 8
     tasks:
-      - id: T5-01
-        do: |
-          Wire voice pipeline into daemon startup and API.
-          1. In daemon/src/server/routes/mod.rs: spawn VoicePipeline::run() when feature=voice+kernel
-             Pass TtsEngine and KernelEngine from KernelState
-          2. daemon/src/cli_voice.rs ALREADY EXISTS (66 lines) with start/stop/status/test commands.
-             Update it to wire to the new VoicePipeline (currently it calls HTTP endpoints).
-             Add /api/voice/* endpoints in api_routes.rs if not present:
-             - POST /api/voice/start
-             - POST /api/voice/stop
-             - GET /api/voice/status → { listening: bool, state: string }
-          3. Ensure all new .rs files from W3 have mod wiring verified
-          4. Feature-gate all new routes with #[cfg(feature = "voice")]
-        type: code
-        output_type: pr
+      - id: "T5-01"
+        title: "Wire pipeline into daemon startup and API endpoints"
+        type: feature
+        priority: P1
+        description: |
+          Spawn VoicePipeline::run() in server routes when voice+kernel features active.
+          Update existing cli_voice.rs (66 lines, already has start/stop/status/test).
+          Add /api/voice/ endpoints in api_routes.rs. Feature-gate with voice.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 2
-        test_criteria: |
-          - cargo check --features voice,kernel
-          - API endpoints registered
-          - CLI commands parse correctly
-          - Feature-gated routes
+        output_type: pr
+        validator_agent: thor
+        effort_level: 2
+        files:
+          - daemon/src/server/routes/mod.rs
+          - daemon/src/server/routes/api_routes.rs
+          - daemon/src/cli_voice.rs
         verify:
           - "cd daemon && cargo check --features voice,kernel"
-          - "grep -q '/api/voice' daemon/src/server/routes/api_routes.rs"
+          - "grep -q 'voice' daemon/src/server/routes/api_routes.rs"
+        test_criteria: "cargo check passes. API endpoints registered. CLI updated."
 
-      - id: T5-02
-        do: |
-          Integration tests for the full voice engine.
-          Create daemon/src/voice/integration_tests.rs:
-          - Test: TtsEngine with Voxtral backend produces correct command args
-          - Test: VoicePipeline state transitions
-          - Test: VAD → wake word → STT flow with mocked audio frames
-          - Test: API /api/voice/status returns correct JSON shape
-          All tests use realistic data (not "test" or "Studio A").
-          Use #[ignore] for tests requiring hardware.
-          Wire in voice/mod.rs.
-        type: code
-        output_type: pr
+      - id: "T5-02"
+        title: "Integration tests for voice engine"
+        type: test
+        priority: P1
+        description: |
+          Create daemon/src/voice/integration_tests.rs with 4+ tests:
+          TtsEngine Voxtral command args, pipeline state transitions,
+          VAD>wake>STT flow with mocked frames, API JSON shape.
+          Realistic data only. Hardware tests use #[ignore]. Wire in mod.rs.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 2
-        test_criteria: |
-          - cargo test -- voice::integration_tests (non-ignored pass)
-          - At least 4 test functions
-          - No dummy data
+        output_type: pr
+        validator_agent: thor
+        effort_level: 2
+        files:
+          - daemon/src/voice/integration_tests.rs
+          - daemon/src/voice/mod.rs
         verify:
           - "cd daemon && cargo test -- voice::integration_tests"
+        test_criteria: "Integration tests pass. At least 4 test functions."
 
-  - id: WF
+  - id: "WF"
     name: "Closure"
-    description: "Full test suite, docs, PR, deploy verification"
-    depends_on: [W5]
+    depends_on: "W5"
+    estimated_hours: 8
     tasks:
-      - id: TF-tests
-        do: |
-          Run full test suite: cd daemon && cargo test --features voice,kernel
-          Fix any failures introduced by voice engine changes.
-          Verify no regressions in kernel::tts, kernel::stt, voice:: modules.
-        type: code
-        output_type: pr
+      - id: "TF-tests"
+        title: "Full test suite — fix regressions"
+        type: test
+        priority: P0
+        description: "Run cargo test --features voice,kernel. Fix any failures."
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 1
-        test_criteria: |
-          - cargo test --features voice,kernel passes with 0 failures
+        output_type: pr
+        validator_agent: thor
+        effort_level: 1
+        files:
+          - daemon/src/kernel/tts.rs
+          - daemon/src/voice/pipeline.rs
         verify:
           - "cd daemon && cargo test --features voice,kernel"
+        test_criteria: "All tests pass with 0 failures."
 
-      - id: TF-doc
-        do: |
-          Update documentation:
-          1. docs/adr/ADR-0123-jarvis-voice-engine.md — decision record (ADR-0120 through 0122 exist)
-          2. TROUBLESHOOTING.md — add "Voice engine won't start" section (cpal device, mlx-audio version, model missing, macOS TCC permission)
-          3. CHANGELOG.md — add entry for voice engine feature under next version
-          4. Update reference/operational/convergio-capabilities.md — add Voice Engine section
-        type: code
-        output_type: pr
+      - id: "TF-doc"
+        title: "ADR, TROUBLESHOOTING, CHANGELOG, capabilities doc"
+        type: doc
+        priority: P1
+        description: |
+          ADR-0123-jarvis-voice-engine.md, TROUBLESHOOTING voice section,
+          CHANGELOG entry, convergio-capabilities.md Voice Engine section.
         model: claude-opus-4.6
-        executor_agent: task-executor
+        output_type: pr
         validator_agent: doc-validator
-        effort: 1
-        test_criteria: |
-          - ADR file exists
-          - TROUBLESHOOTING.md has voice section
-          - CHANGELOG.md has voice entry
+        effort_level: 1
+        files:
+          - docs/adr/ADR-0123-jarvis-voice-engine.md
+          - TROUBLESHOOTING.md
+          - CHANGELOG.md
         verify:
           - "test -f docs/adr/ADR-0123-jarvis-voice-engine.md"
           - "grep -qi 'voice' TROUBLESHOOTING.md"
-          - "grep -qi 'voxtral\\|voice' CHANGELOG.md"
+          - "grep -qi 'voice' CHANGELOG.md"
+        test_criteria: "All 4 docs updated."
 
-      - id: TF-pr
-        do: |
-          Create PR for the voice engine feature.
-          Branch: feat/jarvis-voice-engine
-          Title: "feat(kernel): Jarvis Voice Engine — Voxtral TTS + Wake Word + Rust Pipeline"
-          Summary: Voxtral 4B TTS, cpal audio capture, webrtc-vad, whisper-rs STT, "Hey Convergio".
-          Squash merge after CI green.
-        type: code
-        output_type: pr
+      - id: "TF-pr"
+        title: "Create PR for voice engine"
+        type: feature
+        priority: P1
+        description: "Branch feat/jarvis-voice-engine. Squash merge after CI green."
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 1
-        test_criteria: |
-          - PR created
-          - CI passes
+        output_type: pr
+        validator_agent: thor
+        effort_level: 1
+        files: []
         verify:
           - "gh pr list --state open --head feat/jarvis-voice-engine"
+        test_criteria: "PR created. CI passes."
 
-      - id: TF-deploy-verify
-        do: |
-          Verify on M1 Pro kernel node:
-          1. SSH to m1Pro, pull latest
-          2. cargo build --release --features voice,kernel
-          3. Verify /api/voice/status returns JSON
-          4. Verify /api/kernel/speak with Voxtral produces audio
-          5. Verify mlx-audio from git main installed
-          6. Verify Voxtral model cached
-        type: code
-        output_type: pr
+      - id: "TF-deploy-verify"
+        title: "Verify deployment on M1 Pro kernel node"
+        type: test
+        priority: P1
+        description: |
+          SSH m1Pro: pull, build --release --features voice,kernel,
+          verify /api/voice/status, /api/kernel/speak, mlx-audio, Voxtral model.
         model: claude-opus-4.6
-        executor_agent: task-executor
-        validator_agent: thor-quality-assurance-guardian
-        effort: 1
-        test_criteria: |
-          - Build succeeds on M1 Pro
-          - /api/voice/status returns 200
-          - Voxtral model in cache
+        output_type: pr
+        validator_agent: thor
+        effort_level: 1
+        files: []
         verify:
           - "ssh m1Pro 'ls ~/.cache/huggingface/hub/models--mlx-community--Voxtral-4B-TTS-2603-mlx-4bit/snapshots/*/voice_embedding/it_female.safetensors'"
+        test_criteria: "Build succeeds. APIs respond. Model cached."
