@@ -120,8 +120,8 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
         let id = s.split_whitespace().filter_map(|t| t.parse::<u32>().ok()).next().unwrap_or(0);
         return VoiceIntent::PlanQuery { plan_id: id };
     }
-    // Anything the kernel can't handle → escalate to Ali (Claude Opus)
-    VoiceIntent::EscalateToAli { question: text.to_string() }
+    // Anything the kernel can't handle → try local Qwen first (AskAli)
+    VoiceIntent::AskAli { question: text.to_string() }
 }
 
 #[cfg(test)]
