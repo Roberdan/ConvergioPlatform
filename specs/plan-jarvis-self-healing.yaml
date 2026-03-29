@@ -1,0 +1,138 @@
+name: "Plan Jarvis — Self-Healing Kernel"
+project_id: convergio
+priority: P0
+execution_mode: serial
+tags: [jarvis, kernel, self-healing, monitoring, ali-escalation]
+
+description: >
+  Name the kernel Jarvis. Add self-healing capabilities:
+  monitor Telegram, remote nodes, daemon health.
+  Auto-fix known issues. Escalate unknown to Ali via delegation.
+
+requirements:
+  - F-01: "kernel renamed to Jarvis in code, logs, Telegram responses"
+  - F-02: "Jarvis monitors Telegram poll loop — restarts if dead"
+  - F-03: "Jarvis monitors remote nodes — alerts if unreachable"
+  - F-04: "Jarvis escalates unknown problems to Ali via plan creation + runner"
+  - F-05: "Jarvis can restart daemon, rebuild, pull code on local node"
+
+waves:
+  - id: W1
+    name: "Jarvis Identity + Self-Healing Monitor"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01, F-02, F-03]
+        do: |
+          1. Rename kernel to Jarvis across the codebase:
+             - daemon/src/kernel/ log messages: "kernel:" → "jarvis:"
+             - Telegram responses: "Convergio Kernel" → "Jarvis"
+             - /api/kernel/status → add "name": "Jarvis" field
+             - CLAUDE.md and capabilities docs: mention Jarvis
+
+          2. Add Telegram poll health check to monitor loop (monitor.rs):
+             - Check if telegram_poll task is alive (store JoinHandle, check is_finished())
+             - If dead: restart the poll loop automatically
+             - Log: "jarvis: Telegram poll restarted"
+
+          3. Add remote node health check to monitor loop:
+             - For each peer in peers.conf: GET /api/health on peer's address
+             - If unreachable for 3 consecutive checks: send Telegram alert
+             - Log: "jarvis: node {name} unreachable, alerting"
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "grep -q 'Jarvis\\|jarvis' daemon/src/kernel/monitor.rs"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- jarvis 2>&1 | grep -q 'test result: ok'"
+
+      - id: T1-02
+        ref: [F-04, F-05]
+        do: |
+          Ali escalation from Jarvis — when Jarvis detects an unknown problem:
+
+          1. In daemon/src/kernel/recover.rs, add escalate_to_ali():
+             - Creates a micro-plan in the DB: "Jarvis Alert: {problem description}"
+             - Single task with the fix instructions
+             - Launches copilot-plan-runner.sh in Convergio tmux
+             - Ali (Claude) picks it up and fixes the issue
+
+          2. Known auto-fixes (no Ali needed):
+             - Daemon crash → restart via start.sh
+             - Telegram poll dead → restart poll loop
+             - DB locked → wait + retry (busy_timeout)
+             - Stale worktrees → git worktree prune
+             - High FD count → warn + schedule restart
+
+          3. Unknown issues → escalate_to_ali():
+             - Compilation errors after git pull
+             - Test failures after code change
+             - Node unreachable for 10+ minutes
+             - DB corruption
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "grep -q 'escalate_to_ali\\|escalate' daemon/src/kernel/recover.rs"
+
+  - id: W2
+    name: "Closure"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        ref: [F-01, F-02, F-03, F-04]
+        do: |
+          Full test suite. Fix failures. All Jarvis features tested.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib 2>&1 | grep -q 'test result: ok'"
+
+      - id: TF-doc
+        ref: [F-01]
+        do: |
+          CHANGELOG, version bump 19.1.0 (minor: new feature).
+          Update NEXT_SESSION.md, convergio-capabilities.md.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "grep -q '19.1.0' VERSION.md"
+
+      - id: TF-deploy-verify
+        ref: [F-01, F-02, F-03]
+        do: |
+          Build release. Deploy to both nodes. Restart daemons.
+          Verify Jarvis responds on Telegram.
+          Verify remote node health check works.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "curl -sf http://localhost:8420/api/health | grep -q ok"
+          - "curl -sf http://localhost:8420/api/kernel/status | grep -q Jarvis"
