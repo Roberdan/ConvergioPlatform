@@ -24,6 +24,7 @@ pub mod security;
 pub mod server;
 pub mod tui;
 pub mod validation;
+#[cfg(feature = "voice")]
 pub mod voice;
 pub mod workspace;
 

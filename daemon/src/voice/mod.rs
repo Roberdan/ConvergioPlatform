@@ -1,6 +1,5 @@
 pub mod intent;
 pub mod pipeline;
-pub mod tts;
 pub mod types;
 pub mod vad;
 pub mod wake_word;

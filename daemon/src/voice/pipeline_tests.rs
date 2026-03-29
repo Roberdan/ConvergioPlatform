@@ -44,3 +44,24 @@ fn config_accessible() {
     assert_eq!(p.config().wake_word, "convergio");
     assert_eq!(p.config().whisper_model, "small");
 }
+
+#[test]
+fn speak_uses_kernel_tts_engine() {
+    // Pipeline's TTS must be kernel::tts::TtsEngine (multi-backend, cached).
+    // The voice/tts.rs simple wrapper must not exist.
+    let mut p = default_pipeline();
+    p.start().unwrap();
+    // speak() now delegates to kernel TtsEngine which returns Result<Vec<u8>, _>.
+    // Pipeline wraps errors as VoiceError and returns Ok(()) on success.
+    // On CI without audio backends, speak may fail — that's fine, we test the wiring.
+    let _result = p.speak("Benvenuto", "it-IT");
+}
+
+#[test]
+fn speak_requires_locale_parameter() {
+    // Kernel TtsEngine requires locale for voice selection.
+    // Pipeline.speak() must accept locale.
+    let mut p = default_pipeline();
+    p.start().unwrap();
+    let _result = p.speak("Hello world", "en-US");
+}

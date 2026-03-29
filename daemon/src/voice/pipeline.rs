@@ -1,9 +1,9 @@
 use super::intent::{extract_intent, Intent};
-use super::tts::TtsEngine;
 use super::types::{AudioFrame, VoiceConfig, VoiceError, VoiceState};
 use super::vad::VoiceActivityDetector;
 use super::wake_word::WakeWordDetector;
 use super::whisper::WhisperEngine;
+use crate::kernel::tts::TtsEngine;
 
 /// Full voice pipeline: VAD → Wake Word → ASR → Intent → TTS.
 /// State machine: Idle → Listening → Processing → Speaking → Idle.
@@ -22,7 +22,7 @@ impl VoicePipeline {
         let vad = VoiceActivityDetector::new(config.vad_threshold);
         let wake = WakeWordDetector::new(&config.wake_word);
         let whisper = WhisperEngine::new(&config.whisper_model, config.prefer_local);
-        let tts = TtsEngine::new(&config.tts_voice, config.tts_rate);
+        let tts = TtsEngine::new();
         Self {
             state: VoiceState::Idle,
             config,
@@ -94,11 +94,14 @@ impl VoicePipeline {
         Ok(Some(intent))
     }
 
-    /// Speak a response via TTS.
-    pub fn speak(&mut self, text: &str) -> Result<(), VoiceError> {
+    /// Speak a response via TTS (delegates to kernel TtsEngine).
+    /// Returns synthesised WAV bytes on success.
+    pub fn speak(&mut self, text: &str, locale: &str) -> Result<Vec<u8>, VoiceError> {
         let prev = self.state;
         self.state = VoiceState::Speaking;
-        let result = self.tts.speak(text);
+        let result = self.tts.speak(text, locale).map_err(|e| {
+            VoiceError::TtsError(e.to_string())
+        });
         self.state = prev;
         result
     }
