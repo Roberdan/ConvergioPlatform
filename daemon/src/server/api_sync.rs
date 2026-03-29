@@ -183,3 +183,11 @@ mod tests;
 #[cfg(test)]
 #[path = "api_sync_status_tests.rs"]
 mod status_tests;
+
+#[cfg(test)]
+#[path = "api_sync_replication_tests.rs"]
+mod replication_tests;
+
+#[cfg(test)]
+#[path = "api_sync_replication_lww_tests.rs"]
+mod replication_lww_tests;
