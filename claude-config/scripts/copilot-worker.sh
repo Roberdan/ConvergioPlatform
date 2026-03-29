@@ -67,8 +67,8 @@ _emit_mesh_event() {
 TASK_ID="${1:-}"
 shift || true
 
-# Defaults (gpt-5.3-codex = cheapest adequate for most tasks)
-MODEL="gpt-5.3-codex"
+# Defaults — Opus 4.6 for reliable execution (was gpt-5.3-codex)
+MODEL="claude-opus-4-6"
 TIMEOUT=600
 MAX_RETRIES=3
 RETRY_DELAYS=(5 15 30) # Exponential backoff: 5s, 15s, 30s
@@ -99,23 +99,24 @@ if [[ -z "$TASK_ID" ]]; then
 	exit 1
 fi
 
-# Preflight checks
-if ! command -v copilot &>/dev/null; then
-	echo '{"error":"copilot CLI not installed"}' >&2
-	exit 1
-fi
-
-if [[ -z "${GH_TOKEN:-}" && -z "${COPILOT_TOKEN:-}" ]] && ! gh auth status &>/dev/null 2>&1; then
-	echo '{"error":"No auth: set GH_TOKEN, COPILOT_TOKEN, or run gh auth login"}' >&2
+# Preflight checks — support both claude and copilot CLI
+if command -v claude &>/dev/null; then
+	CLI="claude"
+	CLI_ARGS="--dangerously-skip-permissions -p"
+elif command -v copilot &>/dev/null; then
+	CLI="copilot"
+	CLI_ARGS="--yolo -p"
+else
+	echo '{"error":"Neither claude nor copilot CLI found"}' >&2
 	exit 1
 fi
 
 # Verify task exists and is pending — query active plans to find the task
-# Uses python3 instead of jq because task descriptions contain unescaped control chars.
+# Uses stdin to avoid triple-quote escaping issues with JSON containing apostrophes.
 _plan_list="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '{"plans":[]}')"
-_found_plan_id="$(python3 -c "
+_found_plan_id="$(echo "$_plan_list" | python3 -c "
 import json, sys, urllib.request
-data = json.loads('''$_plan_list''') if '${_plan_list}' != '' else {'plans':[]}
+data = json.load(sys.stdin)
 plans = data.get('plans', data if isinstance(data, list) else [])
 for p in plans:
     if p.get('status') not in ('doing', 'draft'): continue
@@ -232,9 +233,8 @@ execute_copilot() {
 
 	# Pipe copilot output to tee: file + stderr (visible to user)
 	# Track child PID for cleanup on parent exit
-	timeout "$TIMEOUT" copilot --yolo --add-dir "$WT" \
-		--disable-mcp-server codegraph \
-		--model "$MODEL" -p "$PROMPT" 2>&1 | tee "$copilot_stdout_file" >&2 &
+	timeout "$TIMEOUT" $CLI $CLI_ARGS --add-dir "$WT" \
+		--model "$MODEL" "$PROMPT" 2>&1 | tee "$copilot_stdout_file" >&2 &
 	local copilot_bg_pid=$!
 	_WORKER_CHILD_PIDS+=("$copilot_bg_pid")
 	wait "$copilot_bg_pid" || true
@@ -409,8 +409,7 @@ if [[ "$AUTO_VALIDATE" == "true" && "$FINAL_STATUS" == "submitted" && "$WAVE_DB_
 	if [[ "$eval_result" == "READY" && "$unresolved_count" -eq 0 && "$submitted_count" -gt 0 ]]; then
 		validate_prompt="@validate Wave ${WAVE_ID:-$WAVE_DB_ID} in plan ${PLAN_ID}. All wave tasks are submitted. Run wave-level validation now."
 		echo "Auto-validate: wave ${WAVE_ID:-$WAVE_DB_ID} is fully submitted. Triggering @validate..."
-		timeout "$TIMEOUT" copilot --yolo --add-dir "$WT" \
-			--disable-mcp-server codegraph \
+		timeout "$TIMEOUT" $CLI $CLI_ARGS --add-dir "$WT" \
 			-p "$validate_prompt" >/dev/null 2>&1 || {
 			echo "WARN: Auto-validate trigger failed for wave ${WAVE_ID:-$WAVE_DB_ID}" >&2
 		}
