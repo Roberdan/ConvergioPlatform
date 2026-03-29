@@ -179,6 +179,16 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // Add updated_at to tables that need timestamp-based sync replication
     "ALTER TABLE knowledge_base ADD COLUMN updated_at DATETIME",
     "ALTER TABLE notifications ADD COLUMN updated_at DATETIME",
+    // Triggers: auto-set updated_at on INSERT and UPDATE for all sync tables.
+    // Without these, new rows have NULL updated_at and never get exported.
+    "CREATE TRIGGER IF NOT EXISTS trg_plans_updated_at_insert AFTER INSERT ON plans FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE plans SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_plans_updated_at_update AFTER UPDATE ON plans FOR EACH ROW WHEN NEW.updated_at IS NULL OR NEW.updated_at = OLD.updated_at BEGIN UPDATE plans SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_tasks_updated_at_insert AFTER INSERT ON tasks FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE tasks SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_tasks_updated_at_update AFTER UPDATE ON tasks FOR EACH ROW WHEN NEW.updated_at IS NULL OR NEW.updated_at = OLD.updated_at BEGIN UPDATE tasks SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_waves_updated_at_insert AFTER INSERT ON waves FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE waves SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_waves_updated_at_update AFTER UPDATE ON waves FOR EACH ROW WHEN NEW.updated_at IS NULL OR NEW.updated_at = OLD.updated_at BEGIN UPDATE waves SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_kb_updated_at_insert AFTER INSERT ON knowledge_base FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE knowledge_base SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_notif_updated_at_insert AFTER INSERT ON notifications FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE notifications SET updated_at = datetime('now') WHERE id = NEW.id; END",
     // Backfill updated_at for ALL sync tables — rows without updated_at break replication
     "UPDATE plans SET updated_at = COALESCE(completed_at, started_at, created_at, datetime('now')) WHERE updated_at IS NULL",
     "UPDATE tasks SET updated_at = COALESCE(completed_at, started_at, datetime('now')) WHERE updated_at IS NULL",
