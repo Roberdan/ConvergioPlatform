@@ -29,6 +29,7 @@ use super::api_ipc;
 use super::api_kernel_audio;
 use super::api_voice;
 use super::api_memory;
+use super::api_memory_mgmt;
 use super::api_mesh;
 use super::api_metrics;
 use super::api_notify;
@@ -146,6 +147,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_kernel_audio::router())
         .merge(api_voice::router())
         .merge(api_memory::router())
+        .merge(api_memory_mgmt::router())
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())
         // Kernel inference routes (feature-gated; uses own KernelState)

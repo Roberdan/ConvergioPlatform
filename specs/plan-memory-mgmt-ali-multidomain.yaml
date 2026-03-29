@@ -1,0 +1,109 @@
+name: "Memory Management + Ali Multi-Domain"
+project: convergio
+description: >
+  T1: Daemon endpoints for Claude memory CRUD + TTL + GC.
+  T2: Ali orchestrator prompt to use all 69 agents across business domains.
+parallel_mode: standard
+
+waves:
+  - id: W1
+    name: "Memory Management + Ali Multi-Domain (parallel)"
+    tasks:
+      - id: T1-01
+        do: >
+          Add memory management API endpoints to the daemon:
+          1. GET /api/memory/list — list all memory files from the Claude projects memory dir
+             (path: ~/.claude/projects/{slug}/memory/). Return: [{name, type, description, size_bytes, modified_at}]
+          2. POST /api/memory/gc — garbage collect stale memories:
+             - Delete files where type=feedback and the described fix is already in code (check git log)
+             - Archive files older than 30 days with no references in recent git history
+             - Return: {deleted: [], archived: [], kept: []}
+          3. GET /api/memory/stats — return total count, total tokens (estimate words*1.5),
+             breakdown by type (user, feedback, project, reference)
+          4. DELETE /api/memory/:filename — delete a specific memory file
+          5. All endpoints must handle the case where memory dir doesn't exist (return empty, not error)
+          6. Add tests for each endpoint
+          Create new file daemon/src/server/api_memory_mgmt.rs (NOT the existing memory/ module
+          which is for vector embeddings). Wire into routes.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test memory_mgmt 2>&1 | grep -v FAILED"
+          - "rg 'api_memory_mgmt' daemon/src/server/routes/ 2>/dev/null | wc -l | xargs test 0 -lt"
+
+      - id: T1-02
+        do: >
+          Update ali-orchestrator agent definition to leverage ALL 69 agents across domains.
+          File: claude-config/agents/core_utility/ali-orchestrator.md
+
+          1. Add a "Domain Routing Table" that maps problem categories to agent teams:
+             - Market/competition → fiona-market-analyst, sofia-marketing-strategist
+             - Legal/compliance → elena-legal-compliance-expert, sophia-govaffairs, luca-security-expert
+             - Finance/pricing → amy-cfo, domik-mckinsey
+             - Architecture/code → baccio-tech-architect, dario-debugger, marco-devops-engineer
+             - Design/UX → sara-ux-ui-designer, jony-creative-director, jenny-accessibility
+             - People/org → giulia-hr, coach-team-coach, behice-cultural-coach
+             - Product/strategy → marcello-pm, antonio-strategy, matteo-business-architect
+             - Startup/fundraising → sam-startupper, wiz-vc-analyst
+             - Data/analytics → omri-data-scientist, diana-performance-dashboard
+             - Quality/validation → thor, plan-reviewer, doc-validator, compliance-validator, design-validator
+
+          2. Add instructions for multi-domain wave decomposition:
+             "When decomposing a problem, consider ALL domains that apply.
+              A product launch needs: market analysis (fiona) + legal review (elena) +
+              pricing model (amy) + architecture (baccio) + UX (sara) + marketing (sofia).
+              Create waves with domain-specific tasks, not just code tasks."
+
+          3. Add output_type routing:
+             - Code tasks → output_type: pr, validator: thor
+             - Analysis tasks → output_type: analysis, validator: strategy-validator (now in plan-reviewer)
+             - Legal tasks → output_type: legal_opinion, validator: compliance-validator
+             - Design tasks → output_type: design, validator: design-validator
+             - Documents → output_type: document, validator: doc-validator
+
+          4. Keep the file under 250 lines. Use tables, not prose.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -f claude-config/agents/core_utility/ali-orchestrator.md"
+          - "wc -l claude-config/agents/core_utility/ali-orchestrator.md | awk '{if($1 < 250) exit 0; else exit 1}'"
+          - "grep -q 'fiona-market-analyst' claude-config/agents/core_utility/ali-orchestrator.md"
+          - "grep -q 'output_type' claude-config/agents/core_utility/ali-orchestrator.md"
+
+  - id: W2
+    name: "Closure"
+    tasks:
+      - id: TF-tests
+        do: >
+          Verify: cargo check passes, new memory endpoints respond,
+          ali-orchestrator references valid agent files.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+
+      - id: TF-doc
+        do: >
+          Update CHANGELOG.md with memory management + Ali multi-domain changes.
+          Bump VERSION.md to 19.5.0. Update daemon/Cargo.toml version.
+        type: documentation
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "head -3 CHANGELOG.md | grep -q '19.5.0'"

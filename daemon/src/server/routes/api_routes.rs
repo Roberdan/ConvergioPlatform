@@ -94,6 +94,8 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/delegation/by-plan/:plan_id",
     "/api/health/deep",
     "/api/memory/recall",
+    "/api/memory-mgmt/list",
+    "/api/memory-mgmt/stats",
     "/api/kernel/status",
     "/api/node/readiness",
     "/api/node/roles",
@@ -171,6 +173,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/delegation/:id/progress",
     "/api/memory/remember",
     "/api/memory/share",
+    "/api/memory-mgmt/gc",
     "/api/memory/attest",
     "/api/kernel/classify",
     "/api/kernel/play",
@@ -190,7 +193,7 @@ pub const PUT_ROUTES: &[&str] = &[
     "/api/nightly/config/:project_id",
     "/api/runs/:id",
 ];
-pub const DELETE_ROUTES: &[&str] = &["/api/ideas/:id", "/api/chat/session", "/api/peers/:name", "/api/memory/forget/:id"];
+pub const DELETE_ROUTES: &[&str] = &["/api/ideas/:id", "/api/chat/session", "/api/peers/:name", "/api/memory/forget/:id", "/api/memory-mgmt/file/:filename"];
 pub const SSE_ROUTES: &[&str] = &[
     "/api/chat/stream/:sid",
     "/api/mesh/action/stream",

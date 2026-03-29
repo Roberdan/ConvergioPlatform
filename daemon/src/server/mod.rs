@@ -29,6 +29,7 @@ pub mod api_ipc;
 pub mod api_kernel_audio;
 pub mod api_voice;
 pub mod api_memory;
+pub mod api_memory_mgmt;
 pub mod api_mesh;
 pub mod api_metrics;
 pub mod api_metrics_queries;
@@ -85,6 +86,8 @@ pub mod ws_pty;
 pub mod api_decisions;
 pub mod api_repositories;
 
+#[cfg(test)]
+mod api_memory_mgmt_tests;
 #[cfg(test)]
 mod api_voice_tests;
 #[cfg(test)]
