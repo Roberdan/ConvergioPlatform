@@ -1,5 +1,17 @@
 # Changelog
 
+## [19.2.0] - 29 Marzo 2026
+
+### Added
+- Background sync fix: DB now syncs between mesh nodes via HTTP (Plan 749 W1)
+- Auto-rebuild script + launchd plist: daemon rebuilds after git pull on both nodes (Plan 749 W1)
+- Delegation E2E test script: end-to-end validation of plan delegation workflow (Plan 749 W2)
+- Remote sync E2E tests integrated into test-e2e.sh (Plan 749 W2)
+
+### Fixed
+- background_sync peer URLs had double http:// scheme (Plan 749 W1)
+- Remote sync export SSH command URL quoting (Plan 749 W3)
+
 ## [19.1.0] - 29 Marzo 2026
 
 ### Added

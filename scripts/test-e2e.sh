@@ -71,10 +71,11 @@ fi
 
 # --- 6c. Telegram ---
 echo "--- Telegram ---"
-if [ -n "${CONVERGIO_TELEGRAM_TOKEN:-}" ]; then
-  check "telegram bot alive" "curl -sf 'https://api.telegram.org/bot${CONVERGIO_TELEGRAM_TOKEN}/getMe' | grep -q ConvergioBot"
+TG_TOKEN="${CONVERGIO_TELEGRAM_TOKEN:-$(security find-generic-password -s convergio-telegram-token -w 2>/dev/null || echo '')}"
+if [ -n "$TG_TOKEN" ]; then
+  check "telegram bot alive" "curl -sf 'https://api.telegram.org/bot${TG_TOKEN}/getMe' | grep -q ConvergioBot"
 else
-  skip "telegram bot" "CONVERGIO_TELEGRAM_TOKEN not set"
+  skip "telegram bot" "no token in env or Keychain"
 fi
 
 # --- 7. Delegation ---

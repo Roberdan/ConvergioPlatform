@@ -1,7 +1,7 @@
 # Convergio Platform — Complete Capability Reference
 
 > Single source of truth for what Convergio can do. Load this in every agent session.
-> Updated: 29 Marzo 2026 | v19.1.0
+> Updated: 29 Marzo 2026 | v19.2.0
 
 ## Core Architecture
 
@@ -75,7 +75,8 @@
 ### Node Management
 - `GET /api/node/readiness` — 10-check health report per node
 - Role-based provisioning (kernel, executor, coordinator)
-- Automatic DB sync via rsync (launchd cron 30min)
+- Background DB sync via HTTP between mesh nodes (replaces rsync-only)
+- Auto-rebuild: daemon rebuilds after git pull, launchd plist (5min interval)
 - `caffeinate` anti-sleep for kernel node
 - Secrets replication via ~/.convergio/env
 

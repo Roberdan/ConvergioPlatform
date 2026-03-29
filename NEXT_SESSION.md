@@ -1,8 +1,25 @@
 # Next Session — Convergio Platform
 
 **Last updated**: 29 Marzo 2026
-**Current version**: 19.1.0
+**Current version**: 19.2.0
 **Platform readiness**: 10/10
+
+---
+
+## What Was Done (Plan 749 — Mesh Ops: DB sync, auto-deploy, delegation E2E)
+
+### W1: DB Sync + Auto-Deploy
+- Fixed background_sync loop: DB now syncs between nodes via HTTP without rsync
+- Fixed double http:// scheme in peer URLs
+- Auto-rebuild script (scripts/platform/auto-rebuild.sh) + launchd plist for both nodes
+
+### W2: Delegation E2E + Test Suite
+- Full delegation E2E test (scripts/test-delegation-e2e.sh)
+- Remote sync E2E tests integrated into test-e2e.sh
+
+### W3: Closure
+- E2E test suite passing on both nodes
+- CHANGELOG 19.2.0 entry, capabilities updated
 
 ---
 
@@ -62,8 +79,8 @@
 
 | Dimension | Status |
 |-----------|--------|
-| Daemon version | 19.1.0 |
-| Sync model | Timestamp-based (crsqlite gated, not default) |
+| Daemon version | 19.2.0 |
+| Sync model | HTTP background sync (timestamp-based, crsqlite gated) |
 | Peer resolver | Centralized, 3-stage fuzzy match |
 | Evidence gate | Hardened (mutex + SHA cache) |
 | Delegation | Unified via cvg + execution-context API |
