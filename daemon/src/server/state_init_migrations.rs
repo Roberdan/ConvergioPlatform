@@ -173,4 +173,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
          last_sync_at TEXT NOT NULL,
          PRIMARY KEY (peer, table_name)
      )",
+    // Plan 748 — branch_name on plans for execution-context agent delegation
+    "ALTER TABLE plans ADD COLUMN branch_name TEXT",
 ];

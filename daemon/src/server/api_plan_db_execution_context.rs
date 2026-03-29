@@ -33,6 +33,9 @@ async fn handle_set_worktree(
         .ok_or_else(|| ApiError::bad_request("missing worktree_path"))?;
     let conn = state.get_conn()?;
     set_worktree_in_db(&conn, plan_id, path)?;
+    if let Some(branch) = body.get("branch_name").and_then(Value::as_str) {
+        set_branch_in_db(&conn, plan_id, branch)?;
+    }
     Ok(Json(json!({ "ok": true, "plan_id": plan_id, "worktree_path": path })))
 }
 
@@ -188,7 +191,7 @@ fn build_prompt(
     )
 }
 
-/// Update the worktree_path for a plan.
+/// Update the worktree_path (and optionally branch_name) for a plan.
 pub fn set_worktree_in_db(conn: &Connection, plan_id: i64, path: &str) -> Result<(), ApiError> {
     let changed = conn.execute(
         "UPDATE plans SET worktree_path = ?1 WHERE id = ?2",
@@ -197,5 +200,14 @@ pub fn set_worktree_in_db(conn: &Connection, plan_id: i64, path: &str) -> Result
     if changed == 0 {
         return Err(ApiError::bad_request(format!("plan {plan_id} not found")));
     }
+    Ok(())
+}
+
+/// Update branch_name for a plan.
+pub fn set_branch_in_db(conn: &Connection, plan_id: i64, branch: &str) -> Result<(), ApiError> {
+    conn.execute(
+        "UPDATE plans SET branch_name = ?1 WHERE id = ?2",
+        rusqlite::params![branch, plan_id],
+    ).map_err(|e| ApiError::internal(format!("update failed: {e}")))?;
     Ok(())
 }
