@@ -191,6 +191,17 @@ fn pipeline_silence_produces_no_intent() {
 }
 
 #[test]
+fn pipeline_set_wake_detected_only_from_listening() {
+    let mut p = VoicePipeline::new(VoiceConfig::default());
+    // set_wake_detected should only work from Listening state.
+    p.set_wake_detected(); // Idle → no change.
+    assert_eq!(p.state(), VoiceState::Idle);
+    p.start().unwrap();
+    p.set_wake_detected(); // Listening → WakeDetected.
+    assert_eq!(p.state(), VoiceState::WakeDetected);
+}
+
+#[test]
 fn pipeline_config_propagates() {
     let config = VoiceConfig {
         wake_word: "jarvis".to_string(),
