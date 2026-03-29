@@ -94,6 +94,34 @@ fn test_query_active_peers_returns_recent_heartbeats() {
 }
 
 #[test]
+fn test_query_active_peers_returns_host_port_without_scheme() {
+    // Peer addresses must be "host:port" — the HTTP transport adds the scheme.
+    // A double scheme (http://http://...) causes silent sync failure.
+    use super::query_active_peers;
+    let db = setup_db();
+    {
+        let conn = db.lock().expect("lock");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        conn.execute_batch(&format!(
+            "INSERT INTO peer_heartbeats (peer_name, last_seen, load_json) VALUES \
+             ('node-x', {now}, '{{\"tailscale_ip\":\"100.5.5.5\"}}');",
+        ))
+        .expect("seed peer");
+    }
+    let peers = query_active_peers(&db).expect("query");
+    assert_eq!(peers.len(), 1);
+    let addr = &peers[0];
+    assert!(
+        !addr.starts_with("http://"),
+        "peer addr must not include scheme, got: {addr}"
+    );
+    assert_eq!(addr, "100.5.5.5:8420");
+}
+
+#[test]
 fn test_db_path_from_env_uses_dashboard_db() {
     let _guard = env_lock().lock().expect("env lock");
     std::env::set_var("DASHBOARD_DB", "/tmp/test-convergio.db");

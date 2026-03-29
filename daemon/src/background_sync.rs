@@ -63,7 +63,7 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
             |row| row.get(0),
         ).ok().flatten();
         if let Some(ip) = ip {
-            urls.push(format!("http://{}:8420", ip));
+            urls.push(format!("{}:8420", ip));
         }
     }
     if urls.is_empty() && !names.is_empty() {
@@ -174,6 +174,11 @@ pub fn spawn_sync_loop(
     };
 
     tokio::spawn(async move {
+        info!(
+            interval_secs = effective_secs,
+            "background_sync: loop spawned, first tick after {}s",
+            effective_secs
+        );
         let mut ticker = tokio::time::interval(Duration::from_secs(effective_secs));
         // Skip the immediate first tick — let the server finish binding.
         ticker.tick().await;
@@ -193,6 +198,11 @@ pub fn spawn_sync_loop(
                 debug!("background_sync: no active peers, skipping tick");
                 continue;
             }
+            info!(
+                count = peers.len(),
+                "background_sync: syncing with {} peer(s)",
+                peers.len()
+            );
 
             // Open a connection to the real dashboard DB for sync operations.
             let db_path = crate::db_path_from_env();
