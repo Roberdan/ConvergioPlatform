@@ -91,6 +91,8 @@ mod api_agents_legacy_tests;
 #[cfg(test)]
 mod api_agents_tests;
 #[cfg(test)]
+mod api_cli_integration_tests;
+#[cfg(test)]
 mod api_audit_tests;
 #[cfg(test)]
 mod api_chat_tests;
@@ -122,6 +124,10 @@ mod api_ideas_tests_filter;
 mod api_ingest_tests;
 #[cfg(test)]
 mod api_ipc_tests;
+#[cfg(test)]
+mod api_ipc_integration_tests;
+#[cfg(test)]
+mod api_ipc_intel_tests;
 #[cfg(test)]
 mod api_metrics_tests;
 #[cfg(test)]
