@@ -57,12 +57,15 @@ pub async fn handle(cmd: LockCommands) {
             let body = serde_json::json!({
                 "file_path": file_path, "task_id": task_id, "agent": agent,
             });
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/ipc/locks/acquire"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         LockCommands::Release {
             file_path,
@@ -71,15 +74,20 @@ pub async fn handle(cmd: LockCommands) {
             api_url,
         } => {
             let body = serde_json::json!({ "file_path": file_path, "task_id": task_id });
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/ipc/locks/release"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         LockCommands::List { human, api_url } => {
-            let _ = crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/locks"), human).await;
+            if let Err(e) = crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/locks"), human).await {
+                eprintln!("error: {e}");
+            }
         }
     }
 }

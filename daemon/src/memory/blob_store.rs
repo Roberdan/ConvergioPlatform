@@ -88,7 +88,10 @@ impl BlobStore {
         let entries = fs::read_dir(&self.root)
             .map_err(|e| MemoryError::StorageError(format!("read blobs dir: {e}")))?;
         Ok(entries
-            .filter_map(|e| e.ok())
+            .filter_map(|e| match e {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("blob count: readdir entry: {e}"); None }
+            })
             .filter(|e| !e.file_name().to_string_lossy().starts_with('.'))
             .count())
     }
@@ -98,8 +101,14 @@ impl BlobStore {
         let entries = fs::read_dir(&self.root)
             .map_err(|e| MemoryError::StorageError(format!("read blobs dir: {e}")))?;
         let total = entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| e.metadata().ok())
+            .filter_map(|e| match e {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("blob total_bytes: readdir entry: {e}"); None }
+            })
+            .filter_map(|e| match e.metadata() {
+                Ok(m) => Some(m),
+                Err(e) => { tracing::warn!("blob total_bytes: metadata: {e}"); None }
+            })
             .map(|m| m.len())
             .sum();
         Ok(total)
@@ -110,7 +119,10 @@ impl BlobStore {
         let entries = fs::read_dir(&self.root)
             .map_err(|e| MemoryError::StorageError(format!("read blobs dir: {e}")))?;
         let mut removed = 0;
-        for entry in entries.filter_map(|e| e.ok()) {
+        for entry in entries.filter_map(|e| match e {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("blob gc: readdir entry: {e}"); None }
+        }) {
             let name = entry.file_name().to_string_lossy().to_string();
             if name.starts_with('.') {
                 continue;

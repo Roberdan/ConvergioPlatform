@@ -118,7 +118,10 @@ fn parse_plan_id(json: &str) -> Option<u64> {
     let pos = json.find(key)?;
     let rest = json[pos + key.len()..].trim_start();
     let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
-    rest[..end].parse().ok()
+    match rest[..end].parse() {
+        Ok(v) => Some(v),
+        Err(_) => None,
+    }
 }
 
 // ----- Triage and auto-fix ---------------------------------------------------

@@ -28,8 +28,12 @@ pub fn spawn_ali(engine: Arc<IpcEngine>, db_path: PathBuf) {
     let reaper_db = db_path.clone();
     tokio::spawn(async move {
         tracing::info!("ali-orchestrator: starting");
-        let _ = engine.channel_create(CHANNEL, Some("Plan orchestration events"), ALI_AGENT);
-        let _ = engine.register(ALI_AGENT, "orchestrator", None, &IpcEngine::hostname(), None);
+        if let Err(e) = engine.channel_create(CHANNEL, Some("Plan orchestration events"), ALI_AGENT) {
+            tracing::warn!("ali-orchestrator: channel create failed: {e}");
+        }
+        if let Err(e) = engine.register(ALI_AGENT, "orchestrator", None, &IpcEngine::hostname(), None) {
+            tracing::warn!("ali-orchestrator: register failed: {e}");
+        }
         reactor::run(engine, db_path).await;
     });
     reaper::spawn_reaper(reaper_db);

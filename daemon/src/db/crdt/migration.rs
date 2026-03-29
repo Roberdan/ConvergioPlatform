@@ -17,12 +17,14 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
         )?;
         let v: Vec<String> = stmt
             .query_map([], |row| row.get::<_, String>(0))?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping temp table row: {e}"); None } })
             .collect();
         v
     };
     for tmp in &temps {
-        let _ = drop_sql_object_if_exists(conn, "TABLE", tmp);
+        if let Err(e) = drop_sql_object_if_exists(conn, "TABLE", tmp) {
+            tracing::warn!("drop temp table {tmp}: {e}");
+        }
     }
     let needs_migration: bool = required_crdt_tables().iter().any(|table| {
         let clock = format!("{table}__crsql_clock");
@@ -46,7 +48,7 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping view row: {e}"); None } }).collect()
     };
     let triggers: Vec<(String, String)> = {
         let mut stmt = conn.prepare(
@@ -55,13 +57,17 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping trigger row: {e}"); None } }).collect()
     };
     for (name, _) in &views {
-        let _ = drop_sql_object_if_exists(conn, "VIEW", name);
+        if let Err(e) = drop_sql_object_if_exists(conn, "VIEW", name) {
+            tracing::warn!("drop view {name}: {e}");
+        }
     }
     for (name, _) in &triggers {
-        let _ = drop_sql_object_if_exists(conn, "TRIGGER", name);
+        if let Err(e) = drop_sql_object_if_exists(conn, "TRIGGER", name) {
+            tracing::warn!("drop trigger {name}: {e}");
+        }
     }
     for table in required_crdt_tables() {
         let clock_table = format!("{table}__crsql_clock");
@@ -99,10 +105,14 @@ pub fn mark_required_tables(conn: &Connection) -> rusqlite::Result<()> {
     }
     // Restore views and triggers
     for (_, sql) in &views {
-        let _ = conn.execute_batch(sql);
+        if let Err(e) = conn.execute_batch(sql) {
+            tracing::warn!("db batch (restore view): {e}");
+        }
     }
     for (_, sql) in &triggers {
-        let _ = conn.execute_batch(sql);
+        if let Err(e) = conn.execute_batch(sql) {
+            tracing::warn!("db batch (restore trigger): {e}");
+        }
     }
     Ok(())
 }
@@ -114,7 +124,7 @@ fn drop_unique_indices(conn: &Connection, table: &str) -> rusqlite::Result<()> {
     )?;
     let indices: Vec<String> = stmt
         .query_map([table], |row| row.get::<_, String>(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping index row: {e}"); None } })
         .collect();
     for idx in &indices {
         drop_sql_object_if_exists(conn, "INDEX", idx)?;

@@ -124,7 +124,9 @@ async fn main() {
                     };
 
                     registry.add_peer(&name, peer_cfg);
-                    std::fs::create_dir_all(peers_path.parent().unwrap()).ok();
+                    if let Err(e) = std::fs::create_dir_all(peers_path.parent().unwrap()) {
+                        eprintln!("warn: could not create peers directory: {e}");
+                    }
                     registry.save(&peers_path)
                         .unwrap_or_else(|e| json_err(&format!("save peers failed: {e}")));
                     json_ok(serde_json::json!({ "added": name }));
@@ -188,7 +190,13 @@ async fn main() {
                 &dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join("GitHub"),
                 &[],
             );
-            let auth_bundle = export_credentials().ok();
+            let auth_bundle = match export_credentials() {
+                Ok(bundle) => Some(bundle),
+                Err(e) => {
+                    eprintln!("warn: could not export credentials: {e}");
+                    None
+                }
+            };
 
             let target = usb.as_deref().unwrap_or("/tmp/convergio-package");
             std::fs::create_dir_all(target)

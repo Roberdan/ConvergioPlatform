@@ -101,8 +101,12 @@ impl McpConnector {
     /// Disconnect: kill the MCP server process.
     pub fn disconnect(&mut self) {
         if let Some(ref mut child) = self.child {
-            let _ = child.kill();
-            let _ = child.wait();
+            if let Err(e) = child.kill() {
+                tracing::debug!("mcp: kill: {e}");
+            }
+            if let Err(e) = child.wait() {
+                tracing::debug!("mcp: wait: {e}");
+            }
         }
         self.child = None;
     }

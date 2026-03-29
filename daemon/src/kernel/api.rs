@@ -199,7 +199,9 @@ pub mod handlers {
             Ok(s) if s.success() => {}
             Ok(s) => {
                 tracing::warn!(code = ?s.code(), "rec exited non-zero");
-                let _ = std::fs::remove_file(wav_path);
+                if let Err(e) = std::fs::remove_file(wav_path) {
+                    tracing::debug!(path = wav_path, error = %e, "cleanup wav after rec failure");
+                }
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     [(header::CONTENT_TYPE, "application/json")],
@@ -219,7 +221,9 @@ pub mod handlers {
         }
 
         let audio = std::fs::read(wav_path).unwrap_or_default();
-        let _ = std::fs::remove_file(wav_path); // privacy: delete immediately
+        if let Err(e) = std::fs::remove_file(wav_path) {
+            tracing::debug!(path = wav_path, error = %e, "privacy cleanup: delete wav after transcribe");
+        }
         let result = {
             let stt = state.stt.lock().unwrap_or_else(|p| p.into_inner());
             stt.transcribe(&audio)

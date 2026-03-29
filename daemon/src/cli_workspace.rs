@@ -83,12 +83,15 @@ pub async fn handle(cmd: WorkspaceCommands) {
             api_url,
         } => {
             let body = serde_json::json!({"plan_id": plan, "wave_db_id": wave});
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/workspace/create"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         WorkspaceCommands::CreateFeature {
             branch,
@@ -96,12 +99,15 @@ pub async fn handle(cmd: WorkspaceCommands) {
             api_url,
         } => {
             let body = serde_json::json!({"feature": true, "branch": branch});
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/workspace/create"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         WorkspaceCommands::Delete {
             workspace_id,
@@ -109,12 +115,15 @@ pub async fn handle(cmd: WorkspaceCommands) {
             api_url,
         } => {
             let body = serde_json::json!({"workspace_id": workspace_id});
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/workspace/delete"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         WorkspaceCommands::List {
             plan,
@@ -126,18 +135,23 @@ pub async fn handle(cmd: WorkspaceCommands) {
             } else {
                 format!("{api_url}/api/workspace/list")
             };
-            let _ = crate::cli_http::fetch_and_print(&url, human).await;
+            if let Err(e) = crate::cli_http::fetch_and_print(&url, human).await {
+                eprintln!("error: {e}");
+            }
         }
         WorkspaceCommands::Status {
             workspace_id,
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/workspace/status/{workspace_id}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         WorkspaceCommands::Events {
             workspace_id,
@@ -145,13 +159,16 @@ pub async fn handle(cmd: WorkspaceCommands) {
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!(
                     "{api_url}/api/workspace/events?workspace_id={workspace_id}&limit={limit}"
                 ),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
     }
 }

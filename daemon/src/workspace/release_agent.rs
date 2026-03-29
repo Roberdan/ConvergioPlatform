@@ -57,7 +57,7 @@ impl ReleaseAgent {
             gates.len(),
             gates.iter().filter(|g| g.passed).count()
         );
-        self.event_logger
+        if let Err(e) = self.event_logger
             .record_event(
                 workspace_id,
                 "release-agent",
@@ -70,7 +70,9 @@ impl ReleaseAgent {
                 Some(&gate_summary),
                 None,
             )
-            .ok();
+        {
+            tracing::warn!("event log (quality gate): {e}");
+        }
 
         if !all_passed {
             let failures: Vec<String> = gates
@@ -91,7 +93,7 @@ impl ReleaseAgent {
                 &format!("feat: release from workspace {workspace_id}"),
             )
             .map_err(|e| WorkspaceError::Git(e.to_string()))?;
-        self.event_logger
+        if let Err(e) = self.event_logger
             .record_event(
                 workspace_id,
                 "release-agent",
@@ -100,14 +102,18 @@ impl ReleaseAgent {
                 None,
                 None,
             )
-            .ok();
+        {
+            tracing::warn!("event log (git commit): {e}");
+        }
 
-        let _ = self.connector.rebase(path, "origin/main");
+        if let Err(e) = self.connector.rebase(path, "origin/main") {
+            tracing::warn!("rebase origin/main: {e}");
+        }
 
         self.connector
             .push(path, &branch, true)
             .map_err(|e| WorkspaceError::Git(e.to_string()))?;
-        self.event_logger
+        if let Err(e) = self.event_logger
             .record_event(
                 workspace_id,
                 "release-agent",
@@ -116,7 +122,9 @@ impl ReleaseAgent {
                 None,
                 None,
             )
-            .ok();
+        {
+            tracing::warn!("event log (git push): {e}");
+        }
 
         let pr_body = self.generate_pr_description(workspace_id);
         let pr = self
@@ -130,7 +138,7 @@ impl ReleaseAgent {
             )
             .await
             .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
-        self.event_logger
+        if let Err(e) = self.event_logger
             .record_event(
                 workspace_id,
                 "release-agent",
@@ -139,7 +147,9 @@ impl ReleaseAgent {
                 Some(&format!("PR #{}", pr.number)),
                 None,
             )
-            .ok();
+        {
+            tracing::warn!("event log (pr created): {e}");
+        }
 
         let readiness = self
             .connector
@@ -160,7 +170,7 @@ impl ReleaseAgent {
             .merge_pr(repo_slug, pr.number, MergeMethod::Squash)
             .await
             .map_err(|e| WorkspaceError::Merge(e.to_string()))?;
-        self.event_logger
+        if let Err(e) = self.event_logger
             .record_event(
                 workspace_id,
                 "release-agent",
@@ -169,13 +179,16 @@ impl ReleaseAgent {
                 Some(&format!("PR #{} merged", pr.number)),
                 None,
             )
-            .ok();
+        {
+            tracing::warn!("event log (pr merged): {e}");
+        }
 
-        conn.execute(
+        if let Err(e) = conn.execute(
             "UPDATE workspaces SET status = 'merged' WHERE workspace_id = ?1",
             rusqlite::params![workspace_id],
-        )
-        .ok();
+        ) {
+            tracing::warn!("db (update workspace status merged): {e}");
+        }
 
         Ok(ReleaseResult {
             workspace_id: workspace_id.to_string(),

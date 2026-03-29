@@ -178,7 +178,5 @@ pub fn extract_worktree_add_path(command: &str) -> Option<String> {
 
 // Suppress unused import warnings — GhMapping and PreflightSnapshot are used
 // transitively via the re-exported types in checks_support_helpers.
-const _: () = {
-    let _ = std::mem::size_of::<GhMapping>();
-    let _ = std::mem::size_of::<PreflightSnapshot>();
-};
+const _ASSERT_GH_MAPPING: usize = std::mem::size_of::<GhMapping>();
+const _ASSERT_PREFLIGHT_SNAPSHOT: usize = std::mem::size_of::<PreflightSnapshot>();

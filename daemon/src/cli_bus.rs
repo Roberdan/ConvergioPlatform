@@ -59,7 +59,9 @@ pub enum BusCommands {
 pub async fn handle(cmd: BusCommands) {
     match cmd {
         BusCommands::Who { human, api_url } => {
-            let _ = crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/agents"), human).await;
+            if let Err(e) = crate::cli_http::fetch_and_print(&format!("{api_url}/api/ipc/agents"), human).await {
+                eprintln!("error: {e}");
+            }
         }
         BusCommands::Send {
             from,
@@ -73,18 +75,23 @@ pub async fn handle(cmd: BusCommands) {
                 "to": to,
                 "message": message,
             });
-            let _ = crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/send"), &body, human).await;
+            if let Err(e) = crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/send"), &body, human).await {
+                eprintln!("error: {e}");
+            }
         }
         BusCommands::Read {
             name,
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/ipc/messages?agent={name}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         BusCommands::Broadcast {
             from,
@@ -96,8 +103,11 @@ pub async fn handle(cmd: BusCommands) {
                 "from": from,
                 "message": message,
             });
-            let _ = crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/broadcast"), &body, human)
-                .await;
+            if let Err(e) = crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/broadcast"), &body, human)
+                .await
+            {
+                eprintln!("error: {e}");
+            }
         }
     }
 }

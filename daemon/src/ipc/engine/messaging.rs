@@ -80,7 +80,7 @@ impl IpcEngine {
         debug_assert!(!agent.is_empty(), "receive: agent must not be empty");
         // limit=0 would silently return nothing — callers should use a positive limit.
         debug_assert!(limit > 0, "receive: limit must be > 0");
-        let _ = peek; // used below by caller-side, suppress dead-code lint in debug
+        _ = peek; // used below by caller-side, suppress dead-code lint in debug
         let conn = self.open_conn()?;
         let mut conditions = vec!["(to_agent = ?1 OR to_agent IS NULL)".to_string()];
         let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(agent.to_string())];
@@ -119,7 +119,10 @@ impl IpcEngine {
                     },
                 ))
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("receive: skipping message row: {e}"); None }
+            })
             .collect();
 
         if !peek {
@@ -236,7 +239,10 @@ impl IpcEngine {
                     created_at: row.get(6)?,
                 })
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("history: skipping message row: {e}"); None }
+            })
             .collect();
 
         Ok(IpcResponse::MessageList { messages })

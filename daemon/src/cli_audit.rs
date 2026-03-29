@@ -176,7 +176,10 @@ pub fn has_copyright(content: &str) -> bool {
 /// Match a markdown file path against the token-budget patterns.
 /// Returns the first matching budget, or None for unlisted md files.
 pub fn find_budget<'a>(root: &Path, path: &Path) -> Option<&'a Budget> {
-    let rel = path.strip_prefix(root).ok()?;
+    let rel = match path.strip_prefix(root) {
+        Ok(r) => r,
+        Err(_) => return None,
+    };
     let rel_str = rel.to_string_lossy();
     let file_name = path.file_name()?.to_string_lossy().to_string();
     for budget in BUDGETS {

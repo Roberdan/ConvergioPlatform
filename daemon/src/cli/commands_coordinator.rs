@@ -62,8 +62,13 @@ pub fn handle_coordinator_status() {
             // No migration state file — that's normal
             let peers_path = default_peers_path();
             let coordinator = if peers_path.exists() {
-                PeersRegistry::load(&peers_path).ok()
-                    .and_then(|r| r.get_coordinator().map(|(n, _)| n.to_string()))
+                match PeersRegistry::load(&peers_path) {
+                    Ok(r) => r.get_coordinator().map(|(n, _)| n.to_string()),
+                    Err(e) => {
+                        eprintln!("warn: could not load peers registry: {e}");
+                        None
+                    }
+                }
             } else {
                 None
             };

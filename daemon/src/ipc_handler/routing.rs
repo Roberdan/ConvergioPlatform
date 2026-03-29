@@ -121,8 +121,11 @@ pub fn handle_request_skill(
             if let Ok(Some((agent, host))) =
                 convergio_core::ipc::skills::find_best_agent(&conn, &skill)
             {
-                let _ = convergio_core::ipc::skills::assign_request(&conn, &id, &agent, &host);
-                println!("Assigned to: {agent}@{host}");
+                if let Err(e) = convergio_core::ipc::skills::assign_request(&conn, &id, &agent, &host) {
+                    eprintln!("warning: assign_request failed: {e}");
+                } else {
+                    println!("Assigned to: {agent}@{host}");
+                }
             }
         }
         Err(e) => {

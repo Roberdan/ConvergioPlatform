@@ -178,14 +178,13 @@ pub fn apply_changes(
                 let columns = get_column_names(conn, &change.table_name)?;
                 let mut col_names = vec!["id".to_string()];
                 let mut placeholders = vec!["?1".to_string()];
-                for (i, col) in columns.iter().enumerate() {
+                for (_i, col) in columns.iter().enumerate() {
                     if *col == "id" {
                         continue;
                     }
                     col_names.push(format!("\"{col}\""));
                     placeholders
                         .push(format!("json_extract(?2, '$.{col}')"));
-                    let _ = i; // consumed via col
                 }
                 let sql = format!(
                     "INSERT INTO \"{}\" ({}) VALUES ({})",

@@ -49,7 +49,9 @@ fn run_command_with_timeout(
                 let stderr = child.stderr.take().map(|mut s| {
                     let mut buf = String::new();
                     use std::io::Read;
-                    let _ = s.read_to_string(&mut buf);
+                    if let Err(e) = s.read_to_string(&mut buf) {
+                        tracing::warn!("verify_checks: read stderr: {e}");
+                    }
                     buf
                 }).unwrap_or_default();
                 return EvidenceCheck::fail(
@@ -62,8 +64,12 @@ fn run_command_with_timeout(
             Ok(None) if start.elapsed() > timeout => {
                 #[cfg(unix)]
                 unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
-                let _ = child.kill();
-                let _ = child.wait();
+                if let Err(e) = child.kill() {
+                    tracing::warn!("verify_checks: kill timed-out child: {e}");
+                }
+                if let Err(e) = child.wait() {
+                    tracing::warn!("verify_checks: wait after kill: {e}");
+                }
                 return EvidenceCheck::fail(
                     check_name,
                     format!("timeout after {timeout_secs}s — killed"),

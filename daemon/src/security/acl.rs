@@ -55,11 +55,13 @@ impl AclManager {
 
     /// List rules for an agent.
     pub fn get_rules(&self, agent_id: &str) -> Vec<AclRule> {
-        self.rules
-            .read()
-            .ok()
-            .and_then(|r| r.get(agent_id).cloned())
-            .unwrap_or_default()
+        match self.rules.read() {
+            Ok(r) => r.get(agent_id).cloned().unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!("acl: rules lock poisoned: {e}");
+                Vec::new()
+            }
+        }
     }
 }
 

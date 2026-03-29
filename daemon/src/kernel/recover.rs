@@ -59,14 +59,13 @@ impl RecoveryConfig {
         let channels = parse_channels(
             &std::env::var("KERNEL_NOTIFY_CHANNELS").unwrap_or_else(|_| "ntfy".to_string()),
         );
-        let db_path = std::env::var("DASHBOARD_DB")
-            .ok()
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var("HOME").ok().map(|h| {
-                    PathBuf::from(h).join(".claude/data/dashboard.db")
-                })
-            });
+        let db_path = match std::env::var("DASHBOARD_DB") {
+            Ok(v) => Some(PathBuf::from(v)),
+            Err(_) => match std::env::var("HOME") {
+                Ok(h) => Some(PathBuf::from(h).join(".claude/data/dashboard.db")),
+                Err(_) => None,
+            },
+        };
         Self { ntfy_topic, channels, dry_run: false, db_path }
     }
 }

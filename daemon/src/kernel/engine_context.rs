@@ -46,7 +46,10 @@ pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
     // Plan detail if specific plan mentioned
     if q.contains("piano") || q.contains("plan") {
         // Try to extract a plan ID
-        let id: Option<u32> = q.split_whitespace().filter_map(|w| w.parse().ok()).next();
+        let id: Option<u32> = q.split_whitespace().filter_map(|w| match w.parse() {
+            Ok(v) => Some(v),
+            Err(_) => None,
+        }).next();
         if let Some(plan_id) = id {
             let args = serde_json::json!({"plan_id": plan_id});
             if let Some(detail) = tools::call_tool("get_plan_detail", daemon_url, &args) {
@@ -81,7 +84,10 @@ pub(crate) fn extract_tool_call(text: &str) -> Option<(String, String)> {
     let start = text.find(start_tag)?;
     let end = text.find(end_tag)?;
     let json_str = text[start + start_tag.len()..end].trim();
-    let v: serde_json::Value = serde_json::from_str(json_str).ok()?;
+    let v: serde_json::Value = match serde_json::from_str(json_str) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
     let name = v.get("name")?.as_str()?.to_string();
     let args = v
         .get("arguments")

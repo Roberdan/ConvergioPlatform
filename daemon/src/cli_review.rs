@@ -109,23 +109,29 @@ pub async fn handle(cmd: ReviewCommands) {
                 "verdict": verdict,
                 "suggestions": suggestions,
             });
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/register"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         ReviewCommands::Check {
             plan_id,
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/review/check?plan_id={plan_id}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         ReviewCommands::Reset {
             plan_id,
@@ -133,12 +139,15 @@ pub async fn handle(cmd: ReviewCommands) {
             api_url,
         } => {
             let body = serde_json::json!({ "plan_id": plan_id.unwrap_or(0) });
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/review/reset"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
     }
 }

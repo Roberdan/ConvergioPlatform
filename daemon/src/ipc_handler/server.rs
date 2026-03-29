@@ -16,7 +16,9 @@ fn kill_stale_listeners(port: u16) {
             if let Ok(pid) = pid_str.parse::<u32>() {
                 if pid != my_pid {
                     info!("killing stale process {pid} on port {port}");
-                    let _ = std::process::Command::new("kill").args(["-9", pid_str]).output();
+                    if let Err(e) = std::process::Command::new("kill").args(["-9", pid_str]).output() {
+                        warn!("kill_stale_listeners: kill failed for pid {pid}: {e}");
+                    }
                 }
             }
         }
@@ -56,7 +58,9 @@ pub async fn run_serve(
     let db_path = default_db_path();
     let shared_ipc = std::sync::Arc::new(convergio_core::ipc::IpcEngine::new(db_path.clone()));
     if let Ok(conn) = shared_ipc.open_conn() {
-        let _ = convergio_core::ipc::ensure_ipc_schema(&conn);
+        if let Err(e) = convergio_core::ipc::ensure_ipc_schema(&conn) {
+            warn!("ensure_ipc_schema failed: {e}");
+        }
     }
 
     // ServerState uses the shared IPC engine
@@ -122,7 +126,7 @@ pub async fn run_daemon(
         bind_ip.unwrap_or_else(|| "127.0.0.1".to_string())
     } else {
         bind_ip
-            .or_else(|| std::env::var("TAILSCALE_IP").ok())
+            .or_else(|| match std::env::var("TAILSCALE_IP") { Ok(v) => Some(v), Err(_) => None })
             .or_else(convergio_core::mesh::daemon::detect_tailscale_ip)
             .unwrap_or_else(|| "0.0.0.0".to_string())
     };

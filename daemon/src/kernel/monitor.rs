@@ -176,10 +176,14 @@ pub async fn check_peer_readiness(pool: &Pool<SqliteConnectionManager>, peer_url
 pub fn store_kernel_event(pool: &Pool<SqliteConnectionManager>, source: &str, msg: &str, severity: &str) {
     match pool.get() {
         Err(e) => warn!("jarvis.monitor: db conn: {e}"),
-        Ok(conn) => { let _ = conn.execute(
-            "INSERT INTO kernel_events (severity, source, message, action_taken) VALUES (?1,?2,?3,'none')",
-            rusqlite::params![severity, source, msg],
-        ).map_err(|e| warn!("jarvis.monitor: insert: {e}")); }
+        Ok(conn) => {
+            if let Err(e) = conn.execute(
+                "INSERT INTO kernel_events (severity, source, message, action_taken) VALUES (?1,?2,?3,'none')",
+                rusqlite::params![severity, source, msg],
+            ) {
+                warn!("jarvis.monitor: insert: {e}");
+            }
+        }
     }
 }
 

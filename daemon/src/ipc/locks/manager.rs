@@ -148,7 +148,7 @@ fn is_pid_alive(pid: i64, host: &str) -> bool {
     }
     #[cfg(not(unix))]
     {
-        let _ = pid;
+        drop(pid);
         true
     }
 }

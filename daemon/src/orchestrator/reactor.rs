@@ -114,7 +114,7 @@ async fn handle_message(
             tracing::warn!("ALI NEEDS HUMAN: {reason}");
             // Surface via notification API
             let plan_id = payload.get("plan_id").and_then(|v| v.as_i64()).unwrap_or(0);
-            let _ = reqwest::Client::new()
+            if let Err(e) = reqwest::Client::new()
                 .post(format!("{}/api/notify/send", super::actions::DAEMON_BASE))
                 .json(&serde_json::json!({
                     "title": "Ali needs help",
@@ -123,7 +123,10 @@ async fn handle_message(
                     "plan_id": plan_id,
                 }))
                 .send()
-                .await;
+                .await
+            {
+                tracing::warn!("ali: notify send failed: {e}");
+            }
         }
         other => {
             tracing::debug!("ali: ignoring unknown event type: {other}");
@@ -145,7 +148,9 @@ fn require_i64(
 
 fn emit_error(engine: &IpcEngine, detail: &str) {
     let content = serde_json::json!({"type": "error", "detail": detail}).to_string();
-    let _ = engine.broadcast(super::ALI_AGENT, &content, "error", Some(super::CHANNEL));
+    if let Err(e) = engine.broadcast(super::ALI_AGENT, &content, "error", Some(super::CHANNEL)) {
+        tracing::warn!("ali: emit_error broadcast failed: {e}");
+    }
 }
 
 #[cfg(test)]

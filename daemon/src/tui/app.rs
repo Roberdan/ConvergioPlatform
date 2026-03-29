@@ -225,11 +225,15 @@ impl TuiApp {
 
 impl Drop for TuiApp {
     fn drop(&mut self) {
-        let _ = crossterm::terminal::disable_raw_mode();
-        let _ = crossterm::execute!(
+        if let Err(e) = crossterm::terminal::disable_raw_mode() {
+            tracing::warn!("terminal (disable raw mode): {e}");
+        }
+        if let Err(e) = crossterm::execute!(
             io::stdout(),
             crossterm::terminal::LeaveAlternateScreen,
             crossterm::event::DisableMouseCapture
-        );
+        ) {
+            tracing::warn!("terminal (leave alternate screen): {e}");
+        }
     }
 }

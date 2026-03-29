@@ -37,23 +37,29 @@ pub async fn handle(cmd: CheckpointCommands) {
             api_url,
         } => {
             let body = serde_json::json!({ "plan_id": plan_id });
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/checkpoint/save"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         CheckpointCommands::Restore {
             plan_id,
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/checkpoint/restore?plan_id={plan_id}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
     }
 }

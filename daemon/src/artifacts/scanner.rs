@@ -46,7 +46,10 @@ fn scan_dir(
         .map_err(|e| ArtifactError::ScanError(format!("read {}: {e}", dir.display())))?;
     let mut count = 0;
 
-    for entry in entries.filter_map(|e| e.ok()) {
+    for entry in entries.filter_map(|e| match e {
+        Ok(v) => Some(v),
+        Err(e) => { tracing::warn!("artifact scan readdir: {e}"); None }
+    }) {
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         if ext != "md" && ext != "yaml" && ext != "yml" {

@@ -63,7 +63,10 @@ pub(crate) fn process_tick(conn: &Connection, seen: &mut HashSet<i64>) -> rusqli
         .query_map([EVENT_LIMIT], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("pause_bridge row: {e}"); None }
+        })
         .collect();
 
     for (id, event_type, payload) in rows {
@@ -118,7 +121,10 @@ pub(crate) fn apply_resume(conn: &Connection, plan_id: i64) -> rusqlite::Result<
 /// Extract `plan_id` from a JSON payload string like `{"plan_id": 42}`.
 pub(crate) fn extract_plan_id(payload: Option<&str>) -> Option<i64> {
     let text = payload?;
-    let v: serde_json::Value = serde_json::from_str(text).ok()?;
+    let v: serde_json::Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
     v.get("plan_id")?.as_i64()
 }
 

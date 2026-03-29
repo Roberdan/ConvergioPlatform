@@ -49,7 +49,7 @@ pub async fn find_available_peer(db_path: &Path, exclude: Option<&str>) -> Optio
     }
 
     // Fallback: check db_path parent for local peer config
-    let _ = db_path; // used for future local-peer discovery
+    _ = db_path; // used for future local-peer discovery
     None
 }
 
@@ -86,7 +86,10 @@ pub fn check_unblocked_plans(
 
     let plan_ids: Vec<i64> = stmt
         .query_map(rusqlite::params![master_id], |row| row.get(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("ali: plan row error: {e}"); None }
+        })
         .collect();
 
     for pid in plan_ids {
@@ -133,11 +136,13 @@ mod tests {
         let tmp = NamedTempFile::new().unwrap();
         let engine = Arc::new(IpcEngine::new(tmp.path().to_path_buf()));
         crate::ipc::ensure_ipc_schema(&engine.open_conn().unwrap()).unwrap();
-        let _ = engine.channel_create(
+        if let Err(e) = engine.channel_create(
             super::super::CHANNEL,
             Some("test"),
             super::super::ALI_AGENT,
-        );
+        ) {
+            eprintln!("test channel create: {e}");
+        }
         (tmp, engine)
     }
 

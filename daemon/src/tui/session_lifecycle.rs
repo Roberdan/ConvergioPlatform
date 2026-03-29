@@ -31,7 +31,9 @@ pub(super) fn process_ndjson_line(
         "system" => {
             // Extract session_id from init message.
             if let Some(sid) = parsed.get("session_id").and_then(|v| v.as_str()) {
-                let _ = event_tx.send(ChatEvent::SessionReady(sid.to_string()));
+                if let Err(e) = event_tx.send(ChatEvent::SessionReady(sid.to_string())) {
+                    tracing::warn!("event send (session ready): {e}");
+                }
             }
         }
         "content_block_delta" => {
@@ -42,7 +44,9 @@ pub(super) fn process_ndjson_line(
                 .and_then(|t| t.as_str())
             {
                 partial.push_str(delta);
-                let _ = event_tx.send(ChatEvent::TextDelta(delta.to_string()));
+                if let Err(e) = event_tx.send(ChatEvent::TextDelta(delta.to_string())) {
+                    tracing::warn!("event send (text delta): {e}");
+                }
             }
         }
         "assistant" => {
@@ -50,7 +54,9 @@ pub(super) fn process_ndjson_line(
             let text = extract_assistant_text(parsed);
             if !text.is_empty() {
                 partial.clear();
-                let _ = event_tx.send(ChatEvent::MessageComplete(text));
+                if let Err(e) = event_tx.send(ChatEvent::MessageComplete(text)) {
+                    tracing::warn!("event send (message complete): {e}");
+                }
             }
         }
         "result" => {
@@ -61,7 +67,9 @@ pub(super) fn process_ndjson_line(
                 extract_result_text(parsed)
             };
             if !text.is_empty() {
-                let _ = event_tx.send(ChatEvent::MessageComplete(text));
+                if let Err(e) = event_tx.send(ChatEvent::MessageComplete(text)) {
+                    tracing::warn!("event send (result complete): {e}");
+                }
             }
         }
         "error" => {
@@ -71,7 +79,9 @@ pub(super) fn process_ndjson_line(
                 .and_then(|m| m.as_str())
                 .or_else(|| parsed.get("message").and_then(|m| m.as_str()))
                 .unwrap_or("unknown error");
-            let _ = event_tx.send(ChatEvent::Error(msg.to_string()));
+            if let Err(e) = event_tx.send(ChatEvent::Error(msg.to_string())) {
+                tracing::warn!("event send (error): {e}");
+            }
         }
         _ => {
             // Ignore other message types (tool_use, user, etc.)

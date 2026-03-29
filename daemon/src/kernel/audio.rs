@@ -66,20 +66,28 @@ pub fn resolve_active_node(conn: &rusqlite::Connection) -> ActiveNode {
 
 fn query_explicit_node(conn: &rusqlite::Connection) -> Option<ActiveNode> {
     // Read active_node + active_node_set_at from kernel_config
-    let node_val: Option<String> = conn
-        .query_row(
-            "SELECT value FROM kernel_config WHERE key = 'active_node'",
-            [],
-            |r| r.get(0),
-        )
-        .ok();
-    let set_at_val: Option<String> = conn
-        .query_row(
-            "SELECT value FROM kernel_config WHERE key = 'active_node_set_at'",
-            [],
-            |r| r.get(0),
-        )
-        .ok();
+    let node_val: Option<String> = match conn.query_row(
+        "SELECT value FROM kernel_config WHERE key = 'active_node'",
+        [],
+        |r| r.get(0),
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!("kernel.audio: query active_node: {e}");
+            None
+        }
+    };
+    let set_at_val: Option<String> = match conn.query_row(
+        "SELECT value FROM kernel_config WHERE key = 'active_node_set_at'",
+        [],
+        |r| r.get(0),
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!("kernel.audio: query active_node_set_at: {e}");
+            None
+        }
+    };
 
     let node = node_val.filter(|s| !s.is_empty())?;
     // Validate 8 h window using sqlite datetime comparison
@@ -103,16 +111,19 @@ fn query_explicit_node(conn: &rusqlite::Connection) -> Option<ActiveNode> {
 fn query_last_cli_peer(conn: &rusqlite::Connection) -> Option<ActiveNode> {
     // kernel_events.source stores the originating hostname for peer-originated events.
     // Pick the most recent non-empty source that isn't 'localhost'/'127.0.0.1'.
-    let peer: Option<String> = conn
-        .query_row(
-            "SELECT source FROM kernel_events
-             WHERE source != '' AND source != 'localhost' AND source != '127.0.0.1'
-             ORDER BY timestamp DESC LIMIT 1",
-            [],
-            |r| r.get(0),
-        )
-        .ok()
-        .flatten();
+    let peer: Option<String> = match conn.query_row(
+        "SELECT source FROM kernel_events
+         WHERE source != '' AND source != 'localhost' AND source != '127.0.0.1'
+         ORDER BY timestamp DESC LIMIT 1",
+        [],
+        |r| r.get::<_, Option<String>>(0),
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!("kernel.audio: query last_cli_peer: {e}");
+            None
+        }
+    };
 
     let hostname = peer.filter(|s| !s.is_empty())?;
     info!("kernel.audio: active_node='{}' source=last_cli", hostname);
@@ -134,7 +145,9 @@ pub async fn play_local(audio: &[u8]) {
         .arg(&path)
         .status()
         .await;
-    let _ = std::fs::remove_file(&path); // cleanup regardless of outcome
+    if let Err(e) = std::fs::remove_file(&path) {
+        tracing::debug!("kernel.audio: temp file cleanup: {e}");
+    } // cleanup regardless of outcome
     match result {
         Ok(s) if s.success() => info!("kernel.audio: afplay complete"),
         Ok(s) => warn!("kernel.audio: afplay exit {:?}", s.code()),

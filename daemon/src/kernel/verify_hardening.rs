@@ -37,7 +37,13 @@ impl EvidenceCache {
     }
 
     pub fn get(&self, sha: &str) -> Option<bool> {
-        let guard = self.inner.lock().ok()?;
+        let guard = match self.inner.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                tracing::warn!("verify_hardening: evidence cache lock poisoned: {e}");
+                return None;
+            }
+        };
         let entry = guard.as_ref()?;
         if entry.sha == sha && entry.at.elapsed() < CACHE_TTL {
             Some(entry.passed)
@@ -78,10 +84,14 @@ pub fn git_head_sha(worktree: Option<&str>) -> Option<String> {
     if let Some(wt) = worktree {
         cmd.current_dir(wt);
     }
-    cmd.output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    match cmd.output() {
+        Ok(o) if o.status.success() => Some(String::from_utf8_lossy(&o.stdout).trim().to_string()),
+        Ok(_) => None,
+        Err(e) => {
+            tracing::warn!("verify_hardening: git rev-parse failed: {e}");
+            None
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

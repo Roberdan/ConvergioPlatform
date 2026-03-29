@@ -20,10 +20,13 @@ pub fn resolve_interval_secs(override_secs: Option<u64>) -> u64 {
     if let Some(v) = override_secs {
         return v;
     }
-    std::env::var("CONVERGIO_SYNC_INTERVAL_SECS")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_INTERVAL_SECS)
+    match std::env::var("CONVERGIO_SYNC_INTERVAL_SECS") {
+        Ok(s) => match s.parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => DEFAULT_INTERVAL_SECS,
+        },
+        Err(_) => DEFAULT_INTERVAL_SECS,
+    }
 }
 
 /// Query online peers and resolve best reachable address (Thunderbolt → Tailscale).
@@ -52,7 +55,10 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
     )?;
     let online_names: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("background_sync peer row: {e}"); None }
+        })
         .collect();
 
     if online_names.is_empty() {
@@ -97,10 +103,13 @@ pub fn sync_table_with_peer(
     peer_addr: &str,
     table: &str,
 ) -> usize {
-    let since = libsql_adapter::get_sync_meta(conn, peer_addr, table)
-        .ok()
-        .flatten()
-        .map(|m| m.last_sync_at);
+    let since = match libsql_adapter::get_sync_meta(conn, peer_addr, table) {
+        Ok(meta) => meta.map(|m| m.last_sync_at),
+        Err(e) => {
+            tracing::warn!("sync_table get_sync_meta {table}/{peer_addr}: {e}");
+            None
+        }
+    };
 
     // Export local changes and send to peer
     let local_changes = match libsql_adapter::export_changes_since(
@@ -211,9 +220,11 @@ pub fn spawn_sync_loop(
             let db_path = crate::db_path_from_env();
             let conn = match Connection::open(&db_path) {
                 Ok(c) => {
-                    let _ = c.execute_batch(
+                    if let Err(e) = c.execute_batch(
                         "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
-                    );
+                    ) {
+                        tracing::warn!("background_sync: PRAGMA init: {e}");
+                    }
                     c
                 }
                 Err(e) => {

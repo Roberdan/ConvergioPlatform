@@ -21,7 +21,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
             args,
         } => {
             let path = db_path.unwrap_or_else(ipc_handler::default_db_path);
-            let _ = crsqlite_path; // crsqlite removed; sync via timestamp adapter
+            drop(crsqlite_path); // crsqlite removed; sync via timestamp adapter
             let db = match convergio_core::db::PlanDb::open_path(&path) {
                 Ok(db) => db,
                 Err(err) => {
@@ -80,7 +80,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
                 std::env::set_var("DASHBOARD_DB", p);
             }
             // crsqlite removed — sync via timestamp-based adapter (libsql_adapter)
-            let _ = crsqlite_path;
+            drop(crsqlite_path);
             let db_path = ipc_handler::default_db_path();
             tokio::spawn(convergio_core::background::run_pause_bridge(db_path));
             if let Err(e) =

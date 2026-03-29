@@ -8,7 +8,9 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
     match cmd {
         // --- GET-based subcommands ---
         PlanCommands::List { human, api_url } => {
-            let _ = crate::cli_http::fetch_and_print(&format!("{api_url}/api/plan-db/list"), human).await;
+            if let Err(e) = crate::cli_http::fetch_and_print(&format!("{api_url}/api/plan-db/list"), human).await {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Tree {
             plan_id,
@@ -21,11 +23,14 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
                     crate::cli_plan_tree_fmt::print_execution_tree(&val);
                 }
             } else {
-                let _ = crate::cli_http::fetch_and_print(
+                if let Err(e) = crate::cli_http::fetch_and_print(
                     &format!("{api_url}/api/plan-db/execution-tree/{plan_id}"),
                     false,
                 )
-                .await;
+                .await
+                {
+                    eprintln!("error: {e}");
+                }
             }
         }
         PlanCommands::Show {
@@ -33,22 +38,28 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/json/{plan_id}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Drift {
             plan_id,
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/drift-check/{plan_id}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Validate {
             plan_id,
@@ -56,12 +67,15 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({});
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plans/{plan_id}/validate"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         // --- POST-based subcommands ---
         PlanCommands::Create {
@@ -78,8 +92,11 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
                 "source_file": source_file,
                 "parent_plan_id": parent,
             });
-            let _ = crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/create"), &body, human)
-                .await;
+            if let Err(e) = crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/create"), &body, human)
+                .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Import {
             plan_id,
@@ -101,8 +118,11 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
                 "plan_id": plan_id,
                 "spec": content,
             });
-            let _ = crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/import"), &body, human)
-                .await;
+            if let Err(e) = crate::cli_http::post_and_print(&format!("{api_url}/api/plan-db/import"), &body, human)
+                .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Start {
             plan_id,
@@ -110,12 +130,15 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({});
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/start/{plan_id}"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Complete {
             plan_id,
@@ -123,12 +146,15 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({});
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/complete/{plan_id}"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Cancel {
             plan_id,
@@ -137,12 +163,15 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({ "reason": reason });
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/cancel/{plan_id}"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Approve {
             plan_id,
@@ -150,23 +179,29 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             api_url,
         } => {
             let body = serde_json::json!({});
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/approve/{plan_id}"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Readiness {
             plan_id,
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/readiness/{plan_id}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         PlanCommands::Template => {
             crate::cli_plan_template::print_template();

@@ -38,7 +38,10 @@ impl IpcEngine {
                     created_at: row.get(3)?,
                 })
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("channel_list: skipping row: {e}"); None }
+            })
             .collect();
         Ok(IpcResponse::ChannelList { channels })
     }
@@ -107,7 +110,10 @@ impl IpcEngine {
                     updated_at: row.get(4)?,
                 })
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("context_list: skipping row: {e}"); None }
+            })
             .collect();
         Ok(IpcResponse::ContextList { entries })
     }

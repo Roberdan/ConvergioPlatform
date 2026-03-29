@@ -122,7 +122,7 @@ impl WhisperEngine {
 
         #[cfg(not(feature = "voice"))]
         {
-            let _ = segment;
+            drop(segment);
             Err(VoiceError::ModelNotAvailable(
                 "whisper-rs model not available: voice feature disabled"
                     .to_string(),
@@ -135,7 +135,7 @@ impl WhisperEngine {
         &self,
         segment: &SpeechSegment,
     ) -> Result<Transcription, VoiceError> {
-        let _ = segment;
+        drop(segment);
         Err(VoiceError::AsrError(
             "whisper API fallback not yet implemented".to_string(),
         ))

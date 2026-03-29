@@ -120,7 +120,9 @@ mod tests {
             .and_then(|value| value.as_str().map(str::to_owned))
             .expect("token");
         assert_eq!(token, "secret");
-        let _ = fs::remove_dir_all(home.parent().expect("tmp parent"));
+        if let Err(e) = fs::remove_dir_all(home.parent().expect("tmp parent")) {
+            eprintln!("test cleanup: {e}");
+        }
     }
 
     #[test]
@@ -143,7 +145,9 @@ mod tests {
             .and_then(|value| value.as_str().map(str::to_owned))
             .expect("deny reason");
         assert!(reason.contains("stale"));
-        let _ = fs::remove_dir_all(base);
+        if let Err(e) = fs::remove_dir_all(base) {
+            eprintln!("test cleanup: {e}");
+        }
     }
 
     #[test]
@@ -158,7 +162,9 @@ mod tests {
         dispatch_pre_tool(&payload_for("az containerapp update -n demo"), &context)
             .expect("dispatch 2");
         assert_eq!(context.db_open_count(), 1);
-        let _ = fs::remove_dir_all(base);
+        if let Err(e) = fs::remove_dir_all(base) {
+            eprintln!("test cleanup: {e}");
+        }
     }
 
     fn seed_dashboard_db(path: &std::path::Path) {

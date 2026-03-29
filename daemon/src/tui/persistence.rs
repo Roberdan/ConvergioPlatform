@@ -12,9 +12,13 @@ pub fn last_project_path() -> PathBuf {
 /// Write project id to the given path (creates parent dirs if needed).
 pub fn save_last_project_to(path: &Path, project_id: &str) {
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            tracing::warn!("mkdir {parent:?}: {e}");
+        }
     }
-    let _ = std::fs::write(path, project_id);
+    if let Err(e) = std::fs::write(path, project_id) {
+        tracing::warn!("write {path:?}: {e}");
+    }
 }
 
 /// Write project id to the canonical persistence path.
@@ -24,10 +28,13 @@ pub fn save_last_project(project_id: &str) {
 
 /// Read project id from the given path; returns None if file missing or unreadable.
 pub fn load_last_project_from(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path)
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+    match std::fs::read_to_string(path) {
+        Ok(s) => {
+            let trimmed = s.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        }
+        Err(_) => None,
+    }
 }
 
 /// Read project id from the canonical persistence path.

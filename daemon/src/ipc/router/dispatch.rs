@@ -104,7 +104,10 @@ pub fn route_task(conn: &Connection, description: &str) -> rusqlite::Result<Opti
                 row.get(5)?,
             ))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("route_task: skipping candidate row: {e}"); None }
+        })
         .collect();
 
     let mut best: Option<RouteDecision> = None;
@@ -178,7 +181,10 @@ pub fn fallback_chain(
     )?;
     let local: Vec<(String, String)> = stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("fallback_chain: skipping local model row: {e}"); None }
+        })
         .collect();
     for (i, (host, model)) in local.iter().enumerate() {
         chain.push(FallbackOption {
@@ -200,7 +206,10 @@ pub fn fallback_chain(
         .query_map(params![primary_sub], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("fallback_chain: skipping subscription row: {e}"); None }
+        })
         .collect();
     let base = chain.len() as i32;
     for (i, (name, provider, budget, spent)) in subs.iter().enumerate() {

@@ -111,10 +111,12 @@ pub fn watch_credential_files(
                     for path in &event.paths {
                         for (watch_path, svc) in &map {
                             if path.starts_with(watch_path) || path == watch_path {
-                                let _ = tx_clone.blocking_send(CredentialChange {
+                                if let Err(e) = tx_clone.blocking_send(CredentialChange {
                                     path: path.clone(),
                                     service: svc.clone(),
-                                });
+                                }) {
+                            tracing::warn!("watch_credential_files: send failed: {e}");
+                        }
                             }
                         }
                     }
@@ -127,7 +129,9 @@ pub fn watch_credential_files(
 
     for (path, _) in &paths {
         if path.exists() {
-            let _ = watcher.watch(path, RecursiveMode::NonRecursive);
+            if let Err(e) = watcher.watch(path, RecursiveMode::NonRecursive) {
+                tracing::warn!("watch_credential_files: failed to watch {}: {e}", path.display());
+            }
         }
     }
     // Leak the watcher so it keeps running

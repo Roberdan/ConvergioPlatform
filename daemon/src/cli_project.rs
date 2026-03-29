@@ -193,16 +193,13 @@ async fn handle_plans(id: &str, api_url: &str) -> Result<(), CliError> {
 async fn fetch_deliverable_count(project_id: &str, api_url: &str) -> i64 {
     let url = format!("{api_url}/api/deliverables?project_id={project_id}&count_only=true");
     match reqwest::get(&url).await {
-        Ok(resp) => resp
-            .json::<serde_json::Value>()
-            .await
-            .ok()
-            .and_then(|v| {
-                v["count"]
-                    .as_i64()
-                    .or_else(|| v.as_array().map(|a| a.len() as i64))
-            })
-            .unwrap_or(0),
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(v) => v.get("count")
+                .and_then(|c| c.as_i64())
+                .or_else(|| v.as_array().map(|a| a.len() as i64))
+                .unwrap_or(0),
+            Err(_) => 0,
+        },
         Err(_) => 0,
     }
 }

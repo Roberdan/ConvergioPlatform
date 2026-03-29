@@ -13,12 +13,18 @@ pub async fn start_model_probe(conn_path: std::path::PathBuf, interval_secs: u64
     loop { // UNBOUNDED: event loop
         if let Ok(conn) = rusqlite::Connection::open(&conn_path) {
             if let Ok(models) = probe_ollama().await {
-                let _ = store_models(&conn, &host, "ollama", &models);
+                if let Err(e) = store_models(&conn, &host, "ollama", &models) {
+                    tracing::warn!("start_model_probe: store ollama models failed: {e}");
+                }
             }
             if let Ok(models) = probe_lmstudio().await {
-                let _ = store_models(&conn, &host, "lmstudio", &models);
+                if let Err(e) = store_models(&conn, &host, "lmstudio", &models) {
+                    tracing::warn!("start_model_probe: store lmstudio models failed: {e}");
+                }
             }
-            let _ = advertise_capabilities(&conn, &host);
+            if let Err(e) = advertise_capabilities(&conn, &host) {
+                tracing::warn!("start_model_probe: advertise_capabilities failed: {e}");
+            }
         }
         tokio::time::sleep(interval).await;
     }
@@ -33,7 +39,10 @@ pub fn advertise_capabilities(conn: &Connection, host: &str) -> rusqlite::Result
     )?;
     let providers: Vec<(String, String)> = stmt
         .query_map(params![host], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("advertise_capabilities: skipping provider row: {e}"); None }
+        })
         .collect();
     for (provider, models_csv) in &providers {
         let models_json: Vec<&str> = models_csv.split(',').collect();

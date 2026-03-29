@@ -71,7 +71,10 @@ pub async fn fetch_tasks(client: &Client, plan_id: i64, api_url: &str) -> Vec<Ta
                 .and_then(Value::as_array)
                 .map(|arr| {
                     arr.iter()
-                        .filter_map(|t| serde_json::from_value::<TaskRow>(t.clone()).ok())
+                        .filter_map(|t| match serde_json::from_value::<TaskRow>(t.clone()) {
+                            Ok(v) => Some(v),
+                            Err(e) => { tracing::warn!("skipping task row: {e}"); None }
+                        })
                         .map(|t| TaskPipelineItem {
                             task_id: t.task_id.unwrap_or_default(),
                             title: t.title.unwrap_or_default(),

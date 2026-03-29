@@ -44,14 +44,19 @@ pub fn check_access(
     agent_id: &str,
 ) -> Result<bool, MemoryError> {
     // Fetch access_level and owner for this memory.
-    let result: Option<(String, String)> = conn
-        .query_row(
-            "SELECT access_level, agent_id FROM agent_memories
-             WHERE id = ?1 AND deleted_at IS NULL",
-            params![memory_id],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-        )
-        .ok();
+    let result: Option<(String, String)> = match conn.query_row(
+        "SELECT access_level, agent_id FROM agent_memories
+         WHERE id = ?1 AND deleted_at IS NULL",
+        params![memory_id],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+    ) {
+        Ok(v) => Some(v),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => {
+            tracing::warn!("sharing: check_access query for {memory_id}: {e}");
+            None
+        }
+    };
 
     let (access_level, owner) = match result {
         Some(row) => row,

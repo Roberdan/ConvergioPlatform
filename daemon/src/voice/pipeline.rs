@@ -192,7 +192,9 @@ impl VoicePipeline {
 
         self.start()?;
         let (event_tx, event_rx) = mpsc::unbounded_channel();
-        let _ = event_tx.send(PipelineEvent::StateChanged(VoiceState::Listening));
+        if let Err(e) = event_tx.send(PipelineEvent::StateChanged(VoiceState::Listening)) {
+            tracing::warn!("voice pipeline: initial state send: {e}");
+        }
 
         // Dedicated thread — VoicePipeline contains non-Send types (whisper-rs).
         let config = self.config.clone();
@@ -203,7 +205,9 @@ impl VoicePipeline {
                 .expect("voice pipeline runtime");
             rt.block_on(async move {
                 let mut inner = VoicePipeline::new(config);
-                inner.start().ok();
+                if let Err(e) = inner.start() {
+                    tracing::warn!("voice pipeline: inner start: {e}");
+                }
                 let mut audio_rx = audio_rx;
                 while let Some(frame) = audio_rx.recv().await {
                     match inner.process_frame(&frame) {
@@ -215,13 +219,17 @@ impl VoicePipeline {
                             }
                         }
                         Err(e) => {
-                            let _ = event_tx.send(PipelineEvent::Error(
+                            if let Err(se) = event_tx.send(PipelineEvent::Error(
                                 VoiceError::PipelineError(e.to_string()),
-                            ));
+                            )) {
+                                tracing::warn!("voice pipeline: error event send: {se}");
+                            }
                         }
                     }
                 }
-                let _ = event_tx.send(PipelineEvent::StateChanged(VoiceState::Idle));
+                if let Err(e) = event_tx.send(PipelineEvent::StateChanged(VoiceState::Idle)) {
+                    tracing::warn!("voice pipeline: idle state send: {e}");
+                }
             });
         });
 

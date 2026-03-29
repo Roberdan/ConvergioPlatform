@@ -150,11 +150,16 @@ pub(crate) fn route_ask_ali(question: &str, daemon_url: &str) -> String {
         .json(&serde_json::json!({"question": question}))
         .send()
     {
-        Ok(r) => r
-            .json::<serde_json::Value>()
-            .ok()
-            .and_then(|v| v.get("answer").and_then(|a| a.as_str().map(String::from)))
-            .unwrap_or_else(|| "Non ho una risposta.".to_string()),
+        Ok(r) => match r.json::<serde_json::Value>() {
+            Ok(v) => v
+                .get("answer")
+                .and_then(|a| a.as_str().map(String::from))
+                .unwrap_or_else(|| "Non ho una risposta.".to_string()),
+            Err(e) => {
+                warn!("voice_router: ask_ali response parse error: {e}");
+                "Non ho una risposta.".to_string()
+            }
+        },
         Err(e) => format!("Errore: {e}"),
     }
 }

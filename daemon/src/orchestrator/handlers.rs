@@ -38,13 +38,18 @@ pub async fn on_task_done(
     let conn = rusqlite::Connection::open(db_path)?;
 
     // Count pending tasks in the same wave
-    let wave_id: Option<i64> = conn
-        .query_row(
-            "SELECT wave_id FROM tasks WHERE id = ?1 AND plan_id = ?2",
-            rusqlite::params![task_id, plan_id],
-            |row| row.get(0),
-        )
-        .ok();
+    let wave_id: Option<i64> = match conn.query_row(
+        "SELECT wave_id FROM tasks WHERE id = ?1 AND plan_id = ?2",
+        rusqlite::params![task_id, plan_id],
+        |row| row.get(0),
+    ) {
+        Ok(v) => Some(v),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => {
+            tracing::warn!("ali: wave_id lookup for task {task_id}: {e}");
+            None
+        }
+    };
 
     let Some(wave_id) = wave_id else {
         tracing::warn!("ali: task {task_id} not found in plan {plan_id}");
@@ -91,13 +96,18 @@ pub fn on_wave_validated(
     let conn = rusqlite::Connection::open(db_path)?;
 
     // Check if there are more waves after this one
-    let next_wave: Option<i64> = conn
-        .query_row(
-            "SELECT id FROM waves WHERE plan_id = ?1 AND id > ?2 AND status = 'pending' ORDER BY id LIMIT 1",
-            rusqlite::params![plan_id, wave_id],
-            |row| row.get(0),
-        )
-        .ok();
+    let next_wave: Option<i64> = match conn.query_row(
+        "SELECT id FROM waves WHERE plan_id = ?1 AND id > ?2 AND status = 'pending' ORDER BY id LIMIT 1",
+        rusqlite::params![plan_id, wave_id],
+        |row| row.get(0),
+    ) {
+        Ok(v) => Some(v),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => {
+            tracing::warn!("ali: next_wave lookup for plan {plan_id}: {e}");
+            None
+        }
+    };
 
     if let Some(next) = next_wave {
         tracing::info!("ali: wave {wave_id} validated, next wave {next} for plan {plan_id}");
@@ -123,14 +133,18 @@ pub fn on_plan_done(engine: &Arc<IpcEngine>, db_path: &Path, plan_id: i64) -> Al
     let conn = rusqlite::Connection::open(db_path)?;
 
     // Find parent (master) plan
-    let parent_id: Option<i64> = conn
-        .query_row(
-            "SELECT parent_plan_id FROM plans WHERE id = ?1",
-            rusqlite::params![plan_id],
-            |row| row.get(0),
-        )
-        .ok()
-        .flatten();
+    let parent_id: Option<i64> = match conn.query_row(
+        "SELECT parent_plan_id FROM plans WHERE id = ?1",
+        rusqlite::params![plan_id],
+        |row| row.get::<_, Option<i64>>(0),
+    ) {
+        Ok(v) => v,
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => {
+            tracing::warn!("ali: parent_plan_id lookup for plan {plan_id}: {e}");
+            None
+        }
+    };
 
     if let Some(master_id) = parent_id {
         let (done, total, status) = plan_hierarchy::master_rollup(&conn, master_id)?;

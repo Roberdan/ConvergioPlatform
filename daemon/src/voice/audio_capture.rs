@@ -185,8 +185,10 @@ impl FrameBuffer {
                 sample_rate: self.target_rate,
                 timestamp_ms,
             };
-            // If receiver dropped, silently stop — pipeline is shutting down.
-            let _ = tx.send(frame);
+            // If receiver dropped, pipeline is shutting down — stop sending.
+            if tx.send(frame).is_err() {
+                return;
+            }
             self.frame_count += 1;
         }
     }

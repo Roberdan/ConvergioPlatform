@@ -51,9 +51,10 @@ pub fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(|_| Utc::now());
     let expires_at = expires_at_str.and_then(|s| {
-        chrono::DateTime::parse_from_rfc3339(&s)
-            .map(|dt| dt.with_timezone(&Utc))
-            .ok()
+        match chrono::DateTime::parse_from_rfc3339(&s) {
+            Ok(dt) => Some(dt.with_timezone(&Utc)),
+            Err(_) => None,
+        }
     });
     let attestations: Vec<Attestation> =
         serde_json::from_str(&attestations_json).unwrap_or_default();

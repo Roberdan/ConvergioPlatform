@@ -149,7 +149,13 @@ pub async fn handle(skill_dir: &Path, api_url: &str, human: bool) -> Result<(), 
     // Disable agents not shared with other active skills
     let agents = yaml_get_list(&yaml_content, "requires-agents").unwrap_or_default();
     let other_agent_plugins: Vec<String> = {
-        let entries = std::fs::read_dir(&skills_dir).ok();
+        let entries = match std::fs::read_dir(&skills_dir) {
+            Ok(e) => Some(e),
+            Err(e) => {
+                eprintln!("warn: could not read skills directory: {e}");
+                None
+            }
+        };
         let mut v = Vec::new();
         if let Some(entries) = entries {
             for entry in entries.flatten() {

@@ -76,7 +76,10 @@ impl VectorStore {
                 Ok((mid, bytes))
             })
             .map_err(|e| MemoryError::StorageError(e.to_string()))?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("vector_store search: row error: {e}"); None }
+            })
             .filter_map(|(mid, bytes)| {
                 let emb = embedding_from_bytes(&bytes);
                 let score = cosine_similarity(&query_emb, &emb);

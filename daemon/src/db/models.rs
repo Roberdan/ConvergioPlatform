@@ -50,7 +50,10 @@ impl TaskStatus {
     }
 
     pub fn from_str_opt(value: &str) -> Option<Self> {
-        value.parse().ok()
+        match value.parse() {
+            Ok(v) => Some(v),
+            Err(_) => None,
+        }
     }
 }
 

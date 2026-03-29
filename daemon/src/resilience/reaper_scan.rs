@@ -88,17 +88,18 @@ pub fn reap_lock_files(lock_dir: &str, stale_after: Duration, dry_run: bool) -> 
             continue;
         }
 
-        let is_expired = path
-            .metadata()
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .map(|modified| {
-                SystemTime::now()
-                    .duration_since(modified)
-                    .unwrap_or(Duration::ZERO)
-                    > stale_after
-            })
-            .unwrap_or(false);
+        let is_expired = match path.metadata() {
+            Ok(m) => match m.modified() {
+                Ok(modified) => {
+                    SystemTime::now()
+                        .duration_since(modified)
+                        .unwrap_or(Duration::ZERO)
+                        > stale_after
+                }
+                Err(_) => false,
+            },
+            Err(_) => false,
+        };
 
         if !is_expired {
             continue;

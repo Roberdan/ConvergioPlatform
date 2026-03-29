@@ -60,7 +60,10 @@ pub fn import_from_markdown(memory_dir: &Path) -> Result<Vec<Memory>, MemoryErro
     let entries = fs::read_dir(memory_dir)
         .map_err(|e| MemoryError::StorageError(format!("read dir: {e}")))?;
 
-    for entry in entries.filter_map(|e| e.ok()) {
+    for entry in entries.filter_map(|e| match e {
+        Ok(v) => Some(v),
+        Err(e) => { tracing::warn!("import_from_markdown: readdir entry: {e}"); None }
+    }) {
         let path = entry.path();
         if path.extension().map(|e| e == "md").unwrap_or(false) {
             let content = fs::read_to_string(&path)

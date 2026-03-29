@@ -16,7 +16,10 @@ fn dirs_next() -> PathBuf {
 }
 
 pub fn agent_name_from_env() -> Option<String> {
-    std::env::var("AGENT_IPC_NAME").ok()
+    match std::env::var("AGENT_IPC_NAME") {
+        Ok(v) => Some(v),
+        Err(_) => None,
+    }
 }
 
 #[derive(Debug, Parser)]

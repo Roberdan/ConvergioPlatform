@@ -46,11 +46,13 @@ impl PermissionManager {
 
     /// Get permissions for an agent (default: Sandboxed, no tools).
     pub fn get(&self, agent_id: &str) -> AgentPermissions {
-        self.agents
-            .read()
-            .ok()
-            .and_then(|a| a.get(agent_id).cloned())
-            .unwrap_or_default()
+        match self.agents.read() {
+            Ok(a) => a.get(agent_id).cloned().unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!("permissions: agents lock poisoned: {e}");
+                AgentPermissions::default()
+            }
+        }
     }
 
     /// Check if an agent can invoke a specific tool at a given ring.

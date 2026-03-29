@@ -31,7 +31,9 @@ pub fn init_file_only() -> WorkerGuard {
 
 fn init_inner(with_stderr: bool) -> WorkerGuard {
     let dir = log_dir();
-    let _ = std::fs::create_dir_all(&dir);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("daemon_logging: cannot create log dir {}: {e}", dir.display());
+    }
 
     let file_appender = tracing_appender::rolling::daily(&dir, "daemon.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
@@ -100,11 +102,14 @@ fn install_panic_hook(log_dir: &std::path::Path) {
         );
 
         eprintln!("{msg}");
-        let _ = std::fs::OpenOptions::new()
+        if let Err(e) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&crash_path)
-            .and_then(|mut f| std::io::Write::write_all(&mut f, msg.as_bytes()));
+            .and_then(|mut f| std::io::Write::write_all(&mut f, msg.as_bytes()))
+        {
+            eprintln!("daemon_logging: cannot write crash log: {e}");
+        }
     }));
 }
 

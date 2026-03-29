@@ -15,7 +15,9 @@ pub async fn start_ipc_server(
     use tokio::net::UnixListener;
     // Remove stale socket
     if socket_path.exists() {
-        std::fs::remove_file(&socket_path).ok();
+        if let Err(e) = std::fs::remove_file(&socket_path) {
+            tracing::debug!("cleanup: remove stale socket: {e}");
+        }
     }
 
     // Ensure parent directory exists

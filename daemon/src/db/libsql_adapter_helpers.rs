@@ -12,7 +12,7 @@ pub(crate) fn get_column_names(
     ))?;
     let cols: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping column row: {e}"); None } })
         .collect();
     Ok(cols)
 }

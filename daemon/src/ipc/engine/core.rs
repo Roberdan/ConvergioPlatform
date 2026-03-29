@@ -39,10 +39,19 @@ impl IpcEngine {
     }
 
     pub fn hostname() -> String {
-        hostname::get()
-            .ok()
-            .and_then(|h| h.into_string().ok())
-            .unwrap_or_else(|| "unknown".into())
+        match hostname::get() {
+            Ok(h) => match h.into_string() {
+                Ok(s) => s,
+                Err(_) => {
+                    tracing::warn!("hostname: OsString contained non-UTF-8 bytes");
+                    "unknown".into()
+                }
+            },
+            Err(e) => {
+                tracing::warn!("hostname: could not retrieve hostname: {e}");
+                "unknown".into()
+            }
+        }
     }
 
     pub(super) fn host_short() -> String {

@@ -39,10 +39,12 @@ pub fn reap(db_path: &Path) -> Result<(usize, usize, usize), Box<dyn std::error:
     ).unwrap_or(0);
 
     // 4. Expired file locks
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "DELETE FROM ipc_file_locks WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
         [],
-    );
+    ) {
+        tracing::warn!("reaper: expired lock cleanup: {e}");
+    }
 
     if agents_reaped > 0 || delegations_cleaned > 0 || sessions_cleaned > 0 {
         tracing::info!(
@@ -187,7 +189,7 @@ mod tests {
             [],
         ).unwrap();
 
-        let _ = reap(tmp.path()).unwrap();
+        reap(tmp.path()).unwrap();
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM ipc_file_locks", [], |r| r.get(0)).unwrap();
         assert_eq!(count, 0);
     }

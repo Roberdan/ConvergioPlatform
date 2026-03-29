@@ -114,7 +114,7 @@ pub fn rebuild_crr_compatible(conn: &Connection, table: &str) -> rusqlite::Resul
     // NOTE: Foreign keys are intentionally NOT added for CRR tables.
     // crsqlite does not allow checked FK constraints in CRR tables because
     // replication can temporarily violate referential integrity.
-    let _ = fks; // consumed above intentionally
+    drop(fks); // consumed above intentionally
     let create = format!("CREATE TABLE \"{}\" ({})", tmp, col_defs.join(", "));
     // Use SAVEPOINT for atomicity — if any step fails, rollback all changes
     match conn.execute_batch(&format!(
@@ -123,8 +123,12 @@ pub fn rebuild_crr_compatible(conn: &Connection, table: &str) -> rusqlite::Resul
     )) {
         Ok(()) => {},
         Err(e) => {
-            let _ = conn.execute_batch("ROLLBACK TO crr_rebuild; RELEASE crr_rebuild;");
-            let _ = conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{}\"", tmp));
+            if let Err(rb) = conn.execute_batch("ROLLBACK TO crr_rebuild; RELEASE crr_rebuild;") {
+                tracing::warn!("db batch (rollback crr_rebuild): {rb}");
+            }
+            if let Err(drop_e) = conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{}\"", tmp)) {
+                tracing::warn!("db batch (drop tmp table): {drop_e}");
+            }
             return Err(e);
         }
     };

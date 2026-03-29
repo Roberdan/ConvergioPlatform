@@ -129,9 +129,11 @@ async fn dispatch_inner(cmd: KernelCommands) -> Result<(), CliError> {
         KernelCommands::Here { api_url, node } => {
             let hostname = node.unwrap_or_else(|| {
                 hostname::get()
-                    .ok()
-                    .and_then(|h| h.into_string().ok())
-                    .unwrap_or_else(|| "unknown".to_string())
+                    .map(|h| h.into_string().unwrap_or_else(|_| "unknown".to_string()))
+                    .unwrap_or_else(|e| {
+                        eprintln!("warn: could not resolve hostname: {e}");
+                        "unknown".to_string()
+                    })
             });
             let body = serde_json::json!({ "node": hostname });
             crate::cli_http::post_and_print(

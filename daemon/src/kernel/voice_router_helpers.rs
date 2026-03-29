@@ -17,10 +17,10 @@ pub(crate) fn get_json(url: &str) -> Result<Value, String> {
 }
 
 pub(crate) fn is_muted() -> bool {
-    MUTE_UNTIL.lock().ok()
-        .and_then(|g| *g)
-        .map(|exp| Instant::now() < exp)
-        .unwrap_or(false)
+    match MUTE_UNTIL.lock() {
+        Ok(guard) => guard.map(|exp| Instant::now() < exp).unwrap_or(false),
+        Err(_) => false,
+    }
 }
 
 /// Parses /api/plan-db/list response: returns (doing_plan_count, remaining_tasks).

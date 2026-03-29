@@ -79,12 +79,15 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
                 "status": status,
                 "summary": summary,
             });
-            let _ = crate::cli_http::post_and_print(
+            if let Err(e) = crate::cli_http::post_and_print(
                 &format!("{api_url}/api/plan-db/task/update"),
                 &body,
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         TaskCommands::Validate {
             task_id,
@@ -124,11 +127,14 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
             human,
             api_url,
         } => {
-            let _ = crate::cli_http::fetch_and_print(
+            if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/kb-search?q={query}&limit={limit}"),
                 human,
             )
-            .await;
+            .await
+            {
+                eprintln!("error: {e}");
+            }
         }
         TaskCommands::Approve {
             task_id,

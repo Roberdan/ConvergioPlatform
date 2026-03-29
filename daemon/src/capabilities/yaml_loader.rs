@@ -15,7 +15,10 @@ pub fn load_from_dir(
     let entries = fs::read_dir(dir)
         .map_err(|e| CapabilityError::InvocationFailed(format!("read dir: {e}")))?;
     let mut count = 0;
-    for entry in entries.filter_map(|e| e.ok()) {
+    for entry in entries.filter_map(|e| match e {
+        Ok(v) => Some(v),
+        Err(e) => { tracing::warn!("yaml_loader: readdir entry: {e}"); None }
+    }) {
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         if ext != "yaml" && ext != "yml" {

@@ -24,11 +24,14 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
     tracing::info!("ali: delegating plan {plan_id} to peer {peer}");
 
     // Mark plan in DB via API
-    let _ = client
+    if let Err(e) = client
         .post(format!("{DAEMON_BASE}/api/mesh/delegate"))
         .json(&serde_json::json!({"plan_id": plan_id, "peer": peer}))
         .send()
-        .await;
+        .await
+    {
+        tracing::warn!("ali: delegate mark in DB failed: {e}");
+    }
 
     let local_repo = delegation_core::find_local_repo();
     let remote_repo = delegation_core::find_peer_repo(&client, peer).await?;

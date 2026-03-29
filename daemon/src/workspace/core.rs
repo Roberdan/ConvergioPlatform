@@ -114,9 +114,13 @@ impl WorkspaceManager {
             )
             .map_err(|_| WorkspaceError::NotFound(workspace_id.to_string()))?;
 
-        run_git(&self.repo_root, &["worktree", "remove", &path, "--force"]).ok();
+        if let Err(e) = run_git(&self.repo_root, &["worktree", "remove", &path, "--force"]) {
+            tracing::warn!("git worktree remove {path}: {e}");
+        }
         if let Some(ref b) = branch {
-            run_git(&self.repo_root, &["branch", "-D", b]).ok();
+            if let Err(e) = run_git(&self.repo_root, &["branch", "-D", b]) {
+                tracing::warn!("git branch -D {b}: {e}");
+            }
         }
         conn.execute(
             "UPDATE workspaces SET status='deleted', deleted_at=datetime('now') \
@@ -225,7 +229,9 @@ pub(crate) fn symlink_env_files(repo_root: &Path, worktree_path: &Path) {
         if name_str.starts_with(".env") {
             let dst = worktree_path.join(&*name_str);
             if !dst.exists() {
-                let _ = symlink(entry.path(), &dst);
+                if let Err(e) = symlink(entry.path(), &dst) {
+                    tracing::warn!("symlink {dst:?}: {e}");
+                }
             }
         }
     }

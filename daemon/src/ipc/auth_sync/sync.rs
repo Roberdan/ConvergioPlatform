@@ -103,7 +103,10 @@ pub fn check_token_sync_health(conn: &Connection) -> rusqlite::Result<TokenSyncH
     let mut stmt = conn.prepare("SELECT DISTINCT service FROM ipc_auth_tokens ORDER BY service")?;
     let services: Vec<String> = stmt
         .query_map([], |r| r.get(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("check_token_sync_health: skipping service row: {e}"); None }
+        })
         .collect();
     Ok(TokenSyncHealth {
         total_tokens: total,
@@ -155,7 +158,10 @@ pub fn rotate_keys(
         .query_map(params![host], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { tracing::warn!("rotate_keys: skipping token row: {e}"); None }
+        })
         .collect();
 
     let mut rotated = 0;

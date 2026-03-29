@@ -49,7 +49,9 @@ pub async fn dispatch(cmd: DomainCommands) -> Result<(), crate::cli_error::CliEr
 }
 
 async fn handle_list(api_url: &str, human: bool) {
-    let _ = crate::cli_http::fetch_and_print(&format!("{api_url}/api/domain/list"), human).await;
+    if let Err(e) = crate::cli_http::fetch_and_print(&format!("{api_url}/api/domain/list"), human).await {
+        eprintln!("error: {e}");
+    }
 }
 
 async fn handle_map(
@@ -68,7 +70,9 @@ async fn handle_map(
         "skill_name": skill,
         "description": description,
     });
-    let _ = crate::cli_http::post_and_print(&format!("{api_url}/api/domain/map"), &body, human).await;
+    if let Err(e) = crate::cli_http::post_and_print(&format!("{api_url}/api/domain/map"), &body, human).await {
+        eprintln!("error: {e}");
+    }
     Ok(())
 }
 

@@ -53,16 +53,19 @@ impl QuietHoursConfig {
         let (sh, sm) = start.split_once(':')?;
         let (eh, em) = end.split_once(':')?;
         Some(Self {
-            start_hour: sh.parse().ok()?,
-            start_minute: sm.parse().ok()?,
-            end_hour: eh.parse().ok()?,
-            end_minute: em.parse().ok()?,
+            start_hour: match sh.parse() { Ok(v) => v, Err(_) => return None },
+            start_minute: match sm.parse() { Ok(v) => v, Err(_) => return None },
+            end_hour: match eh.parse() { Ok(v) => v, Err(_) => return None },
+            end_minute: match em.parse() { Ok(v) => v, Err(_) => return None },
         })
     }
 
     /// Load from KERNEL_QUIET_HOURS env var.
     pub fn from_env() -> Option<Self> {
-        std::env::var("KERNEL_QUIET_HOURS").ok().and_then(|v| Self::parse(&v))
+        match std::env::var("KERNEL_QUIET_HOURS") {
+            Ok(v) => Self::parse(&v),
+            Err(_) => None,
+        }
     }
 
     /// Returns true if (hour, minute) falls inside the quiet window (wraps midnight).
@@ -191,10 +194,20 @@ pub async fn communicate(
 
     let mode = NotifyMode::from_env();
     let quiet = QuietHoursConfig::from_env().map(|q| q.is_active_now()).unwrap_or(false);
-    let token = std::env::var("CONVERGIO_TELEGRAM_TOKEN").ok();
-    let chat_id: Option<i64> = std::env::var("CONVERGIO_TELEGRAM_CHAT_ID")
-        .ok()
-        .and_then(|v| v.parse().ok());
+    let token = match std::env::var("CONVERGIO_TELEGRAM_TOKEN") {
+        Ok(v) => Some(v),
+        Err(_) => None,
+    };
+    let chat_id: Option<i64> = match std::env::var("CONVERGIO_TELEGRAM_CHAT_ID") {
+        Ok(v) => match v.parse() {
+            Ok(id) => Some(id),
+            Err(e) => {
+                warn!("jarvis.telegram: CONVERGIO_TELEGRAM_CHAT_ID parse error: {e}");
+                None
+            }
+        },
+        Err(_) => None,
+    };
 
     let use_telegram = matches!(mode, NotifyMode::Telegram | NotifyMode::Both)
         || severity == Severity::Critical;

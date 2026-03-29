@@ -57,11 +57,14 @@ impl BudgetEnforcer {
 
     /// Get current usage status for an agent.
     pub fn status(&self, agent_id: &str) -> BudgetStatus {
-        let budget = self.budgets.lock().ok()
-            .and_then(|b| b.get(agent_id).cloned())
-            .unwrap_or_default();
-        let usage = self.usage.lock().ok()
-            .and_then(|u| u.get(agent_id).map(|v| (v.api_calls, v.tokens)));
+        let budget = match self.budgets.lock() {
+            Ok(b) => b.get(agent_id).cloned().unwrap_or_default(),
+            Err(e) => { tracing::warn!("budget: budgets lock poisoned: {e}"); AgentBudget::default() }
+        };
+        let usage = match self.usage.lock() {
+            Ok(u) => u.get(agent_id).map(|v| (v.api_calls, v.tokens)),
+            Err(e) => { tracing::warn!("budget: usage lock poisoned: {e}"); None }
+        };
         let (calls, tokens) = usage.unwrap_or((0, 0));
         let calls_pct = if budget.max_api_calls_per_hour > 0 {
             (calls as f64 / budget.max_api_calls_per_hour as f64 * 100.0) as u8

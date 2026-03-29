@@ -75,7 +75,13 @@ pub struct WatchdogStatus {
 /// Run one full health-check cycle.
 #[deprecated(note = "Use kernel module: cvg kernel (daemon/src/kernel/monitor.rs)")]
 pub async fn run_checks(config: &WatchdogConfig) -> Vec<CheckResult> {
-    let client = Client::builder().timeout(Duration::from_secs(5)).build().unwrap_or_default();
+    let client = match Client::builder().timeout(Duration::from_secs(5)).build() {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("watchdog: client build failed: {e}");
+            Client::new()
+        }
+    };
     vec![
         check_daemon_health(&client, &config.daemon_url).await,
         check_stale_locks().await,
@@ -135,7 +141,13 @@ async fn check_orphan_worktrees() -> CheckResult {
 /// Ask Ollama to summarise; falls back to plain text on error (no LLM needed).
 #[deprecated(note = "Use kernel module: cvg kernel (daemon/src/kernel/monitor.rs)")]
 pub async fn ollama_summarise(config: &WatchdogConfig, context: &str) -> String {
-    let client = Client::builder().timeout(Duration::from_secs(10)).build().unwrap_or_default();
+    let client = match Client::builder().timeout(Duration::from_secs(10)).build() {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("watchdog: ollama client build failed: {e}");
+            Client::new()
+        }
+    };
     let url = format!("{}/api/generate", config.ollama_url);
     let payload = serde_json::json!({
         "model": config.model_name,
@@ -144,10 +156,13 @@ pub async fn ollama_summarise(config: &WatchdogConfig, context: &str) -> String 
     });
     match client.post(&url).json(&payload).send().await {
         Ok(resp) if resp.status().is_success() => {
-            resp.json::<serde_json::Value>().await
-                .ok()
-                .and_then(|j| j["response"].as_str().map(str::to_string))
-                .unwrap_or_else(|| context.to_string())
+            match resp.json::<serde_json::Value>().await {
+                Ok(j) => j["response"].as_str().map(str::to_string).unwrap_or_else(|| context.to_string()),
+                Err(e) => {
+                    warn!("watchdog: Ollama response parse failed: {e}");
+                    context.to_string()
+                }
+            }
         }
         _ => { warn!("watchdog: Ollama unavailable, using raw error text"); context.to_string() }
     }

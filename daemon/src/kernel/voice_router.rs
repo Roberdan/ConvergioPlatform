@@ -64,7 +64,10 @@ fn classify_via_llm(text: &str, engine: &KernelEngine) -> Option<VoiceIntent> {
 fn parse_llm_json(raw: &str, original_text: &str) -> Option<VoiceIntent> {
     let start = raw.find('{')?;
     let end = raw.rfind('}')?;
-    let v: Value = serde_json::from_str(&raw[start..=end]).ok()?;
+    let v: Value = match serde_json::from_str(&raw[start..=end]) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
     let name = v.get("intent")?.as_str()?.to_lowercase();
     let params = v.get("params");
     match name.as_str() {
@@ -117,7 +120,10 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
         return VoiceIntent::Restart { target };
     }
     if s.contains("piano") || s.contains("plan") {
-        let id = s.split_whitespace().filter_map(|t| t.parse::<u32>().ok()).next().unwrap_or(0);
+        let id = s.split_whitespace().filter_map(|t| match t.parse::<u32>() {
+            Ok(v) => Some(v),
+            Err(_) => None,
+        }).next().unwrap_or(0);
         return VoiceIntent::PlanQuery { plan_id: id };
     }
     // Anything the kernel can't handle → try local Qwen first (AskAli)

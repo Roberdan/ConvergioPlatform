@@ -11,10 +11,15 @@ pub fn detect_stale_locks(threshold_secs: u64) -> KernelCheckResult {
     let now = std::time::SystemTime::now();
     let stale: Vec<_> = std::fs::read_dir("/tmp").into_iter().flatten().flatten()
         .filter(|e| e.path().extension().is_some_and(|x| x == "lock"))
-        .filter(|e| std::fs::metadata(e.path()).ok()
-            .and_then(|m| m.modified().ok())
-            .map(|t| now.duration_since(t).unwrap_or_default() > cutoff)
-            .unwrap_or(false))
+        .filter(|e| {
+            match std::fs::metadata(e.path()) {
+                Err(_) => false,
+                Ok(m) => match m.modified() {
+                    Err(_) => false,
+                    Ok(t) => now.duration_since(t).unwrap_or_default() > cutoff,
+                },
+            }
+        })
         .map(|e| e.path().display().to_string())
         .collect();
     if stale.is_empty() { KernelCheckResult::pass("stale_locks") }

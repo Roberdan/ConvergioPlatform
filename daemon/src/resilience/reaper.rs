@@ -83,16 +83,18 @@ pub fn reap_worktrees(repo_root: &str, stale_after: Duration, dry_run: bool) -> 
         // Use the worktree metadata file to gauge last activity.
         // (The .git/gitdir file exists inside each linked worktree; we check
         // the worktree root directory mtime as a proxy for recent activity.)
-        let meta = std::fs::metadata(&path).ok();
-        let is_stale = meta
-            .and_then(|m| m.modified().ok())
-            .map(|modified| {
-                SystemTime::now()
-                    .duration_since(modified)
-                    .unwrap_or(Duration::ZERO)
-                    > stale_after
-            })
-            .unwrap_or(false);
+        let is_stale = match std::fs::metadata(&path) {
+            Ok(m) => match m.modified() {
+                Ok(modified) => {
+                    SystemTime::now()
+                        .duration_since(modified)
+                        .unwrap_or(Duration::ZERO)
+                        > stale_after
+                }
+                Err(_) => false,
+            },
+            Err(_) => false,
+        };
 
         if !is_stale {
             continue;

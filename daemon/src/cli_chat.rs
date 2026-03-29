@@ -44,7 +44,9 @@ pub async fn handle(api_url: &str, message: Option<String>) -> Result<(), CliErr
             continue;
         }
         if trimmed == "/status" {
-            let _ = crate::cli_status::handle(api_url).await;
+            if let Err(e) = crate::cli_status::handle(api_url).await {
+                eprintln!("error: {e}");
+            }
             continue;
         }
 

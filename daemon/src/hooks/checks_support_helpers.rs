@@ -15,12 +15,18 @@ pub fn extract_plan_id(command: &str) -> Option<u64> {
     let parts: Vec<_> = command.split_whitespace().collect();
     for window in parts.windows(3) {
         if window[0] == "plan-db.sh" && window[1] == "start" {
-            return window[2].parse::<u64>().ok();
+            return match window[2].parse::<u64>() {
+                Ok(v) => Some(v),
+                Err(_) => None,
+            };
         }
     }
     for (idx, value) in parts.iter().enumerate() {
         if (*value == "execute-plan.sh" || *value == "copilot-worker.sh") && idx + 1 < parts.len() {
-            return parts[idx + 1].parse::<u64>().ok();
+            return match parts[idx + 1].parse::<u64>() {
+                Ok(v) => Some(v),
+                Err(_) => None,
+            };
         }
     }
     None

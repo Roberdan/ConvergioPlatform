@@ -45,13 +45,19 @@ impl CheckContext {
     pub fn from_env(home: &str) -> Self {
         let home_dir = PathBuf::from(home);
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let branch = std::process::Command::new("git")
+        let branch = match std::process::Command::new("git")
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim().to_string());
+        {
+            Ok(o) if o.status.success() => {
+                match String::from_utf8(o.stdout) {
+                    Ok(s) => Some(s.trim().to_string()),
+                    Err(e) => { tracing::debug!("git branch utf8: {e}"); None }
+                }
+            }
+            Ok(_) => None,
+            Err(e) => { tracing::debug!("git branch: {e}"); None }
+        };
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)

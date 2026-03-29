@@ -60,7 +60,7 @@ pub fn project_plan_tree(conn: &Connection, project_id: &str) -> rusqlite::Resul
                 r.get(6)?, r.get::<_, i64>(7).map(|v| v != 0)?,
                 r.get(8)?,
             ))
-        })?.filter_map(|r| r.ok()).collect();
+        })?.filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping plan row: {e}"); None } }).collect();
 
     // Build tree: masters first, then attach children
     let mut masters: Vec<PlanNode> = Vec::new();
@@ -145,7 +145,7 @@ pub fn master_rollup(conn: &Connection, master_id: i64) -> rusqlite::Result<(i64
     )?;
     let children: Vec<(String, i64, i64)> = stmt
         .query_map(params![master_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping child plan row: {e}"); None } })
         .collect();
 
     if children.is_empty() {

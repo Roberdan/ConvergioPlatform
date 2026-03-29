@@ -5,8 +5,14 @@ use serde_json::Value;
 /// POST /api/chat/session — creates a new chat session, returns session_id.
 pub async fn create_session(client: &Client, api_url: &str) -> Option<String> {
     let url = format!("{api_url}/api/chat/session");
-    let resp = client.post(&url).json(&serde_json::json!({})).send().await.ok()?;
-    let val: Value = resp.json().await.ok()?;
+    let resp = match client.post(&url).json(&serde_json::json!({})).send().await {
+        Ok(r) => r,
+        Err(e) => { tracing::warn!("chat session request: {e}"); return None; }
+    };
+    let val: Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => { tracing::warn!("chat session json: {e}"); return None; }
+    };
     val.get("session_id").and_then(Value::as_str).map(String::from)
         .or_else(|| val.get("session").and_then(|s| s.get("id")).and_then(Value::as_str).map(String::from))
 }
@@ -18,11 +24,14 @@ pub async fn send_message(
     _client: &Client, _api_url: &str, _session_id: &str, content: &str,
 ) -> Option<String> {
     use tokio::process::Command;
-    let output = Command::new("claude")
+    let output = match Command::new("claude")
         .args(["--print", "--agent", "ali-chief-of-staff", content])
         .output()
         .await
-        .ok()?;
+    {
+        Ok(o) => o,
+        Err(e) => { tracing::warn!("claude command spawn: {e}"); return None; }
+    };
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if stdout.is_empty() { None } else { Some(stdout) }

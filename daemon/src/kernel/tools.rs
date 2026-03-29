@@ -78,7 +78,20 @@ fn make_client() -> reqwest::blocking::Client {
 }
 
 fn fetch_json(url: &str) -> Option<Value> {
-    make_client().get(url).send().ok()?.json::<Value>().ok()
+    let resp = match make_client().get(url).send() {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("kernel.tools: fetch_json send error {url}: {e}");
+            return None;
+        }
+    };
+    match resp.json::<Value>() {
+        Ok(v) => Some(v),
+        Err(e) => {
+            tracing::warn!("kernel.tools: fetch_json parse error {url}: {e}");
+            None
+        }
+    }
 }
 
 fn error_json(msg: &str) -> String {

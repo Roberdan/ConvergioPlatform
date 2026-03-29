@@ -92,7 +92,9 @@ impl SttEngine {
             .map_err(|e| SttError::Io(e.to_string()))?;
         let result = self.run_whisper(&tmp);
         // Privacy: delete temp audio immediately.
-        let _ = std::fs::remove_file(&tmp);
+        if let Err(e) = std::fs::remove_file(&tmp) {
+            tracing::debug!("stt: temp audio cleanup: {e}");
+        }
         result
     }
 

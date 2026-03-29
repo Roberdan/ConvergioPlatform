@@ -71,7 +71,9 @@ impl ClaudeSession {
             }
 
             // Process exited — notify.
-            let _ = event_tx.send(ChatEvent::Error("Claude session ended".to_string()));
+            if let Err(e) = event_tx.send(ChatEvent::Error("Claude session ended".to_string())) {
+                tracing::warn!("event send (session ended): {e}");
+            }
         });
 
         Ok(Self { child, stdin, event_rx })
@@ -110,6 +112,8 @@ impl ClaudeSession {
 impl Drop for ClaudeSession {
     fn drop(&mut self) {
         // Best-effort kill on drop.
-        let _ = self.child.start_kill();
+        if let Err(e) = self.child.start_kill() {
+            tracing::warn!("kill claude session: {e}");
+        }
     }
 }

@@ -134,7 +134,7 @@ fn ensure_mesh_sync_stats_columns(conn: &Connection) -> rusqlite::Result<()> {
         let mut stmt = conn.prepare("PRAGMA table_info(mesh_sync_stats)")?;
         let names: Vec<String> = stmt
             .query_map([], |row| row.get::<_, String>(1))?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r { Ok(v) => Some(v), Err(e) => { tracing::warn!("skipping column name row: {e}"); None } })
             .collect();
         names
     };

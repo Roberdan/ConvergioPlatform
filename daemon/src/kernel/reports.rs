@@ -107,9 +107,20 @@ pub fn format_weekly_report(
 // ----- Internal send helper --------------------------------------------------
 
 async fn send_report(text: &str) {
-    let token = std::env::var("CONVERGIO_TELEGRAM_TOKEN").ok();
-    let chat_id: Option<i64> =
-        std::env::var("CONVERGIO_TELEGRAM_CHAT_ID").ok().and_then(|v| v.parse().ok());
+    let token = match std::env::var("CONVERGIO_TELEGRAM_TOKEN") {
+        Ok(v) => Some(v),
+        Err(_) => None,
+    };
+    let chat_id: Option<i64> = match std::env::var("CONVERGIO_TELEGRAM_CHAT_ID") {
+        Ok(v) => match v.parse() {
+            Ok(id) => Some(id),
+            Err(e) => {
+                warn!("kernel.reports: CONVERGIO_TELEGRAM_CHAT_ID parse error: {e}");
+                None
+            }
+        },
+        Err(_) => None,
+    };
 
     match (token.as_deref(), chat_id) {
         (Some(tok), Some(cid)) => {

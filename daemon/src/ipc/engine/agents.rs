@@ -68,7 +68,10 @@ impl IpcEngine {
                     last_seen: row.get(4)?,
                 })
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("who: skipping agent row: {e}"); None }
+            })
             .collect();
         Ok(IpcResponse::AgentList { agents })
     }
@@ -79,7 +82,10 @@ impl IpcEngine {
             conn.prepare("SELECT name, host, pid FROM ipc_agents WHERE pid IS NOT NULL")?;
         let agents: Vec<(String, String, u32)> = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("prune: skipping agent row: {e}"); None }
+            })
             .collect();
 
         let local_host = Self::hostname();
@@ -130,7 +136,10 @@ impl IpcEngine {
             .query_map(rusqlite::params![local_host], |row| {
                 Ok((row.get(0)?, row.get(1)?))
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => { tracing::warn!("heartbeat_local_agents: skipping row: {e}"); None }
+            })
             .collect();
 
         let mut alive = 0usize;
@@ -139,22 +148,26 @@ impl IpcEngine {
             {
                 let is_alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
                 if is_alive {
-                    conn.execute(
+                    if let Err(e) = conn.execute(
                         "UPDATE ipc_agents SET last_seen = strftime('%Y-%m-%dT%H:%M:%f','now') WHERE name = ?1 AND host = ?2",
                         rusqlite::params![name, local_host],
-                    ).ok();
+                    ) {
+                        tracing::warn!("heartbeat_local_agents: update last_seen failed: {e}");
+                    }
                     alive += 1;
                 } else {
-                    conn.execute(
+                    if let Err(e) = conn.execute(
                         "DELETE FROM ipc_agents WHERE name = ?1 AND host = ?2",
                         rusqlite::params![name, local_host],
-                    )
-                    .ok();
+                    ) {
+                        tracing::warn!("heartbeat_local_agents: delete dead agent failed: {e}");
+                    }
                 }
             }
             #[cfg(not(unix))]
             {
-                let _ = (name, pid);
+                drop(name);
+                drop(pid);
                 alive += 1;
             }
         }

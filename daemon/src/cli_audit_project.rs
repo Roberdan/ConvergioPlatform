@@ -127,20 +127,20 @@ async fn write_report(
 /// Scan output directory for existing audit folders to find next version number.
 fn next_audit_version(output_dir: &std::path::Path, date_prefix: &str) -> u32 {
     let pattern = format!("{date_prefix}_audit_v");
-    let max = fs::read_dir(output_dir)
-        .ok()
-        .map(|entries| {
-            entries
-                .flatten()
-                .filter_map(|e| {
-                    let name = e.file_name().to_string_lossy().to_string();
-                    name.strip_prefix(&pattern)
-                        .and_then(|v| v.parse::<u32>().ok())
+    let max = match fs::read_dir(output_dir) {
+        Ok(entries) => entries
+            .flatten()
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                name.strip_prefix(&pattern).and_then(|v| match v.parse::<u32>() {
+                    Ok(n) => Some(n),
+                    Err(_) => None,
                 })
-                .max()
-                .unwrap_or(0)
-        })
-        .unwrap_or(0);
+            })
+            .max()
+            .unwrap_or(0),
+        Err(_) => 0,
+    };
     max + 1
 }
 

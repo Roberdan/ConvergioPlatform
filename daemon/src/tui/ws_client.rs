@@ -32,7 +32,10 @@ impl WsClient {
             .replacen("https://", "wss://", 1)
             .replacen("http://", "ws://", 1);
         let url = format!("{}/ws/brain", url.trim_end_matches('/'));
-        let auth_token = std::env::var("CONVERGIO_AUTH_TOKEN").ok();
+        let auth_token = match std::env::var("CONVERGIO_AUTH_TOKEN") {
+            Ok(v) => Some(v),
+            Err(_) => None,
+        };
         Self {
             url,
             auth_token,
@@ -49,7 +52,10 @@ impl WsClient {
     ///
     /// Returns None for unknown kinds/event_types or malformed JSON.
     pub fn parse_message(text: &str) -> Option<BrainEvent> {
-        let v: serde_json::Value = serde_json::from_str(text).ok()?;
+        let v: serde_json::Value = match serde_json::from_str(text) {
+            Ok(v) => v,
+            Err(e) => { tracing::warn!("json parse (ws message): {e}"); return None; }
+        };
         let kind = v.get("kind")?.as_str()?;
 
         // heartbeat_snapshot is a top-level message kind (not wrapped in brain_event)
