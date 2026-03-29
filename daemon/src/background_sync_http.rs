@@ -19,7 +19,7 @@ pub fn send_changes_to_peer(
     let resp = reqwest::blocking::Client::new()
         .post(&url)
         .json(&payload)
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(120))
         .send()
         .map_err(|e| format!("HTTP POST failed: {e}"))?;
     if !resp.status().is_success() {
@@ -42,7 +42,7 @@ pub fn fetch_changes_from_peer(
     }
     let resp = reqwest::blocking::Client::new()
         .get(&url)
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(120))
         .send()
         .map_err(|e| format!("HTTP GET failed: {e}"))?;
     if !resp.status().is_success() {
