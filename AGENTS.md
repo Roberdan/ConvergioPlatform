@@ -47,6 +47,7 @@
 | Agent | Role | Model | Protocol |
 |-------|------|-------|----------|
 | jony-creative-director | Creative direction and visual identity | sonnet | v1.0 |
+| nasra-app-builder | Maranello UI Builder — analyze backend, map to DS, generate/fix/rebuild | sonnet | v1.0 |
 | sara-ux-ui-designer | UX/UI design, user research, prototyping | sonnet | v1.0 |
 | stefano-design-thinking-facilitator | Design thinking workshops and facilitation | sonnet | v1.0 |
 | jenny-inclusive-accessibility-champion | WCAG accessibility and inclusive design | sonnet | v1.0 |

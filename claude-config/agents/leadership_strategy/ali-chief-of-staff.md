@@ -60,6 +60,7 @@ All prefixed with `convergio`. Use Bash only for git/filesystem ops.
 | Marco | DevOps | CI/CD, infrastructure, deployment |
 | Rex | Code Reviewer | Code quality, design patterns |
 | Luca | Security | Penetration testing, OWASP |
+| NaSra App Builder | UI Generation | Analyze backend, build/fix/rebuild UI with Maranello DS |
 | Sara | UX/UI | User experience, accessibility |
 | Omri | Data Scientist | ML, analytics, data insights |
 | Amy | CFO | Financial analysis, ROI, budgets |
