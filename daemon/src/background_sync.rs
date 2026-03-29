@@ -42,32 +42,36 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
         )
     })?;
 
-    // Use peer_heartbeats (always exists) — find peers seen in last 10 min.
-    // Returns peer URLs like "http://100.x.x.x:8420" for sync HTTP calls.
+    // Read peers.conf for Tailscale IPs — this is the source of truth for addresses.
+    // peer_heartbeats tells us WHO is online, peers.conf tells us HOW to reach them.
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let peers_conf_path = format!("{}/.claude/config/peers.conf", home);
+    let conf_content = std::fs::read_to_string(&peers_conf_path).unwrap_or_default();
+    let conf = crate::server::api_mesh::peer_conf::parse_peers_conf(&conf_content);
+
+    // Find peers that have heartbeated recently AND have a tailscale_ip in peers.conf
     let mut stmt = conn.prepare_cached(
         "SELECT DISTINCT peer_name FROM peer_heartbeats \
          WHERE last_seen > unixepoch() - 600"
     )?;
-    let names: Vec<String> = stmt
+    let online_names: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
         .filter_map(|r| r.ok())
         .collect();
 
-    // Resolve peer names to HTTP URLs via peers.conf or tailscale IP
     let mut urls = Vec::new();
-    for name in &names {
-        // Try to find tailscale_ip from peer_heartbeats load_json
-        let ip: Option<String> = conn.query_row(
-            "SELECT json_extract(load_json, '$.tailscale_ip') FROM peer_heartbeats WHERE peer_name = ?1",
-            [name],
-            |row| row.get(0),
-        ).ok().flatten();
-        if let Some(ip) = ip {
-            urls.push(format!("{}:8420", ip));
+    for name in &online_names {
+        if let Some(peer) = conf.get(name.as_str()) {
+            if let Some(ip) = peer.get("tailscale_ip") {
+                if !ip.is_empty() {
+                    urls.push(format!("http://{}:8420", ip));
+                    info!("background_sync: peer {name} → http://{ip}:8420");
+                }
+            }
         }
     }
-    if urls.is_empty() && !names.is_empty() {
-        debug!("background_sync: {} peers found but no resolved URLs", names.len());
+    if urls.is_empty() && !online_names.is_empty() {
+        warn!("background_sync: {} online peers but no tailscale_ip in peers.conf: {:?}", online_names.len(), online_names);
     }
     Ok(urls)
 }
