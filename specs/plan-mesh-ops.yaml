@@ -1,0 +1,138 @@
+name: "Mesh Ops — DB sync, auto-deploy, delegation E2E"
+project_id: convergio
+priority: P0
+execution_mode: serial
+tags: [mesh, sync, deploy, e2e]
+
+description: >
+  Make the mesh work end-to-end: DB sync between nodes without rsync,
+  auto-rebuild on merge, delegation test with real plan execution.
+
+requirements:
+  - F-01: "DB sync works: write on M5Max, read on M1Pro within 60s"
+  - F-02: "auto-rebuild + restart daemon on git pull (launchd or post-merge hook)"
+  - F-03: "delegation E2E: create test plan, delegate to M1Pro, verify execution"
+  - F-04: "E2E test suite covers all mesh scenarios"
+
+waves:
+  - id: W1
+    name: "DB sync + auto-deploy"
+    merge_mode: sync
+    tasks:
+      - id: T1-01
+        ref: [F-01]
+        do: |
+          Fix background_sync loop so DB actually syncs between nodes.
+
+          The sync loop spawns but never logs anything. Root cause investigation:
+          1. Check if spawn_sync_loop is called (add info! at spawn point)
+          2. Check if query_active_peers returns peers (add info! with count)
+          3. Check if sync_table_with_peer makes HTTP calls (add info!)
+          4. The peer URLs must be http://TAILSCALE_IP:8420 format
+          5. peer_heartbeats must have recent entries with tailscale_ip in load_json
+
+          After fixing, verify:
+          - Write a test plan on M5Max: curl POST /api/plan-db/create
+          - Wait 60s
+          - Read it on M1Pro: curl GET /api/plan-db/list — must include the new plan
+          - This proves sync works without rsync
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cargo check --features kernel --manifest-path daemon/Cargo.toml"
+          - "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- background_sync 2>&1 | grep -q 'test result: ok'"
+
+      - id: T1-02
+        ref: [F-02]
+        do: |
+          Auto-rebuild daemon after git pull.
+
+          Create scripts/platform/auto-rebuild.sh:
+          1. git pull --rebase origin main
+          2. If files changed in daemon/: cargo build --features kernel --release
+          3. If binary changed: restart daemon via start.sh
+          4. Send Telegram notification on success/failure
+
+          Create a launchd plist that runs every 5 minutes:
+          ~/Library/LaunchAgents/com.convergio.auto-rebuild.plist
+          Deploy to both nodes via deploy-node.sh.
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f scripts/platform/auto-rebuild.sh"
+          - "bash -n scripts/platform/auto-rebuild.sh"
+
+  - id: W2
+    name: "Delegation E2E + test suite"
+    merge_mode: sync
+    tasks:
+      - id: T2-01
+        ref: [F-03, F-04]
+        do: |
+          Full delegation E2E test.
+
+          1. Create a micro test plan (2 tasks: create a file + verify it)
+          2. Import into DB via cvg plan create + import
+          3. Start the plan
+          4. Launch copilot-plan-runner.sh for it
+          5. Wait for completion (max 5 min)
+          6. Verify: plan status = completed, file exists, test passes
+
+          Add this as scripts/test-delegation-e2e.sh
+          Add delegation tests to scripts/test-e2e.sh
+
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "test -f scripts/test-delegation-e2e.sh"
+          - "bash -n scripts/test-delegation-e2e.sh"
+
+  - id: W3
+    name: "Closure"
+    merge_mode: sync
+    tasks:
+      - id: TF-tests
+        ref: [F-01, F-02, F-03, F-04]
+        do: |
+          Run full E2E: scripts/test-e2e.sh --remote m1Pro
+          All must pass. Deploy to both nodes.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: test
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "bash scripts/test-e2e.sh --remote m1Pro"
+
+      - id: TF-doc
+        ref: [F-01, F-02]
+        do: |
+          CHANGELOG entry, update NEXT_SESSION.md, update capabilities.
+          Working dir: /Users/Roberdan/GitHub/ConvergioPlatform
+        type: chore
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "grep -q 'sync' CHANGELOG.md"
