@@ -210,14 +210,14 @@ impl TtsEngine {
 
     fn speak_via_voxtral(&self, text: &str, locale: &str) -> Result<Vec<u8>, TtsError> {
         let wav_dir = self.temp_wav_path();
-        let lang = if locale.starts_with("it") { "it" } else { "en" };
+        let voice = if locale.starts_with("it") { "it_female" } else { "it_male" };
         let python = crate::ipc::models::apple_fm::AppleFmBridge::resolve_python();
         let status = std::process::Command::new(&python)
             .args([
                 "-m", "mlx_audio.tts.generate",
-                "--model", "mlx-community/Voxtral-Mini-3B-2507-bf16",
+                "--model", "mlx-community/Voxtral-4B-TTS-2603-mlx-4bit",
                 "--text", text,
-                "--lang_code", lang,
+                "--voice", voice,
                 "--output_path", wav_dir.to_str().unwrap_or("/tmp/convergio_tts"),
             ])
             .stdout(std::process::Stdio::null())
@@ -226,7 +226,7 @@ impl TtsEngine {
             .map_err(|e| TtsError::SubprocessFailed(e.to_string()))?;
         if !status.success() {
             return Err(TtsError::SubprocessFailed(
-                "voxtral-mini exited with error".into(),
+                "voxtral-tts exited with error".into(),
             ));
         }
         // mlx-audio saves to <output_path>/audio_000.wav
