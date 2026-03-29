@@ -176,7 +176,7 @@ fn pipeline_start_stop_cycle() {
 fn pipeline_idle_ignores_frames() {
     let mut p = VoicePipeline::new(VoiceConfig::default());
     let result = p.process_frame(&silence_frame(0)).unwrap();
-    assert!(result.is_none());
+    assert!(result.is_empty());
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn pipeline_silence_produces_no_intent() {
     p.start().unwrap();
     for ms in (0..500).step_by(10) {
         let result = p.process_frame(&silence_frame(ms)).unwrap();
-        assert!(result.is_none(), "silence at {ms}ms produced intent");
+        assert!(result.is_empty(), "silence at {ms}ms produced intent");
     }
     assert_eq!(p.state(), VoiceState::Listening);
 }
