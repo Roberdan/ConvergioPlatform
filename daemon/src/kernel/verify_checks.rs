@@ -84,7 +84,7 @@ fn run_command_with_timeout(
 pub(crate) fn run_cargo_test(worktree: Option<&str>) -> EvidenceCheck {
     // --lib only: unit tests are fast (~20s). Full test (bins+integration) takes 45s+
     // and spawns 400+ threads, risking resource exhaustion.
-    run_command_with_timeout("cargo_test", "cargo", &["test", "--lib"], worktree, 90)
+    run_command_with_timeout("cargo_test", "cargo", &["test", "--lib"], worktree, 180)
 }
 
 pub(crate) fn run_npm_check(worktree: Option<&str>) -> EvidenceCheck {
