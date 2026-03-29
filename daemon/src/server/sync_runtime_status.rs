@@ -64,13 +64,23 @@ impl SyncRuntimeStatusHolder {
     }
 }
 
+/// Shared lock for tests that mutate the global SyncRuntimeStatusHolder.
+#[cfg(test)]
+pub(crate) fn global_status_test_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn daemon_first_defaults_are_explicit() {
-        let status = SyncRuntimeStatusHolder::new_daemon_first().snapshot();
+        let _guard = global_status_test_lock().lock().expect("test lock");
+        let holder = SyncRuntimeStatusHolder::new_daemon_first();
+        holder.reset();
+        let status = holder.snapshot();
         assert_eq!(status.transport_mode, "daemon-http");
         assert_eq!(status.fallback_policy, "manual-rsync-only");
         assert!(!status.healthy);
@@ -80,6 +90,7 @@ mod tests {
 
     #[test]
     fn holder_is_shared_across_clones() {
+        let _guard = global_status_test_lock().lock().expect("test lock");
         let holder_a = SyncRuntimeStatusHolder::new_daemon_first();
         holder_a.reset();
         holder_a.mark_success("2026-03-29T20:00:00Z");

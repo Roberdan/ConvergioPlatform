@@ -1,16 +1,9 @@
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use serde_json::Value;
-use std::sync::{Mutex, OnceLock};
 use tower::ServiceExt;
 
-use crate::server::sync_runtime_status::SyncRuntimeStatusHolder;
-
-static STATUS_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-fn status_lock() -> &'static Mutex<()> {
-    STATUS_LOCK.get_or_init(|| Mutex::new(()))
-}
+use crate::server::sync_runtime_status::{global_status_test_lock, SyncRuntimeStatusHolder};
 
 fn test_router_with_sync_meta(seed_sql: &str) -> axum::Router {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -63,7 +56,7 @@ async fn get_status(router: axum::Router) -> (StatusCode, Value) {
 
 #[tokio::test]
 async fn sync_status_exposes_daemon_first_policy_and_success_snapshot() {
-    let _guard = status_lock().lock().expect("status lock");
+    let _guard = global_status_test_lock().lock().expect("status lock");
     let holder = SyncRuntimeStatusHolder::new_daemon_first();
     holder.reset();
     holder.mark_success("2026-03-30T12:00:00Z");
@@ -85,7 +78,7 @@ async fn sync_status_exposes_daemon_first_policy_and_success_snapshot() {
 
 #[tokio::test]
 async fn sync_status_exposes_last_error_when_runtime_unhealthy() {
-    let _guard = status_lock().lock().expect("status lock");
+    let _guard = global_status_test_lock().lock().expect("status lock");
     let holder = SyncRuntimeStatusHolder::new_daemon_first();
     holder.reset();
     holder.mark_error("peer query failed: timeout");
