@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// TTS integration for kernel messages — Voxtral MLX primary, Qwen3 secondary, macOS `say` fallback.
-// Pattern: AppleFmBridge subprocess model (see ipc/models/apple_fm.rs).
+// TTS: Voxtral MLX primary, Qwen3 secondary, macOS `say` fallback (AppleFmBridge subprocess).
 
 pub use crate::kernel::tts_templates::KernelTemplates;
 
