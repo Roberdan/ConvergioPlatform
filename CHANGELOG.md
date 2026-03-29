@@ -1,5 +1,38 @@
 # Changelog
 
+## [19.0.0] - 2026-03-29
+
+### Breaking
+- libSQL migration: timestamp-based sync adapter replaces crsqlite CRDT (W1)
+- Data migration required: new sync columns on plans/tasks/waves tables
+
+### Added
+- HTTP sync endpoints with crsqlite gated and background_sync wired (W1)
+- GET /api/plan-db/execution-context/:plan_id — complete prompt generation for delegated tasks
+- Centralized peer resolver with 3-stage fuzzy match (W2, B6/B9)
+- Evidence gate hardening: mutex, SHA cache, shutdown reaper (W2)
+- Unified delegation workflow with cvg tool integration (W3)
+- Terminal stack replication + worktree auto-cleanup (W3)
+- Per-repo gh credential routing for multi-org setups (W3)
+- invoke_agent MCP tool — tool 18 in MCP server (W4)
+- Developer experience improvements: cheatsheet, commands, api, template CLI commands (W4)
+- API telemetry instrumentation: 90 handlers, 16 tests (W5)
+- IPC + CLI integration tests: 34 tests, ~80% IPC coverage (W5)
+- Comprehensive mesh module tests: 310 tests, ~90% coverage (W5)
+- API integration tests for previously untested endpoints (W5)
+- ADR-0121 libSQL migration decision
+- ADR-0122 recursive session continuity
+- PreCompact hook: checkpoints plan + spawns copilot continuation
+
+### Fixed
+- Bug fixes B1-B4, B7-B8: assorted daemon reliability issues (W2)
+- branch_name read from DB instead of derived from worktree path
+- Plan runner: never dies on error, only resets in_progress tasks (not submitted)
+- Execution-context prompt is directive (ACT IMMEDIATELY, no questions)
+
+### Changed
+- copilot-plan-runner uses daemon execution-context API instead of local prompt generation
+
 ## [18.5.0] - 2026-03-28
 
 ### Removed

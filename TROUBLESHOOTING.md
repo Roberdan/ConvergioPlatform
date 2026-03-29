@@ -62,52 +62,23 @@
 
 ## Watchdog Alerts (W2 / Plan 724)
 
-Watchdog runs every 30 s. Alerts dispatched via `notifications.conf`.
+Watchdog runs every 30s. Alerts via `notifications.conf`. Test: `cvg notify send "test" "hello" --severity info`
 
-| Alert | Meaning | Action |
-|---|---|---|
-| `agent stalled >300s` | Task has no DB update in 5 min | Check task status: `cvg plan show <id>` |
-| `/api/health/deep` non-healthy | A component is degraded | `curl -s http://localhost:8420/api/health/deep \| jq .` |
-| `Ollama unavailable` | LLM summarisation off; rules-only mode | Install Ollama or ignore (fallback is automatic) |
-| `rate limit detected` | Agent hit API rate limit | Check task log; watchdog will alert and block task |
-| `wave complete` | Info notification on wave merge | No action needed |
+| Alert | Action |
+|---|---|
+| `agent stalled >300s` | `cvg plan show <id>` |
+| `/api/health/deep` non-healthy | `curl -s http://localhost:8420/api/health/deep \| jq .` |
+| `Ollama unavailable` | Install Ollama or ignore (fallback automatic) |
+| `rate limit detected` | Check task log; watchdog blocks task |
 
-**Configure ntfy.sh notifications:**
-```toml
-# claude-config/config/notifications.conf
-[watchdog]
-check_interval_secs = 30
-ollama_url = "http://localhost:11434"
-stale_threshold_secs = 300
-
-[[notification_channels]]
-type = "ntfy"
-url = "https://ntfy.sh/your-topic"   # replace with your topic
-```
-
-**Test notification:** `cvg notify send "test" "hello" --severity info`
-
-**Watchdog CLI:**
-```bash
-cvg watchdog start    # start background watchdog
-cvg watchdog stop     # stop watchdog
-cvg watchdog status   # show last check results
-```
+CLI: `cvg watchdog start|stop|status`
+Config: `claude-config/config/notifications.conf` (set ntfy topic, check_interval, stale_threshold)
 
 ## Decision Log (F-27)
 
 Every watchdog restart, reap, and block action is stored in `decision_log`.
-
-```bash
-cvg decision log                          # list recent decisions
-cvg decision log --plan-id 724            # filter by plan
-curl -s http://localhost:8420/api/decisions?plan_id=724 | jq .
-```
-
-Log a decision manually:
-```bash
-cvg decision log "chose retry over escalate" --reasoning "transient SQLITE_BUSY" --plan-id 724
-```
+Query: `cvg decision log [--plan-id 724]` or `GET /api/decisions?plan_id=724`
+Log manually: `cvg decision log "message" --reasoning "reason" --plan-id 724`
 
 ## Zombie Reaper (F-25)
 
@@ -211,13 +182,35 @@ cvg repo sync           # checks each repo path exists + health endpoint respond
 - Fix: add or update the hostname entry in `peers.conf` with the correct role field, then restart daemon:
   `./daemon/start.sh`
 
-## macOS / App
+## libSQL Migration (Plan 742)
 
-**Menu bar icon missing**
-- Fix: `./daemon/start.sh` → rebuild app: `cd CommandCenter && ruby Scripts/generate_xcodeproj.rb`
+**Sync columns missing after upgrade**
+- Symptom: daemon logs "no such column: updated_at" on sync endpoints.
+- Cause: migration did not run (daemon started from old binary).
+- Fix: rebuild and restart: `cd daemon && cargo build --release && ./daemon/start.sh`
 
-**CommandCenter build uses CommandLineTools (wrong SDK)**
-- Fix: `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
+**Peer resolver returns wrong node**
+- Symptom: delegation sends task to unexpected node, or "peer not found" error.
+- Cause: `~/.claude/config/peers.conf` entry missing or hostname changed.
+- Fix: `grep <expected_name> ~/.claude/config/peers.conf` — add/update entry, restart daemon.
+  Resolution order: exact match > prefix match > Tailscale MagicDNS.
+
+**Evidence gate deadlock on shutdown**
+- Symptom: daemon hangs on SIGTERM for >10s, lock files left in `/tmp/`.
+- Cause: verify mutex held during shutdown race (pre-v19.0.0 bug).
+- Fix: upgrade to v19.0.0 (shutdown reaper cleans locks). Manual: `rm /tmp/convergio-verify-*.lock`
+
+**Credential routing fails for multi-org repos**
+- Symptom: `gh api` returns 401 for repos in non-default GitHub org.
+- Cause: gh credential helper not configured per-repo.
+- Fix: run `scripts/platform/gh-credential-route.sh <repo-path>` to configure per-repo credential routing.
+
+**copilot-plan-runner exits without completing all tasks**
+- Symptom: runner exits 0 but tasks remain in_progress.
+- Cause: pre-v19 runner called `set -e` and exited on first non-zero CLI return.
+- Fix: upgrade runner script. v19 removes `set -e`, protects CLI launch, only resets in_progress tasks.
+
+## macOS / Terminal
 
 **PTY terminal rejects session name**
 - Cause: name must match `[A-Za-z0-9_-]`, max 64 chars.
