@@ -1,5 +1,16 @@
 # Changelog
 
+## [19.5.0] - 29 Marzo 2026
+
+### Added
+- Memory management API endpoints: list, stats, gc, delete (`/api/memory/*`) (Plan 758 W1)
+
+### Changed
+- Ali orchestrator: compressed to 10-domain routing with domain-specific validation (Plan 758 W2)
+
+### Fixed
+- SQLite ALTER TABLE: replaced function defaults with trigger-based updated_at (Plan 758 W1)
+
 ## [19.4.0] - 29 Marzo 2026
 
 ### Changed
