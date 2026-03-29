@@ -36,6 +36,12 @@
           {
             "type": "command",
             "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"WARNING: $FILE has $LINES lines (max 250). Split this file.\" >&2; fi; fi"
+          },
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r \".file_path // empty\" 2>/dev/null); if [ -n \"$FILE\" ] && echo \"$FILE\" | grep -qE \"daemon/src/.*\\.rs$\"; then ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo \".\"); OUTPUT=$(\"$ROOT/scripts/check-rust-wiring.sh\" 2>&1) || echo \"$OUTPUT\" >&2; fi",
+            "timeout": 15,
+            "statusMessage": "Rust module wiring check"
           }
         ]
       },
@@ -51,6 +57,12 @@
             "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/scripts/platform/post-edit-rust-check.sh\"",
             "timeout": 30,
             "statusMessage": "Rust cargo check"
+          },
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r \".file_path // empty\" 2>/dev/null); if [ -n \"$FILE\" ] && echo \"$FILE\" | grep -qE \"daemon/src/.*\\.rs$\"; then ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo \".\"); OUTPUT=$(\"$ROOT/scripts/check-rust-wiring.sh\" 2>&1) || echo \"$OUTPUT\" >&2; fi",
+            "timeout": 15,
+            "statusMessage": "Rust module wiring check"
           }
         ]
       }
