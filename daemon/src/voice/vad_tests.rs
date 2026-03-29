@@ -1,13 +1,20 @@
 use super::types::AudioFrame;
-use super::vad::{threshold_to_vad_mode, VoiceActivityDetector};
+use super::vad::{threshold_to_vad_mode, VadAggressiveness, VoiceActivityDetector};
 
 fn silence_frame(ts: u64) -> AudioFrame {
     AudioFrame { samples: vec![0i16; 160], sample_rate: 16000, timestamp_ms: ts }
 }
 
 fn speech_frame(ts: u64) -> AudioFrame {
-    // Loud signal — high energy, webrtc-vad should detect as voice.
-    AudioFrame { samples: vec![20000i16; 160], sample_rate: 16000, timestamp_ms: ts }
+    // Pseudo-random broadband noise at speech amplitude — webrtc-vad detects this as voice.
+    // Uses a simple LCG seeded by timestamp to produce varying waveforms per frame.
+    let mut seed: u64 = 12345 + ts * 67890;
+    let mut samples = vec![0i16; 160];
+    for s in samples.iter_mut() {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        *s = ((seed >> 33) as i32 - 1_000_000) as i16;
+    }
+    AudioFrame { samples, sample_rate: 16000, timestamp_ms: ts }
 }
 
 #[test]
@@ -50,12 +57,11 @@ fn reset_clears_state() {
 
 #[test]
 fn threshold_maps_to_vad_mode() {
-    use std::mem::discriminant;
     // Low threshold = Quality (most permissive).
-    assert!(discriminant(&threshold_to_vad_mode(0.1)) == discriminant(&webrtc_vad::VadMode::Quality));
-    assert!(discriminant(&threshold_to_vad_mode(0.3)) == discriminant(&webrtc_vad::VadMode::LowBitrate));
-    assert!(discriminant(&threshold_to_vad_mode(0.6)) == discriminant(&webrtc_vad::VadMode::Aggressive));
-    assert!(discriminant(&threshold_to_vad_mode(0.9)) == discriminant(&webrtc_vad::VadMode::VeryAggressive));
+    assert_eq!(threshold_to_vad_mode(0.1), VadAggressiveness::Quality);
+    assert_eq!(threshold_to_vad_mode(0.3), VadAggressiveness::LowBitrate);
+    assert_eq!(threshold_to_vad_mode(0.6), VadAggressiveness::Aggressive);
+    assert_eq!(threshold_to_vad_mode(0.9), VadAggressiveness::VeryAggressive);
 }
 
 #[test]

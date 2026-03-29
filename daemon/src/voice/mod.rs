@@ -1,5 +1,6 @@
 #[cfg(feature = "voice")]
 pub mod audio_capture;
+pub mod audio_util;
 pub mod intent;
 #[cfg(feature = "voice")]
 pub mod pipeline;
