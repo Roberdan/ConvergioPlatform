@@ -1,9 +1,4 @@
-/**
- * EvolutionEngine — the standalone orchestrator.
- *
- * Lifecycle: collect metrics → evaluate → propose → experiment → report.
- * Adapters provide platform-specific I/O; the engine owns the control flow.
- */
+/** EvolutionEngine — collect metrics → evaluate → propose → experiment → report. */
 
 import type {
   Metric,
@@ -181,19 +176,7 @@ export class EvolutionEngine {
     return proposals;
   }
 
-  /**
-   * Auto-approve Draft proposals whose confidence exceeds the threshold.
-   *
-   * Why: generateProposals always creates Drafts, but runExperiments only
-   * processes Approved ones. Without this step the pipeline never executes
-   * any experiment. Manual approval (PendingApproval) is used for high-blast
-   * proposals that require human review before canary deployment.
-   *
-   * Approval rules:
-   *   - confidence >= AUTO_APPROVE_THRESHOLD AND blastRadius != MultiRepo/Ecosystem
-   *     → Approved (safe to run canary automatically)
-   *   - otherwise → PendingApproval (human must approve via API or CLI)
-   */
+  /** Auto-approve high-confidence, low-blast proposals; others need human review. */
   private reviewProposals(proposals: Proposal[]): Proposal[] {
     const AUTO_APPROVE_THRESHOLD = 0.8;
     const HIGH_BLAST: ReadonlyArray<string> = ['MultiRepo', 'Ecosystem'];
@@ -257,13 +240,4 @@ export class EvolutionEngine {
   }
 }
 
-export interface CycleSummary {
-  cycleId: number;
-  startedAt: number;
-  completedAt: number;
-  metricsCollected: number;
-  evaluations: EvaluationResult[];
-  proposalsGenerated: number;
-  experimentsRun: number;
-  experiments: Experiment[];
-}
+export type { CycleSummary } from './cycle-summary';
