@@ -171,6 +171,52 @@ fn apply_changes_skips_stale_updates() {
 }
 
 #[test]
+fn apply_changes_skips_stale_when_local_is_legacy_space_format() {
+    let conn = Connection::open_in_memory().expect("db");
+    setup_sync_schema(&conn);
+    conn.execute_batch(
+        "INSERT INTO tasks(id, title, status, updated_at)
+         VALUES (1, 'Current', 'done', '2026-03-28 15:00:00');",
+    )
+    .expect("seed");
+
+    let changes = vec![SyncChange {
+        table_name: "tasks".to_string(),
+        pk: 1,
+        data: serde_json::json!({
+            "title": "Should Not Apply",
+            "status": "pending",
+            "updated_at": "2026-03-28T14:00:00Z"
+        }),
+    }];
+    let applied = super::apply_changes(&conn, &changes).expect("apply");
+    assert_eq!(applied, 0, "older remote update must be skipped");
+}
+
+#[test]
+fn apply_changes_applies_newer_when_remote_is_legacy_space_format() {
+    let conn = Connection::open_in_memory().expect("db");
+    setup_sync_schema(&conn);
+    conn.execute_batch(
+        "INSERT INTO tasks(id, title, status, updated_at)
+         VALUES (1, 'Current', 'done', '2026-03-28T14:00:00Z');",
+    )
+    .expect("seed");
+
+    let changes = vec![SyncChange {
+        table_name: "tasks".to_string(),
+        pk: 1,
+        data: serde_json::json!({
+            "title": "Should Apply",
+            "status": "pending",
+            "updated_at": "2026-03-28 15:00:00"
+        }),
+    }];
+    let applied = super::apply_changes(&conn, &changes).expect("apply");
+    assert_eq!(applied, 1, "newer remote update must be applied");
+}
+
+#[test]
 fn open_path_without_crsqlite_succeeds() {
     // PlanDb::open_path should work without crsqlite extension loading
     let dir = tempfile::tempdir().expect("tmpdir");

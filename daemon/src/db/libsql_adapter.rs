@@ -27,6 +27,16 @@ pub struct SyncChange {
     pub data: serde_json::Value,
 }
 
+fn normalize_sortable_ts(ts: &str) -> String {
+    let trimmed = ts.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let no_z = trimmed.strip_suffix('Z').unwrap_or(trimmed);
+    let core = no_z.get(0..19).unwrap_or(no_z);
+    core.replace(' ', "T")
+}
+
 /// Upsert sync metadata for a peer+table pair.
 pub fn upsert_sync_meta(conn: &Connection, meta: &SyncMeta) -> rusqlite::Result<()> {
     conn.execute(
@@ -88,9 +98,7 @@ pub fn export_changes_since(
 
     let col_list = columns.join(", ");
     let query = if let Some(since_ts) = since {
-        // Normalize: SQLite datetime('now') uses space separator, RFC3339 uses T.
-        // Replace T with space so string comparison works consistently.
-        let normalized = since_ts.replace('T', " ");
+        let normalized = normalize_sortable_ts(since_ts).replace('T', " ");
         let sql = format!(
             "SELECT id, {col_list} FROM \"{table_name}\" WHERE REPLACE(updated_at,'T',' ') > ?1 ORDER BY id"
         );
@@ -138,6 +146,7 @@ pub fn apply_changes(
             .get("updated_at")
             .and_then(|v| v.as_str())
             .unwrap_or("");
+        let remote_normalized = normalize_sortable_ts(remote_updated);
 
         // Check if row exists and get its updated_at (may be NULL for old rows)
         let row_exists: bool = conn
@@ -158,7 +167,10 @@ pub fn apply_changes(
         };
 
         match local_ts {
-            Some(ref ts) if !ts.is_empty() && *ts >= remote_updated.to_string() => {
+            Some(ref ts)
+                if !ts.is_empty()
+                    && normalize_sortable_ts(ts) >= remote_normalized =>
+            {
                 // Local is same or newer — skip
                 continue;
             }
