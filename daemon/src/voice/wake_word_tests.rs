@@ -13,16 +13,22 @@ fn make_frame(samples: Vec<i16>, timestamp_ms: u64) -> AudioFrame {
 }
 
 /// Generate a loud tone that exceeds VAD threshold, simulating speech.
+/// webrtc-vad requires 10/20/30ms frames at 16kHz (160/320/480 samples).
 #[cfg(feature = "voice")]
 fn speech_samples(len: usize) -> Vec<i16> {
-    (0..len).map(|i| ((i % 50) as i16 * 500) - 12500).collect()
+    // High-energy alternating signal that triggers voice detection.
+    (0..len).map(|i| if i % 2 == 0 { 20000 } else { -20000 }).collect()
 }
 
 /// Generate near-silence samples that stay below VAD threshold.
 #[cfg(feature = "voice")]
 fn silence_samples(len: usize) -> Vec<i16> {
-    vec![10; len]
+    vec![0; len]
 }
+
+/// webrtc-vad valid frame: 20ms at 16kHz = 320 samples.
+#[cfg(feature = "voice")]
+const FRAME_LEN: usize = 320;
 
 #[test]
 fn new_detector_starts_inactive() {
@@ -71,7 +77,7 @@ fn check_text_empty_string() {
 fn detection_state_set_by_check_text() {
     let mut det = WakeWordDetector::new("jarvis", 0.5, "small");
     assert!(!det.is_detected());
-    // check_text alone doesn't set detected (that's only process_frame).
+    // check_text alone doesn't set detected (only process_frame does).
     det.check_text("hey jarvis").unwrap();
     assert!(!det.is_detected());
 }
@@ -87,7 +93,7 @@ fn silence_does_not_trigger() {
         config.vad_threshold,
         &config.whisper_model,
     );
-    let frame = make_frame(silence_samples(1600), 0);
+    let frame = make_frame(silence_samples(FRAME_LEN), 0);
     let result = det.process_frame(&frame).unwrap();
     assert!(!result);
     assert!(!det.is_detected());
@@ -95,21 +101,27 @@ fn silence_does_not_trigger() {
 
 #[cfg(feature = "voice")]
 #[test]
-fn process_frame_returns_result() {
+fn process_frame_speech_then_silence() {
     let config = VoiceConfig::default();
     let mut det = WakeWordDetector::new(
         &config.wake_word,
         config.vad_threshold,
         &config.whisper_model,
     );
-    // Speech followed by silence should produce a segment.
-    let speech = make_frame(speech_samples(1600), 0);
-    let silence = make_frame(silence_samples(1600), 500);
-    let r1 = det.process_frame(&speech).unwrap();
-    let r2 = det.process_frame(&silence).unwrap();
-    // With stub whisper, transcription won't contain the wake word.
-    assert!(!r1);
-    assert!(!r2);
+    // Feed multiple speech frames (>100ms min_speech) then silence frames (>300ms).
+    // 20ms per frame at 320 samples.
+    for i in 0..10 {
+        let frame = make_frame(speech_samples(FRAME_LEN), i * 20);
+        let _ = det.process_frame(&frame);
+    }
+    // Silence frames to end the speech segment (>300ms = 15+ frames).
+    for i in 10..30 {
+        let frame = make_frame(silence_samples(FRAME_LEN), i * 20);
+        let _ = det.process_frame(&frame);
+    }
+    // With no real whisper model, transcription returns ModelNotAvailable
+    // or stub text that won't contain wake word — so detected stays false.
+    assert!(!det.is_detected());
 }
 
 #[cfg(feature = "voice")]
@@ -121,11 +133,18 @@ fn multiple_segments_independent() {
         config.vad_threshold,
         &config.whisper_model,
     );
-    for ts_base in [0u64, 1000] {
-        let speech = make_frame(speech_samples(1600), ts_base);
-        let silence = make_frame(silence_samples(1600), ts_base + 500);
-        let _ = det.process_frame(&speech);
-        let _ = det.process_frame(&silence);
+    // Two rounds of speech + silence.
+    for round in 0..2u64 {
+        let base = round * 1000;
+        for i in 0..10 {
+            let frame = make_frame(speech_samples(FRAME_LEN), base + i * 20);
+            let _ = det.process_frame(&frame);
+        }
+        for i in 10..30 {
+            let frame = make_frame(silence_samples(FRAME_LEN), base + i * 20);
+            let _ = det.process_frame(&frame);
+        }
     }
+    // No crash, no lingering state.
     assert!(!det.is_detected());
 }

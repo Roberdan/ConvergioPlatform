@@ -28,28 +28,19 @@ fn silence_produces_no_segment() {
 fn speech_then_silence_produces_segment() {
     let mut vad = VoiceActivityDetector::new(0.1);
     // Speech frames (200ms of loud audio).
-    let mut voice_count = 0;
     for ms in (0..200).step_by(10) {
-        let frame = speech_frame(ms);
-        // Verify webrtc-vad sees these as voice before processing.
-        let mut probe = webrtc_vad::Vad::new_with_rate(webrtc_vad::SampleRate::Rate16kHz);
-        probe.set_mode(webrtc_vad::VadMode::Quality);
-        if probe.is_voice_segment(&frame.samples).unwrap_or(false) {
-            voice_count += 1;
-        }
-        vad.process(&frame).unwrap();
+        vad.process(&speech_frame(ms)).unwrap();
     }
-    eprintln!("voice_count={voice_count}/20, in_speech={}", vad.is_in_speech());
-    assert!(vad.is_in_speech(), "VAD must detect speech (voice_count={voice_count}/20)");
-    // Silence frames to end segment.
+    assert!(vad.is_in_speech());
+    // Silence frames to end segment — extend window to allow webrtc-vad hangover.
     let mut segment = None;
-    for ms in (200..600).step_by(10) {
+    for ms in (200..1200).step_by(10) {
         if let Some(s) = vad.process(&silence_frame(ms)).unwrap() {
             segment = Some(s);
             break;
         }
     }
-    assert!(segment.is_some());
+    assert!(segment.is_some(), "segment must emit after silence follows speech");
     let seg = segment.unwrap();
     assert!(seg.start_ms < seg.end_ms);
     assert!(!seg.samples.is_empty());
