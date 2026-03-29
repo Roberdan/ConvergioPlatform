@@ -74,6 +74,7 @@ pub mod sse_delegate;
 pub mod sse_preflight;
 pub mod sse_stream;
 pub mod state;
+pub mod sync_runtime_status;
 pub mod state_init;
 pub mod telemetry;
 pub mod state_init_canon;
@@ -196,6 +197,8 @@ mod api_plan_db_review_integration_tests2;
 mod api_plan_db_import_integration_tests;
 #[cfg(test)]
 mod state_init_tests;
+#[cfg(test)]
+mod state_sync_runtime_tests;
 #[cfg(test)]
 mod ws_pty_tests;
 #[cfg(test)]

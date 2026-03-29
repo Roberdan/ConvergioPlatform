@@ -1,4 +1,5 @@
 use super::state_init::init_db_and_pool;
+use super::sync_runtime_status::SyncRuntimeStatusHolder;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -23,6 +24,7 @@ pub struct ServerState {
     pub ws_tx: broadcast::Sender<Value>,
     pub started_at: std::time::Instant,
     pub ipc_engine: Option<Arc<IpcEngine>>,
+    pub sync_runtime_status: SyncRuntimeStatusHolder,
 }
 
 impl std::fmt::Debug for ServerState {
@@ -32,6 +34,7 @@ impl std::fmt::Debug for ServerState {
             .field("crsqlite_path", &self.crsqlite_path)
             .field("started_at", &self.started_at)
             .field("ipc_engine", &self.ipc_engine.as_ref().map(|_| "IpcEngine"))
+            .field("sync_runtime_status", &"SyncRuntimeStatusHolder")
             .finish()
     }
 }
@@ -62,6 +65,7 @@ impl ServerState {
             ws_tx,
             started_at: std::time::Instant::now(),
             ipc_engine: Some(ipc_engine),
+            sync_runtime_status: SyncRuntimeStatusHolder::new_daemon_first(),
         }
     }
 
@@ -74,6 +78,10 @@ impl ServerState {
     /// Expose the connection pool for modules that need a Pool directly (e.g. WorkspaceManager).
     pub fn pool(&self) -> r2d2::Pool<SqliteConnectionManager> {
         self.pool.clone()
+    }
+
+    pub fn sync_runtime_status(&self) -> SyncRuntimeStatusHolder {
+        self.sync_runtime_status.clone()
     }
 }
 
