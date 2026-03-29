@@ -115,6 +115,7 @@ pub fn check_readiness(conn: &Connection, plan_id: i64) -> Result<ReadinessResul
 }
 
 /// GET /api/plan-db/readiness/:plan_id
+    #[tracing::instrument(skip_all)]
 async fn handle_readiness(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,

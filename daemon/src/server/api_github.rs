@@ -15,6 +15,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/github/repo/create", post(handle_github_repo_create))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_github_commits(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -34,6 +35,7 @@ async fn handle_github_commits(
     })))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_github_events(
     State(state): State<ServerState>,
     Path(project_id): Path<String>,
@@ -50,6 +52,7 @@ async fn handle_github_events(
     ))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_github_repo_create(axum::Json(payload): axum::Json<Value>) -> Json<Value> {
     let name = payload
         .get("name")

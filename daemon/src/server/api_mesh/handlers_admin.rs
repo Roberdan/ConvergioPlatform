@@ -16,6 +16,7 @@ fn validate_ini_field(value: &str, field: &str) -> Result<(), Json<Value>> {
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub(crate) async fn handle_mesh_action(Query(qs): Query<HashMap<String, String>>) -> Json<Value> {
     let action = qs.get("action").cloned().unwrap_or_default();
     let peer = qs.get("peer").cloned().unwrap_or_default();

@@ -14,6 +14,7 @@ pub struct CostQuery {
 
 /// GET /api/metrics/cost — cost breakdown by model/project/date
 /// Query params: ?days=7&project=convergio
+    #[tracing::instrument(skip_all)]
 pub async fn handle_cost_breakdown(
     State(state): State<ServerState>,
     Query(params): Query<CostQuery>,

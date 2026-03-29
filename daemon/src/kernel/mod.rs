@@ -8,6 +8,9 @@ pub mod engine;
 pub mod engine_context;
 pub mod tools;
 pub mod monitor;
+pub mod monitor_checks;
+#[cfg(test)]
+mod monitor_checks_tests;
 pub mod recover;
 pub mod reports;
 pub mod stt;

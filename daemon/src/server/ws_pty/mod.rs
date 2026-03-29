@@ -116,6 +116,7 @@ pub async fn ws_pty(
     ws.on_upgrade(move |socket| handle_pty(socket, params, state))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_pty(mut socket: WebSocket, params: PtyParams, state: ServerState) {
     let params = match validate_pty_params(params) {
         Ok(p) => p,

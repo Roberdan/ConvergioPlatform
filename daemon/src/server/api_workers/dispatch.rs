@@ -13,6 +13,7 @@ pub fn router() -> Router<ServerState> {
 
 /// POST /api/mesh/exec — execute command on remote peer via mesh
 /// Body: {peer, command, args?, timeout_secs?}
+    #[tracing::instrument(skip_all)]
 async fn handle_exec(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -126,6 +127,7 @@ async fn handle_exec(
 
 /// POST /api/mesh/delegate — delegate plan execution to a peer
 /// Body: {plan_id, peer, model?}
+    #[tracing::instrument(skip_all)]
 async fn handle_delegate(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

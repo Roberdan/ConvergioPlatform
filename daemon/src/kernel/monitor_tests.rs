@@ -5,9 +5,10 @@
 mod tests {
     use crate::kernel::monitor::{
         check_daemon_reachable, check_mesh_peers, check_disk_ram, classify_and_store,
-        detect_compaction_risk, detect_stale_locks, peer_name_from_url,
+        detect_compaction_risk, peer_name_from_url,
         KernelCheckResult, MonitorConfig,
     };
+    use crate::kernel::monitor_checks::detect_stale_locks;
 
     // --- KernelCheckResult construction ---
 

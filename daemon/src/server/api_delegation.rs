@@ -39,6 +39,7 @@ pub fn router() -> Router<ServerState> {
 /// POST /api/delegation/:id/progress
 /// Body: {status, current_task?, output_summary?}
 /// Upserts a progress record for the given delegation ID.
+    #[tracing::instrument(skip_all)]
 async fn handle_post_progress(
     State(state): State<ServerState>,
     Path(delegation_id): Path<String>,
@@ -85,6 +86,7 @@ async fn handle_post_progress(
 /// GET /api/delegation/:id/progress
 /// Returns current progress for the given delegation ID.
 /// Returns 404 if the ID is not known.
+    #[tracing::instrument(skip_all)]
 async fn handle_get_progress(
     State(state): State<ServerState>,
     Path(delegation_id): Path<String>,
@@ -121,6 +123,7 @@ async fn handle_get_progress(
 /// Returns all delegation progress entries whose delegation_id starts with `del-{plan_id}-`.
 /// This resolves the mismatch where CLI passes plan_id but the per-delegation endpoint
 /// expects a full delegation_id.
+    #[tracing::instrument(skip_all)]
 async fn handle_get_by_plan(
     State(state): State<ServerState>,
     Path(plan_id): Path<String>,

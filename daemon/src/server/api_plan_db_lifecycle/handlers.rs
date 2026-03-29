@@ -20,6 +20,7 @@ pub fn router() -> Router<ServerState> {
 
 /// POST /api/plan-db/create — create a new plan
 /// Body: {project_id, name, source_file?, description?, parent_plan_id?}
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_create(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -69,6 +70,7 @@ pub(super) async fn handle_create(
 }
 
 /// POST /api/plan-db/start/:plan_id — set status=doing, started_at=now
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_start(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -113,6 +115,7 @@ pub(super) async fn handle_start(
 /// For non-code plans (all tasks output_type != 'pr'), completion requires
 /// all deliverables approved. Mixed plans require both PRs merged AND
 /// non-code deliverables approved.
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_complete(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -153,6 +156,7 @@ pub(super) async fn handle_complete(
 
 /// POST /api/plan-db/cancel/:plan_id — cancel plan + all pending tasks
 /// Body: {reason?}
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_cancel(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -210,6 +214,7 @@ pub(super) async fn handle_cancel(
 }
 
 /// POST /api/plan-db/approve/:plan_id — set status=approved (from draft)
+#[tracing::instrument(skip_all)]
 pub(super) async fn handle_approve(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,

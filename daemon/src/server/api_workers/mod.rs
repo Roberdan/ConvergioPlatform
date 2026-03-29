@@ -15,6 +15,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/workers — list active worker processes
+    #[tracing::instrument(skip_all)]
 async fn handle_list_workers(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let workers = query_rows(
@@ -36,6 +37,7 @@ async fn handle_list_workers(State(state): State<ServerState>) -> Result<Json<Va
 
 /// POST /api/workers/launch — launch a new worker process
 /// Body: {agent_type, command?, plan_id?, task_id?, model?}
+    #[tracing::instrument(skip_all)]
 async fn handle_launch_worker(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -96,6 +98,7 @@ async fn handle_launch_worker(
 }
 
 /// GET /api/workers/status — summary of worker activity
+    #[tracing::instrument(skip_all)]
 async fn handle_worker_status(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;

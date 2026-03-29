@@ -5,6 +5,7 @@ use axum::Json;
 use serde_json::{json, Value};
 
 /// GET /api/plan-db/execution-tree/:plan_id — nested plan+waves+tasks
+    #[tracing::instrument(skip_all)]
 pub async fn handle_execution_tree(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,

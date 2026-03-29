@@ -31,6 +31,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/sync/import", post(handle_import))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_export(
     State(state): State<ServerState>,
     Query(params): Query<ExportQuery>,
@@ -56,6 +57,7 @@ async fn handle_export(
     })))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_import(
     State(state): State<ServerState>,
     Json(payload): Json<ImportPayload>,

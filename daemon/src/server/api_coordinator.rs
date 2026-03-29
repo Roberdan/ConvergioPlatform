@@ -12,6 +12,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/coordinator/events — list recent coordinator events
+    #[tracing::instrument(skip_all)]
 async fn handle_list_events(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let events = query_rows(
@@ -31,6 +32,7 @@ async fn handle_list_events(State(state): State<ServerState>) -> Result<Json<Val
 
 /// POST /api/coordinator/emit — emit a new coordinator event
 /// Body: {event_type, payload?, source_node?}
+    #[tracing::instrument(skip_all)]
 async fn handle_emit_event(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -86,6 +88,7 @@ async fn handle_emit_event(
 
 /// POST /api/coordinator/process — trigger event processing
 /// Processes unhandled events and triggers appropriate actions
+    #[tracing::instrument(skip_all)]
 async fn handle_process_events(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;

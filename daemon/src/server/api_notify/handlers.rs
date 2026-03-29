@@ -13,6 +13,7 @@ pub fn router() -> Router<ServerState> {
 
 /// POST /api/notify — create notification, attempt native delivery + mesh relay
 /// Body: {severity, title, message, plan_id?, link?}
+    #[tracing::instrument(skip_all)]
 pub async fn handle_notify(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -88,6 +89,7 @@ pub async fn handle_notify(
 }
 
 /// GET /api/notify/queue — list pending notifications
+    #[tracing::instrument(skip_all)]
 pub async fn handle_queue(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let notifications = query_rows(
@@ -108,6 +110,7 @@ pub async fn handle_queue(State(state): State<ServerState>) -> Result<Json<Value
 
 /// POST /api/notify/deliver — mark notifications as delivered
 /// Body: {ids: [1, 2, 3]}
+    #[tracing::instrument(skip_all)]
 pub async fn handle_deliver(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

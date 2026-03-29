@@ -247,6 +247,7 @@ fn build_checks(db: &std::path::Path) -> Vec<Check> {
 }
 
 /// GET /api/node/readiness
+    #[tracing::instrument(skip_all)]
 async fn handle_node_readiness(
     State(state): State<ServerState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

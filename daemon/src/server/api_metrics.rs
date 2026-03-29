@@ -14,6 +14,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/metrics/run/:id — metrics for a single execution run
+    #[tracing::instrument(skip_all)]
 async fn handle_run_metrics(
     State(state): State<ServerState>,
     Path(id): Path<i64>,
@@ -109,6 +110,7 @@ async fn handle_run_metrics(
 }
 
 /// GET /api/metrics/summary — aggregate metrics across all runs
+    #[tracing::instrument(skip_all)]
 async fn handle_summary(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let conn = &conn;

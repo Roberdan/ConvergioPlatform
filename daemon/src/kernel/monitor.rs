@@ -1,7 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Kernel monitor — model-agnostic health checks every 30s.
-// Replaces watchdog.rs (Ollama-based). No LLM dep.
-// Writes to kernel_events table (migration: state_init_migrations.rs).
+// Kernel monitor — health checks every 30s. Writes to kernel_events.
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -12,7 +10,7 @@ use tracing::{info, warn};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 const READINESS_INTERVAL: Duration = Duration::from_secs(300);
-const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
+pub const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 const STALL_SECS: u64 = 300;
 const RATE_LIMIT_WARN: u64 = 3;
 const DISK_WARN_PCT: f64 = 85.0;
@@ -201,28 +199,14 @@ pub fn classify_and_store(pool: &Pool<SqliteConnectionManager>, results: &[Kerne
     critical
 }
 
-/// Scan /tmp for stale .lock files older than `threshold_secs`.
-pub fn detect_stale_locks(threshold_secs: u64) -> KernelCheckResult {
-    let cutoff = Duration::from_secs(threshold_secs);
-    let now = std::time::SystemTime::now();
-    let stale: Vec<_> = std::fs::read_dir("/tmp").into_iter().flatten().flatten()
-        .filter(|e| e.path().extension().is_some_and(|x| x == "lock"))
-        .filter(|e| std::fs::metadata(e.path()).ok()
-            .and_then(|m| m.modified().ok())
-            .map(|t| now.duration_since(t).unwrap_or_default() > cutoff)
-            .unwrap_or(false))
-        .map(|e| e.path().display().to_string())
-        .collect();
-    if stale.is_empty() { KernelCheckResult::pass("stale_locks") }
-    else { KernelCheckResult::fail("stale_locks", &format!("stale: {}", stale.join(", "))) }
-}
-
 /// Run one full cycle and persist results (extracted for testability).
 pub async fn run_and_store_cycle(pool: &Pool<SqliteConnectionManager>, config: &MonitorConfig) {
+    use super::monitor_checks::{check_api_telemetry, detect_stale_locks};
     let mut all: Vec<KernelCheckResult> = vec![check_daemon_reachable(&config.daemon_url).await];
     all.extend(check_mesh_peers(&config.peer_urls).await);
     all.push(detect_stalled_agents(&config.daemon_url).await);
     all.push(detect_rate_limits(&config.daemon_url).await);
+    all.push(check_api_telemetry(&config.daemon_url).await);
     all.extend(check_disk_ram());
     all.push(detect_stale_locks(300));
     all.push(detect_compaction_risk(0, config.compaction_token_limit));

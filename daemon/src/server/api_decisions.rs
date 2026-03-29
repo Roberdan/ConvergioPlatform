@@ -19,6 +19,7 @@ pub fn router() -> Router<ServerState> {
 /// POST /api/decisions — log a decision to decision_log.
 /// Body: {decision, reasoning, plan_id?, task_id?, first_principles?,
 ///        alternatives_considered?, agent?}
+    #[tracing::instrument(skip_all)]
 pub async fn handle_log(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -64,6 +65,7 @@ pub struct DecisionQuery {
 }
 
 /// GET /api/decisions?plan_id=X — query decisions, optionally filtered.
+    #[tracing::instrument(skip_all)]
 pub async fn handle_query(
     State(state): State<ServerState>,
     Query(params): Query<DecisionQuery>,

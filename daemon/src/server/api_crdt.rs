@@ -1,8 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// HTTP API handlers for CRDT sync status and peer management.
-// GET  /api/crdt/status      — CRDT mode, table count, version
-// POST /api/crdt/force-sync  — placeholder sync trigger (wired in W3b)
-// GET  /api/crdt/peers       — peer list from mesh_sync_stats
+// CRDT sync status, force-sync, and peer management handlers.
 
 use super::state::{ApiError, ServerState};
 use axum::extract::State;
@@ -17,6 +14,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/crdt/peers", get(handle_crdt_peers))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_crdt_status(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
 
@@ -43,6 +41,7 @@ async fn handle_crdt_status(State(state): State<ServerState>) -> Result<Json<Val
     })))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_force_sync(_state: State<ServerState>) -> Result<Json<Value>, ApiError> {
     // Placeholder: actual sync wired in W3b when mesh sync loop is integrated
     Ok(Json(json!({
@@ -51,6 +50,7 @@ async fn handle_force_sync(_state: State<ServerState>) -> Result<Json<Value>, Ap
     })))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_crdt_peers(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
 

@@ -24,6 +24,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/plan-db/context/:plan_id — full plan+waves+tasks for execution
+    #[tracing::instrument(skip_all)]
 async fn handle_get_context(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -64,6 +65,7 @@ async fn handle_get_context(
 }
 
 /// GET /api/plan-db/json/:plan_id — compact plan JSON (same as plan-db.sh json)
+    #[tracing::instrument(skip_all)]
 async fn handle_get_json(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -113,6 +115,7 @@ async fn handle_get_json(
 
 /// POST /api/plan-db/task/update — update task status
 /// Body: {"task_id": N, "status": "...", "notes": "...", "test_criteria": "..."}
+    #[tracing::instrument(skip_all)]
 async fn handle_task_update(
     State(state): State<ServerState>,
     Json(body): Json<Value>,

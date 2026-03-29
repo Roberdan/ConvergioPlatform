@@ -71,6 +71,7 @@ pub mod sse_preflight;
 pub mod sse_stream;
 pub mod state;
 pub mod state_init;
+pub mod telemetry;
 pub mod state_init_canon;
 mod state_init_migrations;
 pub mod static_serve;
@@ -164,6 +165,8 @@ mod api_agent_control_tests;
 mod api_capabilities_tests;
 #[cfg(test)]
 mod api_nightly_tests;
+#[cfg(test)]
+mod api_telemetry_tests;
 #[cfg(test)]
 mod api_plan_db_lifecycle_integration_tests;
 #[cfg(test)]

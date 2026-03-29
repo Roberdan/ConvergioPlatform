@@ -14,6 +14,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/plan-db/set-worktree/:plan_id", post(handle_set_worktree))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_execution_context(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -22,6 +23,7 @@ async fn handle_execution_context(
     build_execution_context(&conn, plan_id).map(Json)
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_set_worktree(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,

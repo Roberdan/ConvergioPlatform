@@ -28,6 +28,7 @@ fn ensure_chat_schema(conn: &rusqlite::Connection) -> Result<(), ApiError> {
     .map_err(|err| ApiError::internal(format!("chat schema failed: {err}")))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_sessions_list(
     State(state): State<ServerState>,
 ) -> Result<Json<Value>, ApiError> {
@@ -41,6 +42,7 @@ async fn handle_chat_sessions_list(
     Ok(Json(json!({"ok": true, "sessions": sessions})))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_models() -> Json<Value> {
     Json(json!({"ok": true, "models": ["claude-sonnet-4.6", "gpt-5.3-codex", "gpt-5.4"]}))
 }
@@ -51,6 +53,7 @@ struct SessionCreateBody {
     title: Option<String>,
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_session_create(
     State(state): State<ServerState>,
     axum::Json(payload): axum::Json<SessionCreateBody>,
@@ -80,6 +83,7 @@ struct ChatMessageBody {
     role: Option<String>,
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_message_create(
     State(state): State<ServerState>,
     axum::Json(payload): axum::Json<ChatMessageBody>,
@@ -106,6 +110,7 @@ async fn handle_chat_message_create(
     ))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_requirement_upsert(
     State(state): State<ServerState>,
     axum::Json(payload): axum::Json<Value>,
@@ -140,14 +145,17 @@ async fn handle_chat_requirement_upsert(
     ))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_approve(axum::Json(_payload): axum::Json<Value>) -> Json<Value> {
     Json(json!({"ok": true}))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_execute(axum::Json(_payload): axum::Json<Value>) -> Json<Value> {
     Json(json!({"ok": true, "queued": true}))
 }
 
+    #[tracing::instrument(skip_all)]
 async fn handle_chat_session_delete(
     State(state): State<ServerState>,
     axum::extract::Query(qs): axum::extract::Query<std::collections::HashMap<String, String>>,

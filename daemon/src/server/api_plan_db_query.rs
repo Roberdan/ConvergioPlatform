@@ -20,6 +20,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/plan-db/list — active plans with task counts
+    #[tracing::instrument(skip_all)]
 async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let plans = query_rows(
@@ -46,6 +47,7 @@ async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, Ap
 }
 
 /// GET /api/plan-db/drift-check/:plan_id — check plan staleness
+    #[tracing::instrument(skip_all)]
 async fn handle_drift_check(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -93,6 +95,7 @@ async fn handle_drift_check(
 ///
 /// Runs deterministic mechanical gates (status, test_criteria, file checks).
 /// Thor AI validation runs at wave level, not per-task.
+    #[tracing::instrument(skip_all)]
 async fn handle_validate_task(
     State(state): State<ServerState>,
     Path((task_id, plan_id)): Path<(i64, i64)>,
