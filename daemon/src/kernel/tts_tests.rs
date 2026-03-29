@@ -38,6 +38,7 @@ fn test_locale_differentiates_cache() {
 fn test_backend_detection_no_panic() {
     let _ = TtsEngine::voxtral_available();
     let _ = TtsEngine::say_available();
+    let _ = TtsEngine::qwen3_tts_available();
 }
 
 #[test]
@@ -45,4 +46,42 @@ fn test_error_display() {
     assert!(TtsError::SubprocessFailed("oops".to_string()).to_string().contains("oops"));
     assert!(TtsError::Unavailable("none".to_string()).to_string().contains("none"));
     assert!(TtsError::Template("bad".to_string()).to_string().contains("bad"));
+}
+
+#[test]
+fn test_voxtral_is_primary_backend() {
+    // When Voxtral is available, it must be selected over Qwen3 and MacOsSay.
+    // Priority chain: VoxtralMlx > Qwen3Tts > MacOsSay.
+    let engine = TtsEngine::new();
+    if TtsEngine::voxtral_available() {
+        assert_eq!(engine.backend, TtsBackend::VoxtralMlx);
+        assert_eq!(engine.model_name, "voxtral-mini-mlx");
+    }
+}
+
+#[test]
+fn test_priority_fallback_to_qwen3() {
+    // When Voxtral unavailable but Qwen3 available, Qwen3 is selected.
+    let engine = TtsEngine::new();
+    if !TtsEngine::voxtral_available() && TtsEngine::qwen3_tts_available() {
+        assert_eq!(engine.backend, TtsBackend::Qwen3Tts);
+        assert_eq!(engine.model_name, "qwen3-tts-vivian");
+    }
+}
+
+#[test]
+fn test_priority_fallback_to_macos_say() {
+    // When neither neural backend is available, macOS say is fallback.
+    let engine = TtsEngine::new();
+    if !TtsEngine::voxtral_available() && !TtsEngine::qwen3_tts_available() {
+        assert_eq!(engine.backend, TtsBackend::MacOsSay);
+        assert_eq!(engine.model_name, "macos-say-alice");
+    }
+}
+
+#[test]
+fn test_backend_display_names() {
+    assert_eq!(TtsBackend::VoxtralMlx.display_name(), "Voxtral Mini MLX");
+    assert_eq!(TtsBackend::Qwen3Tts.display_name(), "Qwen3 TTS Vivian");
+    assert_eq!(TtsBackend::MacOsSay.display_name(), "macOS Say");
 }
