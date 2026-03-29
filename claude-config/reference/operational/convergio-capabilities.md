@@ -52,12 +52,25 @@
 - Monitor loop (30s) — health, stall detection, rate limits
 - Verify gate — evidence check before task completion
 - Recover — restart crashed daemons, checkpoint, notify
-- TTS — macOS say (Siri voices via Shortcuts)
-- STT — Whisper (planned)
+- TTS — Voxtral 4B neural (mlx-audio) + macOS say (Siri) fallback
+- STT — whisper-rs native GGML inference (lazy model loading)
 - Telegram bidirectional — text + voice, long polling
 - Telegram poll health check: detect and report dead poll task
 - Peer failure tracker: 3-strike consecutive failure alerts for remote nodes
 - Deterministic problem triage: auto-fix daemon crash, DB lock, stale worktrees, high FD count
+
+### Voice Engine (Plan 748, feature-gated)
+- Full pipeline: Audio Capture → VAD → Wake Word → ASR → Intent → TTS
+- Audio capture: `cpal` native, stereo-to-mono, linear resampling to 16kHz
+- VAD: `webrtc-vad` (libwebrtc), 4 aggressiveness levels, ~10ms frame detection
+- STT: `whisper-rs` (GGML), lazy model loading, Metal acceleration on Apple Silicon
+- Wake word: VAD + Whisper micro-transcription for "convergio" detection
+- TTS: Voxtral 4B (`mlx-community/Voxtral-4B-TTS-2603-mlx-4bit`), Italian/English voices
+- Intent: rule-based classifier → cvg commands, queries, navigation, control
+- State machine: Idle → Listening → WakeDetected → Processing → Speaking
+- Feature flag: `cargo build --features voice` (opt-in, not default)
+- Models required: `~/.cache/whisper/ggml-small.bin` (Whisper), Voxtral 4B via mlx-audio
+- `mlx-audio` installed from git main (PyPI 0.4.1 lacks voxtral_tts)
 
 ### Ali Escalation
 - "ali dimmi..." via Telegram/API → Claude CLI (Sonnet/Opus) subprocess

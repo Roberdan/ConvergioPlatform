@@ -82,42 +82,12 @@ Log manually: `cvg decision log "message" --reasoning "reason" --plan-id 724`
 
 ## Zombie Reaper (F-25)
 
-Reaper removes: stale worktrees (plan done > 24 h), merged branches, lock files > 1 h.
-Auto-runs every 30 min. Manual:
-
-```bash
-cvg reap --dry-run    # preview only — no changes
-cvg reap              # execute cleanup
-```
-
-What gets cleaned:
-- `git worktree list` entries with no matching active wave
-- `git branch --merged main` branches
-- `/tmp/*.lock` files older than 1 hour
+Reaper removes: stale worktrees (plan done > 24h), merged branches, lock files > 1h.
+Auto-runs every 30 min. Manual: `cvg reap --dry-run` (preview) | `cvg reap` (execute).
 
 ## Multi-Repo (W4 / Plan 724)
 
-**Register a repo:**
-```bash
-cvg repo add convergio-daemon --path ~/GitHub/convergio-daemon \
-  --github-url https://github.com/Roberdan/convergio-daemon
-```
-
-**List / inspect:**
-```bash
-cvg repo list           # all registered repos
-cvg repo show convergio-daemon
-```
-
-**Link repo to project:**
-```bash
-cvg repo link convergio-daemon <project-id>
-```
-
-**Sync health for all repos:**
-```bash
-cvg repo sync           # checks each repo path exists + health endpoint responds
-```
+Commands: `cvg repo add <name> --path <p> [--github-url <u>]` | `cvg repo list` | `cvg repo show <name>` | `cvg repo link <name> <project-id>` | `cvg repo sync`
 
 **Repo health unknown / not updating**
 - Cause: daemon not running, or repo path missing.
@@ -214,6 +184,29 @@ cvg repo sync           # checks each repo path exists + health endpoint respond
 - Symptom: runner logs `Wave: ? | Next: none | Thor: false` even though tasks are pending.
 - Cause: execution-context API queries `branch_name` from plans table, but column was missing (added in v19.1.0+).
 - Fix: rebuild daemon (`cargo build --release`), restart. Migration auto-adds `branch_name`. Then set it: `curl -X POST localhost:8420/api/plan-db/set-worktree/<plan_id> -H 'Content-Type: application/json' -d '{"worktree_path":"/path","branch_name":"feat/branch"}'`.
+
+## Voice Engine (Plan 748)
+
+**No audio input device found**
+- Symptom: `VoiceError::AudioError("no default audio input device")`.
+- Cause: no microphone available, or macOS permission not granted.
+- Fix: System Settings → Privacy & Security → Microphone → enable for Terminal/IDE.
+
+**Whisper model not found**
+- Symptom: `VoiceError::ModelNotAvailable("whisper model not found: ~/.cache/whisper/ggml-small.bin")`.
+- Fix: download the model: `curl -L -o ~/.cache/whisper/ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin`
+- Alt: set `WHISPER_MODEL_PATH=/path/to/model.bin`.
+
+**Voxtral TTS fails with "voxtral_tts not found"**
+- Cause: `mlx-audio` installed from PyPI 0.4.1 (lacks voxtral_tts).
+- Fix: `pip install git+https://github.com/lucasnewman/mlx-audio.git@main`
+
+**VAD rejects all frames**
+- Cause: frame size not 10/20/30ms at 16kHz (160/320/480 samples).
+- Fix: ensure `CaptureConfig::frame_duration_ms` is 10, 20, or 30.
+
+**Voice feature not compiling**
+- Fix: `cd daemon && cargo build --features voice`. Requires: cpal, webrtc-vad, whisper-rs, hound, ringbuf.
 
 ## macOS / Terminal
 

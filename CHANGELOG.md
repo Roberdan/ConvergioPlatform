@@ -15,6 +15,9 @@
 ## [19.1.0] - 29 Marzo 2026
 
 ### Added
+- Voice engine: full pipeline — cpal audio capture, webrtc-vad, whisper-rs STT, wake word detection, intent classification (Plan 748)
+- Voice engine: Voxtral 4B TTS via mlx-audio (mlx-community/Voxtral-4B-TTS-2603-mlx-4bit), Italian/English voices
+- Voice engine: feature-gated (`--features voice`), opt-in with zero default build impact
 - Jarvis identity: kernel renamed to Jarvis across log prefixes, Telegram responses, and /api/kernel/status
 - Telegram poll health check: detect and report dead poll task
 - Peer failure tracker: 3-strike consecutive failure alerts for remote nodes
