@@ -1,5 +1,20 @@
 # Changelog
 
+## [19.6.0] - 29 Marzo 2026
+
+### Added
+- Daemon-first sync: `GET /api/sync/status` runtime health endpoint with per-peer/per-table breakdown (Plan 10004 W1)
+- `SyncRuntimeStatusHolder`: shared global sync state with mark_success/mark_error lifecycle (Plan 10004 W1)
+- Two-node daemon verification harness: proves plan replication within 60s SLA (Plan 10004 W1)
+- Sync preflight checks and timestamp normalization (SQLite space vs RFC3339 T separator) (Plan 10004 W1)
+- Thor guard normalisation for task sync; auto-create probe tasks in harness (Plan 10004 W1)
+
+### Fixed
+- Sync peer addr resolution and transport validation hardened (Plan 10004 W1)
+- Sync `updated_at` migration timestamps normalized; NULL handling in LWW comparison (Plan 10004 W1)
+- Sync INSERT COALESCE to prevent NOT NULL constraint failures (Plan 10004 W1)
+- Global `SyncRuntimeStatusHolder` tests serialized to prevent race conditions (Plan 10004 W1)
+
 ## [19.5.0] - 29 Marzo 2026
 
 ### Added

@@ -1,7 +1,7 @@
 # Convergio Platform — Complete Capability Reference
 
 > Single source of truth for what Convergio can do. Load this in every agent session.
-> Updated: 29 Marzo 2026 | v19.2.0
+> Updated: 29 Marzo 2026 | v19.6.0
 
 ## Core Architecture
 
@@ -89,6 +89,8 @@
 - `GET /api/node/readiness` — 10-check health report per node
 - Role-based provisioning (kernel, executor, coordinator)
 - Background DB sync via HTTP between mesh nodes (replaces rsync-only)
+- `GET /api/sync/status` — runtime health, per-peer/per-table sync state, transport mode
+- Two-node replication verified within 60s SLA
 - Auto-rebuild: daemon rebuilds after git pull, launchd plist (5min interval)
 - `caffeinate` anti-sleep for kernel node
 - Secrets replication via ~/.convergio/env
@@ -148,6 +150,7 @@
 | Agents | 4 | 5 | /api/agents, /api/ipc/agents |
 | Mesh | 8 | 4 | /api/mesh, /api/mesh/status, /api/heartbeat |
 | Kernel | 3 | 5 | /api/kernel/status, /ask, /speak, /transcribe |
+| Sync | 2 | 1 | /api/sync/status, /export, /import |
 | Node | 1 | 0 | /api/node/readiness |
 | Metrics | 4 | 1 | /api/metrics/summary, /api/tokens/daily |
 | Chat | 3 | 4 | /api/chat/session, /message |

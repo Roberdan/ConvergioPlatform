@@ -130,73 +130,61 @@ Commands: `cvg repo add <name> --path <p> [--github-url <u>]` | `cvg repo list` 
 ## Nightly Calibration (Plan 734)
 
 **calibrate-models.sh not found on M1 Pro**
-- Symptom: `bash: scripts/kernel/calibrate-models.sh: No such file or directory`
-- Cause: M1 Pro repo is behind main (script added in Plan T commit `3bba32f`).
-- Fix: `ssh m1Pro "cd ~/GitHub/ConvergioPlatform && git pull --rebase origin main"`
+- Cause: repo behind main. Fix: `ssh m1Pro "cd ~/GitHub/ConvergioPlatform && git pull --rebase origin main"`
 
-**Telegram notification skipped**
-- Symptom: `[calibrate-models] Telegram not configured — skipping notification`
-- Cause: `CONVERGIO_TELEGRAM_TOKEN` or `CONVERGIO_TELEGRAM_CHAT_ID` not set in `~/.convergio/env`.
-- Fix: add both vars to `~/.convergio/env` on M1 Pro and reload: `source ~/.convergio/env`.
+**Telegram notification skipped** → add `CONVERGIO_TELEGRAM_TOKEN` + `CONVERGIO_TELEGRAM_CHAT_ID` to `~/.convergio/env`.
 
-**Evolution proposal submission fails (non-fatal)**
-- Symptom: `[calibrate-models] Evolution proposal submission failed (non-fatal)`
-- Cause: daemon not running or `/api/evolution/proposals` endpoint unavailable.
-- Fix: verify daemon is running on M1 Pro: `ssh m1Pro "curl -sf http://localhost:8420/api/health"`.
-  If down: `ssh m1Pro "cd ~/GitHub/ConvergioPlatform && ./daemon/start.sh"`.
+**Evolution proposal submission fails (non-fatal)** → daemon not running on M1 Pro. Start it.
 
 ## Node Deployment (Plan 732)
 
-**deploy-node.sh fails on DB sync**
-- Symptom: `scripts/mesh/deploy-node.sh` exits with "rsync: connection unexpectedly closed".
-- Cause: SSH alias in the deploy script does not match the entry in `~/.claude/config/peers.conf`.
-- Fix: verify the target node name in `peers.conf` matches the SSH alias used by `deploy-node.sh`.
-  Run `grep <nodename> ~/.claude/config/peers.conf` and align aliases.
+**deploy-node.sh "rsync: connection unexpectedly closed"**
+- Cause: SSH alias doesn't match `peers.conf`. Fix: align aliases in `~/.claude/config/peers.conf`.
 
 **"keychain User interaction not allowed"**
-- Symptom: deploy script fails with "errSecInteractionNotAllowed" when accessing keychain.
-- Cause: script is launched from a non-interactive context (launchd, cron, SSH non-interactive).
-- Fix: run `scripts/mesh/deploy-node.sh` from an interactive terminal session (Terminal.app or iTerm2),
-  not from launchd or a background agent.
+- Cause: non-interactive context (launchd/cron). Fix: run from interactive terminal.
 
-**node readiness shows role FAIL**
-- Symptom: `GET /api/node/readiness` returns a check with `name: "role"` and `status: "FAIL"`.
-- Cause: the node's hostname is not registered in `~/.claude/config/peers.conf` under the correct role.
-- Fix: add or update the hostname entry in `peers.conf` with the correct role field, then restart daemon:
-  `./daemon/start.sh`
+**node readiness role FAIL**
+- Cause: hostname not in `peers.conf` with correct role. Fix: add entry, restart daemon.
+
+## Daemon Sync / Replication (Plan 10004)
+
+**Check sync health**: `curl -s http://localhost:8420/api/sync/status | jq .`
+- Returns: `healthy`, `last_success_at`, `last_error`, `transport_mode`, per-peer/per-table breakdown.
+
+**Sync unhealthy** (`"healthy": false`)
+- Check `last_error`. Common: peer unreachable, auth failure, DB locked.
+- Fix: verify peer (`tailscale ping <peer>`), restart daemon on both nodes.
+
+**Rows not syncing (timestamp mismatch)**
+- Cause: `updated_at` format mismatch (SQLite space vs RFC3339 `T`).
+- Fix: rebuild daemon (v19.6.0+) — normalizes automatically.
+
+**Two-node verification**: create plan on node A, verify on node B within 60s SLA.
+- Harness: `cargo test two_node` in daemon/.
+
+**Transport**: `daemon-http` default. Fallback: `manual-rsync-only` (operator must run `scripts/kernel/sync-db.sh`).
 
 ## libSQL Migration (Plan 742)
 
-**Sync columns missing after upgrade**
-- Symptom: daemon logs "no such column: updated_at" on sync endpoints.
-- Cause: migration did not run (daemon started from old binary).
-- Fix: rebuild and restart: `cd daemon && cargo build --release && ./daemon/start.sh`
+**Sync columns missing ("no such column: updated_at")**
+- Cause: old binary. Fix: `cd daemon && cargo build --release && ./daemon/start.sh`
 
 **Peer resolver returns wrong node**
-- Symptom: delegation sends task to unexpected node, or "peer not found" error.
-- Cause: `~/.claude/config/peers.conf` entry missing or hostname changed.
-- Fix: `grep <expected_name> ~/.claude/config/peers.conf` — add/update entry, restart daemon.
-  Resolution order: exact match > prefix match > Tailscale MagicDNS.
+- Cause: `peers.conf` entry missing/stale. Resolution: exact > prefix > Tailscale MagicDNS.
+- Fix: update `~/.claude/config/peers.conf`, restart daemon.
 
 **Evidence gate deadlock on shutdown**
-- Symptom: daemon hangs on SIGTERM for >10s, lock files left in `/tmp/`.
-- Cause: verify mutex held during shutdown race (pre-v19.0.0 bug).
-- Fix: upgrade to v19.0.0 (shutdown reaper cleans locks). Manual: `rm /tmp/convergio-verify-*.lock`
+- Cause: pre-v19.0.0 mutex race. Fix: upgrade to v19.0.0. Manual: `rm /tmp/convergio-verify-*.lock`
 
-**Credential routing fails for multi-org repos**
-- Symptom: `gh api` returns 401 for repos in non-default GitHub org.
-- Cause: gh credential helper not configured per-repo.
-- Fix: run `scripts/platform/gh-credential-route.sh <repo-path>` to configure per-repo credential routing.
+**Credential routing 401 for multi-org repos**
+- Fix: `scripts/platform/gh-credential-route.sh <repo-path>`
 
 **copilot-plan-runner exits without completing all tasks**
-- Symptom: runner exits 0 but tasks remain in_progress.
-- Cause: pre-v19 runner called `set -e` and exited on first non-zero CLI return.
-- Fix: upgrade runner script. v19 removes `set -e`, protects CLI launch, only resets in_progress tasks.
+- Cause: pre-v19 `set -e`. Fix: upgrade runner script (v19 removes `set -e`).
 
-**copilot-plan-runner shows "Next: none" despite pending tasks**
-- Symptom: runner logs `Wave: ? | Next: none | Thor: false` even though tasks are pending.
-- Cause: execution-context API queries `branch_name` from plans table, but column was missing (added in v19.1.0+).
-- Fix: rebuild daemon (`cargo build --release`), restart. Migration auto-adds `branch_name`. Then set it: `curl -X POST localhost:8420/api/plan-db/set-worktree/<plan_id> -H 'Content-Type: application/json' -d '{"worktree_path":"/path","branch_name":"feat/branch"}'`.
+**copilot-plan-runner "Next: none" despite pending tasks**
+- Cause: `branch_name` column missing (pre-v19.1.0). Fix: rebuild daemon, restart.
 
 ## Voice Engine (Plan 748)
 
@@ -229,20 +217,16 @@ Commands: `cvg repo add <name> --path <p> [--github-url <u>]` | `cvg repo list` 
 ## Session Stability
 
 **Session crashes / context limit reached**
-- Symptom: "Context limit reached" or "cache_control.ttl ordering" error.
-- Cause: Hook overhead (13 hooks per tool call) + inline merge conflict resolution.
-- Fix: Use consolidated hooks (`scripts/platform/pre-tool-guard.sh`), delegate cherry-picks to agents, checkpoint after every task. See ADR-0113.
+- Cause: hook overhead + inline merge conflict resolution.
+- Fix: consolidated hooks (`pre-tool-guard.sh`), delegate cherry-picks, checkpoint after every task. ADR-0113.
 
-**Thor verify commands fail with "cd daemon: No such file or directory"**
-- Symptom: `cvg task validate` returns REJECTED with "cd daemon" path error.
-- Cause: Daemon process cwd is already `daemon/`, so `cd daemon &&` tries `daemon/daemon/`.
-- Fix: Remove `cd daemon &&` prefix from verify commands in plan specs. Update task notes via API:
-  `curl -s -X POST http://localhost:8420/api/plan-db/task/update -H "Content-Type: application/json" -d '{"task_id": ID, "status": "submitted", "notes": "cargo test FILTER"}'`
+**Thor verify "cd daemon: No such file or directory"**
+- Cause: daemon cwd already `daemon/`, so `cd daemon &&` resolves to `daemon/daemon/`.
+- Fix: remove `cd daemon &&` prefix from verify commands in plan specs.
 
-**plan-checkpoint.sh fails with "Cannot reach daemon"**
-- Symptom: `plan-checkpoint.sh save` errors.
+**plan-checkpoint.sh "Cannot reach daemon"**
 - Cause: v1 used wrong API path or `sqlite3` directly.
-- Fix: Updated to v2.0 using `cvg plan show`. Rebuild: `cd daemon && cargo build --release`.
+- Fix: rebuild daemon (v2.0 uses `cvg plan show`).
 
 ## Plan Workflow
 
