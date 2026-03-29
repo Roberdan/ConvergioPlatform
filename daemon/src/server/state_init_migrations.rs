@@ -175,4 +175,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
      )",
     // Plan 748 — branch_name on plans for execution-context agent delegation
     "ALTER TABLE plans ADD COLUMN branch_name TEXT",
+    // Add updated_at to tables that need timestamp-based sync replication
+    "ALTER TABLE knowledge_base ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
+    "ALTER TABLE notifications ADD COLUMN updated_at DATETIME DEFAULT (datetime('now'))",
 ];

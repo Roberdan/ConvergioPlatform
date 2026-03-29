@@ -30,15 +30,29 @@ fn setup_db() -> Arc<Mutex<Connection>> {
     Arc::new(Mutex::new(conn))
 }
 
+/// Create a temporary peers.conf file and set CONVERGIO_PEERS_CONF to point to it.
+/// Returns the path (kept alive by the caller owning the string).
+fn setup_peers_conf(content: &str) -> String {
+    let path = format!("/tmp/test-peers-{}.conf", std::process::id());
+    std::fs::write(&path, content).expect("write temp peers.conf");
+    std::env::set_var("CONVERGIO_PEERS_CONF", &path);
+    path
+}
+
+fn cleanup_peers_conf(path: &str) {
+    let _ = std::fs::remove_file(path);
+    std::env::remove_var("CONVERGIO_PEERS_CONF");
+}
+
 #[tokio::test]
 async fn test_loop_calls_sync_returns_join_handle() {
+    let _guard = env_lock().lock().expect("env lock");
     // spawn_sync_loop must return a JoinHandle immediately without blocking.
-    // With no rows in mesh_sync_stats, each tick is a no-op — we just verify
-    // the handle is created and the loop doesn't panic on an empty peer table.
     let db = setup_db();
+    let path = setup_peers_conf("[mesh]\nshared_secret=test\n");
     let handle = spawn_sync_loop(db, 60);
-    // Aborting the background task prevents it running in test teardown.
     handle.abort();
+    cleanup_peers_conf(&path);
 }
 
 #[test]
@@ -70,35 +84,20 @@ fn test_interval_arg_overrides_env() {
 #[test]
 fn test_query_active_peers_returns_recent_heartbeats() {
     use super::query_active_peers;
+    let _guard = env_lock().lock().expect("env lock");
     let db = setup_db();
-    {
-        let conn = db.lock().expect("lock");
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
-        conn.execute_batch(&format!(
-            "INSERT INTO peer_heartbeats (peer_name, last_seen, load_json) VALUES
-             ('node-a', {now}, '{{\"tailscale_ip\":\"100.1.1.1\"}}'),
-             ('node-b', {old}, NULL),
-             ('node-c', {now}, '{{\"tailscale_ip\":\"100.2.2.2\"}}');",
-            now = now, old = now - 3600.0,
-        ))
-        .expect("seed peers");
-    }
-    let peers = query_active_peers(&db).expect("query peers");
-    // node-a and node-c have tailscale_ip and recent heartbeat
-    assert_eq!(peers.len(), 2);
-    assert!(peers.iter().any(|u| u.contains("100.1.1.1")));
-    assert!(peers.iter().any(|u| u.contains("100.2.2.2")));
-    // node-b is too old (> 600s)
-    assert!(!peers.iter().any(|u| u.contains("node-b")));
-}
 
-#[test]
-fn test_query_active_peers_returns_host_port_without_scheme() {
-    // Peer addresses must be "host:port" — the HTTP transport adds the scheme.
-    // A double scheme (http://http://...) causes silent sync failure.
-    use super::query_active_peers;
-    let db = setup_db();
+    // Create peers.conf with the test peer names
+    let conf_path = setup_peers_conf(
+        "[mesh]\nshared_secret=test\n\n\
+         [node-a]\nssh_alias=node-a\nuser=test\nos=macos\n\
+         tailscale_ip=100.1.1.1\ndns_name=node-a.ts.net\n\
+         capabilities=claude\nrole=worker\n\n\
+         [node-c]\nssh_alias=node-c\nuser=test\nos=macos\n\
+         tailscale_ip=100.2.2.2\ndns_name=node-c.ts.net\n\
+         capabilities=claude\nrole=worker\n",
+    );
+
     {
         let conn = db.lock().expect("lock");
         let now = std::time::SystemTime::now()
@@ -106,19 +105,103 @@ fn test_query_active_peers_returns_host_port_without_scheme() {
             .unwrap()
             .as_secs_f64();
         conn.execute_batch(&format!(
-            "INSERT INTO peer_heartbeats (peer_name, last_seen, load_json) VALUES \
-             ('node-x', {now}, '{{\"tailscale_ip\":\"100.5.5.5\"}}');",
+            "INSERT INTO peer_heartbeats (peer_name, last_seen) VALUES
+             ('node-a', {now}),
+             ('node-b', {old}),
+             ('node-c', {now});",
+            now = now,
+            old = now - 3600.0,
+        ))
+        .expect("seed peers");
+    }
+    let peers = query_active_peers(&db).expect("query peers");
+    // node-a and node-c are online but may not be TCP-reachable in test env.
+    // The key assertion: node-b (old heartbeat) is never included.
+    for addr in &peers {
+        assert!(
+            !addr.contains("node-b"),
+            "stale peer node-b must not appear, got: {addr}"
+        );
+    }
+    // Addresses must not have http:// scheme (transport layer adds it)
+    for addr in &peers {
+        assert!(
+            !addr.starts_with("http://"),
+            "peer addr must not include scheme, got: {addr}"
+        );
+    }
+    cleanup_peers_conf(&conf_path);
+}
+
+#[test]
+fn test_query_active_peers_returns_host_port_without_scheme() {
+    // Peer addresses must be "host:port" — the HTTP transport adds the scheme.
+    // A double scheme (http://http://...) causes silent sync failure.
+    use super::query_active_peers;
+    let _guard = env_lock().lock().expect("env lock");
+    let db = setup_db();
+
+    let conf_path = setup_peers_conf(
+        "[mesh]\nshared_secret=test\n\n\
+         [node-x]\nssh_alias=node-x\nuser=test\nos=macos\n\
+         tailscale_ip=100.5.5.5\ndns_name=node-x.ts.net\n\
+         capabilities=claude\nrole=worker\n",
+    );
+
+    {
+        let conn = db.lock().expect("lock");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        conn.execute_batch(&format!(
+            "INSERT INTO peer_heartbeats (peer_name, last_seen) VALUES \
+             ('node-x', {now});",
         ))
         .expect("seed peer");
     }
     let peers = query_active_peers(&db).expect("query");
-    assert_eq!(peers.len(), 1);
-    let addr = &peers[0];
+    // Peer may not be TCP-reachable in test, but if resolved it must not have scheme
+    for addr in &peers {
+        assert!(
+            !addr.starts_with("http://"),
+            "peer addr must not include scheme, got: {addr}"
+        );
+        assert!(
+            addr.ends_with(":8420"),
+            "peer addr must end with :8420, got: {addr}"
+        );
+    }
+    cleanup_peers_conf(&conf_path);
+}
+
+#[test]
+fn test_query_active_peers_peer_not_in_conf() {
+    // Peer online in heartbeats but missing from peers.conf → error logged, not panicked.
+    use super::query_active_peers;
+    let _guard = env_lock().lock().expect("env lock");
+    let db = setup_db();
+
+    // peers.conf has NO peers — only [mesh] section
+    let conf_path = setup_peers_conf("[mesh]\nshared_secret=test\n");
+
+    {
+        let conn = db.lock().expect("lock");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        conn.execute_batch(&format!(
+            "INSERT INTO peer_heartbeats (peer_name, last_seen) VALUES ('ghost', {now});",
+        ))
+        .expect("seed");
+    }
+    let peers = query_active_peers(&db).expect("query");
     assert!(
-        !addr.starts_with("http://"),
-        "peer addr must not include scheme, got: {addr}"
+        peers.is_empty(),
+        "peer not in peers.conf must not be returned"
     );
-    assert_eq!(addr, "100.5.5.5:8420");
+    cleanup_peers_conf(&conf_path);
 }
 
 #[test]

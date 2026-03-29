@@ -14,6 +14,7 @@ pub struct ResolvedPeer {
     pub user: String,
     pub ssh_alias: String,
     pub tailscale_ip: String,
+    pub thunderbolt_ip: Option<String>,
 }
 
 /// Normalize a peer name by lowercasing and stripping separators for fuzzy matching.
@@ -49,6 +50,7 @@ pub fn resolve_from_registry(
         user: config.user.clone(),
         ssh_alias: config.ssh_alias.clone(),
         tailscale_ip: config.tailscale_ip.clone(),
+        thunderbolt_ip: config.thunderbolt_ip.clone(),
     })
 }
 

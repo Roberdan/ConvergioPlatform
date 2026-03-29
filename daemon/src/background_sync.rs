@@ -1,25 +1,21 @@
-/// Background sync loop — periodically syncs with active mesh peers via HTTP.
-///
-/// Spawned once at daemon startup. Queries mesh_sync_stats for live peers and
-/// uses the timestamp-based `libsql_adapter` to export/import changes over HTTP.
-/// Skips ticks silently when the DB lock is contended or no peers are available.
+/// Background sync loop — syncs with active mesh peers via HTTP (timestamp-based LWW).
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{error, info, warn};
 
-use crate::background_sync_http::{fetch_changes_from_peer, send_changes_to_peer};
+use crate::background_sync_http::{
+    fetch_changes_from_peer, peers_conf_path_from_env, resolve_best_addr, send_changes_to_peer,
+};
 use crate::db::libsql_adapter::{self, SyncMeta};
 
 /// Default sync interval in seconds when CONVERGIO_SYNC_INTERVAL_SECS is unset.
 const DEFAULT_INTERVAL_SECS: u64 = 30;
 
 /// Tables eligible for timestamp-based sync. Must have `id` + `updated_at`.
-const SYNC_TABLES: &[&str] = &["tasks", "plans", "waves"];
+const SYNC_TABLES: &[&str] = &["tasks", "plans", "waves", "knowledge_base", "notifications"];
 
-/// Resolve the effective sync interval.
-///
-/// Priority: explicit `override_secs` arg > CONVERGIO_SYNC_INTERVAL_SECS env var > 30s default.
+/// Resolve sync interval: explicit arg > env var > 30s default.
 pub fn resolve_interval_secs(override_secs: Option<u64>) -> u64 {
     if let Some(v) = override_secs {
         return v;
@@ -30,10 +26,8 @@ pub fn resolve_interval_secs(override_secs: Option<u64>) -> u64 {
         .unwrap_or(DEFAULT_INTERVAL_SECS)
 }
 
-/// Query mesh_sync_stats for peers that are not 'unreachable'.
-///
-/// Returns an empty Vec — not an error — when the table has no rows or the
-/// lock is already held. Callers should skip the tick rather than propagate.
+/// Query online peers and resolve best reachable address (Thunderbolt → Tailscale).
+/// Returns "host:port" WITHOUT scheme. Fails loud — errors at ERROR level.
 pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, rusqlite::Error> {
     let conn = db.lock().map_err(|_| {
         rusqlite::Error::SqliteFailure(
@@ -42,50 +36,62 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
         )
     })?;
 
-    // Read peers.conf for Tailscale IPs — this is the source of truth for addresses.
-    // peer_heartbeats tells us WHO is online, peers.conf tells us HOW to reach them.
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let peers_conf_path = format!("{}/.claude/config/peers.conf", home);
-    let conf_content = std::fs::read_to_string(&peers_conf_path).unwrap_or_default();
+    let peers_conf_path = peers_conf_path_from_env();
+    let conf_content = match std::fs::read_to_string(&peers_conf_path) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("background_sync: cannot read peers.conf at {peers_conf_path}: {e}");
+            return Ok(Vec::new());
+        }
+    };
     let conf = crate::server::api_mesh::peer_conf::parse_peers_conf(&conf_content);
 
-    // Find peers that have heartbeated recently AND have a tailscale_ip in peers.conf
     let mut stmt = conn.prepare_cached(
         "SELECT DISTINCT peer_name FROM peer_heartbeats \
-         WHERE last_seen > unixepoch() - 600"
+         WHERE last_seen > unixepoch() - 600",
     )?;
     let online_names: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
         .filter_map(|r| r.ok())
         .collect();
 
-    let mut urls = Vec::new();
+    if online_names.is_empty() {
+        info!("background_sync: no peers with recent heartbeat");
+        return Ok(Vec::new());
+    }
+
+    let mut addrs = Vec::new();
     for name in &online_names {
-        if let Some(peer) = conf.get(name.as_str()) {
-            if let Some(ip) = peer.get("tailscale_ip") {
-                if !ip.is_empty() {
-                    urls.push(format!("http://{}:8420", ip));
-                    info!("background_sync: peer {name} → http://{ip}:8420");
-                }
+        let peer = match conf.get(name.as_str()) {
+            Some(p) => p,
+            None => {
+                error!(
+                    "background_sync: peer '{name}' online (heartbeat) but NOT in peers.conf — \
+                     check that peer_heartbeats.peer_name matches peers.conf section name"
+                );
+                continue;
+            }
+        };
+        match resolve_best_addr(name, peer) {
+            Some(addr) => {
+                info!("background_sync: peer {name} → {addr}");
+                addrs.push(addr);
+            }
+            None => {
+                error!(
+                    "background_sync: peer '{name}' has no reachable address — \
+                     tried thunderbolt_ip={:?}, tailscale_ip={:?}",
+                    peer.get("thunderbolt_ip"),
+                    peer.get("tailscale_ip"),
+                );
             }
         }
     }
-    if urls.is_empty() && !online_names.is_empty() {
-        warn!("background_sync: {} online peers but no tailscale_ip in peers.conf: {:?}", online_names.len(), online_names);
-    }
-    Ok(urls)
+    Ok(addrs)
 }
 
-/// Sync a single table with a remote peer via HTTP.
-///
-/// 1. Read local _sync_meta for the last sync timestamp with this peer+table.
-/// 2. Export local changes since that timestamp.
-/// 3. POST them to the peer's /api/sync/import.
-/// 4. GET the peer's /api/sync/export?table=X&since=Y.
-/// 5. Apply the remote changes locally.
-/// 6. Update _sync_meta with current timestamp.
-///
-/// Returns the number of remote changes applied, or 0 on failure.
+/// Sync one table with a peer: export local → POST → GET remote → apply → checkpoint.
+/// Returns changes applied, or 0 on failure.
 pub fn sync_table_with_peer(
     conn: &Connection,
     peer_addr: &str,
@@ -111,7 +117,8 @@ pub fn sync_table_with_peer(
 
     if !local_changes.is_empty() {
         if let Err(e) = send_changes_to_peer(peer_addr, &local_changes) {
-            warn!(peer = %peer_addr, error = %e, "send changes failed");
+            error!(peer = %peer_addr, error = %e, "send changes failed — aborting sync tick to prevent data loss");
+            return 0;
         }
     }
 
@@ -158,15 +165,7 @@ pub fn sync_table_with_peer(
     applied
 }
 
-/// Spawn the background sync loop.
-///
-/// Each `interval_secs` tick:
-/// 1. Lock the DB to read active peers from mesh_sync_stats.
-/// 2. For each peer+table, export/import changes via HTTP.
-/// 3. Log results via tracing; skip tick silently on lock contention.
-///
-/// The returned `JoinHandle` can be aborted to stop the loop.
-/// `interval_secs` overrides CONVERGIO_SYNC_INTERVAL_SECS env var when non-zero.
+/// Spawn the background sync loop. Abortable via the returned JoinHandle.
 pub fn spawn_sync_loop(
     db: Arc<Mutex<Connection>>,
     interval_secs: u64,
@@ -199,7 +198,7 @@ pub fn spawn_sync_loop(
             };
 
             if peers.is_empty() {
-                debug!("background_sync: no active peers, skipping tick");
+                error!("background_sync: no reachable peers — sync is NOT running");
                 continue;
             }
             info!(
@@ -218,7 +217,7 @@ pub fn spawn_sync_loop(
                     c
                 }
                 Err(e) => {
-                    warn!("background_sync: cannot open DB at {}: {e}", db_path.display());
+                    error!("background_sync: cannot open DB at {}: {e}", db_path.display());
                     continue;
                 }
             };

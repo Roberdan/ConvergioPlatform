@@ -33,6 +33,7 @@ mod tests {
             capabilities: vec!["claude".to_owned()],
             role: role.to_owned(),
             status: "active".to_owned(),
+            thunderbolt_ip: None,
             mac_address: None,
             gh_account: None,
             runners: None,

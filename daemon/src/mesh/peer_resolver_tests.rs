@@ -15,6 +15,7 @@ fn test_registry() -> PeersRegistry {
             capabilities: vec!["claude".into(), "copilot".into()],
             role: "coordinator".to_string(),
             status: "active".to_string(),
+            thunderbolt_ip: None,
             mac_address: None,
             gh_account: None,
             runners: None,
@@ -32,6 +33,7 @@ fn test_registry() -> PeersRegistry {
             capabilities: vec!["claude".into()],
             role: "worker".to_string(),
             status: "active".to_string(),
+            thunderbolt_ip: Some("10.0.0.2".to_string()),
             mac_address: None,
             gh_account: None,
             runners: None,
@@ -105,6 +107,7 @@ fn ssh_destination_prefers_alias() {
         user: "roberdan".to_string(),
         ssh_alias: "RoberdanM5Max.local".to_string(),
         tailscale_ip: "100.89.245.79".to_string(),
+        thunderbolt_ip: None,
     };
     assert_eq!(ssh_destination(&resolved), "RoberdanM5Max.local");
 }
@@ -118,6 +121,7 @@ fn ssh_destination_falls_back_to_user_at_host() {
         user: "roberdan".to_string(),
         ssh_alias: String::new(),
         tailscale_ip: "100.64.0.2".to_string(),
+        thunderbolt_ip: None,
     };
     assert_eq!(ssh_destination(&resolved), "roberdan@100.64.0.2");
 }
