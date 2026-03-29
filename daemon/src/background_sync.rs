@@ -5,7 +5,8 @@ use std::time::Duration;
 use tracing::{error, info, warn};
 
 use crate::background_sync_http::{
-    fetch_changes_from_peer, peers_conf_path_from_env, resolve_best_addr, send_changes_to_peer,
+    detect_local_tailscale_ip, fetch_changes_from_peer, peers_conf_path_from_env,
+    resolve_best_addr, send_changes_to_peer,
 };
 use crate::db::libsql_adapter::{self, SyncMeta};
 
@@ -66,6 +67,7 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
         return Ok(Vec::new());
     }
 
+    let local_ts_ip = detect_local_tailscale_ip();
     let mut addrs = Vec::new();
     for name in &online_names {
         let peer = match conf.get(name.as_str()) {
@@ -78,6 +80,11 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
                 continue;
             }
         };
+        if let Some(ts_ip) = peer.get("tailscale_ip") {
+            if Some(ts_ip.as_str()) == local_ts_ip.as_deref() {
+                continue; // skip self
+            }
+        }
         match resolve_best_addr(name, peer) {
             Some(addr) => {
                 info!("background_sync: peer {name} → {addr}");

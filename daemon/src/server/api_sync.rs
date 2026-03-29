@@ -28,7 +28,12 @@ pub struct ImportPayload {
 pub fn router() -> Router<ServerState> {
     Router::new()
         .route("/api/sync/export", get(handle_export))
-        .route("/api/sync/import", post(handle_import))
+        .route(
+            "/api/sync/import",
+            post(handle_import).layer(
+                axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024), // 50 MB for bulk sync
+            ),
+        )
 }
 
     #[tracing::instrument(skip_all)]
