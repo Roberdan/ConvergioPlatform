@@ -42,28 +42,34 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
         )
     })?;
 
-    // Table may not exist on a fresh DB — return empty rather than error.
-    let exists: bool = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mesh_sync_stats'",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .map(|n| n > 0)
-        .unwrap_or(false);
-
-    if !exists {
-        debug!("background_sync: mesh_sync_stats not yet present, skipping tick");
-        return Ok(vec![]);
-    }
-
-    let mut stmt =
-        conn.prepare_cached("SELECT peer_name FROM mesh_sync_stats WHERE status != 'unreachable'")?;
-    let peers: Vec<String> = stmt
+    // Use peer_heartbeats (always exists) — find peers seen in last 10 min.
+    // Returns peer URLs like "http://100.x.x.x:8420" for sync HTTP calls.
+    let mut stmt = conn.prepare_cached(
+        "SELECT DISTINCT peer_name FROM peer_heartbeats \
+         WHERE last_seen > unixepoch() - 600"
+    )?;
+    let names: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
         .filter_map(|r| r.ok())
         .collect();
-    Ok(peers)
+
+    // Resolve peer names to HTTP URLs via peers.conf or tailscale IP
+    let mut urls = Vec::new();
+    for name in &names {
+        // Try to find tailscale_ip from peer_heartbeats load_json
+        let ip: Option<String> = conn.query_row(
+            "SELECT json_extract(load_json, '$.tailscale_ip') FROM peer_heartbeats WHERE peer_name = ?1",
+            [name],
+            |row| row.get(0),
+        ).ok().flatten();
+        if let Some(ip) = ip {
+            urls.push(format!("http://{}:8420", ip));
+        }
+    }
+    if urls.is_empty() && !names.is_empty() {
+        debug!("background_sync: {} peers found but no resolved URLs", names.len());
+    }
+    Ok(urls)
 }
 
 /// Sync a single table with a remote peer via HTTP.
