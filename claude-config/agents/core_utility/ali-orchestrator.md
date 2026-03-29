@@ -165,7 +165,7 @@ curl -s $DAEMON_URL/api/ipc/metrics
 - Silent (10 min) → check IPC status → re-spawn if dead
 - CPU > 90% → re-route to different mesh node
 
-@reference/ali-ipc-protocol.md
+@docs/reference/agent-protocols/ali-ipc-protocol.md
 
 ## Step 7: Validate per Domain (C5)
 
@@ -183,7 +183,7 @@ Task(subagent_type="$VALIDATOR", prompt="Validate task $TASK_ID. Apply gates for
 
 After report: `sqlite3 $DASHBOARD_DB "UPDATE execution_runs SET status='completed', completed_at=datetime('now'), result='$SUMMARY', cost_usd=$COST, agents_used=$N WHERE id=$RUN_ID;"`
 
-@reference/ali-cross-repo-protocol.md
+@docs/reference/agent-protocols/ali-cross-repo-protocol.md
 
 ## Rules
 
