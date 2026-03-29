@@ -77,13 +77,24 @@ else
   skip "telegram bot" "CONVERGIO_TELEGRAM_TOKEN not set"
 fi
 
-# --- 7. Compilation ---
+# --- 7. Delegation ---
+echo "--- Delegation ---"
+if [ -x "scripts/test-delegation-e2e.sh" ]; then
+  check "delegation script syntax" "bash -n scripts/test-delegation-e2e.sh"
+  check "copilot-plan-runner exists" "test -f ~/.claude/scripts/copilot-plan-runner.sh"
+  check "cvg plan create" "~/.local/bin/cvg plan create 1 'E2E-probe-$(date +%s)' 2>/dev/null | grep -qi plan"
+  check "cvg plan import" "~/.local/bin/cvg plan import --help 2>/dev/null | grep -qi spec"
+else
+  skip "delegation tests" "scripts/test-delegation-e2e.sh not found"
+fi
+
+# --- 8. Compilation ---
 echo "--- Build ---"
 check "cargo check" "cargo check --features kernel --manifest-path daemon/Cargo.toml 2>&1 | grep -q Finished"
 check "cargo test" "cargo test --features kernel --manifest-path daemon/Cargo.toml --lib -- --test-threads=4 2>&1 | tee /tmp/cargo-test-e2e.log | tail -5 | grep -q 'test result: ok'"
 check "zero files over 250" "! find daemon/src -name '*.rs' -exec sh -c 'test \$(wc -l < \"\$1\") -gt 250' _ {} \; -print 2>/dev/null | grep -q ."
 
-# --- 8. Remote Node (if specified) ---
+# --- 9. Remote Node (if specified) ---
 if [ -n "$REMOTE_NODE" ]; then
   echo "--- Remote: $REMOTE_NODE ---"
   check "remote health" "ssh $REMOTE_NODE 'curl -sf http://localhost:8420/api/health' | grep -q ok"
