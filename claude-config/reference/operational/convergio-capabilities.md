@@ -153,6 +153,8 @@
 | Chat | 3 | 4 | /api/chat/session, /message |
 | Nightly | 3 | 3 | /api/nightly/jobs |
 | Workspace | 4 | 4 | /api/workspace/create, /quality-gate |
+| Memory | 2 | 2 | /api/memory/list, /stats, /gc, /delete/:file |
+| Voice | 2 | 3 | /api/voice/start, /stop, /status, /wake-word |
 
 ## NON-NEGOTIABLE Rules
 
