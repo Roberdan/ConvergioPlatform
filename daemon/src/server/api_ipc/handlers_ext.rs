@@ -1,5 +1,5 @@
-// handlers_ext: Plan 668 agent write handlers (register/unregister/heartbeat)
-use super::super::state::{ApiError, ServerState};
+// handlers_ext: Plan 668 agent write handlers + T2-04 list/deregister
+use super::super::state::{query_rows, ApiError, ServerState};
 use super::super::ws_brain::{broadcast_brain_agent_update, broadcast_brain_session_update};
 use super::ensure_ipc_schema;
 use axum::extract::State;
@@ -96,6 +96,59 @@ pub async fn api_ipc_agents_unregister(
     broadcast_brain_session_update(&state);
 
     Ok(Json(json!({ "ok": true })))
+}
+
+/// GET /api/ipc/agents/list — all registered sessions with derived status.
+pub async fn api_ipc_agents_list(
+    State(state): State<ServerState>,
+) -> Result<Json<Value>, ApiError> {
+    ensure_ipc_schema(&state)?;
+    let conn = state.get_conn()?;
+    // Derive status: active if last_seen within 10 minutes, else inactive.
+    let rows = query_rows(
+        &conn,
+        "SELECT name,
+                agent_type AS type,
+                CASE WHEN last_seen >= strftime('%Y-%m-%dT%H:%M:%f','now','-10 minutes')
+                     THEN 'active' ELSE 'inactive' END AS status,
+                pid,
+                registered_at
+         FROM ipc_agents ORDER BY last_seen DESC",
+        [],
+    )?;
+    Ok(Json(json!({ "ok": true, "agents": rows })))
+}
+
+#[derive(Deserialize)]
+pub struct DeregisterAgent {
+    name: String,
+}
+
+/// POST /api/ipc/agents/deregister — remove an agent by name (all hosts).
+pub async fn api_ipc_agents_deregister(
+    State(state): State<ServerState>,
+    Json(body): Json<DeregisterAgent>,
+) -> Result<Json<Value>, ApiError> {
+    ensure_ipc_schema(&state)?;
+    let conn = state.get_conn()?;
+    let deleted = conn
+        .execute(
+            "DELETE FROM ipc_agents WHERE name = ?1",
+            rusqlite::params![body.name],
+        )
+        .map_err(|e| ApiError::internal(format!("agent deregister failed: {e}")))?;
+
+    if let Err(e) = state.ws_tx.send(json!({
+        "type": "agent_deregistered",
+        "name": body.name,
+    })) {
+        tracing::debug!("ws agent_deregistered broadcast (no subscribers): {e}");
+    }
+
+    broadcast_brain_agent_update(&state);
+    broadcast_brain_session_update(&state);
+
+    Ok(Json(json!({ "ok": true, "deleted": deleted })))
 }
 
 pub async fn api_ipc_agents_heartbeat(

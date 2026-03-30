@@ -8,6 +8,20 @@ Unified AI orchestration: Rust daemon + kernel/Jarvis (Qwen 7B) + mesh + agents 
 **Style**: Concise, action-first, no emojis | Datetime: DD Mese YYYY, HH:MM CET
 **Shell**: zsh. `Read` tool over Bash. NEVER pipe to `tail`/`head`/`grep`/`cat` — hooks block.
 
+## Session Identity (NON-NEGOTIABLE)
+
+On session start, register with the daemon using a meaningful name:
+```bash
+curl -sf -X POST http://localhost:8420/api/ipc/agents/register \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_id":"copilot-<hostname>-<pid>","host":"<hostname>","agent_type":"copilot"}'
+```
+Use `cvg agent start "copilot-$(hostname -s)-$$"` for plan work (include `--task-id`).
+On exit: `cvg agent complete "copilot-$(hostname -s)-$$"` or POST to `/api/ipc/agents/deregister`.
+Unregistered sessions are invisible in `cvg who agents` and platform dashboards.
+
+Check registered sessions: `GET http://localhost:8420/api/ipc/agents/list`
+
 ## Language (NON-NEGOTIABLE)
 
 Code/comments/docs: English | Conversation: Italian or English | Override: explicit user request only

@@ -1,7 +1,8 @@
 // handlers: Plan 634 coordination read handlers
-// Agent write handlers (register/unregister/heartbeat) → handlers_ext.rs
+// Agent write handlers (register/unregister/heartbeat/list/deregister) → handlers_ext.rs
 pub use super::handlers_ext::{
-    api_ipc_agents_heartbeat, api_ipc_agents_register, api_ipc_agents_unregister,
+    api_ipc_agents_deregister, api_ipc_agents_heartbeat, api_ipc_agents_list,
+    api_ipc_agents_register, api_ipc_agents_unregister,
 };
 
 use super::super::state::{query_rows, ApiError, ServerState};
