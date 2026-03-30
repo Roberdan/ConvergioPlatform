@@ -58,7 +58,8 @@ graph TB
         WEB["convergio-web<br><small>Next.js 15 + Tauri 2.0<br>Maranello Luce DS (6 themes)</small>"]
         TUI["TUI<br><small>ratatui terminal</small>"]
         CLI["CLI (cvg)<br><small>50+ subcommands</small>"]
-        VOICE["Voice / Siri<br><small>Wake word → Whisper → TTS</small>"]
+        VOICE["Voice<br><small>Wake word 'convergio'<br>Whisper STT → Voxtral TTS</small>"]
+        PHONE["Telegram Mobile<br><small>iPhone / Android<br>text + voice control</small>"]
         MCP["MCP Server<br><small>18 tools, ring security</small>"]
     end
 
@@ -126,7 +127,8 @@ graph TB
     WEB -- "HTTP + WS + SSE" --> SERVER
     TUI -- "WS /ws/brain" --> SERVER
     CLI -- "HTTP :8420" --> SERVER
-    VOICE -- "/api/voice/*" --> KERN
+    VOICE -- "cpal audio → /api/voice/*" --> KERN
+    PHONE -- "Bot API → long poll" --> KERN
     MCP -. "stdio → HTTP" .-> SERVER
 
     %% Internal daemon
@@ -182,7 +184,7 @@ graph TB
     classDef ext fill:#1a1a22,stroke:#6b7a8d,color:#d4dae4
     classDef eco fill:#1a2222,stroke:#4dc8a8,color:#d4dae4
 
-    class WEB,TUI,CLI,VOICE,MCP ui
+    class WEB,TUI,CLI,VOICE,PHONE,MCP ui
     class SERVER,ORCH,INF,IPC,KERN,SEC,THOR,SYNC,MEM,WS,NIGHT,POLICY daemon
     class DB,GIT,AUDIT data
     class M5,M1,FUTURE mesh
@@ -304,16 +306,19 @@ graph TB
         N2["macOS M1 Pro<br><small>kernel + executor</small>"]
         N3["Linux server<br><small>worker</small>"]
         N4["macOS M4 Mini<br><small>worker</small>"]
+        N5["Windows PC<br><small>worker (WSL2)</small>"]
     end
 
     N1 <-- "Thunderbolt" --> N2
     N1 <-- "Tailscale" --> N3
     N1 <-- "LAN" --> N4
+    N1 <-- "Tailscale" --> N5
     N2 <-- "Tailscale" --> N3
 
     TB --> N1
     LAN --> N4
     TS --> N3
+    TS --> N5
     SSH --> N3
 
     COORD --> N1
@@ -322,6 +327,7 @@ graph TB
     EXECUTOR --> N2
     WORKER --> N3
     WORKER --> N4
+    WORKER --> N5
 
     classDef transport fill:#18232e,stroke:#38c8d8,color:#d4dae4
     classDef role fill:#221828,stroke:#e87ab0,color:#d4dae4
@@ -329,7 +335,7 @@ graph TB
 
     class TB,LAN,TS,SSH transport
     class COORD,KERNEL,EXECUTOR,WORKER role
-    class N1,N2,N3,N4 node
+    class N1,N2,N3,N4,N5 node
 ```
 
 ### Node Roles
@@ -347,12 +353,12 @@ A node can have multiple roles (e.g., coordinator + executor).
 
 The daemon probes each peer in priority order and uses the fastest reachable transport:
 
-| Priority | Transport | Latency | Use case |
-|---|---|---|---|
-| 1 | Thunderbolt (10.0.0.x) | <1ms | Same desk, macOS ↔ macOS |
-| 2 | LAN / Wi-Fi | 1-5ms | Same network |
-| 3 | Tailscale VPN (100.x.x.x) | 5-50ms | Anywhere, encrypted WireGuard tunnel |
-| 4 | SSH direct | 10-100ms | Legacy, NAT traversal, fallback |
+| Priority | Transport | Bandwidth | Latency | Use case |
+|---|---|---|---|---|
+| 1 | Thunderbolt 5 (10.0.0.x) | 120 Gbps | <1ms | Same desk, macOS ↔ macOS |
+| 2 | LAN / Wi-Fi 6E | 10 Gbps | 1-5ms | Same network |
+| 3 | Tailscale VPN (100.x.x.x) | varies | 5-50ms | Anywhere, encrypted WireGuard tunnel |
+| 4 | SSH direct | varies | 10-100ms | Legacy, NAT traversal, fallback |
 
 If a transport disappears (e.g., Thunderbolt dock unplugged), the daemon falls back to the next available transport within 5 seconds — no restart needed.
 
