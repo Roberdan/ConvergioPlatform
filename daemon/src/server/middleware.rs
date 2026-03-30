@@ -88,7 +88,7 @@ pub(crate) fn compare_tokens(a: &str, b: &str) -> bool {
 }
 
 /// Authenticate a request. Returns Ok(Some(claims)) for JWT,
-/// Ok(None) for legacy bearer or dev-mode bypass, Err for denied.
+/// Ok(None) for legacy bearer or dev-mode, Err for denied.
 fn authenticate(header_value: Option<&str>) -> Result<Option<AgentClaims>, ()> {
     // 1. Try JWT first (Bearer <jwt-with-dots>)
     if let Some(token) = header_value
