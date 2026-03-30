@@ -66,9 +66,26 @@ struct AttestBody {
 
 // -- Helpers --
 
-fn open_store(state: &ServerState) -> Result<SqliteMemoryStore, ApiError> {
-    SqliteMemoryStore::new(state.db_path.to_str().unwrap_or("data/dashboard.db"))
-        .map_err(|e| ApiError::internal(e.to_string()))
+/// Resolve the memory DB path: CONVERGIO_MEMORY_PATH env var, or $HOME/.claude/memory/memory.db.
+/// Using an absolute path prevents 500 errors when the daemon runs from a non-repo cwd.
+fn memory_db_path() -> String {
+    if let Ok(p) = std::env::var("CONVERGIO_MEMORY_PATH") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    format!("{home}/.claude/memory/memory.db")
+}
+
+fn open_store(_state: &ServerState) -> Result<SqliteMemoryStore, ApiError> {
+    let path = memory_db_path();
+    // Ensure parent directory exists so SQLite can create the file.
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| ApiError::internal(format!("cannot create memory dir: {e}")))?;
+    }
+    SqliteMemoryStore::new(&path).map_err(|e| ApiError::internal(e.to_string()))
 }
 
 fn parse_memory_type(s: &str) -> Result<MemoryType, ApiError> {
