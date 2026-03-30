@@ -13,6 +13,7 @@ pub enum IpcRequest {
         pid: Option<u32>,
         host: String,
         metadata: Option<String>,
+        parent_agent: Option<String>,
     },
     Unregister {
         name: String,

@@ -9,6 +9,11 @@ pub const IPC_TABLES: [&str; 6] = [
     "ipc_worktrees",
 ];
 
+/// Add parent_agent column to existing ipc_agents tables (idempotent).
+pub fn migrate_parent_agent(conn: &Connection) {
+    let _ = conn.execute_batch("ALTER TABLE ipc_agents ADD COLUMN parent_agent TEXT;");
+}
+
 pub fn ensure_ipc_schema(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "
@@ -18,6 +23,7 @@ pub fn ensure_ipc_schema(conn: &Connection) -> rusqlite::Result<()> {
             agent_type  TEXT NOT NULL DEFAULT 'claude',
             pid         INTEGER,
             metadata    TEXT,
+            parent_agent TEXT,
             registered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
             last_seen   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
             PRIMARY KEY (name, host)
@@ -74,7 +80,9 @@ pub fn ensure_ipc_schema(conn: &Connection) -> rusqlite::Result<()> {
             created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now'))
         );
         ",
-    )
+    )?;
+    migrate_parent_agent(conn);
+    Ok(())
 }
 
 #[cfg(test)]

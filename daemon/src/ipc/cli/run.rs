@@ -25,12 +25,14 @@ pub async fn run_ipc(args: IpcArgs) -> Result<(), super::super::error::IpcError>
             pid,
             host,
             metadata,
+            parent,
         } => IpcRequest::Register {
             name: name.or_else(agent_name_from_env).unwrap_or_else(agent_name),
             agent_type,
             pid: pid.or_else(|| Some(std::process::id())),
             host: host.unwrap_or_else(hostname),
             metadata,
+            parent_agent: parent,
         },
         IpcSubcommand::Unregister { name, host } => IpcRequest::Unregister {
             name: name.unwrap_or_else(agent_name),

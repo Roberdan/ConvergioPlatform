@@ -13,7 +13,7 @@ pub(super) fn temp_engine() -> (IpcEngine, tempfile::TempDir) {
 fn test_register_and_who() {
     let (engine, _dir) = temp_engine();
     engine
-        .register("planner", "claude", Some(1234), "mac-worker-2", None)
+        .register("planner", "claude", Some(1234), "mac-worker-2", None, None)
         .unwrap();
     let resp = engine.who().unwrap();
     match resp {
@@ -30,10 +30,10 @@ fn test_register_and_who() {
 fn test_register_duplicate() {
     let (engine, _dir) = temp_engine();
     engine
-        .register("planner", "claude", Some(1), "mac-worker-2", None)
+        .register("planner", "claude", Some(1), "mac-worker-2", None, None)
         .unwrap();
     engine
-        .register("planner", "copilot", Some(2), "mac-worker-2", None)
+        .register("planner", "copilot", Some(2), "mac-worker-2", None, None)
         .unwrap();
     match engine.who().unwrap() {
         IpcResponse::AgentList { agents } => {
@@ -48,7 +48,7 @@ fn test_register_duplicate() {
 fn test_unregister() {
     let (engine, _dir) = temp_engine();
     engine
-        .register("planner", "claude", None, "mac-worker-2", None)
+        .register("planner", "claude", None, "mac-worker-2", None, None)
         .unwrap();
     engine.unregister("planner", "mac-worker-2").unwrap();
     match engine.who().unwrap() {
@@ -61,10 +61,10 @@ fn test_unregister() {
 fn test_send_and_receive() {
     let (engine, _dir) = temp_engine();
     engine
-        .register("alice", "claude", None, "mac-worker-2", None)
+        .register("alice", "claude", None, "mac-worker-2", None, None)
         .unwrap();
     engine
-        .register("bob", "claude", None, "mac-worker-2", None)
+        .register("bob", "claude", None, "mac-worker-2", None, None)
         .unwrap();
     engine
         .send_message("alice", "bob", "hello bob", "text", 0)
@@ -159,7 +159,7 @@ fn test_prune_stale_removes_old_remote_agents() {
 
     // Also register a fresh local agent (must NOT be pruned).
     engine
-        .register("local-agent", "claude", None, &IpcEngine::hostname(), None)
+        .register("local-agent", "claude", None, &IpcEngine::hostname(), None, None)
         .unwrap();
 
     let resp = engine.prune_stale(3600).unwrap();

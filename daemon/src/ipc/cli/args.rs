@@ -50,6 +50,8 @@ pub enum IpcSubcommand {
         host: Option<String>,
         #[arg(long)]
         metadata: Option<String>,
+        #[arg(long)]
+        parent: Option<String>,
     },
     Unregister {
         #[arg(short, long)]

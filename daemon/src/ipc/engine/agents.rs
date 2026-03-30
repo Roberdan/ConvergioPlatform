@@ -9,6 +9,7 @@ impl IpcEngine {
         pid: Option<u32>,
         host: &str,
         metadata: Option<&str>,
+        parent_agent: Option<&str>,
     ) -> rusqlite::Result<IpcResponse> {
         // Agent name identifies the executor in the bus — blank names break routing.
         debug_assert!(!name.is_empty(), "register: agent name must not be empty");
@@ -18,14 +19,15 @@ impl IpcEngine {
         debug_assert!(!host.is_empty(), "register: host must not be empty");
         let conn = self.open_conn()?;
         conn.execute(
-            "INSERT INTO ipc_agents (name, host, agent_type, pid, metadata, registered_at, last_seen)
-             VALUES (?1, ?2, ?3, ?4, ?5, strftime('%Y-%m-%dT%H:%M:%f','now'), strftime('%Y-%m-%dT%H:%M:%f','now'))
+            "INSERT INTO ipc_agents (name, host, agent_type, pid, metadata, parent_agent, registered_at, last_seen)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, strftime('%Y-%m-%dT%H:%M:%f','now'), strftime('%Y-%m-%dT%H:%M:%f','now'))
              ON CONFLICT(name, host) DO UPDATE SET
                agent_type = excluded.agent_type,
                pid = excluded.pid,
                metadata = excluded.metadata,
+               parent_agent = excluded.parent_agent,
                last_seen = strftime('%Y-%m-%dT%H:%M:%f','now')",
-            rusqlite::params![name, host, agent_type, pid, metadata],
+            rusqlite::params![name, host, agent_type, pid, metadata, parent_agent],
         )?;
         Ok(IpcResponse::Ok {
             message: format!("registered {name}@{host}"),
@@ -56,7 +58,7 @@ impl IpcEngine {
     pub fn who(&self) -> rusqlite::Result<IpcResponse> {
         let conn = self.open_conn()?;
         let mut stmt = conn.prepare(
-            "SELECT name, host, agent_type, pid, last_seen FROM ipc_agents ORDER BY name, host",
+            "SELECT name, host, agent_type, pid, last_seen, parent_agent FROM ipc_agents ORDER BY name, host",
         )?;
         let agents: Vec<AgentInfo> = stmt
             .query_map([], |row| {
@@ -66,6 +68,7 @@ impl IpcEngine {
                     agent_type: row.get(2)?,
                     pid: row.get(3)?,
                     last_seen: row.get(4)?,
+                    parent_agent: row.get(5)?,
                 })
             })?
             .filter_map(|r| match r {

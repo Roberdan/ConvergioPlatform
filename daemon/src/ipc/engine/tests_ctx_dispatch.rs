@@ -71,7 +71,7 @@ fn test_history() {
 #[test]
 fn test_db_stats_and_reset() {
     let (engine, _dir) = temp_engine();
-    engine.register("a", "claude", None, "h", None).unwrap();
+    engine.register("a", "claude", None, "h", None, None).unwrap();
     engine.send_message("a", "b", "x", "text", 0).unwrap();
 
     match engine.db_stats().unwrap() {
@@ -164,7 +164,7 @@ fn test_db_cleanup_preserves_recent_messages() {
 fn test_db_reset_clears_all_tables() {
     let (engine, _dir) = temp_engine();
     // Populate multiple tables
-    engine.register("a", "claude", None, "host", None).unwrap();
+    engine.register("a", "claude", None, "host", None, None).unwrap();
     engine.send_message("a", "b", "hello", "text", 0).unwrap();
     engine.channel_create("general", None, "a").unwrap();
     engine.context_set("k", "v", "a").unwrap();
