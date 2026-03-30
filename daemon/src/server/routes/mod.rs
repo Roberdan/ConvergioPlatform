@@ -65,6 +65,7 @@ use super::api_workspace_events;
 use super::api_decisions;
 use super::api_repositories;
 use super::api_inference_status;
+use super::api_policy;
 use super::mesh_provision;
 use super::middleware as server_mw;
 use super::sse;
@@ -170,6 +171,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_decisions::router())
         .merge(api_repositories::router())
         .merge(api_inference_status::router())
+        .merge(api_policy::router())
         // Kernel inference routes (feature-gated; uses own KernelState)
         .merge({
             #[cfg(feature = "kernel")]
