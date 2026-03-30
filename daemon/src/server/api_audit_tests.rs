@@ -14,9 +14,9 @@ fn test_router() -> (axum::Router, std::path::PathBuf) {
     let conn = rusqlite::Connection::open(&tmp).expect("open");
     conn.execute_batch(SCHEMA).expect("schema");
     drop(conn);
-    super::middleware::set_dev_mode(true);
+    crate::server::middleware::set_dev_mode(true);
     let router =
-        super::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp.clone(), None);
+        crate::server::routes::build_router_with_db(std::path::PathBuf::from("/tmp"), tmp.clone(), None);
     (router, tmp)
 }
 
@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS execution_runs (
 CREATE TABLE IF NOT EXISTS knowledge_base (
   id INTEGER PRIMARY KEY, domain TEXT, title TEXT,
   content TEXT, created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY,
+  timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+  agent TEXT, action TEXT NOT NULL,
+  resource TEXT, detail TEXT, ip_addr TEXT
 );
 ";
 
@@ -202,4 +208,61 @@ async fn audit_kb_learnings_match_by_domain() {
     let kb = json["kb_learnings"].as_array().unwrap();
     assert_eq!(kb.len(), 1);
     assert_eq!(kb[0]["title"], "OWASP Top 10");
+}
+
+// ── audit_log tests ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn audit_log_empty_returns_ok() {
+    let (app, _db) = test_router();
+    let resp = app
+        .oneshot(Request::builder().uri("/api/audit/log").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp.into_body()).await;
+    assert_eq!(json["total"], 0);
+    assert!(json["entries"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn audit_log_after_insert() {
+    let (app, db) = test_router();
+    // Insert directly so we can test the GET endpoint
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute(
+        "INSERT INTO audit_log (agent, action, resource, detail) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params!["test-agent", "task_update", "42", "done"],
+    ).unwrap();
+    drop(conn);
+
+    let resp = app
+        .oneshot(Request::builder().uri("/api/audit/log?limit=10").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp.into_body()).await;
+    assert_eq!(json["total"], 1);
+    let entries = json["entries"].as_array().unwrap();
+    assert_eq!(entries[0]["agent"], "test-agent");
+    assert_eq!(entries[0]["action"], "task_update");
+}
+
+#[tokio::test]
+async fn audit_log_filter_by_agent() {
+    let (app, db) = test_router();
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "INSERT INTO audit_log (agent, action) VALUES ('alice', 'task_update');
+         INSERT INTO audit_log (agent, action) VALUES ('bob', 'task_update');",
+    ).unwrap();
+    drop(conn);
+
+    let resp = app
+        .oneshot(Request::builder().uri("/api/audit/log?agent=alice").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let json = body_json(resp.into_body()).await;
+    assert_eq!(json["total"], 1);
+    assert_eq!(json["entries"][0]["agent"], "alice");
 }

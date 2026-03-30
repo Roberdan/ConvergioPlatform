@@ -45,8 +45,8 @@ PROMPT=$("$SCRIPT_DIR/copilot-task-prompt.sh" "$TASK_DB_ID")
 
 case "$TYPE" in
 claude)
-	# Resolve Claude command
-	CLAUDE_CMD="claude --dangerously-skip-permissions"
+	# Resolve Claude command — uses .claude/settings.json for permissions
+	CLAUDE_CMD="claude"
 	command -v wildClaude &>/dev/null && CLAUDE_CMD="wildClaude"
 
 	kitty @ launch --type=tab --title="$TAB_NAME" --cwd="$CWD" \

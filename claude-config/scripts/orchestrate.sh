@@ -78,7 +78,8 @@ check_kitty() {
 }
 
 check_wildclaude() {
-	CLAUDE_CMD="claude --dangerously-skip-permissions"
+	# Uses .claude/settings.json for permissions — no --dangerously flag
+	CLAUDE_CMD="claude"
 	command -v wildClaude &>/dev/null && CLAUDE_CMD="wildClaude"
 	success "Claude: $CLAUDE_CMD"
 }

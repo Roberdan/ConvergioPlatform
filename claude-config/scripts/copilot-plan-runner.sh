@@ -101,7 +101,7 @@ for t in d.get('tasks', []):
 	# Use claude or copilot
 	if command -v claude &>/dev/null; then
 		CLI="claude"
-		CLI_ARGS="--dangerously-skip-permissions -p"
+		CLI_ARGS="-p"
 	elif command -v copilot &>/dev/null; then
 		CLI="copilot"
 		CLI_ARGS="--yolo -p"

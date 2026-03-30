@@ -137,8 +137,14 @@ run_task() {
 		[[ -n "$worktree" && -d "$worktree" ]] && dir_flag="--add-dir $worktree"
 		# cd to worktree so file operations target correct directory
 		[[ -n "$worktree" && -d "$worktree" ]] && cd "$worktree"
+		# Generate per-worktree settings.json (replaces --dangerously-skip-permissions)
+		if [[ -n "$worktree" && -d "$worktree" ]]; then
+			local _sdir="${worktree}/.claude"
+			mkdir -p "$_sdir"
+			printf '{"permissions":{"allow":["Bash(cargo check:*)","Bash(cargo build:*)","Bash(cargo test:*)","Bash(git add:*)","Bash(git commit:*)","Bash(git diff:*)","Bash(git status:*)","Bash(curl http://localhost:*)","Bash(curl http://127.0.0.1:*)"]}}' \
+				> "${_sdir}/settings.json"
+		fi
 		timeout "$TASK_TIMEOUT" claude \
-			--dangerously-skip-permissions \
 			$dir_flag \
 			$model_flag \
 			-p "$prompt" || exit_code=$?

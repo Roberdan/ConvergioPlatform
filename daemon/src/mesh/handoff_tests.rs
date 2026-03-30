@@ -69,7 +69,7 @@ fn resolve_cli_prefers_primary_then_fallbacks() {
     );
     assert_eq!(
         preferred,
-        Some("claude --dangerously-skip-permissions --model sonnet".to_string())
+        Some("claude --model sonnet".to_string())
     );
 }
 
