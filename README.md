@@ -356,6 +356,50 @@ The daemon probes each peer in priority order and uses the fastest reachable tra
 
 If a transport disappears (e.g., Thunderbolt dock unplugged), the daemon falls back to the next available transport within 5 seconds — no restart needed.
 
+### Multi-Model Execution
+
+Every node can use any combination of LLM providers. The daemon routes tasks to the best available model based on tier, health, and cost — transparently.
+
+```mermaid
+graph LR
+    subgraph NODE["Any Mesh Node"]
+        ROUTER["Inference Router<br><small>tier + health + fallback</small>"]
+    end
+
+    CLAUDE["Claude (subscription)<br><small>claude -p subprocess<br>Opus, Sonnet, Haiku</small>"]
+    COPILOT["Copilot (subscription)<br><small>gh copilot -p subprocess<br>GPT-5.3 Codex</small>"]
+    OLLAMA["Ollama / MLX<br><small>localhost:8321<br>Qwen 7B, Mistral, Codestral</small>"]
+
+    ROUTER -- "T3/T4: premium" --> CLAUDE
+    ROUTER -- "fallback" --> COPILOT
+    ROUTER -- "T1: fast/free" --> OLLAMA
+
+    classDef node fill:#142218,stroke:#42d392,color:#d4dae4
+    classDef provider fill:#221822,stroke:#b07ee8,color:#d4dae4
+
+    class ROUTER node
+    class CLAUDE,COPILOT,OLLAMA provider
+```
+
+No API keys — all cloud calls go through logged-in CLI subscriptions. Local models run on-device with zero cloud dependency.
+
+### Distributed Task Delegation
+
+The coordinator can delegate any plan or individual task to any node in the mesh:
+
+```bash
+# Delegate a full plan to a remote node
+cvg plan delegate 10022 --node m1pro
+
+# Delegate a single task to the best available executor
+cvg task delegate 9678 --auto       # picks node by health + capacity
+
+# Run tasks in parallel across nodes
+cvg plan start 10022 --parallel     # W1 tasks split across available executors
+```
+
+The daemon handles: worktree creation on the target node, context transfer via `/api/plan-db/execution-context`, progress reporting back to coordinator via sync, and automatic failover if a node becomes unreachable.
+
 ### Sync
 
 - Conflict-aware timestamp-based replication (v20)
