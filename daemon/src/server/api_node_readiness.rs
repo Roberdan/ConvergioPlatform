@@ -108,9 +108,13 @@ pub fn summarize_for_boot(checks: &[Check]) -> BootReadinessSummary {
 }
 
 fn is_boot_blocking(check: &Check) -> bool {
-    // DB missing or corrupt and missing peers.conf role are hard requirements.
-    // All other failures are warnings that allow the daemon to continue.
-    matches!(check.name.as_str(), "disk_space" | "db_exists" | "node_role")
+    // DB corrupt and missing peers.conf role are hard requirements.
+    // Missing DB is a warning — daemon can start degraded and self-provision.
+    match check.name.as_str() {
+        "disk_space" | "node_role" => true,
+        "db_exists" => !check.detail.contains("not found"),
+        _ => false,
+    }
 }
 
 /// GET /api/node/readiness — serves live checks; falls back to cached boot result.

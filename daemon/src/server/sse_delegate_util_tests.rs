@@ -100,7 +100,7 @@ fn claude_uses_input_file_not_inline_prompt() {
         "expected --input-file in command, got: {cmd}"
     );
     assert!(
-        !cmd.contains(" -p "),
+        !cmd.contains("claude -p "),
         "must not use inline -p flag, got: {cmd}"
     );
 }

@@ -107,6 +107,13 @@ pub fn resolve_best_addr(
 
 /// Detect local Tailscale IP via `tailscale ip -4`. Used to skip self-sync.
 pub fn detect_local_tailscale_ip() -> Option<String> {
+    // Allow test/env override to skip system calls in CI or constrained environments.
+    if let Ok(ip) = std::env::var("CONVERGIO_LOCAL_TAILSCALE_IP") {
+        let ip = ip.trim().to_string();
+        if !ip.is_empty() {
+            return Some(ip);
+        }
+    }
     for cmd in &["tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"] {
         if let Some(ip) = std::process::Command::new(cmd)
             .args(["ip", "-4"]).output().ok() // intentional: local IP detection is best-effort; callers handle None
