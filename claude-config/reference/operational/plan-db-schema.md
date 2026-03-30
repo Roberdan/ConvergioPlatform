@@ -87,8 +87,10 @@ Thor uses these as gate criteria when validating a wave.
 
 **Triggers**:
 - `enforce_thor_done` — BLOCKS status→done unless OLD.status='submitted' AND validated_by IN ('thor','thor-quality-assurance-guardian','thor-per-wave','forced-admin')
-- `task_done_counter` — Increments waves.tasks_done and plans.tasks_done on status→done
 - `task_undone_counter` — Decrements counters on done→other status
+
+**Counter maintenance** (NOT a trigger — application-managed):
+- `tasks_done` on waves and plans is updated by `handle_task_update()` in `api_plan_db.rs` when status transitions to 'done'. Always use the API (`POST /api/plan-db/task/update` or `cvg task update`), never raw SQL, for task status changes.
 
 ## Critical Notes
 
