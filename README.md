@@ -63,6 +63,146 @@ convergio stop [run_id]                     # abort execution
 
 ## Architecture
 
+```mermaid
+graph TB
+    %% ── User Interfaces ──────────────────────────
+    subgraph UI["User Interfaces"]
+        DASH["Dashboard Web<br><small>Vanilla JS + Maranello DS</small>"]
+        TUI["TUI<br><small>ratatui terminal</small>"]
+        CLI["CLI (cvg)<br><small>50+ subcommands</small>"]
+        SIRI["Siri / Voice<br><small>Swift CommandCenter</small>"]
+        MCP["MCP Server<br><small>17 tools, ring security</small>"]
+    end
+
+    %% ── Daemon Core ──────────────────────────────
+    subgraph DAEMON["Daemon Core — Rust — :8420"]
+        SERVER["HTTP Server (axum)<br><small>26 API modules<br>REST + SSE + WebSocket</small>"]
+        ORCH["Orchestrator<br><small>reactor → executor<br>delegation, reaper</small>"]
+        IPC["IPC Engine<br><small>budget, locks, worktrees<br>agent coordination</small>"]
+        KERN["Kernel / Jarvis<br><small>engine, monitor, recover<br>STT (Whisper) → TTS</small>"]
+        SEC["Security<br><small>ACL, audit chain<br>egress, kill switch</small>"]
+        RES["Resilience<br><small>circuit breaker, watchdog<br>checkpoint, retry</small>"]
+        INF["Inference Router<br><small>classifier → tier routing<br>local > cloud preference</small>"]
+        THOR["Thor Validator<br><small>10-gate checklist<br>submitted → done</small>"]
+        MEM["Memory<br><small>vector store, embeddings<br>blob store, attestation</small>"]
+        VOICE["Voice Pipeline<br><small>VAD → wake word → Whisper<br>intent → pipeline</small>"]
+        WS["Workspace<br><small>git connector, merge ops<br>quality gate, release agent</small>"]
+        CHAN["Channels<br><small>Slack, Telegram, Email</small>"]
+    end
+
+    %% ── Data Layer ───────────────────────────────
+    subgraph DATA["Data Layer"]
+        DB[("dashboard.db<br><small>SQLite WAL + CRDT</small>")]
+        GIT["Git Repos<br><small>GitHub API + subprocess</small>"]
+        VEC[("Vector Store<br><small>embeddings + blob</small>")]
+    end
+
+    %% ── Mesh Network ─────────────────────────────
+    subgraph MESH["Mesh Network — Tailscale P2P"]
+        COORD["Mesh Coordinator<br><small>peers, topology, sync<br>HMAC-SHA256 + AES-GCM</small>"]
+        PEER1["Peer Node :8420"]
+        PEER2["Peer Node :8420"]
+    end
+
+    %% ── Evolution Engine ─────────────────────────
+    subgraph EVO["Evolution Engine — TypeScript"]
+        ECORE["Core<br><small>evaluators, cadence<br>guardrails, experiments</small>"]
+        EADAPT["Adapters<br><small>claude, dashboard<br>maranello, telemetry</small>"]
+    end
+
+    %% ── LLM Infrastructure ──────────────────────
+    subgraph LLM["LLM Infrastructure"]
+        LOCAL["Local LLM<br><small>oMLX :8321 + LiteLLM :4000<br>Qwen 7B (Jarvis)</small>"]
+        CLOUD["Cloud LLMs<br><small>Opus 4.6 · Sonnet 4.6<br>GPT-5.3 Codex · Gemini 3 Pro</small>"]
+    end
+
+    %% ── External Services ────────────────────────
+    TG["Telegram Bot API"]
+    OCLAW["OpenClaw Bridge<br><small>30+ platforms</small>"]
+
+    %% ── Governance ───────────────────────────────
+    subgraph GOV["Agent Governance — Hook-Enforced"]
+        HOOKS["10 Enforcement Hooks<br><small>SecretScan, SqliteBlock<br>EvidenceGate, TestGate, ...</small>"]
+        CMDS["Commands<br><small>/solve → /planner → /execute</small>"]
+        AGENTS["89 Agents · 119 Skills<br><small>12 domains · 27 validation gates</small>"]
+    end
+
+    %% ── CONNECTIONS ──────────────────────────────
+
+    %% UI → Daemon
+    DASH -- "HTTP + WS<br>/api/* + /ws/dashboard" --> SERVER
+    TUI -- "WS /ws/brain" --> SERVER
+    CLI -- "HTTP localhost:8420" --> SERVER
+    CLI -. "Unix socket<br>~/.claude/ipc.sock" .-> IPC
+    SIRI -- "HTTP /api/voice" --> KERN
+    MCP -. "stdio → HTTP" .-> SERVER
+
+    %% Internal daemon
+    SERVER --> ORCH
+    SERVER --> IPC
+    SERVER --> KERN
+    ORCH --> THOR
+    KERN --> INF
+    VOICE --> KERN
+    WS --> GIT
+    CHAN --> SERVER
+
+    %% Daemon → Data
+    SERVER --> DB
+    IPC --> DB
+    MEM --> VEC
+    WS -- "api.github.com" --> GIT
+
+    %% Daemon → Mesh
+    SERVER -. "Tailscale + HMAC" .-> COORD
+    COORD -- "/api/sync/*" --> PEER1
+    PEER1 -- "CRDT" --> COORD
+    COORD -- "/api/sync/*" --> PEER2
+    PEER2 -- "CRDT" --> COORD
+
+    %% Daemon → External
+    KERN -- "Bot API" --> TG
+    INF -- ":8321" --> LOCAL
+    INF -- "HTTPS" --> CLOUD
+    SERVER --> OCLAW
+
+    %% Evolution → Daemon
+    EADAPT -- "HTTP adapters → /api/*" --> SERVER
+    ECORE --> EADAPT
+
+    %% Governance (cross-cutting)
+    GOV -. "enforcement" .-> DAEMON
+
+    %% Styling
+    classDef ui fill:#1a2744,stroke:#4d9cf6,color:#d4dae4
+    classDef daemon fill:#142218,stroke:#42d392,color:#d4dae4
+    classDef data fill:#18232e,stroke:#38c8d8,color:#d4dae4
+    classDef mesh fill:#18232e,stroke:#38c8d8,color:#d4dae4
+    classDef evo fill:#221828,stroke:#e87ab0,color:#d4dae4
+    classDef llm fill:#221822,stroke:#b07ee8,color:#d4dae4
+    classDef gov fill:#221818,stroke:#e85454,color:#d4dae4
+    classDef ext fill:#1a1a22,stroke:#6b7a8d,color:#d4dae4
+
+    class DASH,TUI,CLI,SIRI,MCP ui
+    class SERVER,ORCH,IPC,KERN,SEC,RES,INF,THOR,MEM,VOICE,WS,CHAN daemon
+    class DB,GIT,VEC data
+    class COORD,PEER1,PEER2 mesh
+    class ECORE,EADAPT evo
+    class LOCAL,CLOUD llm
+    class HOOKS,CMDS,AGENTS gov
+    class TG,OCLAW ext
+```
+
+> Full interactive diagram: [`convergio-architecture.html`](./convergio-architecture.html)
+
+### Execution Flow (hook-enforced)
+
+```
+/solve (Opus) → /planner (Opus 1M) → Review (Sonnet) → DB → /execute (Codex) → Thor (Opus, 10 gates) → Merge → Done
+```
+
+### Layer Summary
+
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
 | **Daemon** | `daemon/` | Rust | HTTP/WS/SSE API (:8420), mesh P2P, IPC, SQLite WAL + CRDT, TUI, `cvg` CLI |
@@ -74,6 +214,35 @@ convergio stop [run_id]                     # abort execution
 | **Config** | `claude-config/` | MD | 89 agents, 119 skills, 8 rules, 27 validation gates |
 
 Daemon stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde · hmac+sha2+aes-gcm · reqwest · tracing
+
+### Model Routing (8 models, 3 providers)
+
+| Alias | Model ID | Tier | Provider | Used for |
+|-------|----------|------|----------|----------|
+| `opus` | claude-opus-4.6 | Premium | Anthropic | Architecture, triage, validation (Thor) |
+| `opus-1m` | claude-opus-4.6-1m | Premium (1M ctx) | Anthropic | Planning (full codebase context) |
+| `sonnet` | claude-sonnet-4.6 | Standard | Anthropic | Coordinator, plan review |
+| `haiku` | claude-haiku-4.5 | Fast/Cheap | Anthropic | Exploration, documentation |
+| `codex` | gpt-5.3-codex | Standard | OpenAI | Task execution, bulk code gen |
+| `codex-mini` | gpt-5.1-codex-mini | Fast/Cheap | OpenAI | Config, mechanical edits |
+| `gpt-5.4` | gpt-5.4 | Deep reasoning | OpenAI | Deep debugging, design tradeoffs |
+| `gemini-3-pro` | gemini-3-pro-preview | Standard (1M ctx) | Google | Large-context research |
+
+Inference Router: classifier → tier routing, local > cloud preference, fallback chain, parallelization control.
+
+### Key Capabilities
+
+| Capability | Detail |
+|---|---|
+| **250+ API endpoints** | Plans(14), agents(9), mesh(12), kernel(8), node(1), metrics(5), chat(7), nightly(6), workspace(8), memory(4), voice(5) |
+| **Voice Engine** | Audio capture (cpal) → VAD (webrtc) → Wake word → STT (Whisper, Metal) → TTS (Voxtral 4B) → Intent classifier |
+| **Telegram Bot** | Bidirectional text + voice, long polling, quiet hours (23:00-07:00 CET), daily/weekly reports |
+| **Ali Escalation** | "ali dimmi..." → Claude CLI (Opus) subprocess with full system context, fallback to Qwen local |
+| **Evolution Engine** | Observe → Measure → Propose → Experiment → Validate → Learn. A/B testing, multi-armed bandit, cost calibration |
+| **OpenClaw Bridge** | 30+ messaging platforms (WhatsApp, Slack, Discord, etc.) via webhook + polling |
+| **Document Ingestion** | PDF → MD, DOCX → MD, XLSX → CSV, URL, images, folder recursive |
+| **MCP Server** | 17 tools (plans, agents, mesh, metrics, kernel, actions, control), ring-based security (0-3) |
+| **Nightly Jobs** | Model calibration (Sunday 03:00), guardian checks (daily), auto-rebuild on git pull |
 
 ---
 

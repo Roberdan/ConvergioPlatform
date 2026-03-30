@@ -1,0 +1,127 @@
+graph TB
+    %% ── User Interfaces ──────────────────────────
+    subgraph UI["User Interfaces"]
+        DASH["Dashboard Web<br><small>Vanilla JS + Maranello DS</small>"]
+        TUI["TUI<br><small>ratatui terminal</small>"]
+        CLI["CLI (cvg)<br><small>50+ subcommands</small>"]
+        SIRI["Siri / Voice<br><small>Swift CommandCenter</small>"]
+        MCP["MCP Server<br><small>17 tools, ring security</small>"]
+    end
+
+    %% ── Daemon Core ──────────────────────────────
+    subgraph DAEMON["Daemon Core — Rust — :8420"]
+        SERVER["HTTP Server (axum)<br><small>26 API modules<br>REST + SSE + WebSocket</small>"]
+        ORCH["Orchestrator<br><small>reactor → executor<br>delegation, reaper</small>"]
+        IPC["IPC Engine<br><small>budget, locks, worktrees<br>agent coordination</small>"]
+        KERN["Kernel / Jarvis<br><small>engine, monitor, recover<br>STT (Whisper) → TTS</small>"]
+        SEC["Security<br><small>ACL, audit chain<br>egress, kill switch</small>"]
+        RES["Resilience<br><small>circuit breaker, watchdog<br>checkpoint, retry</small>"]
+        INF["Inference Router<br><small>classifier → tier routing<br>local > cloud preference</small>"]
+        THOR["Thor Validator<br><small>10-gate checklist<br>submitted → done</small>"]
+        MEM["Memory<br><small>vector store, embeddings<br>blob store, attestation</small>"]
+        VOICE["Voice Pipeline<br><small>VAD → wake word → Whisper<br>intent → pipeline</small>"]
+        WS["Workspace<br><small>git connector, merge ops<br>quality gate, release agent</small>"]
+        CHAN["Channels<br><small>Slack, Telegram, Email</small>"]
+    end
+
+    %% ── Data Layer ───────────────────────────────
+    subgraph DATA["Data Layer"]
+        DB[("dashboard.db<br><small>SQLite WAL + CRDT</small>")]
+        GIT["Git Repos<br><small>GitHub API + subprocess</small>"]
+        VEC[("Vector Store<br><small>embeddings + blob</small>")]
+    end
+
+    %% ── Mesh Network ─────────────────────────────
+    subgraph MESH["Mesh Network — Tailscale P2P"]
+        COORD["Mesh Coordinator<br><small>peers, topology, sync<br>HMAC-SHA256 + AES-GCM</small>"]
+        PEER1["Peer Node :8420"]
+        PEER2["Peer Node :8420"]
+    end
+
+    %% ── Evolution Engine ─────────────────────────
+    subgraph EVO["Evolution Engine — TypeScript"]
+        ECORE["Core<br><small>evaluators, cadence<br>guardrails, experiments</small>"]
+        EADAPT["Adapters<br><small>claude, dashboard<br>maranello, telemetry</small>"]
+    end
+
+    %% ── LLM Infrastructure ──────────────────────
+    subgraph LLM["LLM Infrastructure"]
+        LOCAL["Local LLM<br><small>oMLX :8321 + LiteLLM :4000<br>Qwen 7B (Jarvis)</small>"]
+        CLOUD["Cloud LLMs<br><small>Opus 4.6 · Sonnet 4.6<br>GPT-5.3 Codex · Gemini 3 Pro</small>"]
+    end
+
+    %% ── External Services ────────────────────────
+    TG["Telegram Bot API"]
+    OCLAW["OpenClaw Bridge<br><small>30+ platforms</small>"]
+
+    %% ── Governance ───────────────────────────────
+    subgraph GOV["Agent Governance — Hook-Enforced"]
+        HOOKS["10 Enforcement Hooks<br><small>SecretScan, SqliteBlock<br>EvidenceGate, TestGate, ...</small>"]
+        CMDS["Commands<br><small>/solve → /planner → /execute</small>"]
+        AGENTS["89 Agents · 119 Skills<br><small>12 domains · 27 validation gates</small>"]
+    end
+
+    %% ── CONNECTIONS ──────────────────────────────
+
+    %% UI → Daemon
+    DASH -- "HTTP + WS<br>/api/* + /ws/dashboard" --> SERVER
+    TUI -- "WS /ws/brain" --> SERVER
+    CLI -- "HTTP localhost:8420" --> SERVER
+    CLI -. "Unix socket<br>~/.claude/ipc.sock" .-> IPC
+    SIRI -- "HTTP /api/voice" --> KERN
+    MCP -. "stdio → HTTP" .-> SERVER
+
+    %% Internal daemon
+    SERVER --> ORCH
+    SERVER --> IPC
+    SERVER --> KERN
+    ORCH --> THOR
+    KERN --> INF
+    VOICE --> KERN
+    WS --> GIT
+    CHAN --> SERVER
+
+    %% Daemon → Data
+    SERVER --> DB
+    IPC --> DB
+    MEM --> VEC
+    WS -- "api.github.com" --> GIT
+
+    %% Daemon → Mesh
+    SERVER -. "Tailscale + HMAC" .-> COORD
+    COORD -- "/api/sync/*" --> PEER1
+    PEER1 -- "CRDT" --> COORD
+    COORD -- "/api/sync/*" --> PEER2
+    PEER2 -- "CRDT" --> COORD
+
+    %% Daemon → External
+    KERN -- "Bot API" --> TG
+    INF -- ":8321" --> LOCAL
+    INF -- "HTTPS" --> CLOUD
+    SERVER --> OCLAW
+
+    %% Evolution → Daemon
+    EADAPT -- "HTTP adapters → /api/*" --> SERVER
+    ECORE --> EADAPT
+
+    %% Governance (cross-cutting)
+    GOV -. "enforcement" .-> DAEMON
+
+    %% Styling
+    classDef ui fill:#1a2744,stroke:#4d9cf6,color:#d4dae4
+    classDef daemon fill:#142218,stroke:#42d392,color:#d4dae4
+    classDef data fill:#18232e,stroke:#38c8d8,color:#d4dae4
+    classDef mesh fill:#18232e,stroke:#38c8d8,color:#d4dae4
+    classDef evo fill:#221828,stroke:#e87ab0,color:#d4dae4
+    classDef llm fill:#221822,stroke:#b07ee8,color:#d4dae4
+    classDef gov fill:#221818,stroke:#e85454,color:#d4dae4
+    classDef ext fill:#1a1a22,stroke:#6b7a8d,color:#d4dae4
+
+    class DASH,TUI,CLI,SIRI,MCP ui
+    class SERVER,ORCH,IPC,KERN,SEC,RES,INF,THOR,MEM,VOICE,WS,CHAN daemon
+    class DB,GIT,VEC data
+    class COORD,PEER1,PEER2 mesh
+    class ECORE,EADAPT evo
+    class LOCAL,CLOUD llm
+    class HOOKS,CMDS,AGENTS gov
+    class TG,OCLAW ext

@@ -3,788 +3,426 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ConvergioPlatform — Architecture Diagram</title>
+<title>ConvergioPlatform — Complete Architecture v19.5.0</title>
 <style>
-  :root {
-    --bg: #0a0e14;
-    --surface: #12171f;
-    --surface2: #1a2030;
-    --border: #2a3040;
-    --text: #d4dae4;
-    --muted: #6b7a8d;
-    --blue: #4d9cf6;
-    --green: #42d392;
-    --orange: #e8a838;
-    --red: #e85454;
-    --purple: #b07ee8;
-    --cyan: #38c8d8;
-    --pink: #e87ab0;
-    --rust: #dea584;
-    --yellow: #e8d44d;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'SF Pro Text', -apple-system, system-ui, sans-serif; background:var(--bg); color:var(--text); overflow-x:auto; }
-
-  .canvas {
-    position: relative;
-    width: 1440px;
-    min-height: 2200px;
-    margin: 0 auto;
-    padding: 40px;
-  }
-
-  /* === NODES === */
-  .node {
-    position: absolute;
-    border-radius: 10px;
-    border: 1.5px solid var(--border);
-    background: var(--surface);
-    padding: 14px 16px;
-    font-size: 12px;
-    line-height: 1.4;
-    transition: border-color .2s, box-shadow .2s;
-    cursor: default;
-  }
-  .node:hover {
-    border-color: var(--blue);
-    box-shadow: 0 0 20px rgba(77,156,246,.12);
-    z-index: 10;
-  }
-  .node .title {
-    font-weight: 700;
-    font-size: 14px;
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .node .subtitle { color: var(--muted); font-size: 11px; margin-bottom: 6px; }
-  .node .detail { color: var(--muted); font-size: 10.5px; line-height: 1.5; }
-  .node .detail b { color: var(--text); font-weight: 600; }
-
-  .tag {
-    display: inline-block;
-    font-size: 9px;
-    font-weight: 700;
-    padding: 1px 6px;
-    border-radius: 3px;
-    letter-spacing: .5px;
-    vertical-align: middle;
-  }
-  .tag-rust  { background: rgba(222,165,132,.15); color: var(--rust); }
-  .tag-ts    { background: rgba(49,120,198,.15);  color: #5b9bd5; }
-  .tag-bash  { background: rgba(66,211,146,.15);  color: var(--green); }
-  .tag-swift { background: rgba(240,81,56,.15);   color: #f05138; }
-  .tag-js    { background: rgba(232,212,77,.15);   color: var(--yellow); }
-  .tag-sql   { background: rgba(56,200,216,.15);  color: var(--cyan); }
-
-  .port {
-    display: inline-block;
-    font-size: 10px;
-    font-family: 'SF Mono', monospace;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: rgba(77,156,246,.1);
-    color: var(--blue);
-    margin-left: 4px;
-  }
-
-  /* Color borders for grouping */
-  .b-blue   { border-color: rgba(77,156,246,.4); }
-  .b-green  { border-color: rgba(66,211,146,.4); }
-  .b-orange { border-color: rgba(232,168,56,.4); }
-  .b-red    { border-color: rgba(232,84,84,.4); }
-  .b-purple { border-color: rgba(176,126,232,.4); }
-  .b-cyan   { border-color: rgba(56,200,216,.4); }
-  .b-pink   { border-color: rgba(232,122,176,.4); }
-
-  /* === GROUP ZONES === */
-  .zone {
-    position: absolute;
-    border-radius: 14px;
-    border: 1px dashed;
-    padding: 12px 16px;
-  }
-  .zone .zone-label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    position: absolute;
-    top: 10px;
-    left: 16px;
-  }
-
-  /* === SVG ARROWS === */
-  svg.arrows {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-  .arrow-line {
-    fill: none;
-    stroke-width: 1.5;
-    stroke-linecap: round;
-  }
-  .arrow-label {
-    font-family: 'SF Mono', monospace;
-    font-size: 9px;
-    fill: var(--muted);
-  }
-
-  /* === HEADER === */
-  .header { margin-bottom: 8px; }
-  .header h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
-  .header .sub { color:var(--muted); font-size: 12px; margin-top: 4px; }
-
-  .legend {
-    position: absolute;
-    top: 40px;
-    right: 40px;
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    font-size: 10px;
-    color: var(--muted);
-  }
-  .legend-item { display: flex; align-items: center; gap: 4px; }
-  .legend-line { width: 20px; height: 0; border-top: 2px solid; }
-  .legend-line-dash { width: 20px; height: 0; border-top: 2px dashed; }
-
-  /* Responsive scroll hint */
-  @media (max-width: 1480px) {
-    body::before {
-      content: 'Scroll horizontally to view full diagram';
-      display: block;
-      text-align: center;
-      padding: 8px;
-      font-size: 11px;
-      color: var(--muted);
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-  }
+:root {
+  --bg:#090d12; --s1:#111820; --s2:#171e28; --s3:#1d2636;
+  --bdr:#283040; --bdr2:#3a4a60;
+  --txt:#d8dfe8; --m:#728090; --m2:#506070;
+  --blue:#4d9cf6; --green:#42d392; --orange:#e8a838; --red:#e85454;
+  --purple:#b07ee8; --cyan:#38c8d8; --pink:#e87ab0; --rust:#dea584;
+  --yellow:#e8d44d;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'SF Pro Text',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--txt);line-height:1.5}
+.page{max-width:1400px;margin:0 auto;padding:40px 32px}
+.hdr{margin-bottom:32px;border-bottom:1px solid var(--bdr);padding-bottom:24px}
+.hdr h1{font-size:32px;font-weight:800;letter-spacing:-.8px}
+.hdr .sub{color:var(--m);font-size:13px;margin-top:4px}
+.hdr .stats{display:flex;gap:28px;margin-top:16px;flex-wrap:wrap}
+.hdr .stat-n{font-size:28px;font-weight:800;color:var(--blue)}
+.hdr .stat-l{font-size:10px;color:var(--m);text-transform:uppercase;letter-spacing:1px}
+.section{margin-bottom:36px}
+.section-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.section-hdr h2{font-size:18px;font-weight:700}
+.section-hdr .line{flex:1;height:1px;background:var(--bdr)}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:1fr 1fr 1fr}
+.g4{grid-template-columns:1fr 1fr 1fr 1fr}
+.g5{grid-template-columns:1fr 1fr 1fr 1fr 1fr}
+.g23{grid-template-columns:2fr 3fr}
+.g32{grid-template-columns:3fr 2fr}
+.card{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;transition:border-color .2s}
+.card:hover{border-color:var(--blue)}
+.card h3{font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.card .desc{font-size:11px;color:var(--m);margin-bottom:8px}
+.card .detail{font-size:10.5px;color:var(--m);line-height:1.6}
+.card .detail b{color:var(--txt);font-weight:600}
+.tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;letter-spacing:.5px;vertical-align:middle}
+.tag-r{background:rgba(222,165,132,.12);color:var(--rust)}
+.tag-t{background:rgba(49,120,198,.12);color:#5b9bd5}
+.tag-b{background:rgba(66,211,146,.12);color:var(--green)}
+.tag-s{background:rgba(240,81,56,.12);color:#f05138}
+.tag-j{background:rgba(232,212,77,.12);color:var(--yellow)}
+.tag-q{background:rgba(56,200,216,.12);color:var(--cyan)}
+.port{font-size:10px;font-family:'SF Mono',monospace;padding:1px 6px;border-radius:3px;background:rgba(77,156,246,.08);color:var(--blue)}
+.bdr-b{border-left:3px solid var(--blue);padding-left:13px}
+.bdr-g{border-left:3px solid var(--green);padding-left:13px}
+.bdr-o{border-left:3px solid var(--orange);padding-left:13px}
+.bdr-r{border-left:3px solid var(--red);padding-left:13px}
+.bdr-p{border-left:3px solid var(--purple);padding-left:13px}
+.bdr-c{border-left:3px solid var(--cyan);padding-left:13px}
+.bdr-pk{border-left:3px solid var(--pink);padding-left:13px}
+.flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:12px 16px;background:var(--s1);border:1px solid var(--bdr);border-radius:8px}
+.flow .step{font-size:11px;padding:5px 12px;border-radius:6px;font-weight:600;white-space:nowrap}
+.flow .arr{color:var(--m);font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}
+th{text-align:left;color:var(--m);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--bdr);font-size:9px;text-transform:uppercase;letter-spacing:.5px}
+td{padding:4px 8px;border-bottom:1px solid rgba(40,48,64,.5)}
+td:first-child{color:var(--blue);font-family:'SF Mono',monospace;font-size:10px}
+.connector{text-align:center;padding:6px 0;color:var(--m);font-size:18px;letter-spacing:4px}
+.pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.pill{font-size:10px;padding:3px 8px;border-radius:5px;background:var(--s2);border:1px solid var(--bdr);color:var(--m);white-space:nowrap}
+.pill.hi{border-color:var(--blue);color:var(--blue)}
+.pill.gr{border-color:var(--green);color:var(--green)}
+.pill.or{border-color:var(--orange);color:var(--orange)}
+.pill.rd{border-color:var(--red);color:var(--red)}
+.pill.pu{border-color:var(--purple);color:var(--purple)}
+.pill.cy{border-color:var(--cyan);color:var(--cyan)}
+.pill.pk{border-color:var(--pink);color:var(--pink)}
+hr.sep{border:none;border-top:1px dashed var(--bdr);margin:10px 0}
+@media(max-width:900px){.g2,.g3,.g4,.g5,.g23,.g32{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
+<div class="page">
 
-<div class="canvas">
-
-  <!-- HEADER -->
-  <div class="header" style="position:relative">
-    <h1>ConvergioPlatform</h1>
-    <div class="sub">Unified AI Orchestration &mdash; Hub-and-Spoke Architecture &mdash; v0.43.0</div>
+<div class="hdr">
+  <h1>ConvergioPlatform Architecture</h1>
+  <div class="sub">Unified AI Orchestration — Hub-and-Spoke Topology — v19.5.0 — 30 Marzo 2026</div>
+  <div class="stats">
+    <div><div class="stat-n">650+</div><div class="stat-l">Modules</div></div>
+    <div><div class="stat-n">89</div><div class="stat-l">Agents</div></div>
+    <div><div class="stat-n">119</div><div class="stat-l">Skills</div></div>
+    <div><div class="stat-n">250+</div><div class="stat-l">API Endpoints</div></div>
+    <div><div class="stat-n">1800+</div><div class="stat-l">Tests</div></div>
+    <div><div class="stat-n">8</div><div class="stat-l">LLM Models</div></div>
+    <div><div class="stat-n">17</div><div class="stat-l">MCP Tools</div></div>
+    <div><div class="stat-n">30+</div><div class="stat-l">Platforms (OpenClaw)</div></div>
   </div>
+</div>
 
-  <div class="legend">
-    <div class="legend-item"><div class="legend-line" style="border-color:var(--blue)"></div> HTTP</div>
-    <div class="legend-item"><div class="legend-line" style="border-color:var(--green)"></div> WebSocket</div>
-    <div class="legend-item"><div class="legend-line" style="border-color:var(--orange)"></div> IPC/Socket</div>
-    <div class="legend-item"><div class="legend-line" style="border-color:var(--purple)"></div> Function call</div>
-    <div class="legend-item"><div class="legend-line-dash" style="border-color:var(--cyan)"></div> Tailscale/SSH</div>
-    <div class="legend-item"><div class="legend-line" style="border-color:var(--pink)"></div> Subprocess</div>
-    <div class="legend-item"><div class="legend-line-dash" style="border-color:var(--muted)"></div> stdio</div>
-  </div>
-
-  <!-- ======================= SVG ARROWS ======================= -->
-  <svg class="arrows" viewBox="0 0 1440 2200" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <marker id="ah-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#4d9cf6"/>
-      </marker>
-      <marker id="ah-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#42d392"/>
-      </marker>
-      <marker id="ah-orange" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#e8a838"/>
-      </marker>
-      <marker id="ah-purple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#b07ee8"/>
-      </marker>
-      <marker id="ah-cyan" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#38c8d8"/>
-      </marker>
-      <marker id="ah-pink" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#e87ab0"/>
-      </marker>
-      <marker id="ah-muted" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#6b7a8d"/>
-      </marker>
-      <marker id="ah-red" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <polygon points="0 0, 8 3, 0 6" fill="#e85454"/>
-      </marker>
-    </defs>
-
-    <!-- === USER INTERFACES → DAEMON HUB === -->
-    <!-- Dashboard Web → Server (HTTP+WS) -->
-    <path d="M 200 200 L 200 370" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)"/>
-    <path d="M 216 200 L 216 370" class="arrow-line" stroke="#42d392" marker-end="url(#ah-green)"/>
-    <text x="224" y="290" class="arrow-label">/api/* + /ws/dashboard</text>
-
-    <!-- TUI → Server (WS) -->
-    <path d="M 480 200 L 420 370" class="arrow-line" stroke="#42d392" marker-end="url(#ah-green)"/>
-    <text x="430" y="278" class="arrow-label">/ws/brain</text>
-
-    <!-- CLI → Server (HTTP) -->
-    <path d="M 720 200 L 580 370" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)"/>
-    <text x="640" y="260" class="arrow-label">localhost:8420/api/*</text>
-    <!-- CLI → IPC socket -->
-    <path d="M 750 200 L 750 520 L 630 520" class="arrow-line" stroke="#e8a838" marker-end="url(#ah-orange)"/>
-    <text x="756" y="400" class="arrow-label">~/.claude/ipc.sock</text>
-
-    <!-- Siri → Kernel (HTTP) -->
-    <path d="M 1000 200 L 870 570" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)"/>
-    <text x="950" y="360" class="arrow-label">/api/voice</text>
-
-    <!-- MCP Server → Server (HTTP) -->
-    <path d="M 1260 200 L 600 400" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)" stroke-dasharray="6,3"/>
-    <text x="920" y="270" class="arrow-label">HTTP (stdio transport to Claude)</text>
-
-    <!-- === INTERNAL DAEMON CONNECTIONS === -->
-    <!-- Server → IPC Engine (shared state) -->
-    <path d="M 400 530 L 500 530" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-
-    <!-- Server → Orchestrator -->
-    <path d="M 400 440 Q 500 440 590 440 L 660 440" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-
-    <!-- Orchestrator → Checklist/Thor -->
-    <path d="M 820 500 L 820 570" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-
-    <!-- Server → Kernel -->
-    <path d="M 400 470 Q 600 550 660 620" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-
-    <!-- Kernel → Inference Router -->
-    <path d="M 870 680 L 1020 680" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-    <text x="905" y="672" class="arrow-label">route()</text>
-
-    <!-- Kernel → Telegram Bot API -->
-    <path d="M 800 720 L 800 810" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)"/>
-    <text x="808" y="770" class="arrow-label">Bot API</text>
-
-    <!-- Voice → Kernel STT -->
-    <path d="M 270 680 L 660 650" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-    <text x="400" y="650" class="arrow-label">audio → STT → engine → TTS</text>
-
-    <!-- === DAEMON → DATA LAYER === -->
-    <!-- Server/IPC → SQLite -->
-    <path d="M 300 560 L 300 960" class="arrow-line" stroke="#38c8d8" marker-end="url(#ah-cyan)"/>
-    <text x="308" y="820" class="arrow-label">rusqlite (WAL+CRDT)</text>
-
-    <!-- Memory module → Vector Store -->
-    <path d="M 560 960 L 560 1010" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-
-    <!-- === DAEMON → MESH === -->
-    <!-- Server → Mesh peers (Tailscale) -->
-    <path d="M 400 500 Q 1100 780 1100 960" class="arrow-line" stroke="#38c8d8" stroke-dasharray="6,3" marker-end="url(#ah-cyan)"/>
-    <text x="850" y="850" class="arrow-label">Tailscale + HMAC-SHA256</text>
-
-    <!-- Mesh HTTP sync between peers -->
-    <path d="M 1200 1020 C 1360 1020 1360 1080 1200 1080" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)"/>
-    <text x="1280" y="1054" class="arrow-label">/api/sync/*</text>
-
-    <!-- === WORKSPACE → GIT === -->
-    <path d="M 150 780 L 150 960" class="arrow-line" stroke="#e87ab0" marker-end="url(#ah-pink)"/>
-    <text x="158" y="870" class="arrow-label">git subprocess</text>
-
-    <!-- Workspace → GitHub API -->
-    <path d="M 200 780 Q 320 870 400 960" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)"/>
-    <text x="240" y="900" class="arrow-label">api.github.com</text>
-
-    <!-- === EVOLUTION → DAEMON === -->
-    <path d="M 720 1290 L 400 560" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)" opacity=".6"/>
-    <text x="520" y="950" class="arrow-label">HTTP adapters → /api/*</text>
-
-    <!-- Evolution → Dashboard WS -->
-    <path d="M 800 1290 L 360 500" class="arrow-line" stroke="#42d392" marker-end="url(#ah-green)" opacity=".5"/>
-
-    <!-- === LLM STACK === -->
-    <!-- Inference Router → Cloud APIs -->
-    <path d="M 1180 720 L 1300 810" class="arrow-line" stroke="#4d9cf6" marker-end="url(#ah-blue)"/>
-    <text x="1210" y="760" class="arrow-label">Cloud</text>
-    <!-- Inference Router → Local oMLX -->
-    <path d="M 1100 720 L 1100 810" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-    <text x="1108" y="770" class="arrow-label">:8321</text>
-
-    <!-- === HOOKS ENFORCEMENT (cross-cutting) === -->
-    <path d="M 340 1620 L 340 560" class="arrow-line" stroke="#e85454" stroke-dasharray="4,4" marker-end="url(#ah-red)" opacity=".4"/>
-    <path d="M 780 1560 L 780 510" class="arrow-line" stroke="#e85454" stroke-dasharray="4,4" marker-end="url(#ah-red)" opacity=".4"/>
-    <text x="360" y="1400" class="arrow-label" fill="#e85454">hook enforcement</text>
-
-    <!-- === EXECUTION FLOW at bottom === -->
-    <!-- /solve → /planner -->
-    <path d="M 240 1870 L 380 1870" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-    <!-- /planner → review -->
-    <path d="M 530 1870 L 620 1870" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-    <!-- review → DB -->
-    <path d="M 740 1870 L 810 1870" class="arrow-line" stroke="#38c8d8" marker-end="url(#ah-cyan)"/>
-    <!-- DB → /execute -->
-    <path d="M 890 1870 L 940 1870" class="arrow-line" stroke="#b07ee8" marker-end="url(#ah-purple)"/>
-    <!-- /execute → Thor -->
-    <path d="M 1070 1870 L 1120 1870" class="arrow-line" stroke="#e8a838" marker-end="url(#ah-orange)"/>
-    <!-- Thor → merge -->
-    <path d="M 1250 1870 L 1300 1870" class="arrow-line" stroke="#42d392" marker-end="url(#ah-green)"/>
-  </svg>
-
-  <!-- ======================= NODES ======================= -->
-
-  <!-- ===== USER INTERFACES (top row, y~110) ===== -->
-  <div class="node b-blue" style="left:80px; top:110px; width:200px">
-    <div class="title">Dashboard Web <span class="tag tag-js">JS</span></div>
-    <div class="subtitle">Vanilla JS + Maranello DS</div>
-    <div class="detail">
-      <b>7 panels</b>: app, kpi, mesh, chat, brain, ideas, ipc<br>
-      Static served by daemon
+<!-- 1. USER INTERFACES -->
+<div class="section">
+  <div class="section-hdr"><h2>1. User Interfaces</h2><div class="line"></div></div>
+  <div class="grid g5">
+    <div class="card bdr-b">
+      <h3>Dashboard Web <span class="tag tag-j">JS</span></h3>
+      <div class="desc">Vanilla JS + Maranello Luce DS</div>
+      <div class="detail"><b>7 panels</b>: app, KPI, mesh-actions, chat, brain-canvas, idea-jar, IPC<br>Static served by daemon <span class="port">:8420</span><br><b>WS</b>: /ws/dashboard (real-time)<br><b>Design</b>: 5 themes, 36 components, WCAG 2.2 AA</div>
+    </div>
+    <div class="card bdr-b">
+      <h3>TUI <span class="tag tag-r">RUST</span></h3>
+      <div class="desc">ratatui terminal interface</div>
+      <div class="detail">Tree nav, drill-down, chat handler<br>WS client &rarr; /ws/brain<br>Session persistence, widgets<br>Claude session lifecycle</div>
+    </div>
+    <div class="card bdr-b">
+      <h3>CLI (cvg) <span class="tag tag-r">RUST</span></h3>
+      <div class="desc">50+ subcommands</div>
+      <div class="detail"><b>HTTP</b> &rarr; localhost:8420/api/*<br><b>IPC</b> &rarr; ~/.claude/ipc.sock<br>argv[0] routing (cvg / agent-ipc)<br>plan, task, wave, agent, workspace, kernel, mesh, skill, checkpoint, reap, review, memory, channel, delegation, voice, domain, audit, cheatsheet, commands, api</div>
+    </div>
+    <div class="card bdr-b">
+      <h3>Siri / Voice <span class="tag tag-s">SWIFT</span></h3>
+      <div class="desc">CommandCenter + speak.swift</div>
+      <div class="detail">convergio-parla.sh &rarr; Italian voice<br>convergio-stato.sh &rarr; status report<br>Siri Shortcuts integration<br>macOS native TTS</div>
+    </div>
+    <div class="card bdr-b">
+      <h3>MCP Server <span class="tag tag-r">RUST</span></h3>
+      <div class="desc">stdio transport &rarr; Claude Code</div>
+      <div class="detail"><b>17 tools</b>: plans(4), agents(3), mesh(2), metrics(1), kernel(2), actions(2), control(3)<br><b>Ring security</b>: 0=core, 1=trusted, 2=community, 3=sandboxed<br>JSON-RPC, bearer token auth<br>.mcp.json wiring</div>
     </div>
   </div>
+</div>
 
-  <div class="node b-green" style="left:360px; top:110px; width:190px">
-    <div class="title">TUI <span class="tag tag-rust">RUST</span></div>
-    <div class="subtitle">ratatui terminal</div>
-    <div class="detail">
-      <b>Views</b>: tree nav, drill down, chat<br>
-      <b>WS</b> client for real-time
+<div class="connector">&#9660; HTTP &nbsp; &#9660; WS &nbsp; &#9660; SSE &nbsp; &#9660; Unix Socket &nbsp; &#9660; stdio</div>
+
+<!-- 2. DAEMON CORE -->
+<div class="section">
+  <div class="section-hdr"><h2>2. Daemon Core</h2><span class="tag tag-r">RUST</span><span class="port">:8420</span><div class="line"></div></div>
+  <div class="grid g32" style="margin-bottom:14px">
+    <div class="card bdr-g">
+      <h3>HTTP Server (axum + tokio)</h3>
+      <div class="desc">26 API modules — 250+ endpoints — REST + SSE + WebSocket</div>
+      <div class="grid g3" style="gap:8px">
+        <div><div class="detail"><b>Plans & Execution</b></div><div class="pills"><span class="pill hi">plans</span><span class="pill hi">plan_db</span><span class="pill hi">runs</span><span class="pill">coordinator</span><span class="pill">delegation</span><span class="pill">deliverables</span><span class="pill">tracking</span></div></div>
+        <div><div class="detail"><b>Agents & Intelligence</b></div><div class="pills"><span class="pill hi">agents</span><span class="pill">chat</span><span class="pill">ideas</span><span class="pill">evolution</span><span class="pill">voice</span><span class="pill">decisions</span><span class="pill">capabilities</span></div></div>
+        <div><div class="detail"><b>Infrastructure</b></div><div class="pills"><span class="pill gr">mesh</span><span class="pill gr">heartbeat</span><span class="pill gr">peers</span><span class="pill gr">sync</span><span class="pill">metrics</span><span class="pill">health</span><span class="pill">workspace</span><span class="pill">ipc</span><span class="pill">notify</span><span class="pill">github</span><span class="pill">openclaw</span><span class="pill">ingest</span><span class="pill">channels</span><span class="pill">repositories</span><span class="pill">audit</span><span class="pill">domain</span><span class="pill">memory</span><span class="pill">nightly</span></div></div>
+      </div>
+      <hr class="sep">
+      <div class="detail"><b>SSE</b>: /api/chat/stream/:sid, /api/plan/delegate, /api/plan/preflight, /api/plan/start &nbsp;|&nbsp; <b>WS</b>: /ws/brain, /ws/dashboard, /ws/pty &nbsp;|&nbsp; <b>Middleware</b>: auth (JWT/bearer), CORS, telemetry, static serve</div>
+    </div>
+    <div class="card bdr-g">
+      <h3>Orchestrator</h3>
+      <div class="desc">Plan execution engine</div>
+      <div class="detail"><b>reactor</b> &rarr; event loop, dispatches tasks<br><b>executor</b> &rarr; TDD execution (RED &rarr; GREEN &rarr; evidence)<br><b>delegation_core</b> &rarr; delegate to remote nodes<br><b>reaper</b> &rarr; auto-clean stale processes, worktrees<br><b>plan_lifecycle_guards</b> &rarr; state machine enforcement</div>
+      <hr class="sep">
+      <div class="detail"><b>Status flow</b>: pending &rarr; in_progress &rarr; <b>submitted</b> (executor) &rarr; <b>done</b> (Thor only)<br><b>Cascading fix threshold</b>: 3 fails &rarr; STOP, propose rebuild<br><b>Max 4 tasks/wave</b>, checkpoint after each</div>
     </div>
   </div>
-
-  <div class="node b-orange" style="left:620px; top:110px; width:190px">
-    <div class="title">CLI (cvg) <span class="tag tag-rust">RUST</span></div>
-    <div class="subtitle">50+ subcommands</div>
-    <div class="detail">
-      <b>HTTP</b> → localhost:8420<br>
-      <b>IPC</b> → Unix socket<br>
-      argv[0] routing
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card bdr-c">
+      <h3>Kernel / Jarvis</h3>
+      <div class="desc">Local LLM brain — Qwen 2.5 7B on M1 Pro</div>
+      <div class="detail"><b>Engine</b>: state machine (context-stuffed intelligent answers)<br><b>Monitor</b> (30s loop): health, stall detection, rate limits, peer failure tracker (3-strike)<br><b>Recover</b>: restart daemon, checkpoint, escalation<br><b>Verify gate</b>: blocks "done" without evidence<br><b>Deterministic triage</b>: auto-fix daemon crash, DB lock, stale worktrees, high FD count<br><b>Ali escalation</b>: "ali dimmi..." &rarr; Claude CLI (Opus) with full context</div>
+    </div>
+    <div class="card bdr-pk">
+      <h3>Voice Engine</h3>
+      <div class="desc">Full pipeline, feature-gated</div>
+      <div class="detail"><b>Capture</b>: cpal native, stereo&rarr;mono, 16kHz<br><b>VAD</b>: webrtc-vad, 4 levels, ~10ms<br><b>STT</b>: whisper-rs GGML, Metal accel<br><b>Wake word</b>: VAD + Whisper micro-transcription<br><b>TTS</b>: Voxtral 4B (mlx-audio) + Siri fallback<br><b>Intent</b>: rule-based &rarr; commands, queries, nav<br><b>State</b>: Idle &rarr; Listening &rarr; WakeDetected &rarr; Processing &rarr; Speaking</div>
+    </div>
+    <div class="card bdr-pk">
+      <h3>Telegram Bot</h3>
+      <div class="desc">@ConvergioBot — bidirectional</div>
+      <div class="detail"><b>Inbound text</b>: classify intent &rarr; respond<br><b>Inbound voice</b>: OGG &rarr; Whisper &rarr; classify &rarr; text + voice<br><b>Outbound</b>: alerts, daily/weekly reports, plan completions<br><b>Long polling</b> (zero wasted requests)<br><b>Quiet hours</b>: 23:00-07:00 CET<br><b>Health check</b>: detect dead poll task</div>
+    </div>
+    <div class="card bdr-o">
+      <h3>Thor Validator</h3>
+      <div class="desc">10-gate QA — v6.0</div>
+      <div class="detail"><b>Checklist engine</b> + NASA rules<br><b>Wave-level validation</b> (not task-level)<br>Only Thor promotes submitted &rarr; done<br>Executors CANNOT set done<br><b>Merge quality gate</b>: clean tree, no contamination, type-check, tests, lint, version, CHANGELOG</div>
     </div>
   </div>
-
-  <div class="node b-purple" style="left:880px; top:110px; width:190px">
-    <div class="title">Siri / Voice <span class="tag tag-swift">SWIFT</span></div>
-    <div class="subtitle">CommandCenter + speak.swift</div>
-    <div class="detail">
-      convergio-parla.sh<br>
-      convergio-stato.sh
+  <div class="grid g4">
+    <div class="card bdr-o">
+      <h3>IPC Engine</h3>
+      <div class="desc">Inter-agent coordination</div>
+      <div class="detail"><b>SQLite tables</b>: ipc_agents, ipc_messages, ipc_channels, ipc_file_locks, ipc_worktrees, ipc_context<br>budget, conflicts, protocol router, compact, skills registry</div>
+    </div>
+    <div class="card bdr-r">
+      <h3>Security</h3>
+      <div class="detail"><b>ACL</b>: role-based access<br><b>Audit chain</b>: immutable log<br><b>Egress filter</b>: outbound control<br><b>Kill switch</b>: emergency stop<br><b>Keychain</b>: secrets<br><b>Sandbox</b>: agent isolation<br><b>Budget</b>: token tracking</div>
+    </div>
+    <div class="card bdr-g">
+      <h3>Resilience</h3>
+      <div class="desc">Art. XI — NON-NEGOTIABLE</div>
+      <div class="detail"><b>Circuit breaker</b>: all external boundaries<br><b>Health</b>: /health + /api/node/readiness (10 checks)<br><b>Checkpoint/restart</b>: snapshot + restore<br><b>Retry + backoff</b>: exponential<br><b>Watchdog</b>: detect stalls<br><b>Reaper</b>: auto-clean zombies</div>
+    </div>
+    <div class="card bdr-p">
+      <h3>Workspace</h3>
+      <div class="desc">Git is invisible to agents</div>
+      <div class="detail"><b>GitConnector</b> trait: GitHub/GitLab/Gitea<br><b>merge_ops</b>: strategy logic<br><b>wave_ops</b>: wave coordination<br><b>Quality gate</b>: mechanical checks in Rust<br><b>Release Agent</b>: gate &rarr; commit &rarr; push &rarr; PR &rarr; merge<br><b>Event log</b>: CRDT audit trail</div>
     </div>
   </div>
+</div>
 
-  <div class="node b-cyan" style="left:1140px; top:110px; width:210px">
-    <div class="title">MCP Server <span class="tag tag-rust">RUST</span></div>
-    <div class="subtitle">stdio transport → Claude</div>
-    <div class="detail">
-      <b>Ring levels</b>: 0-3 (core→sandboxed)<br>
-      tool_catalog, invoke_agent<br>
-      <b>Security</b>: bearer token
+<div class="connector">&#9660; rusqlite &nbsp; &#9660; CRDT sync &nbsp; &#9660; git subprocess &nbsp; &#9660; reqwest HTTP</div>
+
+<!-- 3. DATA -->
+<div class="section">
+  <div class="section-hdr"><h2>3. Data Layer</h2><div class="line"></div></div>
+  <div class="grid g4">
+    <div class="card bdr-c">
+      <h3>dashboard.db <span class="tag tag-q">SQLITE WAL+CRDT</span></h3>
+      <div class="detail"><b>Tables</b>: plans, waves, tasks, knowledge_base, peer_heartbeats, agents, metrics, workspaces, ipc_*, workspace_events, nightly_jobs<br><b>Sync</b>: CRDT between mesh nodes via /api/sync/*<br><b>Path</b>: data/dashboard.db (env: DASHBOARD_DB)</div>
+    </div>
+    <div class="card bdr-p">
+      <h3>Vector Store</h3>
+      <div class="detail"><b>Embeddings</b> DB for semantic search<br><b>Blob store</b>: large content<br><b>sqlite_store</b>: structured memory<br><b>Attestation</b>: provenance<br><b>Sharing</b>: cross-agent memory</div>
+    </div>
+    <div class="card">
+      <h3>Git Repos</h3>
+      <div class="detail"><b>Local</b>: git subprocess (commit, push, rebase)<br><b>Remote</b>: api.github.com (reqwest, 30s timeout)<br>PRs, CI checks, merge, branch ops</div>
+    </div>
+    <div class="card">
+      <h3>File System</h3>
+      <div class="detail">~/.claude/projects/ &mdash; agent memory<br>~/.convergio/env &mdash; secrets<br>~/.cache/huggingface/hub/ &mdash; MLX models<br>~/Library/LaunchAgents/ &mdash; launchd plists<br>.claude/agent-memory/ &mdash; per-agent state</div>
     </div>
   </div>
+</div>
 
-  <!-- ===== DAEMON HUB (center, y~370) ===== -->
-  <div class="zone" style="left:60px; top:350px; width:1310px; height:430px; border-color:rgba(66,211,146,.25); background:rgba(66,211,146,.02)">
-    <div class="zone-label" style="color:var(--green)">Daemon Core &mdash; Rust &mdash; axum + tokio + rusqlite <span style="font-weight:400;letter-spacing:0">| 107+ .rs files</span></div>
-  </div>
-
-  <!-- Server -->
-  <div class="node b-blue" style="left:80px; top:390px; width:310px; min-height:180px">
-    <div class="title">HTTP Server <span class="port">:8420</span></div>
-    <div class="subtitle">axum router &mdash; 26+ API modules</div>
-    <div class="detail">
-      <b>REST</b>: /api/plans, agents, chat, workspace, mesh, ipc, voice, metrics, github, openclaw, ingest, sync, evolution, ...<br><br>
-      <b>SSE</b>: /api/chat/stream, /api/plan/delegate, /api/plan/preflight<br><br>
-      <b>WS</b>: /ws/brain, /ws/dashboard, /ws/pty<br><br>
-      <b>Static</b>: /* → dashboard_web files<br>
-      <b>Middleware</b>: auth (JWT), CORS, telemetry
+<!-- 4. MESH -->
+<div class="section">
+  <div class="section-hdr"><h2>4. Mesh Network (Swarm Intelligence)</h2><span class="tag tag-r">RUST</span><span class="tag tag-b">BASH</span><div class="line"></div></div>
+  <div class="desc" style="font-size:11px;color:var(--m);margin-bottom:10px">Art. XII Constitution — NON-NEGOTIABLE — Inspired by Giorgio Parisi (Nobel Physics 2021): emergent behavior from local interactions</div>
+  <div class="grid g23">
+    <div class="card bdr-c">
+      <h3>Mesh Coordinator (40+ Rust modules)</h3>
+      <div class="grid g2" style="gap:8px;margin-top:8px">
+        <div class="detail"><b>Core</b>: coordinator, peers, topology, sync<br><b>Delegate</b>: handoff (SSH/WS), routing, monitor<br><b>Intelligence</b>: peer_resolver (3-stage fuzzy match), profiles, runners<br><b>Sync</b>: daemon_sync, frames, batch, DB ops, quota</div>
+        <div class="detail"><b>Transport</b>: Tailscale, SSH2, WebSocket, HTTP, LAN mDNS<br><b>Auth</b>: HMAC-SHA256 + AES-GCM, token-based<br><b>Self-healing</b>: node failure &rarr; auto swarm reorg<br><b>No SPOF</b>: any node failure must not halt swarm</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Mesh Scripts (13 Bash)</h3>
+      <div class="pills" style="margin-top:6px"><span class="pill gr">deploy-node.sh</span><span class="pill gr">mesh-provision-node.sh</span><span class="pill gr">mesh-sync.sh</span><span class="pill gr">mesh-sync-all.sh</span><span class="pill gr">mesh-heartbeat.sh</span><span class="pill gr">mesh-auth-sync.sh</span><span class="pill gr">mesh-delegate-task.sh</span><span class="pill gr">mesh-preflight.sh</span><span class="pill gr">mesh-rsync.sh</span><span class="pill">build-dmg.sh</span><span class="pill">build-usb.sh</span><span class="pill">offline-recovery.sh</span><span class="pill">post-commit-sync.sh</span></div>
+      <hr class="sep">
+      <div class="detail"><b>Node roles</b>: kernel, executor, coordinator<br><b>Deploy</b>: one-command &rarr; deploy-node.sh &lt;node&gt; --kernel<br><b>Auto-rebuild</b>: daemon rebuilds after git pull, launchd (5min)</div>
     </div>
   </div>
+</div>
 
-  <!-- IPC Engine -->
-  <div class="node b-orange" style="left:420px; top:490px; width:220px">
-    <div class="title">IPC Engine</div>
-    <div class="subtitle">Inter-agent coordination</div>
-    <div class="detail">
-      <b>SQLite tables</b>: ipc_agents, ipc_messages, ipc_channels, ipc_file_locks, ipc_worktrees, ipc_context<br><br>
-      budget, locks, conflicts, worktrees, skills, protocol router
+<!-- 5. LLM -->
+<div class="section">
+  <div class="section-hdr"><h2>5. LLM Infrastructure — Multi-Model, Multi-Provider</h2><div class="line"></div></div>
+  <div class="grid g2">
+    <div class="card bdr-p">
+      <h3>Model Registry (8 models, 3 providers)</h3>
+      <table>
+        <tr><th>Alias</th><th>Model ID</th><th>Tier</th><th>Provider</th></tr>
+        <tr><td>opus</td><td>claude-opus-4.6</td><td>Premium</td><td>Anthropic</td></tr>
+        <tr><td>opus-1m</td><td>claude-opus-4.6-1m</td><td>Premium (1M ctx)</td><td>Anthropic</td></tr>
+        <tr><td>sonnet</td><td>claude-sonnet-4.6</td><td>Standard</td><td>Anthropic</td></tr>
+        <tr><td>haiku</td><td>claude-haiku-4.5</td><td>Fast/Cheap</td><td>Anthropic</td></tr>
+        <tr><td>codex</td><td>gpt-5.3-codex</td><td>Standard</td><td>OpenAI</td></tr>
+        <tr><td>codex-mini</td><td>gpt-5.1-codex-mini</td><td>Fast/Cheap</td><td>OpenAI</td></tr>
+        <tr><td>gpt-5.4</td><td>gpt-5.4</td><td>Deep reasoning</td><td>OpenAI</td></tr>
+        <tr><td>gemini-3-pro</td><td>gemini-3-pro-preview</td><td>Standard (1M ctx)</td><td>Google</td></tr>
+      </table>
+    </div>
+    <div class="card bdr-p">
+      <h3>Phase Routing (hook-enforced)</h3>
+      <table>
+        <tr><th>Phase</th><th>Model</th><th>Agent</th><th>Rationale</th></tr>
+        <tr><td>Prompt</td><td>opus</td><td>@prompt</td><td>Deep reasoning for requirements</td></tr>
+        <tr><td>Planning</td><td>opus-1m</td><td>@planner</td><td>1M context for full codebase</td></tr>
+        <tr><td>Review</td><td>sonnet</td><td>plan-reviewer</td><td>Fast, accurate review</td></tr>
+        <tr><td>Execution</td><td>codex</td><td>@execute</td><td>Capable bulk code gen</td></tr>
+        <tr><td>Validation</td><td>opus</td><td>@validate</td><td>Deep reasoning for Thor gates</td></tr>
+        <tr><td>Exploration</td><td>haiku</td><td>explore</td><td>Fast read-only search</td></tr>
+        <tr><td>Coordinator</td><td>sonnet</td><td>&mdash;</td><td>Default session</td></tr>
+      </table>
+      <hr class="sep">
+      <div class="detail"><b>Inference Router</b>: classifier &rarr; tier routing, local > cloud preference<br><b>Fallback chain</b>: primary unavailable &rarr; next tier<br><b>Parallelization</b>: &le;3 concurrent = sonnet, >3 = opus required</div>
     </div>
   </div>
-
-  <!-- Orchestrator -->
-  <div class="node b-purple" style="left:660px; top:390px; width:200px">
-    <div class="title">Orchestrator</div>
-    <div class="subtitle">Plan execution engine</div>
-    <div class="detail">
-      <b>reactor</b> → executor<br>
-      delegation_core<br>
-      reaper (stale cleanup)<br>
-      plan lifecycle guards
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card bdr-o">
+      <h3>Local LLM Stack (Apple Silicon)</h3>
+      <div class="detail"><b>oMLX</b> <span class="port">:8321</span> &mdash; MLX-optimized inference<br><b>LiteLLM Proxy</b> <span class="port">:4000</span> &mdash; unified API routing<br><b>Qwen 2.5 7B</b> (Jarvis) &mdash; context-stuffed local brain<br><b>Voxtral 4B</b> &mdash; neural TTS (Italian/English)<br><b>Whisper GGML</b> &mdash; STT with Metal acceleration<br><br><b>Scripts</b>: convergio-llm.sh (start/stop/status/test/models/logs), setup, download<br><b>Paths</b>: ~/llm-local/ (venv), ~/models/, ~/.convergio-llm/ (PIDs+logs)</div>
+    </div>
+    <div class="card">
+      <h3>Task-Type Routing (ad-hoc)</h3>
+      <table>
+        <tr><th>Task Type</th><th>Model</th><th>Rationale</th></tr>
+        <tr><td>Architecture</td><td>opus</td><td>Deep reasoning</td></tr>
+        <tr><td>Standard codegen</td><td>codex</td><td>Capable, bulk</td></tr>
+        <tr><td>Deep debugging</td><td>gpt-5.4</td><td>Deep reasoning (OpenAI)</td></tr>
+        <tr><td>Config / mechanical</td><td>codex-mini</td><td>Fast, cheap</td></tr>
+        <tr><td>Documentation</td><td>haiku</td><td>Fast, trivial</td></tr>
+        <tr><td>Large codebase</td><td>opus-1m</td><td>1M context</td></tr>
+        <tr><td>Large research</td><td>gemini-3-pro</td><td>1M context, free tier</td></tr>
+      </table>
     </div>
   </div>
+</div>
 
-  <!-- Checklist / Thor -->
-  <div class="node b-orange" style="left:680px; top:570px; width:180px">
-    <div class="title">Thor <span style="font-size:10px;color:var(--orange)">10 gates</span></div>
-    <div class="subtitle">Validation engine</div>
-    <div class="detail">
-      checklist engine<br>
-      nasa_rules<br>
-      runners, registry<br>
-      <b>submitted → done</b>
+<!-- 6. AGENTS -->
+<div class="section">
+  <div class="section-hdr"><h2>6. Agent Catalog — 89 Agents, 12 Domains</h2><div class="line"></div></div>
+  <div class="grid g4">
+    <div class="card bdr-p">
+      <h3>Core Platform (20)</h3>
+      <div class="detail"><b>Ali</b> &mdash; Chief of Staff, orchestration (opus)<br><b>Thor</b> &mdash; QA validation, 10 gates (sonnet v6.0)<br><b>strategic-planner</b> &mdash; plan creation (opus v4.2)<br><b>plan-reviewer</b> &mdash; strategy validation (opus v2.0)<br><b>task-executor</b> &mdash; TDD execution (sonnet)<br>compliance-validator, design-validator, doc-validator, deep-repo-auditor, sentinel, context-optimizer, plan-business-advisor, plan-post-mortem, po-prompt-optimizer, wanda, xavier, explore, Convergio, ConvergioLLM, pr-comment-resolver</div>
+    </div>
+    <div class="card">
+      <h3>Technical Dev (8)</h3>
+      <div class="detail"><b>baccio</b> &mdash; system design, DDD, Clean Arch (opus)<br><b>dario</b> &mdash; root-cause debugging (sonnet)<br><b>rex</b> &mdash; code review, security (sonnet)<br><b>marco</b> &mdash; DevOps, CI/CD, K8s (sonnet)<br>omri (data science, ML), otto (performance), paolo (best practices), adversarial-debugger</div>
+    </div>
+    <div class="card">
+      <h3>Leadership (9)</h3>
+      <div class="detail"><b>ali</b> &mdash; Chief of Staff (opus)<br><b>amy</b> &mdash; CFO, ROI (opus)<br><b>satya</b> &mdash; Board of Directors (opus)<br>antonio (strategy), dan (engineering GM), domik (McKinsey), matteo (business architect), sam (startup), wiz (VC/investor)</div>
+    </div>
+    <div class="card">
+      <h3>Product & PM (5)</h3>
+      <div class="detail"><b>davide</b> &mdash; project delivery, GTM (sonnet v2.0)<br><b>luke</b> &mdash; program coordination (sonnet)<br>marcello (product mgmt), wanda (workflow), taskmaster (task decomposition)</div>
     </div>
   </div>
+  <div class="grid g4" style="margin-top:14px">
+    <div class="card"><h3>Design & UX (5)</h3><div class="detail">jony (creative director), nasra (Maranello UI builder), sara (UX/UI), stefano (design thinking), jenny (accessibility WCAG)</div></div>
+    <div class="card"><h3>Legal & Compliance (5)</h3><div class="detail">elena (legal/contracts), luca (security OWASP), dr-enzo (healthcare), guardian (AI security, opus), sophia (gov affairs)</div></div>
+    <div class="card"><h3>Business Ops (7)</h3><div class="detail">andrea (customer success), anna (exec assistant), dave (change mgmt), enrico (BPM), fabio (sales/BD), sofia (marketing), steve (exec comms)</div></div>
+    <div class="card"><h3>Other Domains</h3><div class="detail"><b>People & Culture (3)</b>: behice, coach, giulia<br><b>Research (3)</b>: research-report, socrates, marcus<br><b>Data & Analytics (2)</b>: diana, fiona<br><b>Release Mgmt (3)</b>: app-release, ecosystem-sync, feature-release</div></div>
+  </div>
+</div>
 
-  <!-- Kernel / Jarvis -->
-  <div class="node b-cyan" style="left:660px; top:600px; width:220px; top:610px; left:660px">
-    <div class="title">Kernel / Jarvis</div>
-    <div class="subtitle">AI brain + voice + Telegram</div>
-    <div class="detail">
-      <b>engine</b> (state machine)<br>
-      monitor → recover → verify<br>
-      <b>STT</b> (Whisper) → <b>TTS</b><br>
-      voice_router, audio_routing<br>
-      <b>Telegram</b>: bot, poll, voice
+<!-- 7. EVOLUTION -->
+<div class="section">
+  <div class="section-hdr"><h2>7. Evolution Engine</h2><span class="tag tag-t">TS</span><div class="line"></div></div>
+  <div class="grid g3">
+    <div class="card bdr-pk">
+      <h3>Core</h3>
+      <div class="desc">Self-improvement loop</div>
+      <div class="detail"><b>Cycle</b>: Observe &rarr; Measure &rarr; Propose &rarr; Experiment &rarr; Validate &rarr; Learn<br>evaluators, cadence engine<br>guardrails (safety bounds)<br>A/B testing, multi-armed bandit<br>Cost calibration, model routing optimization<br><b>Proposals require human approval</b></div>
+    </div>
+    <div class="card">
+      <h3>Adapters (7)</h3>
+      <div class="detail"><b>claude-adapter</b> &rarr; daemon HTTP /api/*<br><b>dashboard-adapter</b> &rarr; /ws/dashboard<br><b>maranello-adapter</b> &rarr; DS bridge<br><b>mld-adapter</b> &rarr; model lifecycle data<br><b>template-adapter</b> &rarr; experiment templates<br><b>telemetry-collector</b> &rarr; metrics<br><b>escalation-collector</b> &rarr; failure events</div>
+    </div>
+    <div class="card">
+      <h3>Modules</h3>
+      <div class="pills" style="margin-top:6px"><span class="pill pk">experiments</span><span class="pill pk">canary</span><span class="pill pk">analysis</span><span class="pill pk">research</span><span class="pill pk">roi</span><span class="pill pk">reporting</span><span class="pill pk">runtime</span><span class="pill pk">agents</span><span class="pill pk">telemetry</span></div>
     </div>
   </div>
+</div>
 
-  <!-- Voice Pipeline -->
-  <div class="node b-pink" style="left:80px; top:610px; width:190px">
-    <div class="title">Voice Pipeline</div>
-    <div class="subtitle">Audio capture → dispatch</div>
-    <div class="detail">
-      VAD → wake_word → Whisper<br>
-      audio_capture<br>
-      intent classifier<br>
-      <b>pipeline</b> orchestrator
+<!-- 8. INTEGRATIONS -->
+<div class="section">
+  <div class="section-hdr"><h2>8. External Integrations & Ecosystem</h2><div class="line"></div></div>
+  <div class="grid g4">
+    <div class="card bdr-pk">
+      <h3>OpenClaw Bridge</h3>
+      <div class="desc">30+ messaging platforms</div>
+      <div class="detail">WhatsApp, Telegram, Slack, Discord, etc.<br>Webhook + polling support<br>All requests &rarr; Ali orchestrator<br>Channel adapters: Slack, Telegram, Email<br>integrations/openclaw-bridge/ (TS)</div>
+    </div>
+    <div class="card"><h3>Channels</h3><div class="detail"><b>Slack</b> adapter<br><b>Telegram</b> adapter (+ kernel bot)<br><b>Email</b> adapter<br>Router for multi-channel dispatch</div></div>
+    <div class="card"><h3>Document Ingestion</h3><div class="detail">PDF &rarr; MD, DOCX &rarr; MD<br>XLSX &rarr; CSV, URL, images<br>Folder recursive ingestion<br>convergio-ingest.sh + graceful fallback</div></div>
+    <div class="card"><h3>Ecosystem (5 repos)</h3><div class="detail"><b>convergio-web</b> &mdash; Next.js 15 + Tauri 2.0<br><b>convergio-design</b> &mdash; Maranello Luce DS<br><b>convergio</b> &mdash; specs, ADR, governance<br><b>convergio-community</b> &mdash; community skills<br><b>convergio.io</b> &mdash; gateway website</div></div>
+  </div>
+</div>
+
+<!-- 9. GOVERNANCE -->
+<div class="section">
+  <div class="section-hdr"><h2>9. Agent Governance — Hook-Enforced</h2><div class="line"></div></div>
+  <div class="grid g3">
+    <div class="card bdr-r">
+      <h3>10 Enforcement Hooks (auto-block)</h3>
+      <table>
+        <tr><th>#</th><th>Rule</th><th>Hook</th></tr>
+        <tr><td>1</td><td>No secrets in code</td><td>SecretScan</td></tr>
+        <tr><td>2</td><td>No direct sqlite3</td><td>SqliteBlock</td></tr>
+        <tr><td>3</td><td>Agent identity required</td><td>AgentIdentity</td></tr>
+        <tr><td>4</td><td>cargo check on .rs edits</td><td>RustCheck</td></tr>
+        <tr><td>5</td><td>Evidence before done</td><td>EvidenceGate</td></tr>
+        <tr><td>6</td><td>Max 250 lines/file</td><td>FileSizeGuard</td></tr>
+        <tr><td>7</td><td>Wire mod.rs on new .rs</td><td>RustModWiring</td></tr>
+        <tr><td>8</td><td>Fail-loud, no silent fallback</td><td>FailLoud</td></tr>
+        <tr><td>9</td><td>Conventional commits</td><td>CommitLint</td></tr>
+        <tr><td>10</td><td>Tests before done</td><td>TestGate</td></tr>
+      </table>
+    </div>
+    <div class="card bdr-o">
+      <h3>Commands / Skills</h3>
+      <div class="detail"><b>Workflow</b>: /solve &rarr; /planner &rarr; review &rarr; DB &rarr; /execute &rarr; Thor &rarr; merge &rarr; done<br>Skipping steps = BLOCKED</div>
+      <div class="pills" style="margin-top:8px"><span class="pill hi">/solve</span><span class="pill hi">/planner</span><span class="pill hi">/execute</span><span class="pill">/check</span><span class="pill">/prepare</span><span class="pill">/release</span><span class="pill">/research</span><span class="pill">/prompt</span><span class="pill">/optimize</span></div>
+      <hr class="sep">
+      <div class="detail"><b>119 skills</b> across all agent domains<br><b>27 validation gates</b><br><b>Merge quality gate</b>: 7 checks (clean tree, no contamination, type-check, tests, lint, version, changelog)</div>
+    </div>
+    <div class="card">
+      <h3>Constitution (12 Articles)</h3>
+      <div class="detail"><b>I</b> Identity &bull; <b>II</b> Safety &bull; <b>III</b> Compliance (GDPR, CCPA, WCAG 2.1 AA) &bull; <b>IV</b> Transparency &bull; <b>V</b> Quality (NN) &bull; <b>VI</b> Verification (NN) &bull; <b>VII</b> Accessibility &bull; <b>VIII</b> Accountability &bull; <b>IX</b> Token Economy &bull; <b>X</b> No Advice &bull; <b>XI</b> Resilience (NN) &bull; <b>XII</b> Swarm Intelligence (NN)<br><br><b>5 NON-NEGOTIABLE</b>: Identity, Quality, Verification, Resilience, Swarm<br>Agentic Manifesto (Milano, 23 June 2025)</div>
     </div>
   </div>
+</div>
 
-  <!-- Security -->
-  <div class="node b-red" style="left:900px; top:390px; width:190px">
-    <div class="title">Security</div>
-    <div class="detail">
-      ACL, audit_chain<br>
-      egress filter, guard<br>
-      keychain, kill_switch<br>
-      sandbox, budget
-    </div>
+<!-- 10. EXECUTION FLOW -->
+<div class="section">
+  <div class="section-hdr"><h2>10. End-to-End Execution Flow</h2><div class="line"></div></div>
+  <div class="flow">
+    <span class="step" style="background:rgba(176,126,232,.15);color:var(--purple)">/solve (Opus)</span><span class="arr">&rarr;</span>
+    <span class="step" style="background:rgba(176,126,232,.15);color:var(--purple)">/planner (Opus 1M)</span><span class="arr">&rarr;</span>
+    <span class="step" style="background:rgba(77,156,246,.15);color:var(--blue)">Review (Sonnet)</span><span class="arr">&rarr;</span>
+    <span class="step" style="background:rgba(56,200,216,.15);color:var(--cyan)">DB persist</span><span class="arr">&rarr;</span>
+    <span class="step" style="background:rgba(66,211,146,.15);color:var(--green)">/execute (Codex)</span><span class="arr">&rarr;</span>
+    <span class="step" style="background:rgba(232,168,56,.15);color:var(--orange)">Thor (Opus, 10 gates)</span><span class="arr">&rarr;</span>
+    <span class="step" style="background:rgba(66,211,146,.15);color:var(--green)">Merge + Done</span>
   </div>
+  <div style="margin-top:12px;font-size:11px;color:var(--m)">Each step is <b>hook-enforced</b>. Skipping = blocked. After every task: <code style="color:var(--cyan)">cvg checkpoint save</code> &rarr; update DB &rarr; next task or Thor. Max 4 tasks/wave. Cascading fix threshold: 3 &rarr; STOP. Executors cannot set done &mdash; only Thor (via <code style="color:var(--cyan)">cvg plan validate</code>) promotes submitted &rarr; done.</div>
+</div>
 
-  <!-- Resilience -->
-  <div class="node b-green" style="left:1110px; top:390px; width:190px">
-    <div class="title">Resilience</div>
-    <div class="detail">
-      circuit_breaker<br>
-      health checks<br>
-      checkpoint/restart<br>
-      retry + backoff<br>
-      watchdog, reaper
-    </div>
+<!-- 11. NIGHTLY -->
+<div class="section">
+  <div class="section-hdr"><h2>11. Nightly Jobs & Automation</h2><div class="line"></div></div>
+  <div class="grid g3">
+    <div class="card"><h3>Scheduled Jobs</h3><div class="detail"><b>Model Calibration</b>: Sunday 03:00 &mdash; local vs cloud<br><b>MirrorBuddy Guardian</b>: daily 01:30<br><b>VirtualBPM Guardian</b>: daily 02:15<br>CRUD: GET/POST /api/nightly/jobs</div></div>
+    <div class="card"><h3>Node Auto-Management</h3><div class="detail"><b>Auto-rebuild</b>: daemon rebuilds after git pull<br><b>launchd plist</b>: 5-minute check interval<br><b>caffeinate</b>: anti-sleep for kernel node<br><b>Secrets replication</b>: ~/.convergio/env</div></div>
+    <div class="card"><h3>Background Sync</h3><div class="detail"><b>DB sync</b> via HTTP between mesh nodes<br><b>post-commit-sync</b>: auto-push after commit<br><b>Telemetry</b>: collect-telemetry.ts<br><b>Daily run</b>: run-daily.ts</div></div>
   </div>
+</div>
 
-  <!-- Inference Router -->
-  <div class="node b-purple" style="left:1010px; top:610px; width:200px">
-    <div class="title">Inference Router</div>
-    <div class="subtitle">Multi-model dispatch</div>
-    <div class="detail">
-      <b>classifier</b> → tier routing<br>
-      fallback chain<br>
-      health + metrics<br>
-      <b>Preference</b>: local > cloud
-    </div>
-  </div>
-
-  <!-- Workspace -->
-  <div class="node b-pink" style="left:80px; top:730px; width:190px">
-    <div class="title">Workspace</div>
-    <div class="subtitle">Git + release management</div>
-    <div class="detail">
-      git_connector (trait)<br>
-      merge_ops, wave_ops<br>
-      quality_gate<br>
-      release_agent<br>
-      deliverables, events
-    </div>
-  </div>
-
-  <!-- Channels -->
-  <div class="node b-pink" style="left:310px; top:730px; width:160px">
-    <div class="title">Channels</div>
-    <div class="detail">
-      <b>Slack</b> adapter<br>
-      <b>Telegram</b> adapter<br>
-      <b>Email</b> adapter<br>
-      router
-    </div>
-  </div>
-
-  <!-- Capabilities -->
-  <div class="node" style="left:500px; top:730px; width:160px">
-    <div class="title">Capabilities</div>
-    <div class="detail">
-      MCP proxy<br>
-      permissions (ring)<br>
-      registry<br>
-      yaml_loader
-    </div>
-  </div>
-
-  <!-- Memory -->
-  <div class="node b-purple" style="left:500px; top:610px; width:150px; top:610px">
-    <div class="title">Memory</div>
-    <div class="detail">
-      vector_store<br>
-      embeddings<br>
-      blob_store<br>
-      sqlite_store<br>
-      attestation, sharing
-    </div>
-  </div>
-
-  <!-- ===== EXTERNAL SERVICES (y~810) ===== -->
-  <!-- Telegram Bot API -->
-  <div class="node b-pink" style="left:700px; top:820px; width:160px">
-    <div class="title">Telegram Bot API</div>
-    <div class="subtitle">External service</div>
-    <div class="detail">Polling + webhooks<br>Text + voice messages</div>
-  </div>
-
-  <!-- Cloud LLMs -->
-  <div class="node b-purple" style="left:1230px; top:810px; width:160px">
-    <div class="title">Cloud LLMs</div>
-    <div class="subtitle">External APIs</div>
-    <div class="detail">
-      Opus 4.6<br>
-      Sonnet 4.6<br>
-      GPT-5.3 Codex<br>
-      Haiku 4.5
-    </div>
-  </div>
-
-  <!-- Local oMLX -->
-  <div class="node b-orange" style="left:1030px; top:810px; width:170px">
-    <div class="title">Local LLM Stack</div>
-    <div class="subtitle">Apple Silicon</div>
-    <div class="detail">
-      <b>oMLX</b> <span class="port">:8321</span><br>
-      <b>LiteLLM</b> <span class="port">:4000</span><br>
-      Qwen 7B (Jarvis)<br>
-      ~/models/ + ~/llm-local/
-    </div>
-  </div>
-
-  <!-- ===== DATA LAYER (y~960) ===== -->
-  <div class="zone" style="left:60px; top:940px; width:800px; height:140px; border-color:rgba(56,200,216,.25); background:rgba(56,200,216,.02)">
-    <div class="zone-label" style="color:var(--cyan)">Data Layer</div>
-  </div>
-
-  <div class="node b-cyan" style="left:80px; top:975px; width:200px">
-    <div class="title">dashboard.db <span class="tag tag-sql">SQLITE</span></div>
-    <div class="subtitle">WAL + CRDT sync</div>
-    <div class="detail">
-      plans, waves, tasks<br>
-      knowledge_base<br>
-      peer_heartbeats<br>
-      agents, metrics, workspaces
-    </div>
-  </div>
-
-  <div class="node" style="left:310px; top:975px; width:190px">
-    <div class="title">Git Repos</div>
-    <div class="detail">
-      Local: <b>git</b> subprocess<br>
-      Remote: <b>api.github.com</b><br>
-      PRs, CI, merge
-    </div>
-  </div>
-
-  <div class="node b-purple" style="left:530px; top:975px; width:190px">
-    <div class="title">Vector Store</div>
-    <div class="detail">
-      Embeddings DB<br>
-      Blob storage<br>
-      Agent memory<br>
-      .claude/agent-memory/
-    </div>
-  </div>
-
-  <!-- ===== MESH (y~960 right side) ===== -->
-  <div class="zone" style="left:900px; top:940px; width:460px; height:180px; border-color:rgba(56,200,216,.25); background:rgba(56,200,216,.02)">
-    <div class="zone-label" style="color:var(--cyan)">Mesh Network &mdash; 40+ Rust modules + 13 Bash scripts</div>
-  </div>
-
-  <div class="node b-cyan" style="left:920px; top:980px; width:250px">
-    <div class="title">Mesh Coordinator</div>
-    <div class="subtitle">Tailscale P2P + HMAC-SHA256 + AES-GCM</div>
-    <div class="detail">
-      <b>Core</b>: coordinator, peers, topology, sync<br>
-      <b>Delegate</b>: handoff (SSH/WS), routing<br>
-      <b>Intelligence</b>: peer_resolver, profiles<br>
-      <b>Sync</b>: daemon_sync, frames, batch, DB ops<br>
-      <b>Scripts</b>: provision, heartbeat, auth-sync, rsync, deploy, preflight, offline-recovery
-    </div>
-  </div>
-
-  <div class="node" style="left:1200px; top:1000px; width:130px; min-height:60px">
-    <div class="title" style="font-size:12px">Peer Node</div>
-    <div class="detail">:8420 (remote)<br>CRDT sync</div>
-  </div>
-
-  <!-- ===== EVOLUTION ENGINE (y~1220) ===== -->
-  <div class="zone" style="left:60px; top:1190px; width:800px; height:190px; border-color:rgba(232,122,176,.25); background:rgba(232,122,176,.02)">
-    <div class="zone-label" style="color:var(--pink)">Evolution Engine &mdash; TypeScript</div>
-  </div>
-
-  <div class="node b-pink" style="left:80px; top:1230px; width:220px">
-    <div class="title">Core <span class="tag tag-ts">TS</span></div>
-    <div class="detail">
-      <b>engine.ts</b>: evaluation loop<br>
-      evaluators, cadence<br>
-      cycle-summary<br>
-      guardrails, experiments<br>
-      canary, analysis, ROI
-    </div>
-  </div>
-
-  <div class="node" style="left:330px; top:1230px; width:220px">
-    <div class="title">Adapters</div>
-    <div class="detail">
-      <b>claude-adapter</b> → daemon HTTP<br>
-      <b>dashboard-adapter</b> → /ws/dashboard<br>
-      <b>maranello-adapter</b> → DS bridge<br>
-      <b>escalation-collector</b><br>
-      <b>telemetry-collector</b>
-    </div>
-  </div>
-
-  <div class="node" style="left:580px; top:1230px; width:200px">
-    <div class="title">Runtime</div>
-    <div class="detail">
-      agents, reporting<br>
-      research, runtime<br>
-      telemetry<br>
-      experiments
-    </div>
-  </div>
-
-  <!-- ===== INTEGRATIONS (y~1220 right side) ===== -->
-  <div class="zone" style="left:900px; top:1190px; width:460px; height:190px; border-color:rgba(176,126,232,.25); background:rgba(176,126,232,.02)">
-    <div class="zone-label" style="color:var(--purple)">External Integrations</div>
-  </div>
-
-  <div class="node" style="left:920px; top:1230px; width:180px">
-    <div class="title">OpenClaw Bridge <span class="tag tag-ts">TS</span></div>
-    <div class="detail">API integration</div>
-  </div>
-
-  <div class="node" style="left:1130px; top:1230px; width:200px">
-    <div class="title">Ecosystem</div>
-    <div class="detail">
-      maranello-design (DS)<br>
-      convergio-community<br>
-      convergio (Go+Python)<br>
-      ConvergioCLI (C++)<br>
-      convergio.io (gateway)
-    </div>
-  </div>
-
-  <!-- ===== HOOKS / GOVERNANCE (y~1450) ===== -->
-  <div class="zone" style="left:60px; top:1450px; width:1310px; height:180px; border-color:rgba(232,84,84,.25); background:rgba(232,84,84,.02)">
-    <div class="zone-label" style="color:var(--red)">Cross-Cutting &mdash; Agent Governance &amp; Enforcement Hooks</div>
-  </div>
-
-  <div class="node b-red" style="left:80px; top:1500px; width:280px">
-    <div class="title">Enforcement Hooks <span style="font-size:10px;color:var(--red)">22 scripts</span></div>
-    <div class="detail">
-      <b>SecretScan</b> &bull; <b>SqliteBlock</b> &bull; <b>RustCheck</b> &bull; <b>EvidenceGate</b> &bull; <b>FileSizeGuard</b> (250 lines) &bull; <b>CommitLint</b> &bull; <b>TestGate</b> &bull; <b>AgentIdentity</b> &bull; <b>FailLoud</b> &bull; RustModWiring &bull; workflow-enforcer &bull; worktree-guard &bull; session-reaper &bull; track-tokens &bull; env-vault-guard
-    </div>
-  </div>
-
-  <div class="node b-orange" style="left:400px; top:1500px; width:220px">
-    <div class="title">Commands / Skills</div>
-    <div class="detail">
-      <b>/solve</b> → <b>/planner</b> → <b>/execute</b><br>
-      /check, /prepare, /release<br>
-      /research, /prompt, /optimize<br><br>
-      <b>Validators</b>: Thor, doc-validator, plan-reviewer, design-validator, compliance-validator
-    </div>
-  </div>
-
-  <div class="node" style="left:660px; top:1500px; width:210px">
-    <div class="title">Status Machine</div>
-    <div class="detail">
-      pending → in_progress → <b>submitted</b> (executor) → <b>done</b> (Thor only)<br><br>
-      Cascading fix threshold: 3 → STOP<br>
-      Merge quality gate: 7 checks
-    </div>
-  </div>
-
-  <div class="node" style="left:910px; top:1500px; width:220px">
-    <div class="title">Agent Routing</div>
-    <div class="detail">
-      <b>Triage</b>: Opus 4.6<br>
-      <b>Planning</b>: Opus 4.6-1M<br>
-      <b>Review</b>: Sonnet 4.6<br>
-      <b>Execution</b>: GPT-5.3 Codex<br>
-      <b>Validation</b>: Opus 4.6<br>
-      <b>Coordinator</b>: Sonnet 4.6
-    </div>
-  </div>
-
-  <div class="node" style="left:1170px; top:1500px; width:170px">
-    <div class="title">Constitution</div>
-    <div class="detail">
-      12 Articles (I-XII)<br>
-      5 NON-NEGOTIABLE<br>
-      Agentic Manifesto<br>
-      LEGAL_NOTICE<br>
-      MPL-2.0
-    </div>
-  </div>
-
-  <!-- ===== EXECUTION FLOW (bottom, y~1800) ===== -->
-  <div class="zone" style="left:60px; top:1780px; width:1310px; height:160px; border-color:rgba(176,126,232,.25); background:rgba(176,126,232,.02)">
-    <div class="zone-label" style="color:var(--purple)">End-to-End Execution Flow (hook-enforced)</div>
-  </div>
-
-  <div class="node b-purple" style="left:120px; top:1830px; width:120px; padding:10px 12px">
-    <div class="title" style="font-size:12px">/solve</div>
-    <div class="detail">Opus 4.6<br>Triage</div>
-  </div>
-
-  <div class="node b-purple" style="left:380px; top:1830px; width:140px; padding:10px 12px">
-    <div class="title" style="font-size:12px">/planner</div>
-    <div class="detail">Opus 4.6-1M<br>Plan generation</div>
-  </div>
-
-  <div class="node b-blue" style="left:620px; top:1830px; width:120px; padding:10px 12px">
-    <div class="title" style="font-size:12px">Review</div>
-    <div class="detail">Sonnet 4.6<br>Plan review</div>
-  </div>
-
-  <div class="node b-cyan" style="left:810px; top:1830px; width:80px; padding:10px 12px">
-    <div class="title" style="font-size:12px">DB</div>
-    <div class="detail">Persist</div>
-  </div>
-
-  <div class="node b-green" style="left:940px; top:1830px; width:120px; padding:10px 12px">
-    <div class="title" style="font-size:12px">/execute</div>
-    <div class="detail">GPT-5.3 Codex<br>Code gen</div>
-  </div>
-
-  <div class="node b-orange" style="left:1120px; top:1830px; width:120px; padding:10px 12px">
-    <div class="title" style="font-size:12px">Thor</div>
-    <div class="detail">Opus 4.6<br>10-gate validate</div>
-  </div>
-
-  <div class="node b-green" style="left:1300px; top:1830px; width:80px; padding:10px 12px">
-    <div class="title" style="font-size:12px; color:var(--green)">Done</div>
-    <div class="detail">Merge</div>
-  </div>
-
-  <!-- Copyright -->
-  <div style="position:absolute; bottom:20px; left:0; right:0; text-align:center; color:var(--muted); font-size:10px;">
-    ConvergioPlatform &mdash; Copyright &copy; 2026 Roberto D'Angelo &mdash; MPL-2.0
-  </div>
+<div style="text-align:center;color:var(--m2);font-size:10px;margin-top:32px;padding-top:16px;border-top:1px solid var(--bdr)">
+  ConvergioPlatform v19.5.0 &mdash; Copyright &copy; 2026 Roberto D'Angelo &mdash; Convergio Community License<br>
+  Built for solopreneurs who dare to build alone.
+</div>
 
 </div>
 </body>
