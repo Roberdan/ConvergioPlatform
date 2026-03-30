@@ -20,6 +20,7 @@ mod cli_domain;
 mod cli_error;
 mod cli_http;
 mod cli_kb;
+mod cli_launch;
 mod cli_lock;
 mod cli_memory;
 mod cli_ops;

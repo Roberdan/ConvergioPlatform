@@ -3,7 +3,7 @@ use crate::{
     cli_agent_format, cli_audit, cli_audit_project, cli_bus, cli_checkpoint, cli_delegation,
     cli_domain,
     cli_error::CliError,
-    cli_capability, cli_channel, cli_chat, cli_kb, cli_kernel, cli_lock, cli_memory, cli_ops, cli_status, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
+    cli_capability, cli_channel, cli_chat, cli_kb, cli_kernel, cli_launch, cli_lock, cli_memory, cli_ops, cli_status, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
     cli_skill, cli_task, cli_wave, cli_who, cli_workspace,
     ipc_handler::{self, DaemonCommands},
 };
@@ -232,6 +232,12 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         Commands::Kernel { command } => cli_kernel::dispatch(command).await,
         Commands::Cheatsheet => { crate::cli_cheatsheet::print_cheatsheet(); ExitCode::SUCCESS }
         Commands::Api => { crate::cli_api_list::print_api_list(); ExitCode::SUCCESS }
+        Commands::Claude { name, parent, api_url } => {
+            exit_on_err(cli_launch::handle(cli_launch::LaunchCommands::Claude { name, parent, api_url }).await)
+        }
+        Commands::Copilot { name, parent, api_url } => {
+            exit_on_err(cli_launch::handle(cli_launch::LaunchCommands::Copilot { name, parent, api_url }).await)
+        }
     }
 }
 fn exit_on_err(result: Result<(), CliError>) -> ExitCode {

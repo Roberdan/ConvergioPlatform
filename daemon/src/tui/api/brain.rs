@@ -62,11 +62,17 @@ pub fn parse_brain_response(v: &Value) -> (Vec<BrainNode>, KpiData) {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string();
+            let parent_id = a
+                .get("parent_session")
+                .or_else(|| a.get("parent_agent"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(String::from);
             nodes.push(BrainNode {
                 id,
                 label,
                 kind: "agent".to_string(),
-                parent_id: None,
+                parent_id,
                 status,
             });
         }
