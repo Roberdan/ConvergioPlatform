@@ -1,5 +1,6 @@
 // handlers_ext2: IPC send-direct handler.
 use super::super::state::{ApiError, ServerState};
+use super::super::ws_brain::broadcast_brain_message_event;
 use super::ensure_ipc_schema;
 use axum::extract::State;
 use axum::Json;
@@ -40,5 +41,6 @@ pub async fn api_ipc_send_direct(
     })) {
         tracing::debug!("ws direct_message (no subscribers): {e}");
     }
+    broadcast_brain_message_event(&state, &body.from, &body.to, &body.content);
     Ok(Json(json!({ "ok": true })))
 }

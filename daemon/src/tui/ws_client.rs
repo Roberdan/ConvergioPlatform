@@ -78,17 +78,22 @@ impl WsClient {
         match event_type {
             "agent_update" => {
                 let agents = payload
-                    .as_array()
+                    .get("agents")
+                    .and_then(|a| a.as_array())
                     .cloned()
                     .unwrap_or_default();
                 Some(BrainEvent::AgentUpdate { agents })
             }
             "session_update" => {
                 let sessions = payload
-                    .as_array()
+                    .get("sessions")
+                    .and_then(|s| s.as_array())
                     .cloned()
                     .unwrap_or_default();
                 Some(BrainEvent::SessionUpdate { sessions })
+            }
+            "message_event" => {
+                Some(BrainEvent::AgentUpdate { agents: vec![payload] })
             }
             "task_update" => {
                 let task_id = payload.get("task_id")?.as_i64()?;

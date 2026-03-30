@@ -1,4 +1,5 @@
-use super::{db_path_from_env, resolve_interval_secs};
+use super::resolve_interval_secs;
+use crate::db_path_from_env;
 
 use std::sync::{Mutex, OnceLock};
 

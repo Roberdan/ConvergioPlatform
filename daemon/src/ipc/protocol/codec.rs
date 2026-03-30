@@ -73,6 +73,7 @@ mod tests {
             pid: Some(1234),
             host: "mac-worker-2".into(),
             metadata: None,
+            parent_agent: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();

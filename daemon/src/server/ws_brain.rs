@@ -23,7 +23,7 @@ pub fn broadcast_brain_agent_update(state: &ServerState) {
     let agents = match state.get_conn() {
         Ok(conn) => query_rows(
             &conn,
-            "SELECT name, host, agent_type, pid, metadata, registered_at, last_seen \
+            "SELECT name, host, agent_type, pid, metadata, parent_agent, registered_at, last_seen \
              FROM ipc_agents ORDER BY last_seen DESC",
             [],
         )
@@ -74,6 +74,20 @@ pub fn broadcast_brain_session_update(state: &ServerState) {
         Err(_) => Vec::new(),
     };
     broadcast_brain_event(state, "session_update", json!({ "sessions": sessions }));
+}
+
+/// Broadcast message_event: fired when an inter-agent message is sent.
+/// Powers the message flow graph in brain visualization.
+pub fn broadcast_brain_message_event(state: &ServerState, from: &str, to: &str, content: &str) {
+    broadcast_brain_event(
+        state,
+        "message_event",
+        json!({
+            "from": from,
+            "to": to,
+            "content": content,
+        }),
+    );
 }
 
 #[cfg(test)]

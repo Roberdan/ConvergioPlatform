@@ -53,6 +53,18 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
                 }
                 _ => println!("No active workers."),
             }
+            // IPC agent tree (parentage hierarchy)
+            let tree_url = format!("{api_url}/api/ipc/agents/tree");
+            if let Ok(tb) = cli_http::get_and_return(&tree_url).await {
+                if let Some(tree) = tb["tree"].as_array() {
+                    if !tree.is_empty() {
+                        println!("\nIPC Agent Tree ({} registered):", tb["total"].as_i64().unwrap_or(0));
+                        for node in tree {
+                            print_tree_node(node, 0);
+                        }
+                    }
+                }
+            }
             // Online peers
             let peers_url = format!("{api_url}/api/heartbeat/status");
             if let Ok(pb) = cli_http::get_and_return(&peers_url).await {
@@ -142,6 +154,26 @@ pub async fn handle(cmd: WhoCommands, api_url: &str) -> Result<(), CliError> {
                 println!("Pruned {pruned} stale workers.");
             }
             Ok(())
+        }
+    }
+}
+
+fn print_tree_node(node: &serde_json::Value, depth: usize) {
+    let indent = "  ".repeat(depth);
+    let prefix = if depth == 0 { "●" } else { "└──" };
+    let name = node["name"].as_str().unwrap_or("?");
+    let kind = node["type"].as_str().unwrap_or("?");
+    let status = node["status"].as_str().unwrap_or("?");
+    let host = node["host"].as_str().unwrap_or("");
+    let status_icon = match status {
+        "active" => "✓",
+        "inactive" => "✗",
+        _ => "?",
+    };
+    println!("  {indent}{prefix} {name} [{kind}] {status_icon} {host}");
+    if let Some(children) = node["children"].as_array() {
+        for child in children {
+            print_tree_node(child, depth + 1);
         }
     }
 }
