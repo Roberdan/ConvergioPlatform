@@ -5,6 +5,8 @@ pub mod actions;
 pub mod approval;
 pub mod auto_rollback;
 pub mod delegation_core;
+pub mod delegation_pipeline;
+mod delegation_pipeline_steps;
 mod executor;
 pub mod goal_decomposer;
 pub mod handlers;
@@ -35,6 +37,7 @@ pub fn spawn_ali(engine: Arc<IpcEngine>, db_path: PathBuf) {
         return;
     }
     let reaper_db = db_path.clone();
+    let db_path_for_validator = db_path.clone();
     tokio::spawn(async move {
         tracing::info!("ali-orchestrator: starting");
         if let Err(e) = engine.channel_create(CHANNEL, Some("Plan orchestration events"), ALI_AGENT) {
@@ -46,4 +49,5 @@ pub fn spawn_ali(engine: Arc<IpcEngine>, db_path: PathBuf) {
         reactor::run(engine, db_path).await;
     });
     reaper::spawn_reaper(reaper_db);
+    validator_service::spawn_validator_loop(db_path_for_validator);
 }

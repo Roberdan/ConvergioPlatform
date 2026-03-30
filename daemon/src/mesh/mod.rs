@@ -28,7 +28,6 @@ pub mod token;
 
 // Node provisioning / migration modules
 pub mod brew;
-mod daemon_sync_auth;
 pub mod macos;
 pub mod repos;
 pub mod runners;

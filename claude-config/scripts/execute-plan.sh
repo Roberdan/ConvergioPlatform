@@ -1,18 +1,8 @@
 #!/bin/bash
-set -euo pipefail
-# execute-plan.sh - Standalone plan executor callable from any CLI
+# execute-plan.sh v2.2.0 - Standalone plan executor callable from any CLI
 # Usage: execute-plan.sh <plan_id> [--from T1-03] [--engine copilot|claude|opencode] [--model <model>]
-#
-# Iterates waves sequentially. Within each wave, executes tasks via:
-#   1. delegate.sh (preferred, if available)
-#   2. copilot-worker.sh (if engine=copilot)
-#   3. claude --dangerously-skip-permissions (if engine=claude)
-#   4. opencode (if engine=opencode)
-# Handles Thor per-task and per-wave validation. Supports resume via --from.
-#
+# Iterates waves sequentially. Handles Thor validation, resume via --from.
 # References: F-01 (universal CLI invocation), F-22 (engine routing)
-
-# Version: 2.1.0 - PATH hardening, process cleanup, wave-stop-on-fail
 set -euo pipefail
 
 # PATH hardening: ensure all tools are findable in non-login SSH shells
@@ -108,17 +98,18 @@ Usage: execute-plan.sh <plan_id> [OPTIONS]
 
 OPTIONS:
   --from <task_id>          Resume from specific task (e.g. T1-03)
-  --engine <engine>         Execution engine: claude|copilot|opencode (default: claude)
+  --engine <engine>         auto|claude|copilot|opencode (default: auto)
   --model <model>           Model override (e.g. claude-opus-4-6, gpt-5.3-codex)
   --timeout <seconds>       Per-task timeout in seconds (default: 900)
   --dry-run                 Show what would be executed without running
   --help                    Show this help
 
+  Engine 'auto' picks first authenticated CLI: claude > copilot > opencode
+
 EXAMPLES:
   execute-plan.sh 180
   execute-plan.sh 180 --from T1-03
   execute-plan.sh 180 --engine copilot --model gpt-5.3-codex
-  execute-plan.sh 180 --engine opencode --model claude-opus-4-6
 EOF
 		exit 0
 		;;
@@ -137,14 +128,21 @@ fi
 
 # Verify plan exists via cvg CLI
 _plan_json="$(cvg plan show "$PLAN_ID" 2>/dev/null || echo '{}')"
-PLAN_NAME="$(echo "$_plan_json" | jq -r '.name // ""' 2>/dev/null || echo '')"
+PLAN_NAME="$(echo "$_plan_json" | jq -r '.plan.name // .name // ""' 2>/dev/null || echo '')"
 if [[ -z "$PLAN_NAME" ]]; then
 	error "Plan $PLAN_ID not found"
 	exit 1
 fi
 
+# Auto-promote draft plans so execution can proceed
+_plan_status="$(echo "$_plan_json" | jq -r '.plan.status // .status // ""' 2>/dev/null || echo '')"
+if [[ "$_plan_status" == "draft" ]]; then
+	log "Plan $PLAN_ID is in draft — auto-starting via API"
+	curl -sf -X POST "http://localhost:8420/api/plan-db/start/$PLAN_ID" &>/dev/null || true
+fi
+
 # Enforce execution_host: one plan = one machine
-PLAN_HOST="$(echo "$_plan_json" | jq -r '.execution_host // ""' 2>/dev/null || echo '')"
+PLAN_HOST="$(echo "$_plan_json" | jq -r '.plan.execution_host // .execution_host // ""' 2>/dev/null || echo '')"
 if [[ -n "$PLAN_HOST" && "$PLAN_HOST" != "$(hostname -s)" ]]; then
 	# Check peer name from peers.conf
 	local_peer=""
@@ -222,7 +220,6 @@ check_engine() {
 }
 
 check_engine
-
 # ============================================================================
 # Preflight: verify required tools, auto-install if possible
 # ============================================================================

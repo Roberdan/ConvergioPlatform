@@ -1,12 +1,10 @@
-/// HTTP sync endpoints for timestamp-based node-to-node sync.
-///
-/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420) is the
-/// sole replication path. Export/import endpoints retained for diagnostics.
-///
-/// GET  /api/sync/export?table=<name>&since=<timestamp>  -- export SyncChange[]
-/// POST /api/sync/import                                  -- apply SyncChange[]
-/// GET  /api/sync/conflicts                               -- list unresolved CRDT conflicts
-/// GET  /api/sync/status                                  -- peer lag, CRDT coverage
+// HTTP sync endpoints for timestamp-based node-to-node replication.
+// These are the primary sync routes; CRDT (crsqlite) is an optional enhancement.
+//
+// GET  /api/sync/export?table=<name>&since=<timestamp>  -- export SyncChange[]
+// POST /api/sync/import                                  -- apply SyncChange[]
+// GET  /api/sync/conflicts                               -- list unresolved sync conflicts
+// GET  /api/sync/status                                  -- peer lag, sync coverage
 use super::state::{ApiError, ServerState};
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
@@ -84,7 +82,7 @@ async fn handle_import(
     })))
 }
 
-/// GET /api/sync/status — health, peer lag, and CRDT table coverage.
+/// GET /api/sync/status — health, peer lag, and sync coverage.
     #[tracing::instrument(skip_all)]
 async fn handle_sync_status(
     State(state): State<ServerState>,
@@ -123,7 +121,7 @@ async fn handle_sync_status(
             .map_or(false, |t| t > threshold)
     });
 
-    // Count CRDT replication peers/tables from _sync_meta (text-timestamp based)
+    // Count synced peers/tables from _sync_meta (text-timestamp based)
     let peer_count: i64 = conn
         .query_row("SELECT COUNT(DISTINCT peer) FROM _sync_meta", [], |r| r.get(0))
         .unwrap_or(0);
@@ -148,7 +146,7 @@ async fn handle_sync_status(
         "last_success_at": snapshot.last_success_at,
         "last_error": snapshot.last_error,
         "interval_secs": 300u64,
-        "http_lww_enabled": false,
+        "http_lww_enabled": true,
         "crdt_tables": crdt_count,
         "crdt_table_list": crdt_tables,
         "peer_count": peer_count,

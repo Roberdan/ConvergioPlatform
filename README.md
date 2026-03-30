@@ -246,13 +246,13 @@ graph TB
 | **Agent parentage** | `parent_agent` column in `ipc_agents`, `GET /api/ipc/agents/tree` for hierarchical view, brain viz integration |
 | **CLI wrappers** | `cvg claude <name>` / `cvg copilot <name>` — auto-register/deregister agents with optional `--parent` linkage |
 | **Brain telemetry** | `broadcast_brain_message_event` for inter-agent message flow; `ipc_agents` in `/api/brain` response |
-| **CRDT sync** | Conflict-aware vector-clock merge; HTTP LWW disabled; `_sync_conflicts` table for review |
+| **Timestamp sync** | Timestamp-based LWW sync with conflict logging; `_sync_conflicts` table for review |
 | **Nightly autonomy** | Scheduled tokio job (default 02:00): goal decomposer → risk policy → audit trail |
 | **Goal decomposer** | Hierarchical goal-to-task decomposition stored in plan DB |
 | **Risk-based policy** | Configurable risk thresholds; LOW auto-progress, HIGH gates for human approval |
-| **Agent sandboxing** | Per-agent capability sets enforced at IPC layer; `--dangerously-skip-permissions` removed |
+| **Agent sandboxing** | Per-agent capability sets with command validation in delegation pipeline; filesystem/network enforcement planned |
 | **Rollback snapshots** | Daemon persists pre-apply snapshots for plan/task rollback |
-| **Audit trail** | All IPC calls logged with agent identity + timestamp in `ipc_audit` (append-only) |
+| **Audit trail** | Mutation requests (POST/PUT/DELETE) logged with agent identity in `audit_log` |
 
 ### Layer Summary
 
@@ -451,8 +451,8 @@ The daemon handles: worktree creation on the target node, context transfer via `
 
 ### Sync
 
-- Conflict-aware CRDT sync (vector clocks); HTTP LWW disabled
-- Coordinator wins for plans; CRDT merge for tasks and knowledge_base
+- Timestamp-based LWW sync with conflict logging to `_sync_conflicts`
+- LWW with coordinator priority; conflict detection across all sync tables
 - Conflicted changes → `_sync_conflicts` table for review
 - `/api/sync/status` shows per-peer, per-table health
 

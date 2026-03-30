@@ -1,4 +1,6 @@
 use super::{PlanDb, TaskStatus, UpdateTaskArgs, ValidateTaskArgs};
+#[cfg(feature = "crsqlite")]
+use super::crdt::CrdtChange;
 
 impl PlanDb {
     pub fn run_subcommand(&self, args: &[String]) -> rusqlite::Result<String> {

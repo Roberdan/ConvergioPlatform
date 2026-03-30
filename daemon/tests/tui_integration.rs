@@ -102,7 +102,7 @@ async fn tui_renders_real_api_plan_data() {
         plans,
         ..TuiData::default()
     };
-    let rendered = render_to_text(&data, MainView::PlanKanban);
+    let rendered = render_to_text(&data, MainView::PlanKanban, &base);
     assert!(rendered.contains("PLAN KANBAN"), "kanban header missing");
     assert!(
         rendered.contains("Dashboard Restructure"),
@@ -130,7 +130,7 @@ async fn tui_kpi_strip_populated_from_api() {
         kpis: kpis.clone(),
         ..TuiData::default()
     };
-    let rendered = render_to_text(&data, MainView::PlanKanban);
+    let rendered = render_to_text(&data, MainView::PlanKanban, &base);
     assert!(rendered.contains("Plans:"), "KPI strip missing Plans gauge");
     assert!(
         rendered.contains("Agents:"),
@@ -180,32 +180,32 @@ async fn tui_views_cycle_with_real_data() {
         MainView::WorkspaceView,
         MainView::Deliverables,
     ] {
-        let text = render_to_text(&data, view);
+        let text = render_to_text(&data, view, &base);
         assert!(!text.trim().is_empty(), "view {:?} rendered empty", view);
     }
 
     // Verify view-specific content
-    let kanban = render_to_text(&data, MainView::PlanKanban);
+    let kanban = render_to_text(&data, MainView::PlanKanban, &base);
     assert!(kanban.contains("PLAN KANBAN"));
 
-    let pipeline = render_to_text(&data, MainView::TaskPipeline);
+    let pipeline = render_to_text(&data, MainView::TaskPipeline, &base);
     assert!(pipeline.contains("TASK PIPELINE"));
 
-    let mesh_text = render_to_text(&data, MainView::MeshStatus);
+    let mesh_text = render_to_text(&data, MainView::MeshStatus, &base);
     assert!(mesh_text.contains("MESH STATUS"));
 
-    let org = render_to_text(&data, MainView::AgentOrgChart);
+    let org = render_to_text(&data, MainView::AgentOrgChart, &base);
     assert!(org.contains("AGENT ORG CHART"));
 }
 
-fn render_to_text(data: &TuiData, view: MainView) -> String {
+fn render_to_text(data: &TuiData, view: MainView, base_url: &str) -> String {
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).expect("terminal");
     terminal
         .draw(|frame| {
             views::render_view(
                 frame, frame.area(), view, data, 0,
-                "http://localhost:8420", false, true, 5, "", false, None, false,
+                base_url, false, true, 5, "", false, None, false,
                 0_u16, &[], None, false, 0,
             );
         })

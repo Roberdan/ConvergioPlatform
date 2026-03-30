@@ -98,13 +98,15 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
                 crsqlite_path,
                 local_only,
             } => {
-                // DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420)
-                // is the sole replication path. Code kept for potential fallback.
-                // let resolved_db = db_path.clone().unwrap_or_else(ipc_handler::default_db_path);
-                // let sync_conn = match Connection::open(&resolved_db) { ... };
-                // let sync_interval = convergio_core::background_sync::resolve_interval_secs(None);
-                // let _sync_handle =
-                //     convergio_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
+                // HTTP LWW sync re-enabled as primary replication path.
+                // CRDT over TCP (crsqlite) is optional enhancement — not compiled/deployed on nodes.
+                let resolved_db = db_path.clone().unwrap_or_else(ipc_handler::default_db_path);
+                if let Ok(sync_conn) = rusqlite::Connection::open(&resolved_db) {
+                    let sync_conn = std::sync::Arc::new(std::sync::Mutex::new(sync_conn));
+                    let sync_interval = convergio_core::background_sync::resolve_interval_secs(None);
+                    let _sync_handle =
+                        convergio_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
+                }
 
                 if let Err(e) = ipc_handler::run_daemon(
                     bind_ip,

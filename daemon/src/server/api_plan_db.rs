@@ -1,4 +1,6 @@
 use super::api_plan_db_evidence;
+use super::api_plan_db_gates;
+use super::api_plan_db_task_evidence;
 use super::state::{query_one, query_rows, ApiError, ServerState};
 use super::ws_brain::broadcast_brain_task_update;
 use axum::extract::{Path, State};
@@ -15,6 +17,14 @@ pub fn router() -> Router<ServerState> {
         .route("/api/plan-db/context/:plan_id", get(handle_get_context))
         .route("/api/plan-db/json/:plan_id", get(handle_get_json))
         .route("/api/plan-db/task/update", post(handle_task_update))
+        .route(
+            "/api/plan-db/task/evidence",
+            post(api_plan_db_task_evidence::handle_record_evidence),
+        )
+        .route(
+            "/api/plan-db/task/evidence/:task_id",
+            get(api_plan_db_task_evidence::handle_list_evidence),
+        )
         .route(
             "/api/plan-db/agent/start",
             post(super::api_plan_db_agents::handle_agent_start),
@@ -139,9 +149,22 @@ async fn handle_task_update(
     let conn = state.get_conn()?;
     let conn = &conn;
 
-    // Kernel evidence gate: if the kernel feature is enabled and the transition
-    // is to a terminal state ("done" or "submitted"), run check_evidence() BEFORE
-    // writing to the DB. A failing gate returns HTTP 403 with the evidence report.
+    // ── Gate 1: TestGate — BLOCK submitted without test evidence ────────────
+    // WHY: Constitution Article VI; plan v20 found 8/17 features fake.
+    // Skipped in tests to allow unit test isolation.
+    #[cfg(not(test))]
+    if status == "submitted" {
+        api_plan_db_gates::run_test_gate(conn, task_id)?;
+    }
+
+    // ── Gate 2: ValidatorGate — BLOCK done without Thor verdict ─────────────
+    // WHY: Constitution Article VI status flow: submitted → validated → done.
+    #[cfg(not(test))]
+    if status == "done" {
+        api_plan_db_gates::run_validator_gate(conn, task_id)?;
+    }
+
+    // Kernel evidence gate (deep artifact + worktree checks, kernel feature only).
     // WHY: Article VI of the Constitution — "done" must be backed by evidence.
     #[cfg(all(feature = "kernel", not(test)))]
     if matches!(status, "done" | "submitted") {

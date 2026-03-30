@@ -55,6 +55,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/ipc/route-history",
     "/api/plan-db/context/:plan_id",
     "/api/plan-db/json/:plan_id",
+    "/api/plan-db/task/evidence/:task_id",
     "/api/plan-db/list",
     "/api/plan-db/execution-tree/:plan_id",
     "/api/plan-db/drift-check/:plan_id",
@@ -114,6 +115,7 @@ pub const GET_ROUTES: &[&str] = &[
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/validation/enqueue",
+    "/api/validation/record",
     "/api/ideas",
     "/api/ideas/:id/notes",
     "/api/ideas/:id/promote",
@@ -143,6 +145,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/optimize/clear",
     "/api/ipc/send",
     "/api/plan-db/task/update",
+    "/api/plan-db/task/evidence",
     "/api/plan-db/agent/start",
     "/api/plan-db/agent/complete",
     "/api/plan-db/create",

@@ -1,10 +1,11 @@
-/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420) is the
-/// sole replication path. Retained for fallback — do NOT spawn in production.
+// HTTP LWW sync loop: timestamp-based peer replication over Tailscale.
+// CRDT (crsqlite) is an optional enhancement; this is the primary replication path.
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
+use crate::background_sync_convergence::check_convergence;
 use crate::background_sync_http::{
     detect_local_tailscale_ip, fetch_changes_from_peer, peers_conf_path_from_env,
     resolve_best_addr, send_changes_to_peer, update_mesh_sync_stats,
@@ -178,9 +179,9 @@ pub fn sync_table_with_peer(
     (sent, received, applied)
 }
 
-/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420)
-/// is the sole replication path. Callers should NOT spawn this loop.
-#[deprecated(note = "v20: use CRDT over TCP (port 9420) instead of HTTP LWW sync")]
+/// HTTP LWW sync re-enabled as primary replication path.
+/// CRDT over TCP (crsqlite, port 9420) is an optional enhancement, not required.
+/// crsqlite C extension is not compiled/deployed on nodes, so this path handles replication.
 pub fn spawn_sync_loop(
     db: Arc<Mutex<Connection>>,
     interval_secs: u64,
@@ -239,6 +240,7 @@ pub fn spawn_sync_loop(
                         &conn, peer, total_sent, total_recv, total_applied, latency_ms,
                     );
                 }
+                check_convergence(&conn);
             }).await;
         }
     })

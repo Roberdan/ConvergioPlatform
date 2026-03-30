@@ -186,32 +186,60 @@ pub fn get_verdict(conn: &Connection, task_id: i64) -> Result<Option<Verdict>> {
 /// Mark stale pending/running entries as failed with a 'timeout' verdict.
 /// `max_age_secs`: entries older than this are considered stale.
 pub fn timeout_stale(conn: &Connection, max_age_secs: u64) -> Result<usize> {
-    // Collect stale queue ids before updating so we can insert verdicts.
     let mut stmt = conn.prepare(
-        "SELECT id FROM validation_queue
-         WHERE status IN ('pending','running')
+        "SELECT id FROM validation_queue WHERE status IN ('pending','running')
          AND created_at < datetime('now', ?1)",
     )?;
     let interval = format!("-{max_age_secs} seconds");
     let ids: Vec<i64> = stmt
         .query_map(params![interval], |r| r.get(0))?
         .collect::<Result<Vec<_>>>()?;
-
     let count = ids.len();
     for id in &ids {
-        conn.execute(
-            "UPDATE validation_queue
-             SET status='failed', completed_at=datetime('now')
-             WHERE id=?1",
-            params![id],
-        )?;
-        conn.execute(
-            "INSERT INTO validation_verdicts (queue_id, verdict, report, validator)
-             VALUES (?1, 'timeout', 'Timed out waiting for validator', 'system')",
-            params![id],
-        )?;
+        conn.execute("UPDATE validation_queue SET status='failed', completed_at=datetime('now') WHERE id=?1", params![id])?;
+        conn.execute("INSERT INTO validation_verdicts (queue_id, verdict, report, validator) VALUES (?1, 'timeout', 'Timed out waiting for validator', 'system')", params![id])?;
     }
     Ok(count)
+}
+
+fn entry_verdict(db: &Connection, entry: &QueueEntry) -> &'static str {
+    // Wave/plan entries (no task_id) must be explicitly reviewed — never auto-pass.
+    // Why: auto-passing wave/plan validations masks real failures (GPT-5.4 audit).
+    let Some(tid) = entry.task_id else { return "needs_review" };
+    match db.query_row("SELECT status FROM tasks WHERE id=?1", params![tid], |r| r.get::<_,String>(0)) {
+        Ok(s) if s == "submitted" || s == "done" => "pass",
+        Ok(s) => { tracing::warn!("validator_loop: task {tid} status '{s}'"); "needs_review" }
+        Err(_) => "fail",
+    }
+}
+
+/// Spawn a background task that processes pending validation entries every 30 s.
+pub fn spawn_validator_loop(db_path: std::path::PathBuf) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            let db = match rusqlite::Connection::open(&db_path) {
+                Ok(c) => { c.execute_batch("PRAGMA busy_timeout=5000;").ok(); c }
+                Err(e) => { tracing::warn!("validator_loop: db open failed: {e}"); continue; }
+            };
+            match timeout_stale(&db, 600) {
+                Ok(n) if n > 0 => tracing::info!("validator_loop: timed out {n} stale entries"),
+                Err(e) => tracing::warn!("validator_loop: timeout_stale failed: {e}"),
+                _ => {}
+            }
+            let pending = match get_pending(&db) {
+                Ok(p) => p,
+                Err(e) => { tracing::warn!("validator_loop: get_pending failed: {e}"); continue; }
+            };
+            for entry in &pending {
+                db.execute("UPDATE validation_queue SET status='running', started_at=datetime('now') WHERE id=?1", params![entry.id]).ok();
+                if let Err(e) = record_verdict(&db, entry.id, entry_verdict(&db, entry), Some("mechanical gate"), Some("validator-loop")) {
+                    tracing::warn!("validator_loop: record_verdict failed: {e}");
+                }
+            }
+            if !pending.is_empty() { tracing::info!("validator_loop: processed {} entries", pending.len()); }
+        }
+    });
 }
 
 #[cfg(test)]

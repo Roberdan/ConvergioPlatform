@@ -1,5 +1,42 @@
 # Changelog
 
+## [20.1.0] - 30 Marzo 2026
+
+### Added
+- Hard enforcement gates: TestGate (evidence before submitted), ValidatorGate (Thor verdict before done)
+- Task evidence API: POST/GET /api/plan-db/task/evidence for recording test/build/lint passes
+- Validation record API: POST /api/validation/record for Thor verdict shortcut
+- Full delegation pipeline: `cvg delegation start` automates rsync, worktree, plan sync, daemon restart, launch
+- Background validator loop processing validation queue every 30s
+- Background health probes: CLI + HTTP checks every 60s with shared state
+- Convergence verification: SHA-256 checksum comparison after each sync round with drift warnings
+- Audit trail middleware: automatic logging of POST/PUT/DELETE mutations to audit_log
+- Sync conflict logging: LWW conflicts recorded to _sync_conflicts table
+- Branch creation blocker hook: only detached worktrees allowed
+- 5 new enforcement hooks: EvidenceGate, TestGate, CommitLint, FailLoud, AgentIdentity
+- Scope management rules in CLAUDE.md (max 5 checkpoints per session)
+- Plan-level done gate preventing redundant execution of completed plans
+
+### Fixed
+- Re-enabled HTTP LWW sync (was commented out; CRDT path broken without crsqlite)
+- Fixed execute-plan.sh JSON parsing (.plan.name instead of .name)
+- Fixed crsqlite feature: added rusqlite/load_extension dependency
+- Fixed tui_integration test: ephemeral port instead of hardcoded 8420
+- Fixed sandbox enforcement: validate_command() now called before delegation
+- Fixed health probe: local CLI check instead of hitting external API
+- Removed silent error swallowing in delegation pipeline and conflict logging
+- Fixed all compiler warnings across kernel + crsqlite feature combinations
+
+### Changed
+- README: corrected false claims about CRDT vector clocks, sandbox enforcement, audit trail
+- Template adapter canary stub now emits explicit warning
+- hard-enforcement.md updated to reflect actual gate status (BLOCK vs WARNING)
+- Deleted dead code: libsql_adapter_task_sync.rs, daemon_sync_auth.rs
+
+### Security
+- Auth headers added to HTTP sync and delegation pipeline API calls
+- ValidatorGate prevents unauthorized status=done transitions
+
 ## [20.0.0] - 2 Aprile 2026
 
 ### Breaking Changes
@@ -9,20 +46,20 @@
 - CLI subscription providers: `ClaudeSubscription`, `CopilotSubscription`, `LocalLLM` replacing LiteLLM proxy
 - Budget tracking integrated into chat pipeline (per-session and cumulative spend)
 - Session IPC endpoints: `agents/list`, `agents/deregister`, `agents/send-direct`
-- Conflict-aware CRDT sync; HTTP LWW merge strategy disabled in favour of CRDT vector clocks
+- Timestamp-based LWW sync with conflict logging to _sync_conflicts table
 - Rollback snapshots: daemon persists pre-apply snapshots for plan/task rollback
-- Agent sandboxing: per-agent capability isolation enforced at IPC layer
+- Agent sandboxing: per-agent command validation in delegation pipeline
 - Thor validator service: dedicated long-running quality-gate daemon
 - Nightly autonomy job: scheduled risk-based goal evaluation (cron via daemon scheduler)
 - Risk-based autonomous policy: decisions gated by configurable risk score thresholds
 - Goal decomposer: hierarchical goal-to-task decomposition engine
-- Mesh convergence proofs: deterministic eventual-consistency verification
+- Mesh convergence heuristic: SHA-256 checksum comparison with drift detection
 - Node self-provisioning: mesh nodes bootstrap configuration on first contact
 - Approval UX: interactive approval flow for high-risk autonomous actions
 - Playwright e2e test suite covering core dashboard flows
 
 ### Security
-- Audit trail: all IPC calls logged with agent identity and timestamp
+- Audit trail: mutation requests (POST/PUT/DELETE) logged with agent identity
 - `--dangerously-skip-permissions` flag removed; permission checks are now non-bypassable
 - Per-worktree `settings.json` isolation; settings no longer bleed across worktrees
 

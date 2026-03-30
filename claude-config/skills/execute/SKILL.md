@@ -8,9 +8,10 @@ Run when invoked as `/execute {{plan_id}}` or `/execute` (uses current plan). Ac
 
 1. Run `cvg plan show {{plan_id}}` to retrieve full JSON with tasks, worktree, and constraints.
 2. View tree: `cvg plan tree {{plan_id}}`
-3. Auto-heal plan/worktree metadata if needed.
-4. Run readiness checks — stop on critical warnings.
-5. Run drift check (mandatory before first task).
+3. **Done gate**: check if ALL waves are already `done`. If yes, print `Plan already completed` and exit. This prevents redundant execution sessions when a plan was finished by a previous run.
+4. Auto-heal plan/worktree metadata if needed.
+5. Run readiness checks — stop on critical warnings.
+6. Run drift check (mandatory before first task).
 
 ### Phase 2: Per-Wave Loop (repeat for each wave)
 

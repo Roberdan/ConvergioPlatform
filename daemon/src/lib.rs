@@ -1,5 +1,6 @@
 pub mod background;
 pub mod background_sync;
+pub mod background_sync_convergence;
 pub mod background_sync_http;
 #[cfg(test)]
 mod background_sync_http_tests;

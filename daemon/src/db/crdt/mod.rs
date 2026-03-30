@@ -1,4 +1,5 @@
 mod migration;
+#[cfg_attr(not(feature = "crsqlite"), allow(dead_code))]
 pub(crate) mod migration_helpers;
 mod sync;
 
@@ -105,8 +106,7 @@ pub fn required_crdt_tables() -> Vec<&'static str> {
 /// Load the crsqlite extension into a connection.
 ///
 /// Only available when the `crsqlite` feature is enabled. When disabled,
-/// sync was handled by the timestamp-based `libsql_adapter` module
-/// (DEPRECATED v20: CRDT over TCP is the sole replication path).
+/// the timestamp-based `libsql_adapter` module handles replication instead.
 #[cfg(feature = "crsqlite")]
 pub fn load_crsqlite(conn: &Connection, extension: &str) -> rusqlite::Result<()> {
     unsafe { conn.load_extension_enable()? };

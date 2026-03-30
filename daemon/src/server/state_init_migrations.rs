@@ -207,4 +207,20 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL DEFAULT (datetime('now')), agent TEXT, action TEXT NOT NULL, resource TEXT, detail TEXT, ip_addr TEXT)",
     // Mesh convergence tracking (T4-06)
     "CREATE TABLE IF NOT EXISTS mesh_peer_state (peer_id TEXT PRIMARY KEY, state_version INTEGER NOT NULL DEFAULT 0, state_checksum TEXT NOT NULL DEFAULT '', last_seen TEXT NOT NULL DEFAULT (datetime('now')))",
+    // Plan 720 T2-02 — LWW conflict log for sync diagnostics
+    "CREATE TABLE IF NOT EXISTS _sync_conflicts (id INTEGER PRIMARY KEY, table_name TEXT NOT NULL, pk INTEGER, local_data TEXT, remote_data TEXT, source_node TEXT DEFAULT '', resolved INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
+    // Hard enforcement gates — TestGate + ValidatorGate evidence table.
+    // WHY: Constitution Article VI — "done" must be backed by evidence.
+    // Executors POST here after tests pass; gates query before allowing status transitions.
+    "CREATE TABLE IF NOT EXISTS task_evidence (
+         id             INTEGER PRIMARY KEY AUTOINCREMENT,
+         task_db_id     INTEGER NOT NULL,
+         evidence_type  TEXT    NOT NULL,
+         command        TEXT,
+         output_summary TEXT,
+         exit_code      INTEGER,
+         created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+     )",
+    "CREATE INDEX IF NOT EXISTS idx_task_evidence_task ON task_evidence(task_db_id)",
+    "CREATE INDEX IF NOT EXISTS idx_task_evidence_type  ON task_evidence(task_db_id, evidence_type)",
 ];

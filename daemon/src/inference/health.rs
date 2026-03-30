@@ -75,6 +75,15 @@ impl EndpointHealth {
         }
     }
 
+    /// Average latency in milliseconds over the sample ring buffer (0 if no data).
+    pub fn avg_latency_ms(&self) -> u64 {
+        if self.latencies.is_empty() {
+            return 0;
+        }
+        let total: u128 = self.latencies.iter().map(|d| d.as_millis()).sum();
+        (total / self.latencies.len() as u128) as u64
+    }
+
     /// Compute current health status from recorded probes.
     pub fn status(&self) -> EndpointHealthStatus {
         // Down takes priority: 3+ consecutive failures.
@@ -138,9 +147,50 @@ impl HealthChecker {
             .unwrap_or(EndpointHealthStatus::Healthy)
     }
 
+    /// Return average latency (ms) for `endpoint_name`. 0 if unknown or no data.
+    pub fn latency_ms(&self, endpoint_name: &str) -> u64 {
+        self.endpoints
+            .iter()
+            .find(|ep| ep.name == endpoint_name)
+            .map(|ep| ep.avg_latency_ms())
+            .unwrap_or(0)
+    }
+
     /// Return the names of all tracked endpoints.
     pub fn endpoint_names(&self) -> Vec<String> {
         self.endpoints.iter().map(|ep| ep.name.clone()).collect()
+    }
+
+    /// Record a pre-computed probe result for a named endpoint.
+    /// WHY: decouples I/O (done without lock) from state mutation (brief write lock).
+    pub fn record_result(&mut self, name: &str, result: ProbeResult) {
+        if let Some(ep) = self.endpoints.iter_mut().find(|ep| ep.name == name) {
+            ep.record_probe(result);
+        }
+    }
+
+    /// Run a local CLI availability check (via `which <cmd>`) and record the result.
+    /// Used for CLI-based providers (claude, copilot) that have no HTTP health endpoint.
+    pub async fn probe_cli(&mut self, name: &str, cmd: &str) -> ProbeResult {
+        let start = std::time::Instant::now();
+        let result = match tokio::process::Command::new("which")
+            .arg(cmd)
+            .output()
+            .await
+        {
+            Ok(o) if o.status.success() => ProbeResult::Success(start.elapsed()),
+            Ok(o) => ProbeResult::Error(format!(
+                "which {cmd} exited {}",
+                o.status.code().unwrap_or(-1)
+            )),
+            Err(e) => ProbeResult::Error(e.to_string()),
+        };
+
+        if let Some(ep) = self.endpoints.iter_mut().find(|ep| ep.name == name) {
+            ep.record_probe(result.clone());
+        }
+
+        result
     }
 
     /// Run a single probe against an HTTP endpoint and record the result.

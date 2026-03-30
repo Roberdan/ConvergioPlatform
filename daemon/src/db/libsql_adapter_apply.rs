@@ -56,8 +56,43 @@ pub fn apply_changes(
                 // Local is same or newer — skip
                 continue;
             }
-            Some(_) => {
-                // Remote is newer or local has NULL updated_at — update
+            Some(ref local_ts_val) => {
+                // Remote is newer or local has NULL updated_at — update.
+                // Log the conflict before overwriting so diagnostics retain the diff.
+                let local_data = format!(
+                    "{{\"updated_at\":\"{}\"}}",
+                    local_ts_val.replace('"', "\\\"")
+                );
+                let remote_data = change
+                    .data
+                    .get("updated_at")
+                    .map(|v| format!("{{\"updated_at\":{}}}", v))
+                    .unwrap_or_else(|| "{}".to_string());
+                if local_data != remote_data {
+                    if let Err(e) = conn.execute(
+                        "INSERT INTO _sync_conflicts \
+                         (table_name, pk, local_data, remote_data, source_node) \
+                         VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![
+                            change.table_name,
+                            change.pk,
+                            local_data,
+                            remote_data,
+                            "" // source_node not carried in SyncChange; left empty
+                        ],
+                    ) {
+                        // Non-fatal: conflict logging failure must not block the sync.
+                        // Why: _sync_conflicts is diagnostic; missing a row is acceptable,
+                        //      but silently dropping the error hides schema/lock issues.
+                        tracing::warn!(
+                            "apply_changes: _sync_conflicts insert failed \
+                             (table={}, pk={}): {e}",
+                            change.table_name,
+                            change.pk,
+                        );
+                    }
+                }
+
                 let columns = get_column_names(conn, &change.table_name)?;
 
                 // Thor guard: tasks transitioning to 'done' via CRDT sync require a

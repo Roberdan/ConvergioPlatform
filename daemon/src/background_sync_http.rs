@@ -9,6 +9,16 @@ use tracing::{info, warn};
 
 use crate::db::libsql_adapter::SyncChange;
 
+/// Read auth token from CONVERGIO_AUTH_TOKEN env var.
+/// Returns None in dev mode (CONVERGIO_DEV=1) or when the var is unset.
+fn auth_token() -> Option<String> {
+    // Skip auth in development mode — avoids forcing token setup on fresh installs.
+    if std::env::var("CONVERGIO_DEV").as_deref() == Ok("1") {
+        return None;
+    }
+    std::env::var("CONVERGIO_AUTH_TOKEN").ok().filter(|t| !t.is_empty())
+}
+
 /// POST local changes to the peer's /api/sync/import endpoint.
 pub fn send_changes_to_peer(
     peer_addr: &str,
@@ -21,11 +31,11 @@ pub fn send_changes_to_peer(
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
-    let resp = client
-        .post(&url)
-        .json(&payload)
-        .send()
-        .map_err(|e| format!("HTTP POST failed: {e}"))?;
+    let mut req = client.post(&url).json(&payload);
+    if let Some(token) = auth_token() {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+    let resp = req.send().map_err(|e| format!("HTTP POST failed: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("peer returned {}", resp.status()));
     }
@@ -49,10 +59,11 @@ pub fn fetch_changes_from_peer(
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
-    let resp = client
-        .get(&url)
-        .send()
-        .map_err(|e| format!("HTTP GET failed: {e}"))?;
+    let mut req = client.get(&url);
+    if let Some(token) = auth_token() {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+    let resp = req.send().map_err(|e| format!("HTTP GET failed: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("peer returned {}", resp.status()));
     }

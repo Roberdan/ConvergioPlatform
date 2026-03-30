@@ -30,6 +30,20 @@ Code/comments/docs: English | Conversation: Italian or English | Override: expli
 
 NEVER `sqlite3` directly (hook-blocked). Use `cvg` CLI or `curl http://localhost:8420/api/...`
 
+## Worktree Discipline (NON-NEGOTIABLE)
+- NEVER create branches. Always `git worktree add --detach <path> HEAD`
+- Branch creation is blocked by hook. Only worktree detached HEAD is allowed.
+- Branches are created ONLY by the workspace release pipeline at merge time.
+- Deleting branches (`git branch -D`) is allowed for cleanup.
+
+## Scope Management
+
+- One session = one plan or one clearly defined scope
+- After 3 checkpoints, evaluate if scope has drifted from original intent
+- If scope changed significantly, suggest opening a new session
+- Max 5 checkpoints per session — beyond this, split is mandatory
+- Mega-sessions (80+ turns) degrade context quality and increase fragility
+
 ## Rules
 
 @rules/hard-enforcement.md
