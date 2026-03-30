@@ -1,7 +1,8 @@
 #!/bin/bash
 # copilot-worker.sh - Launch Copilot CLI worker for a plan task
-# Usage: copilot-worker.sh <db_task_id> [--model <model>] [--timeout <secs>] [--no-auto-validate]
-# Version: 3.3.0 - Fix bad substitution in cleanup (array length + default)
+# Usage: copilot-worker.sh --plan <plan_id> --task <db_task_id> [--model <model>] [--timeout <secs>] [--no-auto-validate]
+#        copilot-worker.sh <db_task_id> [options]  (deprecated: scans all plans)
+# Version: 4.0.0 - Add --plan/--task flags + execution-context API + IPC registration
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,10 +75,20 @@ MAX_RETRIES=3
 RETRY_DELAYS=(5 15 30) # Exponential backoff: 5s, 15s, 30s
 AGENT_ROLE="executor"
 AUTO_VALIDATE=true
+PLAN_ARG=""
+TASK_ARG=""
 
 # Parse optional flags
 while [[ $# -gt 0 ]]; do
 	case $1 in
+	--plan)
+		PLAN_ARG="$2"
+		shift 2
+		;;
+	--task)
+		TASK_ARG="$2"
+		shift 2
+		;;
 	--model)
 		MODEL="$2"
 		shift 2
@@ -94,8 +105,12 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+# --task flag overrides positional argument
+[[ -n "$TASK_ARG" ]] && TASK_ID="$TASK_ARG"
+
 if [[ -z "$TASK_ID" ]]; then
-	echo "Usage: copilot-worker.sh <db_task_id> [--model <model>] [--timeout <secs>] [--no-auto-validate]" >&2
+	echo "Usage: copilot-worker.sh --plan <plan_id> --task <db_task_id> [--model <model>] [--timeout <secs>] [--no-auto-validate]" >&2
+	echo "       copilot-worker.sh <db_task_id> [options]  (deprecated: scans all plans)" >&2
 	exit 1
 fi
 
@@ -111,10 +126,34 @@ else
 	exit 1
 fi
 
-# Verify task exists and is pending — query active plans to find the task
-# Uses stdin to avoid triple-quote escaping issues with JSON containing apostrophes.
-_plan_list="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '{"plans":[]}')"
-_found_plan_id="$(echo "$_plan_list" | python3 -c "
+# Resolve task context: prefer execution-context API (--plan + --task), fall back to legacy scan
+CTX_PROMPT=""
+if [[ -n "$PLAN_ARG" && -n "$TASK_ARG" ]]; then
+	# Fast path: use execution-context API — no plan scan needed
+	_exec_ctx="$(curl -sf "${DAEMON_API}/api/plan-db/execution-context/${PLAN_ARG}?task_id=${TASK_ARG}" 2>/dev/null || echo '{}')"
+	if [[ -z "$_exec_ctx" || "$_exec_ctx" == '{}' ]]; then
+		echo '{"error":"execution-context API returned empty for plan '"${PLAN_ARG}"' task '"${TASK_ARG}"'"}' >&2
+		exit 1
+	fi
+	_found_plan_id="$PLAN_ARG"
+	STATUS="$(echo "$_exec_ctx" | jq -r '.task.status // "pending"' 2>/dev/null || echo 'pending')"
+	WT="$(echo "$_exec_ctx" | jq -r '.worktree_path // ""' 2>/dev/null || echo '')"
+	WT="${WT/#\~/$HOME}"
+	PLAN_ID="$PLAN_ARG"
+	WAVE_DB_ID="$(echo "$_exec_ctx" | jq -r '.task.wave_id_fk // 0' 2>/dev/null || echo '0')"
+	WAVE_ID="$(echo "$_exec_ctx" | jq -r '.task.wave_id // ""' 2>/dev/null || echo '')"
+	PROJECT_ID="$(echo "$_exec_ctx" | jq -r '.plan.project_id // ""' 2>/dev/null || echo '')"
+	TASK_TYPE="$(echo "$_exec_ctx" | jq -r '.task.type // "code"' 2>/dev/null || echo 'code')"
+	TASK_TITLE="$(echo "$_exec_ctx" | jq -r '.task.title // ""' 2>/dev/null || echo '')"
+	TASK_DESC="$(echo "$_exec_ctx" | jq -r '.task.description // ""' 2>/dev/null || echo '')"
+	CTX_PROMPT="$(echo "$_exec_ctx" | jq -r '.prompt // ""' 2>/dev/null || echo '')"
+	AGENT_SESSION_NAME="worker-${PLAN_ID}-${TASK_ID}"
+else
+	# Legacy path: scan all active plans to find the task (DEPRECATED)
+	echo "WARN: --plan/--task not provided; falling back to deprecated plan-scan behavior" >&2
+	# Uses stdin to avoid triple-quote escaping issues with JSON containing apostrophes.
+	_plan_list="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '{"plans":[]}')"
+	_found_plan_id="$(echo "$_plan_list" | python3 -c "
 import json, sys, urllib.request
 data = json.load(sys.stdin)
 plans = data.get('plans', data if isinstance(data, list) else [])
@@ -128,12 +167,12 @@ for p in plans:
                 print(p['id']); sys.exit(0)
     except: pass
 " 2>/dev/null || echo '')"
-if [[ -z "$_found_plan_id" ]]; then
-	echo '{"error":"task not found in any active plan"}' >&2
-	exit 1
-fi
-_plan_json="$(curl -sf "${DAEMON_API}/api/plan-db/json/${_found_plan_id}" 2>/dev/null || echo '{}')"
-STATUS="$(python3 -c "
+	if [[ -z "$_found_plan_id" ]]; then
+		echo '{"error":"task not found in any active plan"}' >&2
+		exit 1
+	fi
+	_plan_json="$(curl -sf "${DAEMON_API}/api/plan-db/json/${_found_plan_id}" 2>/dev/null || echo '{}')"
+	STATUS="$(python3 -c "
 import json, sys
 data = json.loads(sys.stdin.read())
 for t in data.get('tasks', []):
@@ -141,7 +180,7 @@ for t in data.get('tasks', []):
         print(t.get('status', '')); sys.exit(0)
 print('')
 " <<< "$_plan_json" 2>/dev/null || echo '')"
-_task_json="$(python3 -c "
+	_task_json="$(python3 -c "
 import json, sys
 data = json.loads(sys.stdin.read())
 for t in data.get('tasks', []):
@@ -149,60 +188,64 @@ for t in data.get('tasks', []):
         json.dump(t, sys.stdout); sys.exit(0)
 print('{}')
 " <<< "$_plan_json" 2>/dev/null || echo '{}')"
-if [[ -z "$STATUS" ]]; then
-	echo '{"error":"task not found"}' >&2
-	exit 1
-fi
-if [[ "$STATUS" != "pending" && "$STATUS" != "in_progress" && "$STATUS" != "submitted" ]]; then
-	echo "{\"error\":\"task status is $STATUS, expected pending/in_progress\"}" >&2
-	exit 1
+	TASK_CTX="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '
+		(.tasks[] | select(.id == $tid)) as $t |
+		{worktree: ($t.worktree_path // .worktree_path // ""),
+		 plan_id: (.id // 0),
+		 wave_db_id: ($t.wave_id_fk // 0),
+		 wave_id: ($t.wave_id // ""),
+		 project_id: (.project_id // ""),
+		 task_type: ($t.type // "code"),
+		 task_title: ($t.title // "")}
+	' 2>/dev/null || echo '{}')"
+	WT="$(echo "$TASK_CTX" | jq -r '.worktree // ""')"
+	WT="${WT/#\~/$HOME}"
+	PLAN_ID="$(echo "$TASK_CTX" | jq -r '.plan_id // 0')"
+	WAVE_DB_ID="$(echo "$TASK_CTX" | jq -r '.wave_db_id // 0')"
+	WAVE_ID="$(echo "$TASK_CTX" | jq -r '.wave_id // ""')"
+	PROJECT_ID="$(echo "$TASK_CTX" | jq -r '.project_id // ""')"
+	TASK_TYPE="$(echo "$TASK_CTX" | jq -r '.task_type // "code"')"
+	TASK_TITLE="$(echo "$TASK_CTX" | jq -r '.task_title // ""')"
+	TASK_DESC="$(echo "$_task_json" | jq -r '.description // ""' 2>/dev/null || echo '')"
+	AGENT_SESSION_NAME="copilot-${TASK_ID}-$(date +%s)"
 fi
 
-# Get context for execution and delegation log
-TASK_CTX="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '
-	(.tasks[] | select(.id == $tid)) as $t |
-	{worktree: ($t.worktree_path // .worktree_path // ""),
-	 plan_id: (.id // 0),
-	 wave_db_id: ($t.wave_id_fk // 0),
-	 wave_id: ($t.wave_id // ""),
-	 project_id: (.project_id // ""),
-	 task_type: ($t.type // "code"),
-	 task_title: ($t.title // "")}
-' 2>/dev/null || echo '{}')"
-WT="$(echo "$TASK_CTX" | jq -r '.worktree // ""')"
-WT="${WT/#\~/$HOME}"
-PLAN_ID="$(echo "$TASK_CTX" | jq -r '.plan_id // 0')"
-WAVE_DB_ID="$(echo "$TASK_CTX" | jq -r '.wave_db_id // 0')"
-WAVE_ID="$(echo "$TASK_CTX" | jq -r '.wave_id // ""')"
-PROJECT_ID="$(echo "$TASK_CTX" | jq -r '.project_id // ""')"
-TASK_TYPE="$(echo "$TASK_CTX" | jq -r '.task_type // "code"')"
-TASK_TITLE="$(echo "$TASK_CTX" | jq -r '.task_title // ""')"
-
-# Fail-loud guard: abort early if context is empty or task has no description
-if [[ -z "$TASK_CTX" || "$TASK_CTX" == "{}" || "$TASK_CTX" == "null" ]]; then
-	echo '{"error":"get-context returned empty — DB may be locked or task missing"}' >&2
-	exit 78
-fi
-TASK_DESC="$(echo "$_task_json" | jq -r '.description // ""' 2>/dev/null || echo '')"
+# Fail-loud guard: task must have a title or description to execute
 if [[ -z "$TASK_TITLE" && -z "$TASK_DESC" ]]; then
 	echo '{"error":"task has no title or description — cannot execute without instructions"}' >&2
 	exit 78
 fi
 
+# Validate status allows execution
+if [[ "$STATUS" != "pending" && "$STATUS" != "in_progress" && "$STATUS" != "submitted" ]]; then
+	echo "{\"error\":\"task status is ${STATUS}, expected pending/in_progress\"}" >&2
+	exit 1
+fi
+
 # Agent activity tracking — register this worker in brain visualization
-AGENT_ID="copilot-${TASK_ID}-$(date +%s)"
+AGENT_ID="${AGENT_SESSION_NAME}"
 "$SCRIPT_DIR/plan-db.sh" agent-start "$AGENT_ID" "copilot" "${TASK_TITLE:-task-$TASK_ID}" \
 	--task "$TASK_ID" --plan "$PLAN_ID" --model "$MODEL" --host "$(hostname -s)" 2>/dev/null || true
+
+# IPC registration so the agent appears in platform dashboards
+curl -sf -X POST "${DAEMON_API}/api/ipc/agents/register" \
+	-H 'Content-Type: application/json' \
+	-d "{\"name\":\"${AGENT_SESSION_NAME}\",\"type\":\"copilot\",\"model\":\"${MODEL}\",\"capabilities\":[\"code\",\"test\",\"review\"]}" \
+	>/dev/null 2>&1 || true
 
 # Emit agent_started mesh event for coordinator
 _emit_mesh_event "agent_started" \
 	"{\"task_id\":${TASK_ID},\"agent_id\":\"${AGENT_ID}\",\"model\":\"${MODEL}\"}" 2>/dev/null || true
 
-# Generate prompt with role-scoped context bundle (fallback handled in prompt script)
-if [[ ! -x "$CONTEXT_LOADER" ]]; then
-	echo "Warning: agent-context-loader.sh not executable, continuing with default prompt context." >&2
+# Generate prompt: use execution-context API prompt when available, else call prompt script
+if [[ -n "$CTX_PROMPT" ]]; then
+	PROMPT="$CTX_PROMPT"
+else
+	if [[ ! -x "$CONTEXT_LOADER" ]]; then
+		echo "Warning: agent-context-loader.sh not executable, continuing with default prompt context." >&2
+	fi
+	PROMPT=$("$SCRIPT_DIR/copilot-task-prompt.sh" "$TASK_ID" "$AGENT_ROLE")
 fi
-PROMPT=$("$SCRIPT_DIR/copilot-task-prompt.sh" "$TASK_ID" "$AGENT_ROLE")
 PROMPT_TOKENS="$(_ap_tokens "$PROMPT" 2>/dev/null || echo 0)"
 
 echo "Launching Copilot worker for task $TASK_ID (timeout: ${TIMEOUT}s, max retries: $MAX_RETRIES)..."
