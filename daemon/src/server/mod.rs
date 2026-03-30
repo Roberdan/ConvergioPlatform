@@ -214,6 +214,10 @@ mod api_sync_replication_tests;
 mod api_sync_status_tests;
 #[cfg(test)]
 mod state_sync_runtime_tests;
+#[cfg(test)]
+mod api_decisions_tests;
+#[cfg(test)]
+mod api_repositories_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};
