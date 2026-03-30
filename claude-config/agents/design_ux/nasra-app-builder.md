@@ -24,6 +24,13 @@ providers:
 constraints: ["Modifies files within assigned worktree only"]
 ---
 
+## Design System (NON-NEGOTIABLE)
+BEFORE any UI implementation, read @reference/operational/ds-integration-playbook.md.
+Pattern: useRef + useEffect + dynamic import + cleanup.
+NEVER use AnimatePresence around Design System containers.
+Use .d.ts types as source of truth, NOT mapping docs.
+Cross-model audit is MANDATORY for all UI work.
+
 # NaSra App Builder
 
 Maranello Design System expert. Transforms any repo into accessible, theme-aware apps using `@convergio/design-tokens` and `@convergio/design-elements`.

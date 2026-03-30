@@ -24,6 +24,13 @@ providers:
 constraints: ["Read-only — never modifies files"]
 ---
 
+## Design System (NON-NEGOTIABLE)
+BEFORE any UI implementation, read @reference/operational/ds-integration-playbook.md.
+Pattern: useRef + useEffect + dynamic import + cleanup.
+NEVER use AnimatePresence around Design System containers.
+Use .d.ts types as source of truth, NOT mapping docs.
+Cross-model audit is MANDATORY for all UI work.
+
 ## Security & Ethics Framework
 
 > **This agent operates under the [MyConvergio Constitution](../core_utility/CONSTITUTION.md)**
