@@ -60,6 +60,7 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     ensure_domain_skill_map(conn)?;
     ensure_mesh_sync_stats_columns(conn)?;
     ensure_sync_meta(conn)?;
+    ensure_sync_conflicts(conn)?;
     ensure_runs_dir();
     Ok(())
 }
@@ -170,6 +171,29 @@ fn ensure_sync_meta(conn: &Connection) -> rusqlite::Result<()> {
             )",
         )?;
         eprintln!("[migrations] created _sync_meta table");
+    }
+    Ok(())
+}
+
+/// Create the `_sync_conflicts` table for CRDT conflict visibility.
+///
+/// Records conflicts detected during CRDT merge so operators can inspect
+/// and resolve them via GET /api/sync/conflicts. Idempotent.
+fn ensure_sync_conflicts(conn: &Connection) -> rusqlite::Result<()> {
+    if !table_exists(conn, "_sync_conflicts")? {
+        conn.execute_batch(
+            "CREATE TABLE _sync_conflicts (
+                id INTEGER PRIMARY KEY,
+                table_name TEXT NOT NULL,
+                pk INTEGER,
+                local_data TEXT,
+                remote_data TEXT,
+                source_node TEXT,
+                resolved BOOLEAN DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )",
+        )?;
+        eprintln!("[migrations] created _sync_conflicts table");
     }
     Ok(())
 }

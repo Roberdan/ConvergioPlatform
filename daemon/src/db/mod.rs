@@ -1,4 +1,5 @@
 mod cli;
+pub mod crdt;
 pub mod libsql_adapter;
 pub(crate) mod libsql_adapter_helpers;
 pub mod migrations;

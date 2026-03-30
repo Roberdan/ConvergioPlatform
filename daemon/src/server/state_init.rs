@@ -98,7 +98,8 @@ pub fn init_db_and_pool(
         #[cfg(feature = "crsqlite")]
         if let Some(ref ext) = crsqlite_path {
             if let Err(e) = crate::db::crdt::load_crsqlite(&conn, ext) {
-                eprintln!("[migration] crsqlite load failed: {e}");
+                // FAIL-FAST: CRDT replication is the sole sync path since v20.
+                panic!("[FATAL] crsqlite load failed — CRDT replication required: {e}");
             }
         }
         #[cfg(not(feature = "crsqlite"))]

@@ -7,11 +7,9 @@ use crate::{
     cli_skill, cli_task, cli_wave, cli_who, cli_workspace,
     ipc_handler::{self, DaemonCommands},
 };
-use rusqlite::Connection;
 use std::env;
 use std::io::Read;
 use std::process::ExitCode;
-use std::sync::{Arc, Mutex};
 
 pub(crate) async fn dispatch(command: Commands) -> ExitCode {
     match command {
@@ -100,20 +98,13 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
                 crsqlite_path,
                 local_only,
             } => {
-                // Open a shared DB connection for the background sync loop.
-                // The mesh service opens its own connections; this Arc<Mutex<Connection>>
-                // is used solely by the CRDT background_sync loop (T3b-01).
-                let resolved_db = db_path.clone().unwrap_or_else(ipc_handler::default_db_path);
-                let sync_conn = match Connection::open(&resolved_db) {
-                    Ok(c) => Arc::new(Mutex::new(c)),
-                    Err(e) => {
-                        eprintln!("background_sync: cannot open db {resolved_db:?}: {e}");
-                        return ExitCode::from(2);
-                    }
-                };
-                let sync_interval = convergio_core::background_sync::resolve_interval_secs(None);
-                let _sync_handle =
-                    convergio_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
+                // DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420)
+                // is the sole replication path. Code kept for potential fallback.
+                // let resolved_db = db_path.clone().unwrap_or_else(ipc_handler::default_db_path);
+                // let sync_conn = match Connection::open(&resolved_db) { ... };
+                // let sync_interval = convergio_core::background_sync::resolve_interval_secs(None);
+                // let _sync_handle =
+                //     convergio_core::background_sync::spawn_sync_loop(sync_conn, sync_interval);
 
                 if let Err(e) = ipc_handler::run_daemon(
                     bind_ip,
