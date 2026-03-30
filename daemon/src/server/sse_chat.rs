@@ -5,6 +5,8 @@
 use super::llm_client::{self, ChatMessage, StreamChunk};
 use super::provider::{estimate_cost, provider_for_model, stream_with_fallback};
 use super::state::{ApiError, ServerState};
+use crate::ipc::budget;
+use chrono::Local;
 use axum::extract::{Path, State};
 use axum::response::sse::{Event, Sse};
 use futures_util::StreamExt;
@@ -129,6 +131,7 @@ async fn relay_llm_to_sse(
         if let Ok(conn) = state.get_conn() {
             save_assistant_message(&conn, &session_id, &full_text, &model, total_in, total_out);
             upsert_agent_activity(&conn, &session_id, &model, total_in, total_out, cost);
+            log_budget_usage(&conn, &session_id, &model, total_in, total_out, cost);
         }
     }
 
@@ -192,6 +195,48 @@ fn upsert_agent_activity(
         rusqlite::params![agent_id, model, "completed", tokens_in, tokens_out, tokens_total, cost, session_id],
     ) {
         warn!("Failed to upsert agent_activity for chat: {e}");
+    }
+}
+
+fn log_budget_usage(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    model: &str,
+    tokens_in: u64,
+    tokens_out: u64,
+    cost: f64,
+) {
+    // Ensure table exists — budget module may not have run its own init yet.
+    let _ = conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ipc_budget_log \
+         (id INTEGER PRIMARY KEY, subscription TEXT, date TEXT, \
+          tokens_in INTEGER, tokens_out INTEGER, estimated_cost_usd REAL, \
+          model TEXT, task_ref TEXT);",
+    );
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let entry = budget::BudgetEntry {
+        subscription: "default".to_string(),
+        date,
+        tokens_in: tokens_in as i64,
+        tokens_out: tokens_out as i64,
+        estimated_cost_usd: cost,
+        model: model.to_string(),
+        task_ref: session_id.to_string(),
+    };
+    if let Err(e) = budget::log_usage(conn, &entry) {
+        warn!("budget log_usage failed: {e}");
+        return;
+    }
+    // Ensure subscriptions table for threshold check
+    let _ = conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ipc_subscriptions \
+         (name TEXT PRIMARY KEY, provider TEXT, plan TEXT, \
+          budget_usd REAL, reset_day INTEGER, models TEXT);",
+    );
+    match budget::check_budget_thresholds(conn, "default") {
+        Ok(Some(alert)) => warn!("Budget threshold hit: {}", alert.message),
+        Ok(None) => {}
+        Err(e) => warn!("budget threshold check failed: {e}"),
     }
 }
 

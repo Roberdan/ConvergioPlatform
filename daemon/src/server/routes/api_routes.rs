@@ -43,6 +43,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/ipc/worktrees",
     "/api/ipc/conflicts",
     "/api/ipc/status",
+    "/api/budget/status",
     "/api/ipc/budget",
     "/api/ipc/models",
     "/api/ipc/skills",
