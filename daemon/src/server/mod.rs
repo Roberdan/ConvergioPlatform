@@ -71,6 +71,8 @@ pub mod sync_runtime_status;
 pub mod plan_lifecycle_guards;
 #[cfg(test)]
 mod plan_lifecycle_guards_tests;
+pub mod provider;
+pub mod api_inference_status;
 pub mod routes;
 pub mod sse;
 pub mod sse_chat;
