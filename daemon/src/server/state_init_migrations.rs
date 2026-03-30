@@ -205,4 +205,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // Agent sandboxing (T3-04)
     "CREATE TABLE IF NOT EXISTS agent_profiles (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, filesystem_allowlist TEXT, network_allowlist TEXT, allowed_commands TEXT, created_at TEXT DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL DEFAULT (datetime('now')), agent TEXT, action TEXT NOT NULL, resource TEXT, detail TEXT, ip_addr TEXT)",
+    // Mesh convergence tracking (T4-06)
+    "CREATE TABLE IF NOT EXISTS mesh_peer_state (peer_id TEXT PRIMARY KEY, state_version INTEGER NOT NULL DEFAULT 0, state_checksum TEXT NOT NULL DEFAULT '', last_seen TEXT NOT NULL DEFAULT (datetime('now')))",
 ];
