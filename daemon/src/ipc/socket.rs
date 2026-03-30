@@ -153,6 +153,7 @@ mod tests {
                 pid: None,
                 host: "local".into(),
                 metadata: None,
+                parent_agent: None,
             })
             .await
             .unwrap();

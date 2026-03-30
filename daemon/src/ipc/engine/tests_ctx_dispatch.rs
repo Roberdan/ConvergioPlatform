@@ -217,6 +217,7 @@ async fn test_dispatch_routing() {
             pid: None,
             host: "local".into(),
             metadata: None,
+            parent_agent: None,
         })
         .await
         .unwrap();

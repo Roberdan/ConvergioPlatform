@@ -5,6 +5,8 @@ pub mod actions;
 pub mod approval;
 pub mod auto_rollback;
 pub mod delegation_core;
+pub mod delegation_pipeline;
+mod delegation_pipeline_steps;
 mod executor;
 pub mod goal_decomposer;
 pub mod handlers;

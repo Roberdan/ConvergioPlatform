@@ -43,6 +43,7 @@ async fn test_round_trip_register_who() {
             pid: Some(std::process::id()),
             host: "test-host".into(),
             metadata: None,
+            parent_agent: None,
         },
     )
     .await;
