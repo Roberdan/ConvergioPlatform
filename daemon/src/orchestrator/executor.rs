@@ -5,7 +5,9 @@
 
 use super::actions::{emit, DAEMON_BASE};
 use super::delegation_core;
+use super::sandbox;
 use crate::ipc::IpcEngine;
+use rusqlite::Connection;
 use std::sync::Arc;
 
 type AliResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -22,6 +24,17 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
         .unwrap_or_default();
 
     tracing::info!("ali: delegating plan {plan_id} to peer {peer}");
+
+    // Load agent profile and enforce sandbox before any delegation work.
+    // Missing profile = allow (backward compatibility with unregistered peers).
+    let conn = Connection::open(&engine.db_path)?;
+    let profile = sandbox::get_profile(&conn, peer);
+    if let Some(ref p) = profile {
+        if let Err(reason) = sandbox::validate_command(p, "delegate") {
+            sandbox::log_violation(&conn, peer, "delegate", &reason);
+            return Err(format!("sandbox: delegation to '{peer}' blocked — {reason}").into());
+        }
+    }
 
     // Mark plan in DB via API
     if let Err(e) = client
@@ -55,8 +68,12 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
     let session = "Convergio";
     let window = format!("plan-{plan_id}");
 
-    // Write per-worktree settings.json to avoid --dangerously-skip-permissions
-    let settings_content = super::worktree_settings::generate_worktree_settings("rust");
+    // Write per-worktree settings.json:
+    // use profile allowlist when available, fallback to language-default for unknown peers.
+    let settings_content = match profile {
+        Some(ref p) => sandbox::generate_worktree_settings(p),
+        None => super::worktree_settings::generate_worktree_settings("rust"),
+    };
     let settings_path = format!("{remote_repo}/.claude/settings.json");
     delegation_core::exec_on_peer(&client, peer, &format!("mkdir -p '{remote_repo}/.claude'")).await?;
     delegation_core::write_file_on_peer(&client, peer, &settings_path, &settings_content).await?;
