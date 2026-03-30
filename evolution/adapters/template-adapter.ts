@@ -47,6 +47,10 @@ export class TemplateAdapter implements PlatformAdapter {
    * Override in subclasses with target-specific canary logic.
    */
   async runCanary(proposal: Proposal): Promise<ExperimentResult> {
+    console.warn(
+      'TemplateAdapter.runCanary() is a stub — override in a subclass with real canary logic. ' +
+      'Returning Inconclusive with zero confidence.'
+    );
     void proposal;
     return {
       confidence: 0,
