@@ -206,6 +206,12 @@ async fn import_rejects_empty_changes() {
 
 #[tokio::test]
 async fn sync_status_returns_unhealthy_when_no_peers() {
+    // Lock the global sync status to prevent concurrent tests from setting healthy=true
+    let _guard = crate::server::sync_runtime_status::global_status_test_lock()
+        .lock()
+        .expect("status lock");
+    let holder = crate::server::sync_runtime_status::SyncRuntimeStatusHolder::new_daemon_first();
+    holder.reset();
     let router = test_router();
     let (status, body) =
         get_json(router, "/api/sync/status").await;

@@ -95,42 +95,64 @@ async fn handle_sync_status(
         .unwrap_or(0);
     let threshold = now - 300; // 5 minutes
 
-    let mut stmt = conn
-        .prepare_cached(
-            "SELECT peer_name, last_sync_at, last_latency_ms, last_error \
-             FROM mesh_sync_stats ORDER BY last_sync_at DESC",
-        )
-        .map_err(|e| ApiError::internal(format!("prepare: {e}")))?;
-    let peers: Vec<Value> = stmt
-        .query_map([], |row| {
-            let last: Option<i64> = row.get(1)?;
-            Ok(json!({
-                "peer": row.get::<_, String>(0)?,
-                "last_sync_at": last,
-                "last_sync_ago_s": last.map(|t| now - t),
-                "latency_ms": row.get::<_, Option<i64>>(2)?,
-                "error": row.get::<_, Option<String>>(3)?,
-            }))
-        })
-        .map_err(|e| ApiError::internal(format!("query: {e}")))?
-        .filter_map(|r| r.ok())
-        .collect();
+    let mut stmt_result = conn.prepare_cached(
+        "SELECT peer_name, last_sync_at, last_latency_ms, last_error \
+         FROM mesh_sync_stats ORDER BY last_sync_at DESC",
+    );
+    let peers: Vec<Value> = match stmt_result {
+        Ok(ref mut stmt) => stmt
+            .query_map([], |row| {
+                let last: Option<i64> = row.get(1)?;
+                Ok(json!({
+                    "peer": row.get::<_, String>(0)?,
+                    "last_sync_at": last,
+                    "last_sync_ago_s": last.map(|t| now - t),
+                    "latency_ms": row.get::<_, Option<i64>>(2)?,
+                    "error": row.get::<_, Option<String>>(3)?,
+                }))
+            })
+            .map_err(|e| ApiError::internal(format!("query: {e}")))?
+            .filter_map(|r| r.ok())
+            .collect(),
+        Err(_) => vec![], // mesh_sync_stats may not exist on fresh/minimal nodes
+    };
 
-    let any_recent = peers.iter().any(|p| {
+    let any_recent_peer = peers.iter().any(|p| {
         p.get("last_sync_at")
             .and_then(Value::as_i64)
             .map_or(false, |t| t > threshold)
     });
 
+    // Count CRDT replication peers/tables from _sync_meta (text-timestamp based)
+    let peer_count: i64 = conn
+        .query_row("SELECT COUNT(DISTINCT peer) FROM _sync_meta", [], |r| r.get(0))
+        .unwrap_or(0);
+    let table_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM _sync_meta", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Merge runtime sync status (transport mode, last success/error) from in-memory holder
+    let snapshot =
+        crate::server::sync_runtime_status::SyncRuntimeStatusHolder::new_daemon_first()
+            .snapshot();
+    let healthy = any_recent_peer || snapshot.healthy;
+
     let crdt_tables = crate::db::crdt::required_crdt_tables();
     let crdt_count = crdt_tables.len();
 
     Ok(Json(json!({
-        "healthy": any_recent,
-        "policy": "crdt-tcp-9420",
+        "healthy": healthy,
+        "policy": snapshot.transport_mode,
+        "transport_mode": snapshot.transport_mode,
+        "fallback_policy": snapshot.fallback_policy,
+        "last_success_at": snapshot.last_success_at,
+        "last_error": snapshot.last_error,
+        "interval_secs": 300u64,
         "http_lww_enabled": false,
         "crdt_tables": crdt_count,
         "crdt_table_list": crdt_tables,
+        "peer_count": peer_count,
+        "table_count": table_count,
         "peers": peers,
     })))
 }

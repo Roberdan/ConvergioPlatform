@@ -14,6 +14,7 @@ import type { Evaluator } from './evaluators/evaluator.js';
 import type { AggregatedPoint } from '../telemetry/aggregation.js';
 import { createDefaultConfig, mergeConfig } from './config.js';
 import { EvaluatorRegistry } from './evaluators/registry.js';
+import type { CycleSummary } from './cycle-summary.js';
 
 /** Callback signature for audit log subscribers. */
 export type AuditSink = (entry: AuditEntry) => void;
