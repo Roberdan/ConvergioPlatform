@@ -1,5 +1,8 @@
+import { spawnSync } from 'child_process';
 import type { PlatformAdapter } from '../core/types/adapter.js';
 import type { Metric, Proposal, ExperimentResult } from '../core/types/index.js';
+
+const DAEMON_HEALTH_URL = 'http://localhost:8420/api/health';
 
 /**
  * Template adapter — copy this file to add a new PlatformAdapter.
@@ -15,7 +18,7 @@ export class TemplateAdapter implements PlatformAdapter {
   readonly name = 'template';
 
   constructor(
-    /** Primary connection target: path, URL, or identifier */
+    /** Primary connection target: path to a local git repo clone */
     private readonly target: string,
   ) {}
 
@@ -41,9 +44,9 @@ export class TemplateAdapter implements PlatformAdapter {
    * Apply the proposed change in a safe canary context.
    * Must honour proposal.failureCriteria and auto-rollback on breach.
    * Measure before/after delta on proposal.targetMetric.
+   * Override in subclasses with target-specific canary logic.
    */
   async runCanary(proposal: Proposal): Promise<ExperimentResult> {
-    // TODO: implement canary logic for this target
     void proposal;
     return {
       confidence: 0,
@@ -55,26 +58,60 @@ export class TemplateAdapter implements PlatformAdapter {
   }
 
   /**
-   * Create a pull request applying the proposed change.
-   * Pattern: `git push origin <branch>` then `gh pr create --repo <owner/repo>`.
+   * Pushes the current branch to origin and opens a PR via `gh pr create`.
+   * Reads repo and head branch from the local git context in `this.target`.
    */
   async openPR(proposal: Proposal): Promise<{ prUrl: string; prNumber: number }> {
-    // TODO: push branch and call `gh pr create`
-    throw new Error(`openPR not implemented for proposal ${proposal.id}`);
-  }
+    const branch = `evo/template/${proposal.id}`;
+    const title = proposal.title || proposal.hypothesis || `Evolution proposal ${proposal.id}`;
+    const target = proposal.targetMetric || `${proposal.targetAdapter}.score`;
 
-  /** Roll back any changes made during a canary experiment. */
-  async rollback(experimentId: string): Promise<void> {
-    // TODO: close PR, delete branch, restore files
-    void experimentId;
+    spawnSync('git', ['push', 'origin', branch], { cwd: this.target, encoding: 'utf8' });
+
+    const res = spawnSync(
+      'gh',
+      [
+        'pr', 'create',
+        '--head', branch,
+        '--title', title,
+        '--body', `Evolution Engine — template proposal ${proposal.id}\nTarget: ${target}`,
+      ],
+      { cwd: this.target, encoding: 'utf8' },
+    );
+    if (res.status !== 0) throw new Error(`gh pr create failed: ${res.stderr?.trim()}`);
+
+    const prUrl = res.stdout.trim();
+    return { prUrl, prNumber: parseInt(prUrl.split('/').at(-1) ?? '0', 10) };
   }
 
   /**
-   * Verify the target is reachable before any operation.
-   * Return `healthy: false` with a clear message when the target is unavailable.
+   * Reverts the last commit on the current branch via `git revert HEAD`.
+   * Non-interactive: uses --no-edit to avoid prompting.
+   */
+  async rollback(experimentId: string): Promise<void> {
+    const res = spawnSync(
+      'git', ['revert', 'HEAD', '--no-edit'],
+      { cwd: this.target, encoding: 'utf8' },
+    );
+    if (res.status !== 0) {
+      throw new Error(`git revert failed for experiment ${experimentId}: ${res.stderr?.trim()}`);
+    }
+  }
+
+  /**
+   * Probes the Convergio daemon health endpoint.
+   * Returns healthy=true only when the daemon responds with HTTP 200.
    */
   async healthCheck(): Promise<{ healthy: boolean; details: string }> {
-    // TODO: replace with a real connectivity check
-    return { healthy: false, details: `${this.target} not yet verified` };
+    const res = spawnSync(
+      'curl',
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', DAEMON_HEALTH_URL],
+      { encoding: 'utf8' },
+    );
+    if (res.status !== 0) {
+      return { healthy: false, details: `curl failed: ${res.stderr?.trim()}` };
+    }
+    const code = res.stdout.trim();
+    return { healthy: code === '200', details: `HTTP ${code} from ${DAEMON_HEALTH_URL}` };
   }
 }
