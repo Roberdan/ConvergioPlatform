@@ -40,6 +40,7 @@ pub mod api_memory_mgmt_gc;
 pub mod api_mesh;
 pub mod api_metrics;
 pub mod api_metrics_queries;
+pub mod api_nightly;
 pub mod api_notify;
 pub mod api_openclaw;
 pub mod api_peers;

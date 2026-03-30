@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.convergio.nightly.plist — Nightly autonomy job for M1 Pro mesh node.
+  Fires daily at 02:00 CET (01:00 UTC) via POST /api/nightly/run.
+
+  Install:
+    cp config/launchd/com.convergio.nightly.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.convergio.nightly.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.convergio.nightly.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.convergio.nightly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/curl</string>
+        <string>-s</string>
+        <string>-X</string>
+        <string>POST</string>
+        <string>http://localhost:8420/api/nightly/run</string>
+        <string>-H</string>
+        <string>Content-Type: application/json</string>
+        <string>-o</string>
+        <string>/Users/Roberdan/.claude/data/nightly-last-run.json</string>
+    </array>
+
+    <!-- 02:00 CET = 01:00 UTC -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>1</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/Roberdan/.claude/data/convergio-nightly.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/Roberdan/.claude/data/convergio-nightly.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DASHBOARD_DB</key>
+        <string>/Users/Roberdan/GitHub/ConvergioPlatform/data/dashboard.db</string>
+        <key>CONVERGIO_PLATFORM_DIR</key>
+        <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/Roberdan/GitHub/ConvergioPlatform</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>LaunchOnlyOnce</key>
+    <false/>
+</dict>
+</plist>

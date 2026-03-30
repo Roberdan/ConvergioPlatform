@@ -5,6 +5,7 @@ pub mod actions;
 pub mod delegation_core;
 mod executor;
 pub mod handlers;
+pub mod nightly;
 pub mod reaper;
 mod reactor;
 pub mod rollback;

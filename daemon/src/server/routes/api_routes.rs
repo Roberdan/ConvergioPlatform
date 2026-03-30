@@ -132,6 +132,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/nightly/jobs/trigger",
     "/api/nightly/jobs/definitions/:id/toggle",
     "/api/nightly/jobs/:id/retry",
+    "/api/nightly/run",
     "/api/projects",
     "/api/plan-status",
     "/api/peers",

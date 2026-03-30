@@ -37,6 +37,7 @@ use super::api_memory;
 use super::api_memory_mgmt;
 use super::api_mesh;
 use super::api_metrics;
+use super::api_nightly;
 use super::api_notify;
 use super::api_openclaw;
 use super::api_peers;
@@ -123,6 +124,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_mesh::router())
         .merge(api_peers::router())
         .merge(api_peers_ext::router())
+        .merge(api_nightly::router())
         .merge(api_notify::router())
         .merge(api_chat::router())
         .merge(api_coordinator::router())
