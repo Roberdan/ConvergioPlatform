@@ -14,6 +14,8 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/mesh/sync-status",
     "/api/mesh/traffic",
     "/api/mesh/provision",
+    "/api/validation/queue",
+    "/api/validation/verdict/:task_id",
     "/api/history",
     "/api/tasks/distribution",
     "/api/tasks/blocked",
@@ -109,6 +111,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/sync/status",
 ];
 pub const POST_ROUTES: &[&str] = &[
+    "/api/validation/enqueue",
     "/api/ideas",
     "/api/ideas/:id/notes",
     "/api/ideas/:id/promote",

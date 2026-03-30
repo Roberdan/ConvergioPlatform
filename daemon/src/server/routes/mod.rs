@@ -5,6 +5,7 @@ pub mod rate_limiter;
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
 
+use super::api_validation;
 use super::api_agent_catalog;
 use super::api_agent_triage;
 use super::api_agents;
@@ -106,6 +107,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
     let rate_limiter = RateLimiter::default();
 
     Router::new()
+        .merge(api_validation::router())
         .merge(api_dashboard::router())
         .merge(api_digest::router())
         .merge(api_build_exec::router())

@@ -7,6 +7,7 @@ mod executor;
 pub mod handlers;
 mod reactor;
 pub mod reaper;
+pub mod validator_service;
 
 use crate::ipc::IpcEngine;
 use std::path::PathBuf;
