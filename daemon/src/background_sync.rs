@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
+use crate::background_sync_convergence::check_convergence;
 use crate::background_sync_http::{
     detect_local_tailscale_ip, fetch_changes_from_peer, peers_conf_path_from_env,
     resolve_best_addr, send_changes_to_peer, update_mesh_sync_stats,
@@ -239,6 +240,7 @@ pub fn spawn_sync_loop(
                         &conn, peer, total_sent, total_recv, total_applied, latency_ms,
                     );
                 }
+                check_convergence(&conn);
             }).await;
         }
     })
