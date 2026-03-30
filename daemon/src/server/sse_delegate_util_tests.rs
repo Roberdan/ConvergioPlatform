@@ -27,7 +27,9 @@ fn safe_id_valid_and_invalid() {
 #[test]
 fn valid_cli_claude_builds_command() {
     let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
-    assert!(cmd.contains("claude --dangerously-skip-permissions"));
+    // Settings file is generated; claude runs WITHOUT --dangerously-skip-permissions
+    assert!(cmd.contains("claude --input-file"));
+    assert!(!cmd.contains("--dangerously-skip-permissions"));
     assert!(cmd.contains("Execute plan 671"));
     assert!(cmd.contains("cvg task update"), "must include cvg workflow");
     assert!(cmd.contains("cvg plan validate"), "must include validation step");
@@ -85,7 +87,9 @@ fn task_wave_id_injection_rejected() {
 #[test]
 fn command_uses_hardcoded_binary() {
     let cmd = build_agent_command("claude", "1", &HashMap::new()).unwrap();
-    assert!(cmd.contains("claude --dangerously-skip-permissions"));
+    // claude invoked directly — settings.json provides permissions, not --dangerously flag
+    assert!(cmd.contains("claude --input-file"));
+    assert!(!cmd.contains("--dangerously-skip-permissions"));
 }
 
 #[test]
@@ -114,7 +118,7 @@ fn copilot_uses_input_file_not_inline_prompt() {
 fn prompt_file_written_before_agent_invocation() {
     let cmd = build_agent_command("claude", "671", &HashMap::new()).unwrap();
     let write_pos = cmd.find("printf").or_else(|| cmd.find("cat >")).or_else(|| cmd.find("tee"));
-    let agent_pos = cmd.find("claude --dangerously");
+    let agent_pos = cmd.find("claude --input-file");
     assert!(write_pos.is_some(), "command must write prompt to file, got: {cmd}");
     assert!(write_pos.unwrap() < agent_pos.unwrap(), "prompt write must precede agent invocation");
 }

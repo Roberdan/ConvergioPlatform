@@ -5,6 +5,7 @@ pub mod actions;
 pub mod delegation_core;
 mod executor;
 pub mod handlers;
+pub mod worktree_settings;
 mod reactor;
 pub mod reaper;
 

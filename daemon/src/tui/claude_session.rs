@@ -38,7 +38,6 @@ impl ClaudeSession {
                 "--verbose",
                 "--agent", "ali-chief-of-staff",
                 "--model", "opus",
-                "--dangerously-skip-permissions",
                 "--mcp-config", &mcp_config_path(),
             ])
             .stdin(Stdio::piped())

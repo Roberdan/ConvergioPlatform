@@ -137,7 +137,7 @@ pub fn resolve_cli_command(cli: &str, detections: &HashMap<String, String>) -> O
         ("copilot", "copilot --yolo"),
         (
             "claude",
-            "claude --dangerously-skip-permissions --model sonnet",
+            "claude --model sonnet",
         ),
         ("opencode", "opencode"),
     ]);

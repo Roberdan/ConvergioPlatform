@@ -54,6 +54,13 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
 
     let session = "Convergio";
     let window = format!("plan-{plan_id}");
+
+    // Write per-worktree settings.json to avoid --dangerously-skip-permissions
+    let settings_content = super::worktree_settings::generate_worktree_settings("rust");
+    let settings_path = format!("{remote_repo}/.claude/settings.json");
+    delegation_core::exec_on_peer(&client, peer, &format!("mkdir -p '{remote_repo}/.claude'")).await?;
+    delegation_core::write_file_on_peer(&client, peer, &settings_path, &settings_content).await?;
+
     let spawn_resp = client
         .post(format!("{DAEMON_BASE}/api/delegate/spawn"))
         .json(&serde_json::json!({
@@ -62,7 +69,7 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
             "tmux_window": window,
             "cwd": remote_repo,
             "command": format!(
-                "claude -p \"$(cat {prompt_file})\" --dangerously-skip-permissions; bash {done_script_path}"
+                "claude -p \"$(cat {prompt_file})\"; bash {done_script_path}"
             ),
         }))
         .send()

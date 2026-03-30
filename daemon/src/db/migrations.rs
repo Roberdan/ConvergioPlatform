@@ -60,6 +60,7 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     ensure_domain_skill_map(conn)?;
     ensure_mesh_sync_stats_columns(conn)?;
     ensure_sync_meta(conn)?;
+    ensure_audit_log(conn)?;
     ensure_runs_dir();
     Ok(())
 }
@@ -170,6 +171,28 @@ fn ensure_sync_meta(conn: &Connection) -> rusqlite::Result<()> {
             )",
         )?;
         eprintln!("[migrations] created _sync_meta table");
+    }
+    Ok(())
+}
+
+/// Create the `audit_log` table for immutable action audit trails.
+///
+/// Tracks every state-changing API call: agent, action, resource, and caller IP.
+/// Idempotent — skips if the table already exists.
+fn ensure_audit_log(conn: &Connection) -> rusqlite::Result<()> {
+    if !table_exists(conn, "audit_log")? {
+        conn.execute_batch(
+            "CREATE TABLE audit_log (
+                id        INTEGER PRIMARY KEY,
+                timestamp TEXT    NOT NULL DEFAULT (datetime('now')),
+                agent     TEXT,
+                action    TEXT    NOT NULL,
+                resource  TEXT,
+                detail    TEXT,
+                ip_addr   TEXT
+            )",
+        )?;
+        eprintln!("[migrations] created audit_log table");
     }
     Ok(())
 }

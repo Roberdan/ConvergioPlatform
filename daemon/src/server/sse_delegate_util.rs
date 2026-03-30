@@ -84,21 +84,31 @@ pub(super) fn build_agent_command(
         prompt.push_str(&format!(" wave {wave_id}"));
     }
 
-    // Use the validated cli name (from allowlist) as a literal — not interpolated from input
-    let cli_bin = match cli {
-        "claude" => "claude --dangerously-skip-permissions",
-        "copilot" => "copilot",
-        // Unreachable: allowlist check above ensures only known values reach here
-        _ => unreachable!("ALLOWED_CLI check must have passed"),
-    };
-
     // Use file-based prompt delivery: write prompt to temp file, pass via --input-file.
     // This preserves all special characters (quotes, backticks, $vars, newlines) that
     // would be mangled by tmux send-keys or shell -p interpolation.
     let prompt_file = format!("/tmp/convergio-prompt-{plan_id}.txt");
-    Ok(format!(
-        "printf '%s' {prompt:?} > {prompt_file} && cd {dir} && {cli_bin} --input-file {prompt_file}; rm -f {prompt_file}"
-    ))
+
+    // Build per-cli command. For claude: write task-scoped settings.json to the
+    // worktree instead of using --dangerously-skip-permissions.
+    let cmd = match cli {
+        "claude" => {
+            let settings =
+                crate::orchestrator::worktree_settings::generate_worktree_settings("rust");
+            format!(
+                "mkdir -p {dir}/.claude && printf '%s' {settings:?} > {dir}/.claude/settings.json \
+                 && printf '%s' {prompt:?} > {prompt_file} \
+                 && cd {dir} && claude --input-file {prompt_file}; rm -f {prompt_file}"
+            )
+        }
+        "copilot" => format!(
+            "printf '%s' {prompt:?} > {prompt_file} \
+             && cd {dir} && copilot --input-file {prompt_file}; rm -f {prompt_file}"
+        ),
+        // Unreachable: allowlist check above ensures only known values reach here
+        _ => unreachable!("ALLOWED_CLI check must have passed"),
+    };
+    Ok(cmd)
 }
 
 pub(super) fn stage(s: &str, peer: &str, detail: &str) -> serde_json::Value {

@@ -134,6 +134,7 @@ async fn handle_task_update(
     let tokens = body.get("tokens").and_then(Value::as_i64).unwrap_or(0);
     let validated_by = body.get("validated_by").and_then(Value::as_str);
     let test_criteria = body.get("test_criteria").and_then(Value::as_str);
+    let agent = body.get("agent").and_then(Value::as_str);
 
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -164,6 +165,15 @@ async fn handle_task_update(
     if changed == 0 {
         return Err(ApiError::bad_request(format!("task {task_id} not found")));
     }
+
+    // Audit: record every state-changing task-update API call
+    super::api_audit::log_audit(
+        conn,
+        agent,
+        "task_update",
+        Some(&task_id.to_string()),
+        Some(status),
+    );
 
     // Update notes field (verify command source for mechanical gates validator)
     if !notes.is_empty() {
