@@ -1,5 +1,5 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
-# Convergio Platform · v20.0.0
+# Convergio Platform · v20.1.0
 
 Give it a problem. It builds the business. — 69 AI agents across 12 domains (code, strategy, legal, finance, marketing, design, HR, data, security, ops, product, research) orchestrated by a Rust daemon on your own hardware. No cloud lock-in.
 
@@ -79,6 +79,10 @@ cvg plan show 10022                        # plan details + task status
 cvg task update 9678 submitted             # mark task submitted
 cvg checkpoint save 10022                  # save plan state
 cvg agent list                             # list active agents
+cvg claude roberto                         # launch claude with auto-registration
+cvg copilot worker-1                       # launch copilot with auto-registration  
+cvg copilot child-1 --parent roberto       # launch with parentage link
+cvg who agents                             # show workers + IPC agent tree
 cvg kernel status                          # local LLM health
 cvg mesh status                            # peer topology
 cvg workspace list                         # list active workspaces
@@ -239,6 +243,9 @@ graph TB
 | **LLM providers** | `ClaudeSubscription`, `CopilotSubscription`, `LocalLLM` — zero Python deps; `Provider::LiteLLM` removed |
 | **Budget tracking** | Per-session and cumulative spend wired into chat pipeline; alerts via Telegram + dashboard WebSocket |
 | **Session IPC** | Named sessions, `agents/list`, `agents/deregister`, `agents/send-direct` endpoints |
+| **Agent parentage** | `parent_agent` column in `ipc_agents`, `GET /api/ipc/agents/tree` for hierarchical view, brain viz integration |
+| **CLI wrappers** | `cvg claude <name>` / `cvg copilot <name>` — auto-register/deregister agents with optional `--parent` linkage |
+| **Brain telemetry** | `broadcast_brain_message_event` for inter-agent message flow; `ipc_agents` in `/api/brain` response |
 | **CRDT sync** | Conflict-aware vector-clock merge; HTTP LWW disabled; `_sync_conflicts` table for review |
 | **Nightly autonomy** | Scheduled tokio job (default 02:00): goal decomposer → risk policy → audit trail |
 | **Goal decomposer** | Hierarchical goal-to-task decomposition stored in plan DB |

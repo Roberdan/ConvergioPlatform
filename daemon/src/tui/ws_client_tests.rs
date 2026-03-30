@@ -3,7 +3,7 @@ use std::time::Duration;
 
 #[test]
 fn test_parse_agent_update() {
-    let json = r#"{"kind":"brain_event","event_type":"agent_update","payload":[{"id":1,"name":"thor"}]}"#;
+    let json = r#"{"kind":"brain_event","event_type":"agent_update","payload":{"agents":[{"id":1,"name":"thor"}]}}"#;
     let event = WsClient::parse_message(json).unwrap();
     match event {
         BrainEvent::AgentUpdate { agents } => {
@@ -16,7 +16,7 @@ fn test_parse_agent_update() {
 
 #[test]
 fn test_parse_session_update() {
-    let json = r#"{"kind":"brain_event","event_type":"session_update","payload":[{"session_id":"abc"}]}"#;
+    let json = r#"{"kind":"brain_event","event_type":"session_update","payload":{"sessions":[{"session_id":"abc"}]}}"#;
     let event = WsClient::parse_message(json).unwrap();
     match event {
         BrainEvent::SessionUpdate { sessions } => {

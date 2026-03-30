@@ -153,6 +153,16 @@ async fn api_brain(State(state): State<ServerState>) -> Result<Json<Value>, ApiE
         [],
     ).unwrap_or_default();
 
+    let ipc_agents = query_rows(
+        &conn,
+        "SELECT name, host, agent_type, pid, parent_agent, \
+         CASE WHEN last_seen >= strftime('%Y-%m-%dT%H:%M:%f','now','-10 minutes') \
+              THEN 'active' ELSE 'inactive' END AS status, \
+         registered_at, last_seen \
+         FROM ipc_agents ORDER BY registered_at ASC",
+        [],
+    ).unwrap_or_default();
+
     Ok(Json(json!({
         "sessions": sessions,
         "agents": agents,
@@ -160,6 +170,7 @@ async fn api_brain(State(state): State<ServerState>) -> Result<Json<Value>, ApiE
         "plans": plans,
         "tasks": tasks,
         "commits": commits,
-        "token_summary": token_summary
+        "token_summary": token_summary,
+        "ipc_agents": ipc_agents
     })))
 }

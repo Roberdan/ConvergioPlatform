@@ -7,6 +7,7 @@ pub use super::handlers_ext::{
 pub use super::handlers_ext2::api_ipc_send_direct;
 
 use super::super::state::{query_rows, ApiError, ServerState};
+use super::super::ws_brain::broadcast_brain_message_event;
 use super::ensure_ipc_schema;
 use axum::extract::{Query, State};
 use axum::Json;
@@ -220,6 +221,7 @@ pub async fn api_ipc_send(
     })) {
         tracing::debug!("ws ipc_message broadcast (no subscribers): {e}");
     }
+    broadcast_brain_message_event(&state, &body.sender_name, channel, &body.content);
 
     Ok(Json(json!({ "ok": true })))
 }
