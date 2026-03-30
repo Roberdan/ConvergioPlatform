@@ -65,6 +65,23 @@ _emit_mesh_event() {
 		-d "{\"event_type\":\"${etype}\",\"source_peer\":\"${host}\",\"plan_id\":${PLAN_ID:-0},\"payload\":${payload}}" 2>/dev/null || true
 }
 
+# _poll_messages() — background IPC inbox polling every 60s during idle.
+# Prints any received messages to stderr for visibility in worker logs.
+_poll_messages() {
+	local agent_name="$1"
+	local interval=60
+	while true; do
+		sleep "$interval"
+		local msgs count
+		msgs="$(curl -sf "${DAEMON_API}/api/ipc/messages?to_agent=${agent_name}&limit=10" 2>/dev/null || echo '{}')"
+		count="$(echo "$msgs" | jq -r '(.messages // []) | length' 2>/dev/null || echo 0)"
+		if [[ "$count" -gt 0 ]]; then
+			echo "[IPC] ${count} message(s) for ${agent_name}:" >&2
+			echo "$msgs" | jq -r '.messages[] | "[IPC] from=\(.from_agent // "?") \(.content)"' 2>/dev/null >&2 || true
+		fi
+	done
+}
+
 TASK_ID="${1:-}"
 shift || true
 
@@ -232,6 +249,10 @@ curl -sf -X POST "${DAEMON_API}/api/ipc/agents/register" \
 	-H 'Content-Type: application/json' \
 	-d "{\"name\":\"${AGENT_SESSION_NAME}\",\"type\":\"copilot\",\"model\":\"${MODEL}\",\"capabilities\":[\"code\",\"test\",\"review\"]}" \
 	>/dev/null 2>&1 || true
+
+# Start background inbox polling — receives messages sent to this agent while idle
+_poll_messages "${AGENT_SESSION_NAME}" &
+_WORKER_CHILD_PIDS+=("$!")
 
 # Emit agent_started mesh event for coordinator
 _emit_mesh_event "agent_started" \

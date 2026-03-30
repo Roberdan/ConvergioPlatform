@@ -150,6 +150,15 @@ pub fn router() -> Router<ServerState> {
             "/api/ipc/agents/heartbeat",
             post(handlers::api_ipc_agents_heartbeat),
         )
+        // T2-04: Session listing and deregister
+        .route(
+            "/api/ipc/agents/list",
+            get(handlers::api_ipc_agents_list),
+        )
+        .route(
+            "/api/ipc/agents/deregister",
+            post(handlers::api_ipc_agents_deregister),
+        )
         // Plan 635: Intelligence endpoints
         .route("/api/ipc/budget", get(routes::api_ipc_budget))
         .route("/api/ipc/models", get(routes::api_ipc_models))
