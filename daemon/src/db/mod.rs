@@ -102,7 +102,10 @@ impl PlanDb {
     }
 }
 
+pub mod libsql_adapter_task_sync;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_naming_convention;
+#[cfg(test)]
+mod libsql_adapter_thor_guard_tests;

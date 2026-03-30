@@ -67,6 +67,7 @@ pub mod api_workspace_events;
 pub mod llm_client;
 pub mod mesh_provision;
 pub mod middleware;
+pub mod sync_runtime_status;
 pub mod plan_lifecycle_guards;
 #[cfg(test)]
 mod plan_lifecycle_guards_tests;
@@ -203,6 +204,14 @@ mod state_init_tests;
 mod ws_pty_tests;
 #[cfg(test)]
 mod api_cli_integration_tests_ipc;
+#[cfg(test)]
+mod api_sync_replication_lww_tests;
+#[cfg(test)]
+mod api_sync_replication_tests;
+#[cfg(test)]
+mod api_sync_status_tests;
+#[cfg(test)]
+mod state_sync_runtime_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

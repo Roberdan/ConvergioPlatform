@@ -1,6 +1,8 @@
 pub mod background;
 pub mod background_sync;
 pub mod background_sync_http;
+#[cfg(test)]
+mod background_sync_http_tests;
 pub mod artifacts;
 pub mod kernel;
 pub mod capabilities;
