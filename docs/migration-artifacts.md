@@ -96,3 +96,27 @@ These artifacts exist only in MyConvergio and have value for ConvergioPlatform b
 | Deferred (hooks, agents, linting, docs) | ~140 files | Future plan |
 
 The most impactful deferred items are the **31 hook files** (enforce-plan-db-safe, secret-scanner, worktree-guard, session management) and the **76 remaining agent files**. These should be migrated as a dedicated plan once the W4 platform consolidation is complete.
+
+## Python → Rust Reduction Status
+
+Python reduction is effectively complete for legacy UI surfaces:
+
+- `scripts/mesh/dashboard_textual/` stayed excluded because the Rust TUI in
+  `daemon/src/tui/` replaces it.
+- `scripts/mesh/dashboard_web/` stayed excluded because `dashboard/` replaces it.
+
+What still depends on Python is the local ML/runtime toolchain rather than the
+core platform:
+
+- `daemon/src/ipc/models/apple_fm.rs` uses `python -m mlx_lm generate`.
+- `daemon/src/kernel/tts.rs` uses `mlx_audio` via Python subprocesses.
+- `daemon/src/server/api_node_readiness_checks.rs` and provisioning scripts
+  still verify Python/venv/MLX readiness.
+- Several shell scripts still call `python3` for JSON parsing or bootstrap.
+
+Practical next migration targets, if full Python minimization is desired, are:
+
+1. Replace the MLX inference bridge with a Rust-native inference adapter.
+2. Replace the Python TTS bridge with a Rust-native speech path.
+3. Gradually remove script-level `python3` JSON helpers where daemon APIs or
+   native shell tooling are sufficient.

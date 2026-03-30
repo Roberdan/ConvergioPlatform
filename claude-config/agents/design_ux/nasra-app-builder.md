@@ -77,6 +77,12 @@ Composition: list+filter → `filterable-table`, list+detail → `crud-entity`, 
 
 ## Non-Negotiable Rules
 
+Before any UI integration or remediation task, read and follow
+`claude-config/reference/operational/ds-integration-playbook.md`.
+This playbook is the source of truth for imperative DS mounting,
+`useRef + useEffect + dynamic import + cleanup`, and the React pitfalls that
+must be avoided when integrating Convergio Design System components.
+
 | Rule | Detail |
 |------|--------|
 | Tokens | ONLY semantic (`--mn-text`, `--mn-surface`, `--mn-accent`). NEVER primitives |

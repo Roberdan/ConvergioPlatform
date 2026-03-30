@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Kernel outbound Telegram notifications: text (sendMessage) + voice (sendVoice OGG).
 // Builds on channels/telegram.rs adapter — reuses TelegramAdapter::new_with_base_url.
-// Config from ENV ONLY: CONVERGIO_TELEGRAM_TOKEN, CONVERGIO_TELEGRAM_CHAT_ID.
+// Config prefers CONVERGIO_TELEGRAM_* with TELEGRAM_* legacy aliases supported.
 
 use crate::channels::telegram::TelegramAdapter;
 use crate::channels::ChannelAdapter;
@@ -194,19 +194,13 @@ pub async fn communicate(
 
     let mode = NotifyMode::from_env();
     let quiet = QuietHoursConfig::from_env().map(|q| q.is_active_now()).unwrap_or(false);
-    let token = match std::env::var("CONVERGIO_TELEGRAM_TOKEN") {
-        Ok(v) => Some(v),
-        Err(_) => None,
-    };
-    let chat_id: Option<i64> = match std::env::var("CONVERGIO_TELEGRAM_CHAT_ID") {
-        Ok(v) => match v.parse() {
-            Ok(id) => Some(id),
-            Err(e) => {
-                warn!("jarvis.telegram: CONVERGIO_TELEGRAM_CHAT_ID parse error: {e}");
-                None
-            }
-        },
-        Err(_) => None,
+    let token = crate::telegram_config::telegram_token();
+    let chat_id: Option<i64> = match crate::telegram_config::telegram_chat_id() {
+        Ok(value) => value,
+        Err(e) => {
+            warn!("jarvis.telegram: Telegram chat id parse error: {e}");
+            None
+        }
     };
 
     let use_telegram = matches!(mode, NotifyMode::Telegram | NotifyMode::Both)
@@ -227,7 +221,7 @@ pub async fn communicate(
                 }
             }
             _ => warn!(
-                "jarvis.telegram: CONVERGIO_TELEGRAM_TOKEN or CONVERGIO_TELEGRAM_CHAT_ID not set"
+                "jarvis.telegram: Telegram credentials not set (need CONVERGIO_TELEGRAM_* or TELEGRAM_*)"
             ),
         }
     }

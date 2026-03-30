@@ -10,6 +10,7 @@ use tracing::{info, warn};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 const READINESS_INTERVAL: Duration = Duration::from_secs(300);
+const MEMORY_MAINTENANCE_INTERVAL: Duration = Duration::from_secs(6 * 3600);
 pub const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 const STALL_SECS: u64 = 300;
 const RATE_LIMIT_WARN: u64 = 3;
@@ -236,6 +237,7 @@ pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorCo
     tokio::spawn(async move {
         info!("jarvis.monitor: started (poll every {}s)", POLL_INTERVAL.as_secs());
         let mut last_readiness_check: Option<Instant> = None;
+        let mut last_memory_maintenance: Option<Instant> = None;
         loop { // UNBOUNDED: event loop
             tokio::time::sleep(POLL_INTERVAL).await;
             run_and_store_cycle(&pool, &config).await;
@@ -245,6 +247,22 @@ pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorCo
                 info!("jarvis.monitor: running node readiness check on {} peers", config.peer_urls.len());
                 for peer_url in &config.peer_urls { check_peer_readiness(&pool, peer_url).await; }
                 last_readiness_check = Some(Instant::now());
+            }
+            let should_maintain_memory = last_memory_maintenance
+                .map(|t| t.elapsed() >= MEMORY_MAINTENANCE_INTERVAL)
+                .unwrap_or(true);
+            if should_maintain_memory {
+                let summaries = crate::server::api_memory_mgmt_gc::garbage_collect_all_projects();
+                let changed = summaries
+                    .iter()
+                    .map(|(_, result)| result.total_changed())
+                    .sum::<usize>();
+                info!(
+                    projects = summaries.len(),
+                    changed,
+                    "jarvis.monitor: completed automatic memory maintenance"
+                );
+                last_memory_maintenance = Some(Instant::now());
             }
         }
     });

@@ -5,8 +5,7 @@ set -euo pipefail
 # memory-save.sh - Create structured memory files for cross-session continuity
 # Usage: memory-save.sh <project-name> "short description"
 
-MEMORY_DIR="$HOME/.claude/memory"
-ARCHIVE_DIR="$MEMORY_DIR/.archive"
+MEMORY_DIR="$HOME/.claude/projects"
 
 usage() {
 	echo "Usage: memory-save.sh <project-name> \"short description\""
@@ -26,7 +25,7 @@ case "$cmd" in
 list)
 	project="${2:-}"
 	if [[ -n "$project" ]]; then
-		target="$MEMORY_DIR/$project"
+		target="$MEMORY_DIR/$project/memory"
 		[[ -d "$target" ]] || {
 			echo "No memory files for $project"
 			exit 0
@@ -36,16 +35,17 @@ list)
 		for dir in "$MEMORY_DIR"/*/; do
 			[[ -d "$dir" ]] || continue
 			name=$(basename "$dir")
-			[[ "$name" == ".archive" ]] && continue
-			count=$(find "$dir" -name "*.md" 2>/dev/null | /usr/bin/wc -l | tr -d ' ')
-			latest=$(ls -1t "$dir"/*.md 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "none")
+			target="$dir/memory"
+			[[ -d "$target" ]] || continue
+			count=$(find "$target" -name "*.md" -not -name "MEMORY.md" 2>/dev/null | /usr/bin/wc -l | tr -d ' ')
+			latest=$(ls -1t "$target"/*.md 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "none")
 			echo "$name ($count files, latest: $latest)"
 		done
 	fi
 	;;
 latest)
 	project="${2:?Missing project name}"
-	target="$MEMORY_DIR/$project"
+	target="$MEMORY_DIR/$project/memory"
 	[[ -d "$target" ]] || {
 		echo "No memory files for $project"
 		exit 1
@@ -54,15 +54,16 @@ latest)
 	;;
 archive)
 	days="${2:-90}"
-	mkdir -p "$ARCHIVE_DIR"
 	found=0
 	while IFS= read -r -d '' file; do
-		rel=$(basename "$(dirname "$file")")/$(basename "$file")
-		mkdir -p "$ARCHIVE_DIR/$(basename "$(dirname "$file")")"
-		mv "$file" "$ARCHIVE_DIR/$rel"
-		echo "Archived: $rel"
+		project_dir=$(dirname "$(dirname "$file")")
+		project_name=$(basename "$project_dir")
+		archive_dir="$project_dir/memory/.archived"
+		mkdir -p "$archive_dir"
+		mv "$file" "$archive_dir/$(basename "$file")"
+		echo "Archived: $project_name/$(basename "$file")"
 		((found++))
-	done < <(find "$MEMORY_DIR" -name "*.md" -mtime +"$days" -not -path "*/.archive/*" -print0 2>/dev/null)
+	done < <(find "$MEMORY_DIR" -path "*/memory/*.md" -mtime +"$days" -not -name "MEMORY.md" -not -path "*/.archived/*" -print0 2>/dev/null)
 	echo "Archived $found files older than $days days"
 	;;
 *)
@@ -74,7 +75,7 @@ archive)
 	date_str=$(date +%Y-%m-%d)
 	time_str=$(date +%H:%M)
 	timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-	target_dir="$MEMORY_DIR/$project"
+	target_dir="$MEMORY_DIR/$project/memory"
 	target_file="$target_dir/${date_str}-${slug}.md"
 
 	mkdir -p "$target_dir"

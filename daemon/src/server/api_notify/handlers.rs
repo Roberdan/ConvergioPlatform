@@ -1,8 +1,12 @@
+use super::metrics;
 use crate::server::state::{query_rows, ApiError, ServerState};
+use crate::server::telemetry;
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde_json::{json, Value};
+use crate::resilience::notify::{dispatch, ChannelResult, NotifyMessage, NotifySeverity};
+use crate::resilience::notify_config::NotificationSettings;
 
 pub fn router() -> Router<ServerState> {
     Router::new()
@@ -29,9 +33,11 @@ pub async fn handle_notify(
         .unwrap_or("info");
     let plan_id = body.get("plan_id").and_then(Value::as_i64);
     let link = body.get("link").and_then(Value::as_str);
+    let trace_id = telemetry::current_request_id()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
     // DB insert must complete before any .await (rusqlite::Connection is !Send)
-    let (notif_id, native_ok) = {
+    let notif_id = {
         let conn = state.get_conn()?;
         conn.execute(
             "INSERT INTO notification_queue (severity, title, message, plan_id, link, status) \
@@ -43,38 +49,33 @@ pub async fn handle_notify(
         let nid: i64 = conn
             .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
             .map_err(|e| ApiError::internal(format!("rowid failed: {e}")))?;
-
-        let native = try_native_notify(title, message, severity);
-        (nid, native)
+        nid
     };
 
-    // Attempt ntfy.sh push notification (requires .await)
-    let ntfy_cfg = super::ntfy::load_config();
-    let ntfy_result = super::ntfy::send(&ntfy_cfg, title, message, severity).await;
-    let ntfy_ok = match &ntfy_result {
-        Ok(delivered) => *delivered,
-        Err(e) => {
-            tracing::error!(channel = "ntfy", error = %e, "notification delivery failed");
-            false
+    let settings = NotificationSettings::load();
+    let notify_message = NotifyMessage {
+        title: title.to_string(),
+        message: message.to_string(),
+        severity: parse_notify_severity(severity),
+    };
+    let mut configured_channels = Vec::new();
+    let mut channel_results: Vec<ChannelResult> = Vec::new();
+    for channel_name in ["macos", "ntfy", "telegram"] {
+        match settings.channel_config(channel_name) {
+            Ok(Some(channel)) => configured_channels.push(channel),
+            Ok(None) => {}
+            Err(error) => channel_results.push(ChannelResult {
+                channel: channel_name.to_string(),
+                success: false,
+                error: Some(error),
+                duration_ms: 0,
+            }),
         }
-    };
+    }
+    channel_results.extend(dispatch(&configured_channels, &notify_message).await);
 
-    let delivered = native_ok || ntfy_ok;
-
-    // Build per-channel status report
-    let mut channels_status = vec![];
-    channels_status.push(json!({
-        "channel": "native",
-        "success": native_ok,
-        "error": if native_ok { None } else { Some("terminal-notifier failed or unavailable") },
-    }));
-    channels_status.push(match &ntfy_result {
-        Ok(true) => json!({"channel": "ntfy", "success": true, "error": null}),
-        Ok(false) => json!({"channel": "ntfy", "success": false, "error": "ntfy disabled"}),
-        Err(e) => json!({"channel": "ntfy", "success": false, "error": e.to_string()}),
-    });
-
-    // Mark as delivered if any channel succeeded
+    // Mark as delivered if any channel succeeded.
+    let delivered = channel_results.iter().any(|result| result.success);
     if delivered {
         let conn = state.get_conn()?;
         conn.execute(
@@ -86,24 +87,56 @@ pub async fn handle_notify(
     }
 
     // Broadcast via WebSocket for real-time dashboard updates
-    if let Err(e) = state.ws_tx.send(json!({
+    let dashboard_ok = state.ws_tx.send(json!({
         "type": "notification",
         "id": notif_id,
         "severity": severity,
         "title": title,
         "message": message,
-    })) {
-        tracing::debug!("ws notification broadcast: {e}");
+    })).is_ok();
+    if settings.dashboard_enabled {
+        channel_results.push(ChannelResult {
+            channel: "dashboard".to_string(),
+            success: dashboard_ok,
+            error: if dashboard_ok {
+                None
+            } else {
+                Some("websocket broadcast failed".to_string())
+            },
+            duration_ms: 0,
+        });
+    }
+    {
+        let conn = state.get_conn()?;
+        metrics::record_delivery_attempts(&conn, notif_id, &trace_id, &channel_results)?;
     }
 
-    let any_failed = channels_status.iter().any(|c| c["success"] == false);
+    let channels_status = channel_results
+        .iter()
+        .map(|result| json!({
+            "channel": result.channel,
+            "success": result.success,
+            "error": result.error,
+            "duration_ms": result.duration_ms,
+        }))
+        .collect::<Vec<_>>();
+    let any_failed = channel_results.iter().any(|result| !result.success);
     Ok(Json(json!({
         "ok": delivered,
         "id": notif_id,
+        "trace_id": trace_id,
         "status": if delivered { "delivered" } else { "pending" },
         "channels": channels_status,
         "partial_failure": delivered && any_failed,
     })))
+}
+
+fn parse_notify_severity(raw: &str) -> NotifySeverity {
+    match raw {
+        "critical" | "error" => NotifySeverity::Critical,
+        "warning" => NotifySeverity::Warning,
+        _ => NotifySeverity::Info,
+    }
 }
 
 /// GET /api/notify/queue — list pending notifications
@@ -164,53 +197,4 @@ pub async fn handle_deliver(
         "delivered": delivered,
         "errors": errors,
     })))
-}
-
-/// Try to send a native OS notification — daemon-native only (no osascript).
-pub fn try_native_notify(title: &str, message: &str, severity: &str) -> bool {
-    let icon = match severity {
-        "error" => "❌",
-        "warning" => "⚠️",
-        "success" => "✅",
-        _ => "ℹ️",
-    };
-    let full_title = format!("{icon} {title}");
-
-    #[cfg(target_os = "macos")]
-    {
-        match std::process::Command::new("terminal-notifier")
-            .args(["-title", &full_title, "-message", message, "-group", "claude-core"])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
-            Ok(_) => true,
-            Err(e) => {
-                tracing::error!(channel = "native", error = %e, "terminal-notifier failed");
-                false
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        match std::process::Command::new("notify-send")
-            .args([&full_title, message])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
-            Ok(_) => true,
-            Err(e) => {
-                tracing::error!(channel = "native", error = %e, "notify-send failed");
-                false
-            }
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        tracing::error!(channel = "native", "no native notification tool available");
-        false
-    }
 }

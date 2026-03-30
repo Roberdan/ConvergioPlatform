@@ -190,6 +190,7 @@ fn cost_summary(daemon_url: &str, token: Option<&str>) -> Result<Value, McpError
         .filter(|p| p.get("status").and_then(|s| s.as_str()) == Some("doing"))
         .count();
     // Include API telemetry metrics (best-effort; omit on failure)
+    // intentional: telemetry is additive for MCP output and must not fail the tool.
     let api_metrics = http_get(&format!("{daemon_url}/api/telemetry"), token).ok();
     Ok(json!({
         "total_cost": total_cost,

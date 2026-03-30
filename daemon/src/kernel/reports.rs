@@ -107,19 +107,13 @@ pub fn format_weekly_report(
 // ----- Internal send helper --------------------------------------------------
 
 async fn send_report(text: &str) {
-    let token = match std::env::var("CONVERGIO_TELEGRAM_TOKEN") {
-        Ok(v) => Some(v),
-        Err(_) => None,
-    };
-    let chat_id: Option<i64> = match std::env::var("CONVERGIO_TELEGRAM_CHAT_ID") {
-        Ok(v) => match v.parse() {
-            Ok(id) => Some(id),
-            Err(e) => {
-                warn!("kernel.reports: CONVERGIO_TELEGRAM_CHAT_ID parse error: {e}");
-                None
-            }
-        },
-        Err(_) => None,
+    let token = crate::telegram_config::telegram_token();
+    let chat_id: Option<i64> = match crate::telegram_config::telegram_chat_id() {
+        Ok(value) => value,
+        Err(e) => {
+            warn!("kernel.reports: Telegram chat id parse error: {e}");
+            None
+        }
     };
 
     match (token.as_deref(), chat_id) {
@@ -130,7 +124,9 @@ async fn send_report(text: &str) {
                 info!("kernel.reports: sent — {}", &text[..text.len().min(60)]);
             }
         }
-        _ => warn!("kernel.reports: CONVERGIO_TELEGRAM_TOKEN or CHAT_ID not set — skipped"),
+        _ => warn!(
+            "kernel.reports: Telegram credentials not set (need CONVERGIO_TELEGRAM_* or TELEGRAM_*)"
+        ),
     }
 }
 

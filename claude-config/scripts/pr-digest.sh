@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/digest-cache.sh"
+DAEMON_API="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
 # Resolve owner/repo from origin remote (handles forks correctly)
 _OWNER="" _REPO="" _SLUG=""
@@ -44,6 +45,16 @@ for arg in "$@"; do
 	[[ "$arg" == "--compact" ]] && continue
 	[[ -z "$PR_NUM" ]] && PR_NUM="$arg"
 done
+
+if [[ "${DIGEST_API_BYPASS:-0}" != "1" ]] && curl -sf "${DAEMON_API}/api/health" >/dev/null 2>&1; then
+	CURL_ARGS=(-sfG "${DAEMON_API}/api/digest/pr" --data-urlencode "cwd=${PWD}")
+	[[ "$COMPACT" -eq 1 ]] && CURL_ARGS+=(--data-urlencode "compact=true")
+	[[ "$NO_CACHE" -eq 1 ]] && CURL_ARGS+=(--data-urlencode "no_cache=true")
+	[[ -n "$PR_NUM" ]] && CURL_ARGS+=(--data-urlencode "pr=${PR_NUM}")
+	if curl "${CURL_ARGS[@]}" 2>/dev/null; then
+		exit 0
+	fi
+fi
 
 # Resolve PR number from current branch if not provided
 # Use REST API instead of gh pr list (GraphQL has numbering issues on forks)

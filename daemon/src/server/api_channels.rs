@@ -1,5 +1,5 @@
 // Channel API endpoints: list channels, send message, health check.
-// Config-driven: ntfy always present, telegram if CONVERGIO_TELEGRAM_TOKEN set.
+// Config-driven: ntfy always present, telegram if Telegram credentials are configured.
 
 use super::state::{ApiError, ServerState};
 use axum::extract::{Path, State};
@@ -16,23 +16,17 @@ pub fn router() -> Router<ServerState> {
 
 /// Known channel names based on config and environment.
 fn available_channels() -> Vec<ChannelInfo> {
-    let mut channels = vec![ChannelInfo {
-        name: "ntfy".to_string(),
-        connected: true,
-        last_message_at: None,
-        error_count: 0,
-    }];
-
-    if std::env::var("CONVERGIO_TELEGRAM_TOKEN").is_ok() {
-        channels.push(ChannelInfo {
-            name: "telegram".to_string(),
+    crate::resilience::notify_config::NotificationSettings::load()
+        .enabled_channel_names()
+        .into_iter()
+        .filter(|name| *name != "dashboard")
+        .map(|name| ChannelInfo {
+            name: name.to_string(),
             connected: false,
             last_message_at: None,
             error_count: 0,
-        });
-    }
-
-    channels
+        })
+        .collect()
 }
 
 fn is_known_channel(name: &str) -> bool {
@@ -94,14 +88,35 @@ async fn send_message(
     let delivered = match name.as_str() {
         "ntfy" => {
             let cfg = super::api_notify::ntfy::load_config();
-            match super::api_notify::ntfy::send(&cfg, "Convergio", message, severity).await {
-                Ok(d) => d,
-                Err(e) => {
+            super::api_notify::ntfy::send(&cfg, "Convergio", message, severity)
+                .await
+                .unwrap_or_else(|e| {
                     tracing::warn!("ntfy send failed: {e}");
                     false
-                }
-            }
+                })
         }
+        "telegram" | "macos" => match crate::resilience::notify_config::NotificationSettings::load()
+            .channel_config(name.as_str())
+        {
+            Ok(Some(channel)) => {
+                let severity = severity.parse().unwrap_or(crate::resilience::notify::NotifySeverity::Info);
+                let results = crate::resilience::notify::dispatch(
+                    &[channel],
+                    &crate::resilience::notify::NotifyMessage {
+                        title: "Convergio".to_string(),
+                        message: message.to_string(),
+                        severity,
+                    },
+                )
+                .await;
+                results.first().map(|result| result.success).unwrap_or(false)
+            }
+            Ok(None) => false,
+            Err(error) => {
+                tracing::warn!(channel = %name, %error, "channel misconfigured");
+                false
+            }
+        },
         _ => false,
     };
 

@@ -141,7 +141,8 @@ impl From<String> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let request_id = Uuid::new_v4().to_string();
+        let request_id = crate::server::telemetry::current_request_id()
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
         let timestamp = Utc::now().to_rfc3339();
         (
             self.status,

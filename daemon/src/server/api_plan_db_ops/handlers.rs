@@ -14,6 +14,7 @@ pub fn canonicalize_project_path(raw: &str) -> Option<String> {
         return None;
     }
     std::fs::canonicalize(raw)
+        // intentional: nonexistent paths preserve the raw value for backward compatibility.
         .ok()
         .and_then(|p| p.into_os_string().into_string().ok())
 }
@@ -150,4 +151,3 @@ pub async fn handle_wave_update(
         "status": status,
     })))
 }
-

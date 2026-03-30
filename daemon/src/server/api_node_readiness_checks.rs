@@ -101,9 +101,14 @@ pub(super) fn check_db_symlink(db: &std::path::Path) -> Check {
 }
 
 pub(super) fn check_telegram_token() -> Check {
-    if std::env::var("CONVERGIO_TELEGRAM_TOKEN").map(|v| !v.is_empty()).unwrap_or(false) {
+    if crate::telegram_config::telegram_token().is_some() {
         Check::pass("telegram_token", "token configured")
-    } else { Check::fail("telegram_token", "CONVERGIO_TELEGRAM_TOKEN not set") }
+    } else {
+        Check::fail(
+            "telegram_token",
+            "Telegram token not set (need CONVERGIO_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN)",
+        )
+    }
 }
 
 pub(super) fn check_disk_space(path: &str) -> Check {
@@ -182,8 +187,8 @@ pub(super) fn check_role_capabilities() -> Check {
         Err(_) => false,
     };
     if !has_mistral { missing.push("mistral model"); }
-    if !std::env::var("CONVERGIO_TELEGRAM_TOKEN").map(|v| !v.is_empty()).unwrap_or(false) {
-        missing.push("CONVERGIO_TELEGRAM_TOKEN");
+    if crate::telegram_config::telegram_token().is_none() {
+        missing.push("CONVERGIO_TELEGRAM_TOKEN/TELEGRAM_BOT_TOKEN");
     }
     if missing.is_empty() {
         Check::pass("role_capabilities", format!("role={role} — all required capabilities present"))

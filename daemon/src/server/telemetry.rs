@@ -3,6 +3,7 @@
 // WHY: Observability across all API handlers for health classification + MCP.
 
 use axum::body::Body;
+use axum::http::header::HeaderName;
 use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -11,6 +12,13 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 use std::time::Instant;
+use uuid::Uuid;
+
+tokio::task_local! {
+    static REQUEST_TRACE_ID: String;
+}
+
+pub const REQUEST_ID_HEADER: &str = "x-request-id";
 
 /// Global request counter (total requests served since daemon start).
 static TOTAL_REQUESTS: AtomicU64 = AtomicU64::new(0);
@@ -122,6 +130,10 @@ pub fn snapshot() -> Value {
     })
 }
 
+pub fn current_request_id() -> Option<String> {
+    REQUEST_TRACE_ID.try_with(Clone::clone).ok()
+}
+
 /// Reset all counters (useful for testing).
 pub fn reset() {
     TOTAL_REQUESTS.store(0, Ordering::Relaxed);
@@ -132,12 +144,28 @@ pub fn reset() {
 }
 
 /// Axum middleware: records request count and response time for every request.
-pub async fn telemetry_layer(req: Request<Body>, next: Next) -> Response {
+pub async fn telemetry_layer(mut req: Request<Body>, next: Next) -> Response {
     let path = req.uri().path().to_string();
+    let request_id = req
+        .headers()
+        .get(REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    req.extensions_mut().insert(request_id.clone());
     let start = Instant::now();
-    let response = next.run(req).await;
+    let mut response = REQUEST_TRACE_ID
+        .scope(request_id.clone(), async move { next.run(req).await })
+        .await;
     let duration_ms = start.elapsed().as_millis() as u64;
     let is_error = response.status().is_client_error() || response.status().is_server_error();
+    if let Ok(header_value) = request_id.parse() {
+        response.headers_mut().insert(
+            HeaderName::from_static(REQUEST_ID_HEADER),
+            header_value,
+        );
+    }
     record_request(&path, duration_ms, is_error);
     response
 }

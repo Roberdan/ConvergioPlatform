@@ -28,6 +28,16 @@ CREATE TABLE IF NOT EXISTS agent_activity (
   id INTEGER PRIMARY KEY, agent_id TEXT UNIQUE, action TEXT, status TEXT
 );
 CREATE TABLE IF NOT EXISTS peer_heartbeats (id INTEGER PRIMARY KEY, peer TEXT);
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+  id INTEGER PRIMARY KEY,
+  notification_id INTEGER NOT NULL,
+  trace_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  success INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 ";
 
 async fn body_json(body: Body) -> Value {
@@ -53,6 +63,8 @@ async fn telemetry_returns_ok_shape() {
     assert!(json["total_errors"].is_number());
     assert!(json["error_rate"].is_number());
     assert!(json["endpoints"].is_array());
+    assert!(json["notification_delivery"].is_object());
+    assert!(json["notification_delivery"]["channels"].is_array());
 }
 
 #[tokio::test]
@@ -83,4 +95,21 @@ async fn telemetry_tracks_requests() {
     let total = json["total_requests"].as_u64().unwrap_or(0);
     // At least the /api/health + /api/telemetry requests should be counted
     assert!(total >= 1, "expected at least 1 request, got {total}");
+}
+
+#[tokio::test]
+async fn telemetry_echoes_request_id_and_notification_summary() {
+    let app = test_router();
+    let req = Request::builder()
+        .uri("/api/telemetry")
+        .header("x-request-id", "req-test-123")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let header = resp
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok());
+    assert_eq!(header, Some("req-test-123"));
 }

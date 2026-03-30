@@ -23,6 +23,7 @@ pub mod resilience;
 pub mod security;
 pub mod server;
 pub mod tui;
+pub mod telegram_config;
 pub mod validation;
 #[cfg(feature = "voice")]
 pub mod voice;

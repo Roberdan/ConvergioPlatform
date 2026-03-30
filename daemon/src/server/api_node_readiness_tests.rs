@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 //! Tests for GET /api/node/readiness — node-level readiness checks.
 
-use super::{run_checks, Check, NodeReadinessResponse};
+use super::{run_checks, summarize_for_boot, Check, NodeReadinessResponse};
 
 fn find_check<'a>(checks: &'a [Check], name: &str) -> &'a Check {
     checks.iter().find(|c| c.name == name).unwrap_or_else(|| {
@@ -99,4 +99,36 @@ fn ok_field_is_true_when_all_checks_pass() {
     ];
     let ok = checks.iter().all(|c| c.passed);
     assert!(ok, "ok should be true when all checks pass");
+}
+
+#[test]
+fn boot_summary_treats_disk_space_as_blocking() {
+    let summary = summarize_for_boot(&[Check {
+        name: "disk_space".into(),
+        passed: false,
+        detail: "0.5 GB free".into(),
+    }]);
+    assert_eq!(summary.blocking_failures.len(), 1);
+    assert!(summary.warning_failures.is_empty());
+}
+
+#[test]
+fn boot_summary_treats_missing_db_as_warning() {
+    let summary = summarize_for_boot(&[Check {
+        name: "db_exists".into(),
+        passed: false,
+        detail: "not found: /tmp/dashboard.db".into(),
+    }]);
+    assert!(summary.blocking_failures.is_empty());
+    assert_eq!(summary.warning_failures.len(), 1);
+}
+
+#[test]
+fn boot_summary_treats_corrupt_db_as_blocking() {
+    let summary = summarize_for_boot(&[Check {
+        name: "db_exists".into(),
+        passed: false,
+        detail: "PRAGMA integrity_check failed: error".into(),
+    }]);
+    assert_eq!(summary.blocking_failures.len(), 1);
 }

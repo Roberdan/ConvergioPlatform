@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // Health and telemetry endpoints extracted from routes/mod.rs (250-line limit).
 
+use super::super::api_notify::metrics as notify_metrics;
 use super::super::state::ServerState;
 use super::super::telemetry;
 use axum::extract::State;
@@ -42,6 +43,7 @@ pub async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Va
             let aa_ok = conn.prepare("SELECT 1 FROM agent_activity LIMIT 0").is_ok();
             let peers =
                 super::super::state::query_one(&conn, "SELECT COUNT(*) AS c FROM peer_heartbeats", [])
+                    // intentional: health endpoint remains available even when peer count query fails.
                     .ok()
                     .flatten()
                     .and_then(|v| v.get("c").and_then(serde_json::Value::as_i64))
@@ -64,6 +66,32 @@ pub async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Va
 }
 
 /// GET /api/telemetry — live request metrics (counters, histograms, error rates).
-pub async fn api_telemetry() -> Json<serde_json::Value> {
-    Json(telemetry::snapshot())
+pub async fn api_telemetry(State(state): State<ServerState>) -> Json<serde_json::Value> {
+    let mut snapshot = telemetry::snapshot();
+    let notification_delivery = match state.get_conn() {
+        Ok(conn) => notify_metrics::telemetry_summary(&conn).unwrap_or_else(|error| {
+            tracing::warn!("telemetry notification summary failed: {error}");
+            serde_json::json!({
+                "total_attempts": 0,
+                "successful_attempts": 0,
+                "failed_attempts": 0,
+                "trace_count": 0,
+                "avg_duration_ms": 0,
+                "channels": [],
+            })
+        }),
+        Err(error) => {
+            tracing::warn!("telemetry connection unavailable: {error}");
+            serde_json::json!({
+                "total_attempts": 0,
+                "successful_attempts": 0,
+                "failed_attempts": 0,
+                "trace_count": 0,
+                "avg_duration_ms": 0,
+                "channels": [],
+            })
+        }
+    };
+    snapshot["notification_delivery"] = notification_delivery;
+    Json(snapshot)
 }

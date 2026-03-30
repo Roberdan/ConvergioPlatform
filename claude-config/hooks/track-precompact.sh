@@ -24,15 +24,14 @@ if [ -n "$ACTIVE_PLAN" ]; then
   # Checkpoint plan state
   cvg checkpoint save "$ACTIVE_PLAN" 2>/dev/null || true
 
-  # Spawn copilot continuation as new tab in Convergio tmux session
-  if tmux has-session -t Convergio 2>/dev/null; then
-    tmux new-window -t Convergio -n "plan-${ACTIVE_PLAN}" \
-      "sleep 10 && ${SCRIPTS}/copilot-plan-runner.sh ${ACTIVE_PLAN}" \
-      2>/dev/null || true
-  else
-    tmux new-session -d -s Convergio -n "plan-${ACTIVE_PLAN}" \
-      "sleep 10 && ${SCRIPTS}/copilot-plan-runner.sh ${ACTIVE_PLAN}" \
-      2>/dev/null || true
-  fi
+  curl -sf -X POST "$CVG_URL/api/delegate/spawn" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -n \
+      --arg session "Convergio" \
+      --arg window "plan-${ACTIVE_PLAN}" \
+      --arg cwd "$PWD" \
+      --arg command "sleep 10 && ${SCRIPTS}/copilot-plan-runner.sh ${ACTIVE_PLAN}" \
+      '{peer:"local",tmux_session:$session,tmux_window:$window,cwd:$cwd,command:$command}')" \
+    >/dev/null 2>&1 || true
 fi
 exit 0

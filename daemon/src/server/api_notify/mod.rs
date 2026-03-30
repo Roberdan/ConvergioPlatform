@@ -1,4 +1,5 @@
 mod handlers;
+pub mod metrics;
 pub mod ntfy;
 pub use handlers::router;
 

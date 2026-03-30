@@ -198,10 +198,10 @@ case "${ROLE}" in
       && ok "Model files: found" \
       || warn "No .safetensors model files detected under ~/.cache/huggingface or ~/models"
 
-    # Check Telegram bot token is set (required for kernel→user notifications)
-    _ssh "[ -n \"\${TELEGRAM_BOT_TOKEN:-}\" ] || grep -qr 'TELEGRAM_BOT_TOKEN' \"\$HOME/.zshenv\" \"\$HOME/.zprofile\" \"\$HOME/.profile\" 2>/dev/null" \
-      && ok "TELEGRAM_BOT_TOKEN: configured" \
-      || warn "TELEGRAM_BOT_TOKEN not set — kernel notifications via Telegram will be unavailable"
+    # Check Telegram bot token is set (canonical CONVERGIO_* names, legacy TELEGRAM_* accepted)
+    _ssh "[ -n \"\${CONVERGIO_TELEGRAM_TOKEN:-}\" ] || [ -n \"\${TELEGRAM_BOT_TOKEN:-}\" ] || grep -qr 'CONVERGIO_TELEGRAM_TOKEN\\|TELEGRAM_BOT_TOKEN' \"\$HOME/.zshenv\" \"\$HOME/.zprofile\" \"\$HOME/.profile\" 2>/dev/null" \
+      && ok "Telegram token: configured" \
+      || warn "Telegram token not set — kernel notifications via Telegram will be unavailable"
     ;;
 
   executor)

@@ -7,7 +7,7 @@
 
 use crate::kernel::engine::{KernelAction, KernelEngine};
 use crate::kernel::verify_checks::{
-    build_situation_string, git_head_sha, run_cargo_check, run_cargo_test,
+    build_situation_string, evidence_cache_key, run_cargo_check, run_cargo_test,
     run_git_clean, run_npm_check, run_npm_test, EVIDENCE_CACHE, EVIDENCE_MUTEX,
 };
 use rusqlite::Connection;
@@ -79,11 +79,11 @@ pub fn check_evidence(
     // Serialize: only 1 evidence check at a time to prevent resource exhaustion.
     let _guard = EVIDENCE_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
-    // SHA cache: skip expensive build/test if git HEAD unchanged (5min TTL).
-    let head_sha = git_head_sha(worktree);
-    if let Some(ref sha) = head_sha {
-        if let Some(cached_passed) = EVIDENCE_CACHE.get(sha) {
-            info!(task_id, sha, "kernel verify: cache hit, skipping checks");
+    // Cache by worktree fingerprint: HEAD + git status + declared outputs.
+    let cache_key = evidence_cache_key(worktree, output_files);
+    if let Some(ref key) = cache_key {
+        if let Some(cached_passed) = EVIDENCE_CACHE.get(key) {
+            info!(task_id, cache_key = key, "kernel verify: cache hit, skipping checks");
             return build_cached_report(
                 conn, engine, task_id, status, cached_passed,
             );
@@ -132,8 +132,8 @@ pub fn check_evidence(
     let passed = checks.iter().all(|c| c.passed);
 
     // Update cache with result.
-    if let Some(ref sha) = head_sha {
-        EVIDENCE_CACHE.store(sha, passed);
+    if let Some(ref key) = cache_key {
+        EVIDENCE_CACHE.store(key, passed);
     }
 
     let report = finalize_report(conn, engine, task_id, status, checks, passed);
@@ -210,4 +210,3 @@ fn finalize_report(
 
     report
 }
-

@@ -39,6 +39,12 @@ pub struct NodeReadinessResponse {
     pub checks: Vec<Check>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BootReadinessSummary {
+    pub blocking_failures: Vec<String>,
+    pub warning_failures: Vec<String>,
+}
+
 fn default_db_path() -> std::path::PathBuf {
     std::env::var("DASHBOARD_DB").map(std::path::PathBuf::from).unwrap_or_else(|_| {
         std::path::PathBuf::from(format!("{}/.claude/data/dashboard.db", checks::home()))
@@ -64,6 +70,28 @@ fn build_checks(db: &std::path::Path) -> Vec<Check> {
 pub fn run_checks() -> Vec<Check> {
     let db = default_db_path();
     build_checks(&db)
+}
+
+pub fn summarize_for_boot(checks: &[Check]) -> BootReadinessSummary {
+    let mut blocking_failures = Vec::new();
+    let mut warning_failures = Vec::new();
+    for check in checks.iter().filter(|check| !check.passed) {
+        let detail = format!("{}: {}", check.name, check.detail);
+        if is_boot_blocking(check) {
+            blocking_failures.push(detail);
+        } else {
+            warning_failures.push(detail);
+        }
+    }
+    BootReadinessSummary { blocking_failures, warning_failures }
+}
+
+fn is_boot_blocking(check: &Check) -> bool {
+    match check.name.as_str() {
+        "disk_space" => true,
+        "db_exists" => !check.detail.starts_with("not found:"),
+        _ => false,
+    }
 }
 
 /// GET /api/node/readiness

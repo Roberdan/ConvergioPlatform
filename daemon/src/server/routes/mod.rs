@@ -8,6 +8,7 @@ pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROU
 use super::api_agent_catalog;
 use super::api_agent_triage;
 use super::api_agents;
+use super::api_build_exec;
 use super::api_audit;
 use super::api_capabilities;
 use super::api_channels;
@@ -17,6 +18,7 @@ use super::api_coordinator;
 use super::api_crdt;
 use super::api_sync;
 use super::api_dashboard;
+use super::api_digest;
 use super::api_deliverables;
 use super::api_domain;
 use super::api_evolution;
@@ -101,6 +103,8 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
 
     Router::new()
         .merge(api_dashboard::router())
+        .merge(api_digest::router())
+        .merge(api_build_exec::router())
         .merge(api_ideas::router())
         .merge(api_plans::router())
         .merge(api_agent_catalog::router())
@@ -222,4 +226,3 @@ async fn basic_rate_limit(
     }
     next.run(request).await
 }
-

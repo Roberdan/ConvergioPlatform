@@ -16,6 +16,7 @@ pub mod checkpoint;
 pub mod circuit_breaker;
 pub mod health;
 pub mod notify;
+pub mod notify_config;
 pub mod reaper;
 pub mod reaper_scan;
 pub mod retry;

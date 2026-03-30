@@ -37,7 +37,13 @@ async fn handle_exec(
         .unwrap_or(30);
 
     // Resolve peer through centralized resolver (B6 fix: SSH resolves from peers.conf)
-    let resolved = peer_resolver::resolve(peer).ok();
+    let resolved = match peer_resolver::resolve(peer) {
+        Ok(resolved) => Some(resolved),
+        Err(error) => {
+            tracing::warn!(peer, %error, "intentional: peer resolution failed, falling back to raw peer host");
+            None
+        }
+    };
     let connect_host = resolved
         .as_ref()
         .map(|r| r.tailscale_ip.clone())

@@ -3,6 +3,20 @@
 // WHY: "done" must be backed by evidence (build green, tests pass, files exist).
 
 use super::state::ApiError;
+use super::state::ServerState;
+use axum::{extract::State, Json};
+use serde_json::{json, Value};
+
+/// GET /api/evidence/clear — clear the in-memory evidence cache.
+pub(super) async fn handle_clear_evidence_cache(
+    State(_state): State<ServerState>,
+) -> Result<Json<Value>, ApiError> {
+    crate::kernel::verify_checks::EVIDENCE_CACHE.clear();
+    Ok(Json(json!({
+        "ok": true,
+        "cleared": true,
+    })))
+}
 
 /// Run the kernel evidence gate for a task status transition.
 /// Only active when the `kernel` feature is enabled and not in test mode.
@@ -14,7 +28,6 @@ pub(super) fn run_evidence_gate(
     status: &str,
 ) -> Result<(), ApiError> {
     use crate::kernel::{engine::{KernelConfig, KernelEngine}, verify};
-    use serde_json::{json, Value};
 
     let engine = KernelEngine::new(KernelConfig::default());
 
@@ -41,6 +54,7 @@ pub(super) fn run_evidence_gate(
     let artifact_strings: Vec<String> =
         output_data_str
             .as_deref()
+            // intentional: malformed JSON means no structured artifacts to inspect.
             .and_then(|s| serde_json::from_str::<Value>(s).ok())
             .and_then(|v| v.get("artifacts").cloned())
             .and_then(|a| {

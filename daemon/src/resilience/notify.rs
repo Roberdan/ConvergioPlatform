@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
+use std::time::Instant;
 
 /// Notification severity — controls priority in ntfy and Telegram subjects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,6 +143,7 @@ pub struct ChannelResult {
     pub channel: String,
     pub success: bool,
     pub error: Option<String>,
+    pub duration_ms: u64,
 }
 
 /// Dispatch to all configured channels; return per-channel results.
@@ -149,6 +151,7 @@ pub struct ChannelResult {
 pub async fn dispatch(channels: &[ChannelConfig], msg: &NotifyMessage) -> Vec<ChannelResult> {
     let mut results = Vec::with_capacity(channels.len());
     for ch in channels {
+        let started_at = Instant::now();
         let (channel_name, result) = match ch {
             ChannelConfig::Ntfy { topic, base_url } => {
                 ("ntfy".to_string(), NtfyChannel::new(topic, base_url).send(msg).await)
@@ -160,11 +163,13 @@ pub async fn dispatch(channels: &[ChannelConfig], msg: &NotifyMessage) -> Vec<Ch
                 ("macos".to_string(), MacOSChannel.send(msg).await)
             }
         };
+        let duration_ms = started_at.elapsed().as_millis() as u64;
         match result {
             Ok(()) => results.push(ChannelResult {
                 channel: channel_name,
                 success: true,
                 error: None,
+                duration_ms,
             }),
             Err(e) => {
                 tracing::error!(channel = %channel_name, error = %e, "notification delivery failed");
@@ -172,6 +177,7 @@ pub async fn dispatch(channels: &[ChannelConfig], msg: &NotifyMessage) -> Vec<Ch
                     channel: channel_name,
                     success: false,
                     error: Some(e),
+                    duration_ms,
                 });
             }
         }
@@ -189,6 +195,7 @@ mod tests {
             channel: "ntfy".to_string(),
             success: false,
             error: Some("connection refused".to_string()),
+            duration_ms: 10,
         };
         assert!(!r.success);
         assert_eq!(r.error.as_deref(), Some("connection refused"));
@@ -200,6 +207,7 @@ mod tests {
             channel: "telegram".to_string(),
             success: true,
             error: None,
+            duration_ms: 5,
         };
         assert!(r.success);
         assert!(r.error.is_none());
@@ -211,11 +219,13 @@ mod tests {
             channel: "ntfy".to_string(),
             success: false,
             error: Some("timeout".to_string()),
+            duration_ms: 42,
         };
         let json = serde_json::to_value(&r).unwrap();
         assert_eq!(json["channel"], "ntfy");
         assert_eq!(json["success"], false);
         assert_eq!(json["error"], "timeout");
+        assert_eq!(json["duration_ms"], 42);
     }
 
     #[tokio::test]
@@ -229,6 +239,7 @@ mod tests {
         let results = dispatch(&channels, &msg).await;
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].channel, "macos");
+        assert!(results[0].duration_ms <= u64::MAX);
         if !results[0].success {
             assert!(results[0].error.is_some(), "failed channel must include error details");
         }

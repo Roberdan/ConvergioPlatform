@@ -136,6 +136,7 @@ pub async fn api_plans_timeline(
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
+    // intentional: invalid days filter falls back to a 30-day default.
     let days = params
         .get("days")
         .and_then(|d| d.parse::<i64>().ok())

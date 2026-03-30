@@ -69,7 +69,9 @@ pub(crate) fn parse_frontmatter(content: &str) -> (Option<String>, Option<String
     (name, mem_type, desc)
 }
 
-fn read_memory_entries(dir: &std::path::Path) -> Result<Vec<(String, String, PathBuf)>, ApiError> {
+pub(crate) fn read_memory_entries(
+    dir: &std::path::Path,
+) -> Result<Vec<(String, String, PathBuf)>, ApiError> {
     let entries = fs::read_dir(dir)
         .map_err(|e| ApiError::internal(format!("read dir: {e}")))?;
     let mut result = Vec::new();
@@ -96,6 +98,7 @@ async fn list_memories(Query(qs): Query<MemoryQuery>) -> Result<Json<Value>, Api
     let mut memories = Vec::new();
     for (fname, content, path) in read_memory_entries(&dir)? {
         let (name, mem_type, description) = parse_frontmatter(&content);
+        // intentional: stats/listing endpoints degrade gracefully when file metadata is unavailable.
         let meta = fs::metadata(&path).ok();
         let modified = meta
             .as_ref()
@@ -155,43 +158,11 @@ async fn delete_memory(
 
 async fn garbage_collect(Query(qs): Query<MemoryQuery>) -> Result<Json<Value>, ApiError> {
     let dir = resolve_memory_dir(qs.slug.as_deref())?;
-    if !dir.exists() {
-        return Ok(Json(json!({"ok": true, "deleted": [], "archived": [], "kept": []})));
-    }
-    let git_log = std::process::Command::new("git")
-        .args(["log", "--oneline", "-100", "--all"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default();
-    let now = std::time::SystemTime::now();
-    let thirty_days = std::time::Duration::from_secs(30 * 24 * 3600);
-    let (mut deleted, mut archived, mut kept) = (Vec::new(), Vec::new(), Vec::new());
-
-    for (fname, content, path) in read_memory_entries(&dir)? {
-        let (name, mem_type, _) = parse_frontmatter(&content);
-        let is_old = fs::metadata(&path)
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .map_or(false, |m| {
-                now.duration_since(m).map_or(false, |age| age > thirty_days)
-            });
-        let ref_name = name.as_deref().unwrap_or(&fname);
-        let in_git = git_log.contains(ref_name);
-
-        if mem_type.as_deref() == Some("feedback") && in_git {
-            fs::remove_file(&path).ok();
-            deleted.push(fname);
-        } else if is_old && !in_git {
-            let archive_dir = dir.join(".archived");
-            fs::create_dir_all(&archive_dir).ok();
-            if fs::rename(&path, archive_dir.join(&fname)).is_ok() {
-                archived.push(fname);
-            } else {
-                kept.push(fname);
-            }
-        } else {
-            kept.push(fname);
-        }
-    }
-    Ok(Json(json!({"ok": true, "deleted": deleted, "archived": archived, "kept": kept})))
+    let result = super::api_memory_mgmt_gc::garbage_collect_dir(&dir);
+    Ok(Json(json!({
+        "ok": true,
+        "deleted": result.deleted,
+        "archived": result.archived,
+        "kept": result.kept
+    })))
 }

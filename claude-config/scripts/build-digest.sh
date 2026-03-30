@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/digest-cache.sh"
+DAEMON_API="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
 CACHE_TTL=30
 NO_CACHE=0
@@ -18,6 +19,26 @@ for arg in "$@"; do
 	--compact) COMPACT=1 ;;
 	esac
 done
+
+if [[ "${DIGEST_API_BYPASS:-0}" != "1" ]] && curl -sf "${DAEMON_API}/api/health" >/dev/null 2>&1; then
+	CURL_ARGS=(-sfG "${DAEMON_API}/api/build/status")
+	REQUEST_JSON="$(jq -n --arg cwd "$PWD" --argjson compact "$([[ "$COMPACT" -eq 1 ]] && echo true || echo false)" --argjson no_cache "$([[ "$NO_CACHE" -eq 1 ]] && echo true || echo false)" '{cwd:$cwd,suite:"all",compact:$compact,no_cache:$no_cache}')"
+	if curl "${CURL_ARGS[@]}" 2>/dev/null | jq -e --argjson request "$REQUEST_JSON" '.last.status == "completed" and .last.request == $request' >/dev/null 2>&1; then
+		curl -sfG "${DAEMON_API}/api/build/status" 2>/dev/null | jq '.last.result'
+		exit 0
+	fi
+	curl -sf -X POST "${DAEMON_API}/api/build" \
+		-H 'Content-Type: application/json' \
+		-d "$(jq -n --arg cwd "$PWD" --argjson compact "$([[ "$COMPACT" -eq 1 ]] && echo true || echo false)" --argjson no_cache "$([[ "$NO_CACHE" -eq 1 ]] && echo true || echo false)" '{cwd:$cwd,compact:$compact,no_cache:$no_cache}')" \
+		>/dev/null 2>&1 || true
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		sleep 1
+		if curl -sfG "${DAEMON_API}/api/build/status" 2>/dev/null | jq -e --argjson request "$REQUEST_JSON" '.last.status == "completed" and .last.request == $request' >/dev/null 2>&1; then
+			curl -sfG "${DAEMON_API}/api/build/status" 2>/dev/null | jq '.last.result'
+			exit 0
+		fi
+	done
+fi
 [[ "${1:-}" == "--no-cache" || "${1:-}" == "--compact" ]] && shift
 [[ "${1:-}" == "--no-cache" || "${1:-}" == "--compact" ]] && shift
 

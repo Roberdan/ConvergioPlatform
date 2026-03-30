@@ -8,6 +8,10 @@ use serde_json::{json, Value};
 
 pub fn router() -> Router<ServerState> {
     Router::new()
+        .route(
+            "/api/evidence/clear",
+            get(api_plan_db_evidence::handle_clear_evidence_cache),
+        )
         .route("/api/plan-db/context/:plan_id", get(handle_get_context))
         .route("/api/plan-db/json/:plan_id", get(handle_get_json))
         .route("/api/plan-db/task/update", post(handle_task_update))

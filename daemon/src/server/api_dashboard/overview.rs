@@ -176,6 +176,7 @@ fn today_lines_changed(conn: &rusqlite::Connection) -> (i64, i64, i64, i64) {
                         for part in line.split(',') {
                             let part = part.trim();
                             if part.contains("insertion") || part.contains("deletion") {
+                                // intentional: skip malformed diff fragments rather than failing the overview.
                                 if let Some(n) = part
                                     .split_whitespace()
                                     .next()

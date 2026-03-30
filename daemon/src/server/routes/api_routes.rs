@@ -90,6 +90,11 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/project/:id/tree",
     "/api/channels",
     "/api/channels/:name/health",
+    "/api/digest/ci",
+    "/api/digest/pr",
+    "/api/build/status",
+    "/api/test/status",
+    "/api/delegate/status",
     "/api/delegation/:id/progress",
     "/api/delegation/by-plan/:plan_id",
     "/api/health/deep",
@@ -117,6 +122,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/chat/execute",
     "/api/github/repo/create",
     "/api/mesh/init",
+    "/api/build",
     "/api/nightly/jobs/create",
     "/api/nightly/jobs/trigger",
     "/api/nightly/jobs/definitions/:id/toggle",
@@ -171,6 +177,8 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/workspace/release",
     "/api/channels/:name/send",
     "/api/delegation/:id/progress",
+    "/api/delegate/spawn",
+    "/api/test",
     "/api/memory/remember",
     "/api/memory/share",
     "/api/memory-mgmt/gc",
@@ -193,7 +201,14 @@ pub const PUT_ROUTES: &[&str] = &[
     "/api/nightly/config/:project_id",
     "/api/runs/:id",
 ];
-pub const DELETE_ROUTES: &[&str] = &["/api/ideas/:id", "/api/chat/session", "/api/peers/:name", "/api/memory/forget/:id", "/api/memory-mgmt/file/:filename"];
+pub const DELETE_ROUTES: &[&str] = &[
+    "/api/ideas/:id",
+    "/api/chat/session",
+    "/api/peers/:name",
+    "/api/delegate/:session_id",
+    "/api/memory/forget/:id",
+    "/api/memory-mgmt/file/:filename",
+];
 pub const SSE_ROUTES: &[&str] = &[
     "/api/chat/stream/:sid",
     "/api/mesh/action/stream",

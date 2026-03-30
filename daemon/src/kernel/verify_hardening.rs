@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 pub static EVIDENCE_MUTEX: Mutex<()> = Mutex::new(());
 
 // ---------------------------------------------------------------------------
-// SHA-based evidence cache — skip re-check if git HEAD unchanged (5min TTL)
+// Evidence cache — skip re-check only when the worktree fingerprint is unchanged.
 // ---------------------------------------------------------------------------
 
 const CACHE_TTL: Duration = Duration::from_secs(300);
@@ -26,7 +26,7 @@ pub struct EvidenceCache {
 }
 
 struct CacheEntry {
-    sha: String,
+    key: String,
     passed: bool,
     at: Instant,
 }
@@ -36,7 +36,7 @@ impl EvidenceCache {
         Self { inner: Mutex::new(None) }
     }
 
-    pub fn get(&self, sha: &str) -> Option<bool> {
+    pub fn get(&self, key: &str) -> Option<bool> {
         let guard = match self.inner.lock() {
             Ok(g) => g,
             Err(e) => {
@@ -45,20 +45,26 @@ impl EvidenceCache {
             }
         };
         let entry = guard.as_ref()?;
-        if entry.sha == sha && entry.at.elapsed() < CACHE_TTL {
+        if entry.key == key && entry.at.elapsed() < CACHE_TTL {
             Some(entry.passed)
         } else {
             None
         }
     }
 
-    pub fn store(&self, sha: &str, passed: bool) {
+    pub fn store(&self, key: &str, passed: bool) {
         if let Ok(mut guard) = self.inner.lock() {
             *guard = Some(CacheEntry {
-                sha: sha.to_string(),
+                key: key.to_string(),
                 passed,
                 at: Instant::now(),
             });
+        }
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut guard) = self.inner.lock() {
+            *guard = None;
         }
     }
 
@@ -92,6 +98,32 @@ pub fn git_head_sha(worktree: Option<&str>) -> Option<String> {
             None
         }
     }
+}
+
+fn git_status_fingerprint(worktree: Option<&str>) -> Option<String> {
+    let mut cmd = Command::new("git");
+    cmd.args(["status", "--porcelain"]);
+    if let Some(wt) = worktree {
+        cmd.current_dir(wt);
+    }
+    match cmd.output() {
+        Ok(o) if o.status.success() => Some(String::from_utf8_lossy(&o.stdout).trim().to_string()),
+        Ok(_) => None,
+        Err(e) => {
+            tracing::warn!("verify_hardening: git status failed: {e}");
+            None
+        }
+    }
+}
+
+pub fn evidence_cache_key(
+    worktree: Option<&str>,
+    output_files: &[&str],
+) -> Option<String> {
+    let sha = git_head_sha(worktree)?;
+    let status = git_status_fingerprint(worktree)?;
+    let outputs = output_files.join("|");
+    Some(format!("{sha}::{status}::{outputs}"))
 }
 
 // ---------------------------------------------------------------------------

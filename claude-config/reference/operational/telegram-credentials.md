@@ -6,7 +6,8 @@ Authoritative source: `~/.convergio/env` on each node.
 
 ```
 ~/.convergio/env (chmod 600)
-  ├── TELEGRAM_BOT_TOKEN=<token>
+  ├── CONVERGIO_TELEGRAM_TOKEN=<token>
+  ├── CONVERGIO_TELEGRAM_CHAT_ID=<chat-id>
   ├── HF_TOKEN=<token>
   └── other secrets...
 ```
@@ -29,11 +30,15 @@ mkdir -p ~/.convergio && chmod 700 ~/.convergio
 
 # Write token (chmod 600 automatic)
 cat > ~/.convergio/env << 'EOF'
-TELEGRAM_BOT_TOKEN=<your-token-here>
+CONVERGIO_TELEGRAM_TOKEN=<your-token-here>
+CONVERGIO_TELEGRAM_CHAT_ID=<your-chat-id-here>
 HF_TOKEN=<your-hf-token-here>
 EOF
 chmod 600 ~/.convergio/env
 ```
+
+Legacy compatibility: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are still
+accepted at runtime, but all new setup should use the `CONVERGIO_*` names.
 
 ### Sync to Peer
 
@@ -49,7 +54,8 @@ ssh <peer> chmod 600 ~/.convergio/env
 ## How the Daemon Loads Tokens
 
 1. Daemon reads `~/.convergio/env` on startup
-2. Kernel module uses `TELEGRAM_BOT_TOKEN` for bot long-polling
+2. Kernel module uses `CONVERGIO_TELEGRAM_TOKEN` and
+   `CONVERGIO_TELEGRAM_CHAT_ID` for bot long-polling
 3. If token missing: kernel Telegram module skips initialization (degraded mode)
 
 ## Rotation

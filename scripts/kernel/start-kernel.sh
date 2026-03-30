@@ -16,6 +16,12 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
+# Normalize legacy Telegram variable names so older node env files still boot cleanly.
+[[ -z "${CONVERGIO_TELEGRAM_TOKEN:-}" && -n "${TELEGRAM_BOT_TOKEN:-}" ]] \
+  && export CONVERGIO_TELEGRAM_TOKEN="${TELEGRAM_BOT_TOKEN}"
+[[ -z "${CONVERGIO_TELEGRAM_CHAT_ID:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] \
+  && export CONVERGIO_TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID}"
+
 # Source Python venv (for mlx_lm)
 [[ -f "$VENV" ]] && source "$VENV"
 

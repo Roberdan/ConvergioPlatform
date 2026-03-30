@@ -1,4 +1,5 @@
 pub mod dispatch;
+pub mod spawn;
 
 use super::state::{query_one, query_rows, ApiError, ServerState};
 use axum::extract::State;
@@ -9,6 +10,7 @@ use serde_json::{json, Value};
 pub fn router() -> Router<ServerState> {
     Router::new()
         .merge(dispatch::router())
+        .merge(spawn::router())
         .route("/api/workers", get(handle_list_workers))
         .route("/api/workers/launch", post(handle_launch_worker))
         .route("/api/workers/status", get(handle_worker_status))

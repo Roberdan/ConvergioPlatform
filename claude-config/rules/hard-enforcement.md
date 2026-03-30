@@ -53,6 +53,17 @@ Executors CANNOT set status=done. Only `cvg plan validate` promotes submitted â†
 
 NEVER delegate via GitHub Issues. Convergio scripts handle orchestration.
 
+## UI Integration Rules
+
+- UI-touching agents MUST read `claude-config/reference/operational/ds-integration-playbook.md`
+  before recommending or implementing Convergio Design System integration.
+- For imperative DS widgets in React, use `useRef + useEffect + dynamic import`
+  with explicit cleanup on unmount.
+- Do NOT wrap DS ref containers in `AnimatePresence`; use early-return loading
+  states instead.
+- Use exact DS API signatures from the generated `.d.ts` types, not inferred
+  prop names from docs, memory, or examples.
+
 ## Compaction Preservation
 
 NEVER remove: quality gates, Thor validation, pre-commit hooks, verify steps, security rules, worktree discipline, routing, docs requirements, learning markers.

@@ -33,6 +33,7 @@ pub async fn api_ipc_messages(
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
     let channel = qs.get("channel").cloned().unwrap_or_default();
+    // intentional: invalid limit falls back to the safe default page size.
     let limit = qs
         .get("limit")
         .and_then(|v| v.parse::<i64>().ok())

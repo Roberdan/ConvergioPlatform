@@ -52,18 +52,24 @@ pub async fn delegate_to_peer(engine: &Arc<IpcEngine>, plan_id: i64, peer: &str)
     delegation_core::write_file_on_peer(&client, peer, &done_script_path, &done_content).await?;
     delegation_core::exec_on_peer(&client, peer, &format!("chmod +x '{done_script_path}'")).await?;
 
-    // Launch in unified "Convergio" tmux session — one session per node, one window per plan.
     let session = "Convergio";
     let window = format!("plan-{plan_id}");
-    let launch = format!(
-        "tmux has-session -t '{session}' 2>/dev/null || \
-         tmux new-session -d -s '{session}' -n 'kernel' -c '{remote_repo}'; \
-         tmux new-window -t '{session}' -n '{window}' -c '{remote_repo}'; \
-         tmux send-keys -t '{session}:{window}' \
-         'claude -p \"$(cat {prompt_file})\" --dangerously-skip-permissions; \
-         bash {done_script_path}' Enter"
-    );
-    delegation_core::exec_on_peer(&client, peer, &launch).await?;
+    let spawn_resp = client
+        .post(format!("{DAEMON_BASE}/api/delegate/spawn"))
+        .json(&serde_json::json!({
+            "peer": peer,
+            "tmux_session": session,
+            "tmux_window": window,
+            "cwd": remote_repo,
+            "command": format!(
+                "claude -p \"$(cat {prompt_file})\" --dangerously-skip-permissions; bash {done_script_path}"
+            ),
+        }))
+        .send()
+        .await?;
+    if !spawn_resp.status().is_success() {
+        return Err(format!("delegate spawn failed: {}", spawn_resp.status()).into());
+    }
 
     tracing::info!("ali: plan {plan_id} launched on {peer} in tmux:Convergio:{window}");
     emit(engine, "plan_delegated", &serde_json::json!({

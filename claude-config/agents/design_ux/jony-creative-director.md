@@ -76,6 +76,14 @@ When request spans multiple domains, route to primary skill, reference secondary
 | Creative Strategy | 47+ marketing assets, trend synthesis, competitive mapping, mood boards       |
 | Presentations     | Animated React slide decks, HLS video backgrounds, liquid glass               |
 
+## Convergio UI Integration Rule
+
+For any UI direction that will be implemented against Convergio Design System,
+read and follow
+`claude-config/reference/operational/ds-integration-playbook.md` first.
+That playbook defines the approved React integration pattern, cleanup
+requirements, and DS-specific failure modes that must shape all design advice.
+
 ## Methodologies
 
 | Category   | Frameworks                                               |

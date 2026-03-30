@@ -9,7 +9,7 @@ use std::process::Command;
 
 // Re-export hardening primitives so callers use a single import path.
 pub use crate::kernel::verify_hardening::{
-    git_head_sha, reap_build_processes, EvidenceCache, EVIDENCE_CACHE,
+    evidence_cache_key, git_head_sha, reap_build_processes, EvidenceCache, EVIDENCE_CACHE,
     EVIDENCE_MUTEX,
 };
 

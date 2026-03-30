@@ -70,6 +70,25 @@ pub async fn run_serve(
         shared_ipc.clone(),
     );
 
+    let readiness_checks = convergio_core::server::api_node_readiness::run_checks();
+    let readiness_summary = convergio_core::server::api_node_readiness::summarize_for_boot(
+        &readiness_checks,
+    );
+    if !readiness_summary.warning_failures.is_empty() {
+        warn!(
+            warnings = ?readiness_summary.warning_failures,
+            "boot readiness completed with warnings"
+        );
+    }
+    if !readiness_summary.blocking_failures.is_empty() {
+        let detail = readiness_summary.blocking_failures.join("; ");
+        warn!(blocking = ?readiness_summary.blocking_failures, "boot readiness failed");
+        return Err(IpcHandlerError::ServerFailed(format!(
+            "boot readiness failed: {detail}"
+        )));
+    }
+    info!("boot readiness passed");
+
     if mesh_enabled {
         // Background CRDT sync
         if let Ok(sync_conn) = rusqlite::Connection::open(&db_path) {

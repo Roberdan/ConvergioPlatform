@@ -1,0 +1,14 @@
+{
+  "name": "convergio-visual-qa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:visual": "playwright test --grep @visual",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0"
+  }
+}

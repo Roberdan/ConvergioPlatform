@@ -58,24 +58,14 @@ pub async fn send(
     Ok(true)
 }
 
-/// Load NtfyConfig from platform_config.json if present, else default.
+/// Load NtfyConfig from `claude-config/config/notifications.conf`.
 pub fn load_config() -> NtfyConfig {
-    let config_path = std::path::Path::new("config/platform_config.json");
-    if !config_path.exists() {
-        return NtfyConfig::default();
+    let settings = crate::resilience::notify_config::NotificationSettings::load();
+    NtfyConfig {
+        enabled: settings.ntfy_enabled,
+        url: settings.ntfy_server,
+        topic: settings.ntfy_topic,
     }
-
-    let Ok(content) = std::fs::read_to_string(config_path) else {
-        return NtfyConfig::default();
-    };
-
-    let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return NtfyConfig::default();
-    };
-
-    val.get("ntfy")
-        .and_then(|v| serde_json::from_value::<NtfyConfig>(v.clone()).ok())
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

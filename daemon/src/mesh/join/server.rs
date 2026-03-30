@@ -63,6 +63,7 @@ pub async fn serve_bundles(
                     // Verify Bearer token
                     let auth_hdr = headers
                         .get("authorization")
+                        // intentional: invalid header bytes degrade to unauthenticated request.
                         .and_then(|v| v.to_str().ok())
                         .unwrap_or("");
                     let bearer = auth_hdr.strip_prefix("Bearer ").unwrap_or("");

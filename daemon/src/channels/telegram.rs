@@ -24,8 +24,11 @@ pub struct TelegramAdapter {
 impl TelegramAdapter {
     /// Create adapter from environment variable.
     pub fn from_env(chat_id: Option<i64>) -> Result<Self, ChannelError> {
-        let token = std::env::var("CONVERGIO_TELEGRAM_TOKEN").map_err(|_| {
-            ChannelError::AuthFailed("CONVERGIO_TELEGRAM_TOKEN not set".into())
+        let token = crate::telegram_config::telegram_token().ok_or_else(|| {
+            ChannelError::AuthFailed(
+                "Telegram token not set (need CONVERGIO_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN)"
+                    .into(),
+            )
         })?;
         Ok(Self::new(token, chat_id))
     }

@@ -181,6 +181,30 @@ Generated: 2026-03-22 | MyConvergio: 1335 files | ConvergioPlatform: 1417 files
 | To migrate (hooks, agents, commands, scripts/lib, ADRs, config) | ~250 |
 | Stay in MyConvergio (Copilot, legacy dashboards, backups, systemd) | ~1070 |
 
+## Python Reduction Verification
+
+The platform is already Rust-first at the application layer. The legacy Python
+TUI and Python web dashboard were intentionally left behind because they are
+superseded by the Rust TUI in `daemon/src/tui/` and the current `dashboard/`
+surface.
+
+The remaining Python dependency is concentrated in runtime inference and
+bootstrap tooling, not in core orchestration logic:
+
+- `daemon/src/ipc/models/apple_fm.rs` shells out to `python -m mlx_lm generate`
+  for Apple Silicon inference.
+- `daemon/src/kernel/tts.rs` shells out to `mlx_audio.tts.generate` for TTS.
+- `daemon/src/server/api_node_readiness_checks.rs` checks for
+  `~/convergio-env/bin/python` and `mlx_lm` availability.
+- `scripts/kernel/setup-models.sh`, `scripts/kernel/start-kernel.sh`,
+  `scripts/mesh/mesh-provision-node.sh`, and `scripts/llm/*.sh` still prepare
+  or depend on Python-based ML stacks.
+
+Conclusion: there is no remaining product UI or orchestration surface that
+must be ported from Python to Rust. The real migration candidates are the MLX
+bridge and TTS bridge, plus optional script-side JSON helpers that still call
+`python3` for parsing or environment setup.
+
 ## Removed: copilot-agents/
 
 Removed in W4 (T4-06) — 2026-03-22. These 85 Copilot CLI agent wrappers are superseded by the universal skill protocol + transpilers created in W3.

@@ -126,6 +126,18 @@ async fn non_code_plan_document_tasks_complete() {
     assert_eq!(resp["status"], "completed");
 }
 
+#[tokio::test]
+async fn evidence_clear_endpoint_returns_success() {
+    let (state, _tmp) = setup_state("doc-proj", "Doc Project");
+    let app = plan_app(state);
+
+    let (status, resp) = get_json(&app, "/api/evidence/clear").await;
+
+    assert_eq!(status, StatusCode::OK, "clear evidence cache: {resp}");
+    assert_eq!(resp["ok"], true);
+    assert_eq!(resp["cleared"], true);
+}
+
 /// Verify incomplete document plan cannot be completed
 #[tokio::test]
 async fn non_code_plan_blocks_completion_with_pending_docs() {

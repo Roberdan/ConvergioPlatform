@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/digest-cache.sh"
+DAEMON_API="${CONVERGIO_DAEMON_URL:-http://localhost:8420}"
 
 CACHE_TTL=15
 NO_CACHE=0
@@ -20,6 +21,23 @@ for arg in "$@"; do
 	[[ "$arg" == "--compact" || "$arg" == "--no-cache" ]] && continue
 	[[ -z "$MODE" ]] && MODE="$arg"
 done
+
+if [[ "${DIGEST_API_BYPASS:-0}" != "1" ]] && curl -sf "${DAEMON_API}/api/health" >/dev/null 2>&1; then
+	CURL_ARGS=(-sfG "${DAEMON_API}/api/digest/ci" --data-urlencode "cwd=${PWD}")
+	[[ "$COMPACT" -eq 1 ]] && CURL_ARGS+=(--data-urlencode "compact=true")
+	[[ "$NO_CACHE" -eq 1 ]] && CURL_ARGS+=(--data-urlencode "no_cache=true")
+	if [[ "$MODE" == "checks" ]]; then
+		CURL_ARGS+=(--data-urlencode "mode=checks")
+		for arg in "$@"; do
+			[[ "$arg" =~ ^[0-9]+$ ]] && CURL_ARGS+=(--data-urlencode "pr=${arg}")
+		done
+	elif [[ "$MODE" =~ ^[0-9]+$ ]]; then
+		CURL_ARGS+=(--data-urlencode "run_id=${MODE}")
+	fi
+	if curl "${CURL_ARGS[@]}" 2>/dev/null; then
+		exit 0
+	fi
+fi
 
 # === SUBCOMMAND: checks <pr> — PR check suites as compact JSON ===
 if [[ "$MODE" == "checks" ]]; then

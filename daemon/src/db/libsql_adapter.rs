@@ -152,7 +152,9 @@ pub fn apply_changes(
                 &format!("SELECT COALESCE(updated_at, '') FROM \"{}\" WHERE id = ?1", change.table_name),
                 params![change.pk],
                 |row| row.get(0),
-            ).ok()
+            )
+            // intentional: rows without updated_at timestamp are treated as stale and overwritten.
+            .ok()
         } else {
             None
         };

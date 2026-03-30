@@ -6,7 +6,7 @@ Structured cross-session continuity via persistent memory files. See format temp
 
 ## Save Path Convention
 
-`~/.claude/memory/{project-name}/{YYYY-MM-DD}-{short-description}.md` — e.g., `~/.claude/memory/my-project/2026-01-29-auth-refactor.md`
+`~/.claude/projects/{project-name}/memory/{YYYY-MM-DD}-{short-description}.md` — e.g., `~/.claude/projects/my-project/memory/2026-01-29-auth-refactor.md`
 
 ## When to Save
 
@@ -59,7 +59,7 @@ Project: {project-name} | Date: {YYYY-MM-DD HH:MM CET} | Session: {session-id}
 
 ## Resume Protocol
 
-Check `~/.claude/memory/{project-name}/` for recent files. Read, summarize, ask user to continue.
+Check `~/.claude/projects/{project-name}/memory/` for recent files. Read, summarize, ask user to continue.
 
 ## Helper Script
 
@@ -67,7 +67,7 @@ Check `~/.claude/memory/{project-name}/` for recent files. Read, summarize, ask 
 
 ## Cleanup
 
-Archive files >90 days to `~/.claude/memory/.archive/`. Never delete.
+Archive files >90 days to `~/.claude/projects/{project-name}/memory/.archived/`. Never delete.
 
 ---
 
@@ -87,7 +87,7 @@ Two memory systems coexist. Both active. Neither replaces the other.
 - **What**: Explicit saves via Write/Edit tools. User-controlled markdown files.
 - **Best for**: Strategic decisions, stable conventions, architecture patterns, decisions that must persist reliably.
 - **How**: Explicitly write files using this protocol (save path, format, resume protocol above).
-- **View/edit**: Read/Write/Edit tools directly on `~/.claude/memory/{project}/` files.
+- **View/edit**: Read/Write/Edit tools directly on `~/.claude/projects/{project}/memory/` files.
 
 ### Coexistence Rule
 

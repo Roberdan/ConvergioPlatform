@@ -37,21 +37,27 @@ pub mod handlers {
                 stt: Arc::new(Mutex::new(stt)),
             };
 
-            // Spawn Telegram polling loop if token is configured
-            if let (Ok(token), Ok(chat_id_str)) = (
-                std::env::var("CONVERGIO_TELEGRAM_TOKEN"),
-                std::env::var("CONVERGIO_TELEGRAM_CHAT_ID"),
-            ) {
-                let chat_id: i64 = chat_id_str.parse().unwrap_or(0);
-                let engine_clone = Arc::new(KernelEngine::new(config.clone()));
-                let daemon_url = std::env::var("DAEMON_URL")
-                    .unwrap_or_else(|_| "http://localhost:8420".to_string());
-                tracing::info!("jarvis: spawning Telegram poll loop for chat_id={chat_id}");
-                crate::kernel::telegram_poll::spawn_telegram_poll(
-                    token, chat_id, daemon_url, engine_clone,
-                );
-            } else {
-                tracing::info!("jarvis: Telegram not configured (no CONVERGIO_TELEGRAM_TOKEN)");
+            // Accept legacy TELEGRAM_* aliases so existing node env files still work.
+            let token = crate::telegram_config::telegram_token();
+            let chat_id = crate::telegram_config::telegram_chat_id();
+            match (token, chat_id) {
+                (Some(token), Ok(Some(chat_id))) => {
+                    let engine_clone = Arc::new(KernelEngine::new(config.clone()));
+                    let daemon_url = std::env::var("DAEMON_URL")
+                        .unwrap_or_else(|_| "http://localhost:8420".to_string());
+                    tracing::info!("jarvis: spawning Telegram poll loop for chat_id={chat_id}");
+                    crate::kernel::telegram_poll::spawn_telegram_poll(
+                        token, chat_id, daemon_url, engine_clone,
+                    );
+                }
+                (_, Err(error)) => {
+                    tracing::warn!(%error, "jarvis: invalid Telegram chat id");
+                }
+                _ => {
+                    tracing::info!(
+                        "jarvis: Telegram not configured (need CONVERGIO_TELEGRAM_* or TELEGRAM_* env)"
+                    );
+                }
             }
 
             state

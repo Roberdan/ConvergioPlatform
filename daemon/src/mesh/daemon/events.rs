@@ -95,5 +95,6 @@ pub fn relay_ipc_changes(state: &DaemonState, node: &str, changes: &[DeltaChange
 }
 
 fn parse_i64(value: Option<&String>) -> Option<i64> {
+    // intentional: absent/malformed event fields stay optional.
     value.and_then(|v| v.parse::<i64>().ok())
 }

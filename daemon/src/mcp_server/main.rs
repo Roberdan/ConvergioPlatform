@@ -16,6 +16,7 @@ fn main() {
         .init();
 
     // Ring level from environment: 0=Core, 1=Trusted, 2=Community, 3=Sandboxed (default).
+    // intentional: missing/invalid env falls back to sandbox ring for safe startup.
     let ring: u8 = std::env::var("CONVERGIO_MCP_RING")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -26,6 +27,7 @@ fn main() {
         .unwrap_or_else(|_| "http://localhost:8420".to_string());
 
     // Optional bearer token for daemon auth middleware.
+    // intentional: token is optional in local/dev deployments.
     let token = std::env::var("CONVERGIO_API_TOKEN").ok();
 
     tracing::info!(
