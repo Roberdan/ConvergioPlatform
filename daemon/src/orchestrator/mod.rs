@@ -35,6 +35,7 @@ pub fn spawn_ali(engine: Arc<IpcEngine>, db_path: PathBuf) {
         return;
     }
     let reaper_db = db_path.clone();
+    let db_path_for_validator = db_path.clone();
     tokio::spawn(async move {
         tracing::info!("ali-orchestrator: starting");
         if let Err(e) = engine.channel_create(CHANNEL, Some("Plan orchestration events"), ALI_AGENT) {
@@ -46,4 +47,5 @@ pub fn spawn_ali(engine: Arc<IpcEngine>, db_path: PathBuf) {
         reactor::run(engine, db_path).await;
     });
     reaper::spawn_reaper(reaper_db);
+    validator_service::spawn_validator_loop(db_path_for_validator);
 }
