@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
 # Convergio Platform
 
-AI orchestration platform — Rust daemon (755 modules), local LLM kernel (Qwen 7B), MCP server, mesh P2P, 69 agents, Telegram bot, voice pipeline.
+Give it a problem. It builds the business. — 69 AI agents across 12 domains (code, strategy, legal, finance, marketing, design, HR, data, security, ops, product, research) orchestrated by a Rust daemon on your own hardware. No cloud lock-in.
 
 **Free and source-available** under the [Convergio Community License](./LICENSE). Use it, learn from it, build with it. If it helps you, consider supporting [FightTheStroke Foundation](https://fightthestroke.org) — a non-profit for children affected by pediatric stroke.
 
@@ -13,13 +13,47 @@ Website: [convergio.io](https://convergio.io)
 
 ## What is Convergio
 
-Convergio Platform is a self-improving AI orchestration system. You describe a goal; Ali (Chief of Staff, Opus) assembles a team of specialized agents, coordinates them across models and machines, validates output through domain-specific validators, and delivers structured results with cost, duration, and learnings.
+Convergio is a virtual organization. You describe a business problem; Ali (Chief of Staff) assembles the right team — not just developers, but strategists, lawyers, designers, analysts, marketers — coordinates them across models and machines, and delivers validated results.
 
 ```bash
 convergio solve "Build a SaaS MVP for fitness tracking"
+convergio solve "Analyze our competitive landscape and recommend positioning"
+convergio solve "Review our contracts for GDPR compliance"
+convergio solve "Design a go-to-market strategy for the EU market"
+convergio solve "Create a financial model for Series A fundraising"
 ```
 
-Ali handles everything: domain analysis, talent selection (69 agents across 12 domains), plan creation, agent dispatch, real-time monitoring, validation, and knowledge capture.
+Ali selects from 69 specialized agents across 12 domains:
+
+| Domain | Agents | Example tasks |
+|---|---|---|
+| **Strategy** | Amy CFO, Antonio OKR, Domik McKinsey, Matteo architect | Financial modeling, competitive analysis, pricing strategy |
+| **Legal** | Elena compliance, Sophia govaffairs, Luca security | GDPR review, contract analysis, regulatory strategy |
+| **Marketing** | Sofia strategist, Riccardo storyteller, Fabio sales | Go-to-market, brand identity, sales strategy |
+| **Design** | Sara UX/UI, Jony creative director, Stefano design thinking | User research, interface design, design systems |
+| **Product** | Marcello PM, Davide project mgr, Luke program mgr | Roadmap planning, feature prioritization, OKR tracking |
+| **Data** | Omri data scientist, Fiona market analyst, Diana dashboard | Market research, predictive modeling, analytics |
+| **People** | Giulia HR, Coach team coach, Behice cultural | Hiring strategy, team dynamics, cross-cultural |
+| **Technical** | Baccio architect, Rex reviewer, Dario debugger, Marco DevOps | Architecture, code review, debugging, CI/CD |
+| **Startup** | Sam startupper (YC), Wiz VC analyst | Pitch decks, fundraising, product-market fit |
+| **Research** | Research report generator, Socrates first principles | Equity research, market analysis, decision frameworks |
+| **Compliance** | Dr. Enzo healthcare, Guardian AI security | HIPAA, FDA, AI ethics, bias detection |
+| **Quality** | Thor validator, plan-reviewer, doc-validator | 10-gate validation, code/doc/design/strategy review |
+
+Every task gets the right specialist, the right model, and the right validator — automatically.
+
+### Hybrid Intelligence: Cloud + Local
+
+Convergio runs on **your hardware first**. Apple Silicon Macs run local LLMs (Qwen 7B, Mistral, Codestral) via MLX with Metal GPU acceleration — zero cloud dependency for most tasks. For premium reasoning (Opus, GPT-5), it uses your existing Claude/Copilot subscriptions. No API keys, no per-token billing surprises.
+
+| Where | Models | Cost | Best for |
+|---|---|---|---|
+| **Local (MLX on Apple Silicon)** | Qwen 7B, Mistral 7B, Codestral 22B | $0 | Fast tasks, privacy-sensitive, offline |
+| **Local (Ollama on any machine)** | Any GGUF model | $0 | Linux/Windows workers, experimentation |
+| **Cloud (your subscription)** | Claude Opus/Sonnet/Haiku | Subscription | Complex reasoning, architecture, validation |
+| **Cloud (your subscription)** | GPT-5 Codex via Copilot | Subscription | Bulk code generation, mechanical tasks |
+
+The inference router picks the cheapest provider that meets the task tier — and falls back automatically if one is unavailable.
 
 ---
 
