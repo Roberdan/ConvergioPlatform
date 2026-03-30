@@ -115,6 +115,7 @@ pub const GET_ROUTES: &[&str] = &[
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/validation/enqueue",
+    "/api/validation/record",
     "/api/ideas",
     "/api/ideas/:id/notes",
     "/api/ideas/:id/promote",

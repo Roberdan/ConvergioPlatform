@@ -18,7 +18,7 @@ fn non_get_route_count_matches_python_port_contract() {
             + DELETE_ROUTES.len()
             + SSE_ROUTES.len()
             + WS_ROUTES.len(),
-        113 // Updated after gates plan (task evidence POST endpoint added)
+        114 // Updated after gates plan (task evidence + validation record POST)
     );
 }
 

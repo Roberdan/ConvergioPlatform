@@ -8,7 +8,10 @@ use tower::ServiceExt;
 
 fn setup_app() -> (axum::Router, TempDir) {
     // Auth is ON by default (Plan 706 F-04). Enable dev-mode for tests.
+    // OnceLock: only the first call wins. Ensure we set true before anything else.
     convergio_core::server::middleware::set_dev_mode(true);
+    // Also clear CONVERGIO_AUTH_TOKEN so the auth middleware falls through in dev-mode.
+    std::env::remove_var("CONVERGIO_AUTH_TOKEN");
     let tmp = TempDir::new().expect("tempdir");
     let db_path = tmp.path().join("test.db");
     let static_dir = tmp.path().join("static");
@@ -66,6 +69,23 @@ fn setup_app() -> (axum::Router, TempDir) {
              task_db_id INTEGER, plan_id INTEGER, parent_session TEXT
          );
          CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_activity_agent_id ON agent_activity(agent_id);
+         CREATE TABLE IF NOT EXISTS task_evidence (
+             id INTEGER PRIMARY KEY, task_db_id INTEGER NOT NULL,
+             evidence_type TEXT NOT NULL, command TEXT,
+             output_summary TEXT, exit_code INTEGER,
+             created_at TEXT DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS validation_queue (
+             id INTEGER PRIMARY KEY, task_id INTEGER, wave_id INTEGER,
+             plan_id INTEGER, status TEXT DEFAULT 'pending',
+             created_at TEXT DEFAULT (datetime('now')),
+             started_at TEXT, completed_at TEXT
+         );
+         CREATE TABLE IF NOT EXISTS validation_verdicts (
+             id INTEGER PRIMARY KEY, queue_id INTEGER NOT NULL,
+             verdict TEXT NOT NULL, report TEXT, validator TEXT,
+             created_at TEXT DEFAULT (datetime('now'))
+         );
          INSERT INTO projects (id, name) VALUES ('test', 'Test Project');
          INSERT INTO knowledge_base (domain, title, content, hit_count)
              VALUES ('rust', 'Axum routing', 'Use Router::new()', 3);",
@@ -173,6 +193,36 @@ async fn api_plan_db_integration_full_lifecycle() {
     assert_eq!(tasks.len(), 2);
     let task1_id = tasks[0]["id"].as_i64().expect("task id");
     let task2_id = tasks[1]["id"].as_i64().expect("task id");
+
+    // Full gate workflow: evidence → submitted → verdict → done
+    for tid in [task1_id, task2_id] {
+        // TestGate: record test_pass evidence (required before submitted)
+        let (s, _) = post_json(
+            &app,
+            "/api/plan-db/task/evidence",
+            json!({"task_id": tid, "evidence_type": "test_pass", "command": "cargo test", "exit_code": 0}),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "evidence POST for task {tid}");
+
+        // Transition to submitted (TestGate checks evidence exists)
+        let (s, resp_body) = post_json(
+            &app,
+            "/api/plan-db/task/update",
+            json!({"task_id": tid, "status": "submitted"}),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "submitted for task {tid}, body: {resp_body}");
+
+        // ValidatorGate: record Thor verdict (required before done)
+        let (s, _) = post_json(
+            &app,
+            "/api/validation/record",
+            json!({"task_id": tid, "verdict": "pass", "validator": "thor-integration-test"}),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "verdict for task {tid}");
+    }
 
     // Update task 1 to done
     let (status, _) = post_json(

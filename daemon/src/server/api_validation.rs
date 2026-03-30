@@ -16,6 +16,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/validation/queue", get(list_queue))
         .route("/api/validation/verdict/:task_id", get(get_verdict))
         .route("/api/validation/enqueue", post(enqueue))
+        .route("/api/validation/record", post(record))
 }
 
 async fn list_queue(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
@@ -40,6 +41,34 @@ struct EnqueueRequest {
     task_id: Option<i64>,
     wave_id: Option<i64>,
     plan_id: Option<i64>,
+}
+
+#[derive(Deserialize)]
+struct RecordRequest {
+    task_id: i64,
+    verdict: String,
+    report: Option<String>,
+    validator: Option<String>,
+}
+
+/// POST /api/validation/record — enqueue + immediately record a verdict (Thor shortcut).
+async fn record(
+    State(state): State<ServerState>,
+    Json(body): Json<RecordRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = state.get_conn()?;
+    vs::run_migrations(&conn).map_err(|e| ApiError::internal(e.to_string()))?;
+    let queue_id = vs::enqueue_validation(&conn, Some(body.task_id), None, None)
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    vs::record_verdict(
+        &conn,
+        queue_id,
+        &body.verdict,
+        body.report.as_deref(),
+        body.validator.as_deref(),
+    )
+    .map_err(|e| ApiError::internal(e.to_string()))?;
+    Ok(Json(json!({ "ok": true, "queue_id": queue_id, "verdict": body.verdict })))
 }
 
 async fn enqueue(
