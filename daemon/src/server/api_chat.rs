@@ -81,6 +81,9 @@ struct ChatMessageBody {
     sid: Option<String>,
     content: Option<String>,
     role: Option<String>,
+    tokens_in: Option<i64>,
+    tokens_out: Option<i64>,
+    model: Option<String>,
 }
 
     #[tracing::instrument(skip_all)]
@@ -101,8 +104,8 @@ async fn handle_chat_message_create(
     let role = payload.role.unwrap_or_else(|| "user".to_string());
     conn
         .execute(
-            "INSERT INTO chat_messages(session_id,role,content,tokens_in,tokens_out) VALUES(?1,?2,?3,0,0)",
-            rusqlite::params![sid, role, content],
+            "INSERT INTO chat_messages(session_id,role,content,model,tokens_in,tokens_out) VALUES(?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![sid, role, content, payload.model, payload.tokens_in.unwrap_or(0), payload.tokens_out.unwrap_or(0)],
         )
         .map_err(|err| ApiError::internal(format!("chat message create failed: {err}")))?;
     Ok(Json(

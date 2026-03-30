@@ -10,6 +10,7 @@ use super::api_agent_triage;
 use super::api_agents;
 use super::api_build_exec;
 use super::api_audit;
+use super::api_budget;
 use super::api_capabilities;
 use super::api_channels;
 use super::api_delegation;
@@ -108,6 +109,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_dashboard::router())
         .merge(api_digest::router())
         .merge(api_build_exec::router())
+        .merge(api_budget::router())
         .merge(api_ideas::router())
         .merge(api_plans::router())
         .merge(api_agent_catalog::router())

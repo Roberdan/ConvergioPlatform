@@ -6,6 +6,7 @@ pub mod api_agent_triage;
 pub mod api_agents;
 pub mod api_build_exec;
 pub mod api_audit;
+pub mod api_budget;
 pub mod api_capabilities;
 pub mod api_channels;
 pub mod api_delegation;
