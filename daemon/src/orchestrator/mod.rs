@@ -5,6 +5,7 @@ pub mod actions;
 pub mod policy;
 pub mod delegation_core;
 mod executor;
+pub mod goal_decomposer;
 pub mod handlers;
 pub mod nightly;
 pub mod reaper;

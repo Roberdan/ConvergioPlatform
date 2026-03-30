@@ -63,6 +63,7 @@ use super::api_workers;
 use super::api_workspace;
 use super::api_workspace_events;
 use super::api_decisions;
+use super::api_goal;
 use super::api_repositories;
 use super::api_inference_status;
 use super::api_policy;
@@ -169,6 +170,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_workspace::router())
         .merge(api_workspace_events::router())
         .merge(api_decisions::router())
+        .merge(api_goal::router())
         .merge(api_repositories::router())
         .merge(api_inference_status::router())
         .merge(api_policy::router())
