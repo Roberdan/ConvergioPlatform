@@ -8,6 +8,7 @@ pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROU
 use super::api_agent_catalog;
 use super::api_agent_triage;
 use super::api_agents;
+use super::api_agent_profiles;
 use super::api_build_exec;
 use super::api_audit;
 use super::api_budget;
@@ -116,6 +117,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_agent_catalog::router())
         .merge(api_agent_triage::router())
         .merge(api_agents::router())
+        .merge(api_agent_profiles::router())
         .merge(api_mesh::router())
         .merge(api_peers::router())
         .merge(api_peers_ext::router())

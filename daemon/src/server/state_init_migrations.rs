@@ -202,4 +202,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "UPDATE waves SET updated_at = datetime('now') WHERE updated_at IS NULL",
     "UPDATE knowledge_base SET updated_at = datetime('now') WHERE updated_at IS NULL",
     "UPDATE notifications SET updated_at = datetime('now') WHERE updated_at IS NULL",
+    // Agent sandboxing (T3-04)
+    "CREATE TABLE IF NOT EXISTS agent_profiles (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, filesystem_allowlist TEXT, network_allowlist TEXT, allowed_commands TEXT, created_at TEXT DEFAULT (datetime('now')))",
+    "CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL DEFAULT (datetime('now')), agent TEXT, action TEXT NOT NULL, resource TEXT, detail TEXT, ip_addr TEXT)",
 ];
