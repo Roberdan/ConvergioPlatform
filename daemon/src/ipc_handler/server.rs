@@ -70,24 +70,42 @@ pub async fn run_serve(
         shared_ipc.clone(),
     );
 
-    let readiness_checks = convergio_core::server::api_node_readiness::run_checks();
-    let readiness_summary = convergio_core::server::api_node_readiness::summarize_for_boot(
-        &readiness_checks,
-    );
-    if !readiness_summary.warning_failures.is_empty() {
-        warn!(
-            warnings = ?readiness_summary.warning_failures,
-            "boot readiness completed with warnings"
-        );
+    let boot_report = convergio_core::server::api_node_readiness::run_boot_checks(&db_path);
+    // Print summary to stdout for operator visibility at startup.
+    let passed = boot_report.checks.iter().filter(|c| c.passed).count();
+    let total = boot_report.checks.len();
+    eprintln!("boot readiness: {passed}/{total} checks passed (node={}, role={})",
+        boot_report.node, boot_report.role);
+    if !boot_report.summary.warning_failures.is_empty() {
+        for w in &boot_report.summary.warning_failures {
+            warn!("boot readiness warning: {w}");
+            eprintln!("  [WARN] {w}");
+        }
     }
-    if !readiness_summary.blocking_failures.is_empty() {
-        let detail = readiness_summary.blocking_failures.join("; ");
-        warn!(blocking = ?readiness_summary.blocking_failures, "boot readiness failed");
-        return Err(IpcHandlerError::ServerFailed(format!(
-            "boot readiness failed: {detail}"
-        )));
+    if !boot_report.summary.blocking_failures.is_empty() {
+        for e in &boot_report.summary.blocking_failures {
+            tracing::error!("boot readiness CRITICAL: {e}");
+            eprintln!("  [ERROR] {e}");
+        }
+        eprintln!("boot readiness: critical failures detected — daemon cannot start");
+        std::process::exit(1);
     }
-    info!("boot readiness passed");
+    info!("boot readiness passed ({passed}/{total} checks OK)");
+    // Store boot result in daemon_config for /api/node/readiness to serve.
+    if let Ok(conn) = shared_ipc.open_conn() {
+        if let Ok(json) = serde_json::to_string(&serde_json::json!({
+            "ok": boot_report.ok,
+            "node": boot_report.node,
+            "role": boot_report.role,
+            "checks": boot_report.checks,
+            "booted_at": chrono::Utc::now().to_rfc3339(),
+        })) {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO daemon_config (key, value, updated_at) VALUES ('boot_readiness', ?1, datetime('now'))",
+                rusqlite::params![json],
+            );
+        }
+    }
 
     if mesh_enabled {
         // DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420)

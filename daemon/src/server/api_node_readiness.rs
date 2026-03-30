@@ -39,10 +39,20 @@ pub struct NodeReadinessResponse {
     pub checks: Vec<Check>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct BootReadinessSummary {
     pub blocking_failures: Vec<String>,
     pub warning_failures: Vec<String>,
+}
+
+/// Full boot readiness report — returned by `run_boot_checks`.
+#[derive(Debug, Serialize)]
+pub struct ReadinessReport {
+    pub ok: bool,
+    pub node: String,
+    pub role: String,
+    pub checks: Vec<Check>,
+    pub summary: BootReadinessSummary,
 }
 
 fn default_db_path() -> std::path::PathBuf {
@@ -72,6 +82,17 @@ pub fn run_checks() -> Vec<Check> {
     build_checks(&db)
 }
 
+/// Run all readiness checks for a specific db_path and return a full report.
+/// Called at daemon boot (before binding) to enforce fail-loud startup policy.
+pub fn run_boot_checks(db_path: &std::path::Path) -> ReadinessReport {
+    let check_results = build_checks(db_path);
+    let summary = summarize_for_boot(&check_results);
+    let ok = check_results.iter().all(|c| c.passed);
+    let node = checks::gethostname();
+    let (role, _) = checks::parse_peers_conf();
+    ReadinessReport { ok, node, role, checks: check_results, summary }
+}
+
 pub fn summarize_for_boot(checks: &[Check]) -> BootReadinessSummary {
     let mut blocking_failures = Vec::new();
     let mut warning_failures = Vec::new();
@@ -87,20 +108,29 @@ pub fn summarize_for_boot(checks: &[Check]) -> BootReadinessSummary {
 }
 
 fn is_boot_blocking(check: &Check) -> bool {
-    match check.name.as_str() {
-        "disk_space" => true,
-        "db_exists" => !check.detail.starts_with("not found:"),
-        _ => false,
-    }
+    // DB missing or corrupt and missing peers.conf role are hard requirements.
+    // All other failures are warnings that allow the daemon to continue.
+    matches!(check.name.as_str(), "disk_space" | "db_exists" | "node_role")
 }
 
-/// GET /api/node/readiness
+/// GET /api/node/readiness — serves live checks; falls back to cached boot result.
     #[tracing::instrument(skip_all)]
 async fn handle_node_readiness(
     State(state): State<ServerState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let node = checks::gethostname();
     let (role, _) = checks::parse_peers_conf();
+    // Try cached boot result first; run live checks as fallback.
+    let cached = state.get_conn().ok().and_then(|conn| {
+        conn.query_row(
+            "SELECT value FROM daemon_config WHERE key = 'boot_readiness'",
+            [],
+            |r| r.get::<_, String>(0),
+        ).ok()
+    }).and_then(|v| serde_json::from_str::<serde_json::Value>(&v).ok());
+    if let Some(cached_val) = cached {
+        return Ok(Json(cached_val));
+    }
     let check_results = build_checks(&state.db_path);
     let ok = check_results.iter().all(|c| c.passed);
     Ok(Json(serde_json::json!({ "ok": ok, "node": node, "role": role, "checks": check_results })))
