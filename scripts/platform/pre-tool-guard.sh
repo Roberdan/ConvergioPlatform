@@ -27,6 +27,11 @@ file_path() {
   echo "$INPUT" | jq -r '.file_path // empty' 2>/dev/null
 }
 
+# Extract new_string for Edit tool
+new_string() {
+  echo "$INPUT" | jq -r '.new_string // empty' 2>/dev/null
+}
+
 guard_bash() {
   local CMD
   CMD=$(cmd)
@@ -83,6 +88,34 @@ guard_bash() {
     warn "Avoid piping to tail/head/grep/cat -- use Read/Grep tools"
   fi
 
+  # CommitLint: conventional commit format check (BLOCK)
+  # gate: git commit -m "..."
+  if echo "$CMD" | grep -qE '(^|[;&[:space:]])git[[:space:]]+commit.*-m'; then
+    local MSG
+    MSG=$(echo "$CMD" | sed -n "s/.*-m[[:space:]]*['\"]\\{0,1\\}//p" | sed "s/['\"].*//")
+    if [ -n "$MSG" ]; then
+      VALID_TYPES="feat|fix|docs|chore|refactor|test|ci|perf|build|style|revert"
+      if ! echo "$MSG" | grep -qE "^(${VALID_TYPES})(\([^)]+\))?!?:[[:space:]].+"; then
+        block "CommitLint: message must match 'type(scope): message'. Valid types: feat|fix|docs|chore|refactor|test|ci|perf|build|style|revert. Got: $MSG"
+      fi
+    fi
+  fi
+
+  # TestGate: track when cargo test runs — create marker file
+  if echo "$CMD" | grep -qE '(^|[;&[:space:]])cargo[[:space:]]+test'; then
+    touch "/tmp/.convergio-test-ran-$$" 2>/dev/null || true
+    touch "/tmp/.convergio-test-ran" 2>/dev/null || true
+  fi
+
+  # TestGate: warn on git commit of .rs files if tests not recently run
+  if echo "$CMD" | grep -qE '(^|[;&[:space:]])git[[:space:]]+commit'; then
+    if echo "$CMD" | grep -qE '\.(rs)\b' || git diff --cached --name-only 2>/dev/null | grep -qE '\.rs$'; then
+      if [ ! -f "/tmp/.convergio-test-ran" ]; then
+        warn "TestGate: committing Rust changes but no cargo test run detected in this session. Run cargo test first."
+      fi
+    fi
+  fi
+
   # git commit — run secret scanner
   if echo "$CMD" | grep -qE '(^|[;&[:space:]])git[[:space:]]+commit'; then
     local ROOT
@@ -106,6 +139,18 @@ guard_edit() {
   # plan spec files — only task-executor may edit
   if echo "$FILE" | grep -qE '(plan-specs|plans)/.*\.(yaml|yml|md)$'; then
     block "Only task-executor may edit plan spec files"
+  fi
+
+  # FailLoud: warn on silent fallback patterns in Rust files
+  if echo "$FILE" | grep -qE '\.rs$'; then
+    local NS
+    NS=$(new_string)
+    if echo "$NS" | grep -qE 'unwrap_or_default\(\)'; then
+      warn "FailLoud: unwrap_or_default() silently swallows errors. Use expect(), ?, or explicit error handling."
+    fi
+    if echo "$NS" | grep -qE 'let[[:space:]]+_[[:space:]]*='; then
+      warn "FailLoud: 'let _ = ...' discards a Result/value silently. Handle the error explicitly."
+    fi
   fi
 }
 
