@@ -136,6 +136,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/ipc/conflicts", get(handlers::api_ipc_conflicts))
         .route("/api/ipc/status", get(handlers::api_ipc_status))
         .route("/api/ipc/send", post(handlers::api_ipc_send))
+        .route("/api/ipc/send-direct", post(handlers::api_ipc_send_direct))
         // Plan 668: Agent write endpoints
         .route(
             "/api/ipc/agents/register",

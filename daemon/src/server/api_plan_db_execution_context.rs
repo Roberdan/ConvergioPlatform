@@ -2,11 +2,12 @@
 //! POST /api/plan-db/set-worktree/:plan_id — update plan worktree_path
 
 use super::state::{query_one, query_rows, ApiError, ServerState};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 pub fn router() -> Router<ServerState> {
     Router::new()
@@ -18,9 +19,11 @@ pub fn router() -> Router<ServerState> {
 async fn handle_execution_context(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
+    Query(qs): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
-    build_execution_context(&conn, plan_id).map(Json)
+    let task_id_filter = qs.get("task_id").and_then(|v| v.parse::<i64>().ok());
+    build_execution_context(&conn, plan_id, task_id_filter).map(Json)
 }
 
     #[tracing::instrument(skip_all)]
@@ -40,7 +43,7 @@ async fn handle_set_worktree(
 }
 
 /// Core logic: build the full execution context for a plan.
-pub fn build_execution_context(conn: &Connection, plan_id: i64) -> Result<Value, ApiError> {
+pub fn build_execution_context(conn: &Connection, plan_id: i64, task_id_filter: Option<i64>) -> Result<Value, ApiError> {
     let plan = query_one(
         conn,
         "SELECT id, name, status, worktree_path, branch_name, \
@@ -93,16 +96,31 @@ pub fn build_execution_context(conn: &Connection, plan_id: i64) -> Result<Value,
         None => Value::Null,
     };
 
-    let next_task_row = query_one(
-        conn,
-        "SELECT t.id, t.task_id, t.title, t.status, t.model, \
-         t.executor_agent, t.test_criteria, t.description, \
-         w.wave_id AS wave_id_code \
-         FROM tasks t JOIN waves w ON t.wave_id_fk = w.id \
-         WHERE t.plan_id = ?1 AND t.status = 'pending' \
-         ORDER BY w.position, t.id LIMIT 1",
-        rusqlite::params![plan_id],
-    )?;
+    let next_task_row = if let Some(tid) = task_id_filter {
+        // Specific task requested — for parallel execution
+        query_one(
+            conn,
+            "SELECT t.id, t.task_id, t.title, t.status, t.model, \
+             t.executor_agent, t.test_criteria, t.description, \
+             w.wave_id AS wave_id_code \
+             FROM tasks t JOIN waves w ON t.wave_id_fk = w.id \
+             WHERE t.plan_id = ?1 AND t.id = ?2 \
+             AND t.status IN ('pending', 'in_progress')",
+            rusqlite::params![plan_id, tid],
+        )?
+    } else {
+        // Default: first pending task (sequential execution)
+        query_one(
+            conn,
+            "SELECT t.id, t.task_id, t.title, t.status, t.model, \
+             t.executor_agent, t.test_criteria, t.description, \
+             w.wave_id AS wave_id_code \
+             FROM tasks t JOIN waves w ON t.wave_id_fk = w.id \
+             WHERE t.plan_id = ?1 AND t.status = 'pending' \
+             ORDER BY w.position, t.id LIMIT 1",
+            rusqlite::params![plan_id],
+        )?
+    };
 
     let next_task = match &next_task_row {
         Some(t) => {

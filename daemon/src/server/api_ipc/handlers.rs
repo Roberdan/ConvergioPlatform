@@ -38,21 +38,36 @@ pub async fn api_ipc_messages(
         .and_then(|v| v.parse::<i64>().ok()) // intentional: invalid limit falls back to safe default
         .unwrap_or(50);
 
-    let rows = if channel.is_empty() {
-        query_rows(
+    let to_agent = qs.get("to_agent").cloned().unwrap_or_default();
+    let rows = match (channel.is_empty(), to_agent.is_empty()) {
+        (true, true) => query_rows(
             &conn,
-            "SELECT id, channel, from_agent, content, created_at
+            "SELECT id, channel, from_agent, to_agent, content, created_at
              FROM ipc_messages ORDER BY created_at DESC LIMIT ?1",
             [limit],
-        )?
-    } else {
-        query_rows(
+        )?,
+        (false, true) => query_rows(
             &conn,
-            "SELECT id, channel, from_agent, content, created_at
+            "SELECT id, channel, from_agent, to_agent, content, created_at
              FROM ipc_messages WHERE channel = ?1
              ORDER BY created_at DESC LIMIT ?2",
             rusqlite::params![channel, limit],
-        )?
+        )?,
+        (true, false) => query_rows(
+            &conn,
+            "SELECT id, channel, from_agent, to_agent, content, created_at
+             FROM ipc_messages WHERE to_agent = ?1 OR to_agent IS NULL
+             ORDER BY created_at DESC LIMIT ?2",
+            rusqlite::params![to_agent, limit],
+        )?,
+        (false, false) => query_rows(
+            &conn,
+            "SELECT id, channel, from_agent, to_agent, content, created_at
+             FROM ipc_messages WHERE channel = ?1
+             AND (to_agent = ?2 OR to_agent IS NULL)
+             ORDER BY created_at DESC LIMIT ?3",
+            rusqlite::params![channel, to_agent, limit],
+        )?,
     };
     Ok(Json(json!({ "ok": true, "messages": rows })))
 }
@@ -204,5 +219,42 @@ pub async fn api_ipc_send(
         tracing::debug!("ws ipc_message broadcast (no subscribers): {e}");
     }
 
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+pub struct SendDirectMessage {
+    from: String,
+    to: String,
+    content: String,
+}
+
+/// POST /api/ipc/send-direct — send a message to a named session/agent.
+pub async fn api_ipc_send_direct(
+    State(state): State<ServerState>,
+    Json(body): Json<SendDirectMessage>,
+) -> Result<Json<Value>, ApiError> {
+    if let Some(ref ipc) = state.ipc_engine {
+        ipc.send_message(&body.from, &body.to, &body.content, "direct", 0)
+            .map_err(|e| ApiError::internal(format!("ipc send_direct failed: {e}")))?;
+    } else {
+        ensure_ipc_schema(&state)?;
+        let conn = state.get_conn()?;
+        conn.execute(
+            "INSERT INTO ipc_messages(id, channel, from_agent, to_agent, content) VALUES (
+                 lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(6))),
+                 'direct', ?1, ?2, ?3)",
+            rusqlite::params![body.from, body.to, body.content],
+        ).map_err(|e| ApiError::internal(format!("direct message insert failed: {e}")))?;
+    }
+
+    if let Err(e) = state.ws_tx.send(json!({
+        "type": "ipc_direct_message",
+        "from": body.from,
+        "to": body.to,
+        "content": body.content,
+    })) {
+        tracing::debug!("ws direct_message (no subscribers): {e}"); // intentional: no subscribers is normal
+    }
     Ok(Json(json!({ "ok": true })))
 }

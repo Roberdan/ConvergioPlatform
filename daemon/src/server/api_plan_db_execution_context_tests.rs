@@ -91,7 +91,7 @@ fn seed_active_plan(db: &PlanDb) {
 fn execution_context_returns_next_pending_task_and_prompt() {
     let db = setup_db();
     seed_active_plan(&db);
-    let ctx = build_execution_context(db.connection(), 742).expect("ctx");
+    let ctx = build_execution_context(db.connection(), 742, None).expect("ctx");
     assert_eq!(ctx["ok"].as_bool(), Some(true));
     assert_eq!(ctx["plan_id"].as_i64(), Some(742));
     assert_eq!(ctx["status"].as_str(), Some("doing"));
@@ -133,7 +133,7 @@ fn execution_context_needs_thor_when_all_submitted() {
         )
         .unwrap();
 
-    let ctx = build_execution_context(db.connection(), 742).expect("ctx");
+    let ctx = build_execution_context(db.connection(), 742, None).expect("ctx");
     let wave = &ctx["current_wave"];
     assert_eq!(wave["all_submitted"].as_bool(), Some(true));
     assert_eq!(wave["needs_thor"].as_bool(), Some(true));
@@ -158,7 +158,7 @@ fn execution_context_completed_plan_no_pending() {
         )
         .unwrap();
 
-    let ctx = build_execution_context(db.connection(), 742).expect("ctx");
+    let ctx = build_execution_context(db.connection(), 742, None).expect("ctx");
     assert_eq!(ctx["status"].as_str(), Some("done"));
     assert!(ctx["next_task"].is_null(), "no next task for done plan");
     let prompt = ctx["prompt"].as_str().expect("prompt");
@@ -172,7 +172,7 @@ fn execution_context_completed_plan_no_pending() {
 fn execution_context_includes_decisions() {
     let db = setup_db();
     seed_active_plan(&db);
-    let ctx = build_execution_context(db.connection(), 742).expect("ctx");
+    let ctx = build_execution_context(db.connection(), 742, None).expect("ctx");
     let decisions = ctx["decisions"].as_array().expect("decisions array");
     assert!(!decisions.is_empty(), "should include decision_log entries");
     let first = decisions[0].as_str().expect("string");
@@ -206,7 +206,7 @@ fn set_worktree_fails_for_missing_plan() {
 fn execution_context_verify_includes_test_criteria_lines() {
     let db = setup_db();
     seed_active_plan(&db);
-    let ctx = build_execution_context(db.connection(), 742).expect("ctx");
+    let ctx = build_execution_context(db.connection(), 742, None).expect("ctx");
     let task = &ctx["next_task"];
     let verify = task["verify"].as_array().expect("verify array");
     assert_eq!(verify.len(), 2, "two verify lines from test_criteria");

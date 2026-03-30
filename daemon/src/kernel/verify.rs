@@ -76,6 +76,11 @@ pub fn check_evidence(
 ) -> EvidenceReport {
     info!(task_id, status, "kernel verify: running evidence gate");
 
+    // Clear cache on status transitions to prevent stale evidence from blocking
+    if status == "submitted" || status == "done" {
+        EVIDENCE_CACHE.clear();
+    }
+
     // Serialize: only 1 evidence check at a time to prevent resource exhaustion.
     let _guard = EVIDENCE_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
 
