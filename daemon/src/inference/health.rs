@@ -75,6 +75,15 @@ impl EndpointHealth {
         }
     }
 
+    /// Average latency in milliseconds over the sample ring buffer (0 if no data).
+    pub fn avg_latency_ms(&self) -> u64 {
+        if self.latencies.is_empty() {
+            return 0;
+        }
+        let total: u128 = self.latencies.iter().map(|d| d.as_millis()).sum();
+        (total / self.latencies.len() as u128) as u64
+    }
+
     /// Compute current health status from recorded probes.
     pub fn status(&self) -> EndpointHealthStatus {
         // Down takes priority: 3+ consecutive failures.
@@ -136,6 +145,15 @@ impl HealthChecker {
             .find(|ep| ep.name == endpoint_name)
             .map(|ep| ep.status())
             .unwrap_or(EndpointHealthStatus::Healthy)
+    }
+
+    /// Return average latency (ms) for `endpoint_name`. 0 if unknown or no data.
+    pub fn latency_ms(&self, endpoint_name: &str) -> u64 {
+        self.endpoints
+            .iter()
+            .find(|ep| ep.name == endpoint_name)
+            .map(|ep| ep.avg_latency_ms())
+            .unwrap_or(0)
     }
 
     /// Return the names of all tracked endpoints.

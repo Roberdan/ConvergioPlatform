@@ -1,7 +1,10 @@
 // GET /api/inference/status — active providers, health, and configuration.
+// Reads health data from the background probe loop via SharedHealthState.
 
+use crate::inference::health::EndpointHealthStatus;
+use crate::inference::health_loop::SharedHealthState;
 use super::state::{ApiError, ServerState};
-use axum::extract::State;
+use axum::extract::{Extension, State};
 use axum::response::Json;
 use axum::Router;
 use axum::routing::get;
@@ -13,6 +16,8 @@ struct ProviderStatus {
     name: String,
     provider_type: String,
     available: bool,
+    status: String,
+    latency_ms: u64,
     description: String,
 }
 
@@ -23,7 +28,15 @@ struct InferenceStatus {
     fallback_chains: Value,
 }
 
-fn check_cli_available(cmd: &str) -> bool {
+fn health_label(s: &EndpointHealthStatus) -> (&'static str, bool) {
+    match s {
+        EndpointHealthStatus::Healthy => ("healthy", true),
+        EndpointHealthStatus::Degraded(_) => ("degraded", true),
+        EndpointHealthStatus::Down => ("down", false),
+    }
+}
+
+fn cli_available(cmd: &str) -> bool {
     std::process::Command::new("which")
         .arg(cmd)
         .stdout(std::process::Stdio::null())
@@ -35,41 +48,53 @@ fn check_cli_available(cmd: &str) -> bool {
 
 async fn inference_status_handler(
     State(_state): State<ServerState>,
+    Extension(health): Extension<SharedHealthState>,
 ) -> Result<Json<InferenceStatus>, ApiError> {
-    let claude_ok = check_cli_available("claude");
-    let gh_ok = check_cli_available("gh");
+    let checker = health.read().await;
 
     let local_port = std::env::var("LOCAL_LLM_PORT").unwrap_or_else(|_| "8321".into());
-    let local_ok = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .build()
-        .unwrap_or_default()
-        .get(format!("http://localhost:{local_port}/v1/models"))
-        .send()
-        .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false);
+
+    // Claude: health from background probe + CLI availability guard.
+    let claude_status = checker.status("claude");
+    let (claude_label, claude_avail) = health_label(&claude_status);
+    let claude_ok = claude_avail && cli_available("claude");
+
+    // Copilot: no HTTP probe; derive from CLI availability only.
+    let gh_ok = cli_available("gh");
+    let copilot_label = if gh_ok { "healthy" } else { "down" };
+
+    // Local LLM: health entirely from background probe.
+    let local_status = checker.status("local-llm");
+    let (local_label, local_avail) = health_label(&local_status);
 
     let providers = vec![
         ProviderStatus {
             name: "ClaudeSubscription".into(),
             provider_type: "cli_subprocess".into(),
             available: claude_ok,
+            status: claude_label.into(),
+            latency_ms: checker.latency_ms("claude"),
             description: "claude -p (OAuth subscription)".into(),
         },
         ProviderStatus {
             name: "CopilotSubscription".into(),
             provider_type: "cli_subprocess".into(),
             available: gh_ok,
+            status: copilot_label.into(),
+            latency_ms: 0,
             description: "gh copilot -p (GitHub subscription)".into(),
         },
         ProviderStatus {
             name: "LocalLLM".into(),
             provider_type: "http_openai_compat".into(),
-            available: local_ok,
+            available: local_avail,
+            status: local_label.into(),
+            latency_ms: checker.latency_ms("local-llm"),
             description: format!("localhost:{local_port} (Ollama/MLX)"),
         },
     ];
+
+    drop(checker);
 
     let chains = serde_json::json!({
         "t1": ["local", "haiku", "sonnet"],

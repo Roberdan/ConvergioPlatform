@@ -68,6 +68,7 @@ use super::api_goal;
 use super::api_repositories;
 use super::api_inference_status;
 use super::api_policy;
+use crate::inference::health_loop::{create_shared_health, spawn_health_probe_loop};
 use super::mesh_provision;
 use super::middleware as server_mw;
 use super::middleware_audit;
@@ -112,6 +113,10 @@ pub fn build_router_with_db(
 pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Router {
     let static_files = ServeDir::new(static_dir).append_index_html_on_directories(true);
     let rate_limiter = RateLimiter::default();
+
+    // Shared inference health state: probed every 60s in background.
+    let health_state = create_shared_health();
+    spawn_health_probe_loop(health_state.clone());
 
     Router::new()
         .merge(api_validation::router())
@@ -204,6 +209,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .route("/api/mesh/provision", get(mesh_provision::provision_all))
         .route("/api/health", get(health::api_health))
         .route("/api/telemetry", get(health::api_telemetry))
+        .layer(axum::Extension(health_state))
         .layer(from_fn_with_state(state.clone(), middleware_audit::audit_mutations))
         .layer(from_fn_with_state(rate_limiter, basic_rate_limit))
         .layer(from_fn(server_mw::require_auth))

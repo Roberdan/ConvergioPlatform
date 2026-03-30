@@ -2,6 +2,7 @@ pub mod agent_config;
 pub mod classifier;
 pub mod fallback;
 pub mod health;
+pub mod health_loop;
 pub mod metrics;
 pub mod router;
 pub mod types;
