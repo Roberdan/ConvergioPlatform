@@ -193,6 +193,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE TRIGGER IF NOT EXISTS trg_waves_updated_at_update AFTER UPDATE ON waves FOR EACH ROW WHEN NEW.updated_at IS NULL OR NEW.updated_at = OLD.updated_at BEGIN UPDATE waves SET updated_at = datetime('now') WHERE id = NEW.id; END",
     "CREATE TRIGGER IF NOT EXISTS trg_kb_updated_at_insert AFTER INSERT ON knowledge_base FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE knowledge_base SET updated_at = datetime('now') WHERE id = NEW.id; END",
     "CREATE TRIGGER IF NOT EXISTS trg_notif_updated_at_insert AFTER INSERT ON notifications FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE notifications SET updated_at = datetime('now') WHERE id = NEW.id; END",
+    "CREATE TABLE IF NOT EXISTS rollback_snapshots (id INTEGER PRIMARY KEY, task_id INTEGER, git_ref TEXT NOT NULL, changed_files TEXT, db_rows_json TEXT, created_at TEXT DEFAULT (datetime('now')))",
+    "CREATE INDEX IF NOT EXISTS idx_rollback_snapshots_task_id ON rollback_snapshots(task_id)",
     // Backfill updated_at for ALL sync tables — rows without updated_at break replication.
     // Use datetime('now') only — COALESCE with other columns fails on test DBs that lack them.
     "UPDATE plans SET updated_at = datetime('now') WHERE updated_at IS NULL",

@@ -59,6 +59,7 @@ pub mod api_node_readiness;
 pub mod api_node_roles;
 pub mod api_agent_control;
 pub mod api_readiness;
+pub mod api_rollback;
 pub mod api_runs;
 pub mod api_runs_handlers;
 pub mod api_tracking;
