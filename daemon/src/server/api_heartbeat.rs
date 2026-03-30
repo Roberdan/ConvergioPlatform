@@ -76,6 +76,22 @@ async fn handle_heartbeat(
         tracing::warn!(peer = peer_name, "host_heartbeats update failed: {e}");
     }
 
+    // Track convergence state sent by the peer
+    let state_version = body.get("state_version").and_then(Value::as_i64).unwrap_or(0);
+    let state_checksum = body
+        .get("state_checksum")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    if let Err(e) = conn.execute(
+        "INSERT OR REPLACE INTO mesh_peer_state \
+         (peer_id, state_version, state_checksum, last_seen) \
+         VALUES (?1, ?2, ?3, datetime('now'))",
+        rusqlite::params![peer_name, state_version, state_checksum],
+    ) {
+        tracing::warn!(peer = peer_name, "mesh_peer_state update failed: {e}");
+    }
+
     Ok(Json(json!({
         "ok": true,
         "peer_name": peer_name,
