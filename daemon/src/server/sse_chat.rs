@@ -1,8 +1,9 @@
 // Real LLM streaming for chat SSE endpoint.
-// Reads session + message history from DB, streams via llm_client,
-// saves assistant reply and upserts agent_activity for budget tracking.
+// Routes through provider.rs (tier routing + fallback chains).
+// Saves assistant reply and upserts agent_activity for budget tracking.
 
-use super::llm_client::{self, ChatMessage, Provider, StreamChunk};
+use super::llm_client::{self, ChatMessage, StreamChunk};
+use super::provider::{estimate_cost, provider_for_model, stream_with_fallback};
 use super::state::{ApiError, ServerState};
 use axum::extract::{Path, State};
 use axum::response::sse::{Event, Sse};
@@ -12,27 +13,6 @@ use std::convert::Infallible;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::warn;
 
-/// Determine LLM provider from model name.
-/// SECURITY: Always route through LiteLLM proxy — never call Anthropic API directly.
-/// LiteLLM handles auth, rate limiting, cost tracking, and supports all providers.
-fn provider_for_model(_model: &str) -> Provider {
-    Provider::LiteLLM
-}
-
-/// Cost estimate per 1k tokens (rough defaults for budget visibility).
-fn estimate_cost(model: &str, input_tokens: u64, output_tokens: u64) -> f64 {
-    let (in_rate, out_rate) = if model.contains("opus") {
-        (0.015, 0.075)
-    } else if model.contains("sonnet") {
-        (0.003, 0.015)
-    } else if model.contains("haiku") {
-        (0.00025, 0.00125)
-    } else {
-        (0.002, 0.01)
-    };
-    (input_tokens as f64 * in_rate + output_tokens as f64 * out_rate) / 1000.0
-}
-
 pub async fn chat_stream_sse(
     State(state): State<ServerState>,
     Path(session_id): Path<String>,
@@ -40,20 +20,16 @@ pub async fn chat_stream_sse(
     let conn = state.get_conn()?;
     ensure_chat_tables(&conn)?;
 
-    // Read session metadata for model preference
     let model = read_session_model(&conn, &session_id)?;
-    let provider = provider_for_model(&model);
-
-    // Build message history from chat_messages
+    let (provider, resolved_model) = provider_for_model(&model);
     let messages = read_message_history(&conn, &session_id)?;
     if messages.is_empty() {
         return Err(ApiError::bad_request("no messages in session"));
     }
 
-    // Spawn LLM stream and relay as SSE events
-    let llm_stream = llm_client::stream_chat(provider, &model, messages);
+    let llm_stream = stream_with_fallback(provider, &resolved_model, messages);
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(64);
-    let model_clone = model.clone();
+    let model_clone = resolved_model.clone();
     let sid_clone = session_id.clone();
     let state_clone = state.clone();
 
@@ -64,7 +40,6 @@ pub async fn chat_stream_sse(
     Ok(Sse::new(ReceiverStream::new(rx)))
 }
 
-/// Read model preference from session metadata_json, fallback to default.
 fn read_session_model(conn: &rusqlite::Connection, session_id: &str) -> Result<String, ApiError> {
     let meta: Option<String> = conn
         .query_row(
@@ -77,16 +52,13 @@ fn read_session_model(conn: &rusqlite::Connection, session_id: &str) -> Result<S
     if let Some(ref json_str) = meta {
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_str) {
             if let Some(m) = parsed.get("model").and_then(|v| v.as_str()) {
-                if !m.is_empty() {
-                    return Ok(m.to_string());
-                }
+                if !m.is_empty() { return Ok(m.to_string()); }
             }
         }
     }
     Ok("claude-sonnet-4-20250514".to_string())
 }
 
-/// Load message history for context window.
 fn read_message_history(
     conn: &rusqlite::Connection,
     session_id: &str,
@@ -99,17 +71,13 @@ fn read_message_history(
         .map_err(|e| ApiError::internal(format!("prepare messages: {e}")))?;
     let rows = stmt
         .query_map(rusqlite::params![session_id], |row| {
-            Ok(ChatMessage {
-                role: row.get(0)?,
-                content: row.get(1)?,
-            })
+            Ok(ChatMessage { role: row.get(0)?, content: row.get(1)? })
         })
         .map_err(|e| ApiError::internal(format!("query messages: {e}")))?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|e| ApiError::internal(format!("read messages: {e}")))
 }
 
-/// Relay LLM stream chunks to SSE events, then persist results.
 async fn relay_llm_to_sse(
     mut llm_stream: llm_client::ChatStream,
     tx: tokio::sync::mpsc::Sender<Result<Event, Infallible>>,
@@ -134,7 +102,8 @@ async fn relay_llm_to_sse(
                 total_out += usage.output_tokens;
                 let cost = estimate_cost(&model, total_in, total_out);
                 Event::default().event("chat").data(
-                    json!({"type": "usage", "input_tokens": total_in, "output_tokens": total_out, "cost": cost}).to_string(),
+                    json!({"type": "usage", "input_tokens": total_in,
+                           "output_tokens": total_out, "cost": cost}).to_string(),
                 )
             }
             StreamChunk::Error(msg) => {
@@ -151,11 +120,10 @@ async fn relay_llm_to_sse(
             }
         };
         if tx.send(Ok(event)).await.is_err() {
-            break; // client disconnected
+            break;
         }
     }
 
-    // Persist assistant message and update budget tracking
     let cost = estimate_cost(&model, total_in, total_out);
     if !full_text.is_empty() {
         if let Ok(conn) = state.get_conn() {
@@ -164,7 +132,6 @@ async fn relay_llm_to_sse(
         }
     }
 
-    // Send final done event
     if let Err(e) = tx
         .send(Ok(Event::default()
             .event("chat")
@@ -175,7 +142,6 @@ async fn relay_llm_to_sse(
     }
 }
 
-/// Save the assistant reply into chat_messages and update session timestamp.
 fn save_assistant_message(
     conn: &rusqlite::Connection,
     session_id: &str,
@@ -200,7 +166,6 @@ fn save_assistant_message(
     }
 }
 
-/// Upsert agent_activity with chat token counts and cost for budget visibility.
 fn upsert_agent_activity(
     conn: &rusqlite::Connection,
     session_id: &str,
@@ -230,7 +195,6 @@ fn upsert_agent_activity(
     }
 }
 
-/// Ensure chat tables exist (idempotent).
 fn ensure_chat_tables(conn: &rusqlite::Connection) -> Result<(), ApiError> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS chat_sessions (id TEXT PRIMARY KEY, project_id INTEGER, \
