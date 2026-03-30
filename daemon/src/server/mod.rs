@@ -1,6 +1,7 @@
 pub mod api_agent_catalog;
 mod api_agent_catalog_parse;
 mod api_agent_catalog_security;
+pub mod api_agent_profiles;
 mod api_plan_db_evidence;
 pub mod api_agent_triage;
 pub mod api_agents;
