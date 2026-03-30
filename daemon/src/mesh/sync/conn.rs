@@ -26,10 +26,11 @@ pub fn open_sync_conn(db_path: &Path, crsqlite_ext: Option<&str>) -> Result<Conn
         })() {
             Ok(()) => {}
             Err(e) => {
-                eprintln!("[warn] crsqlite failed (SQLite {ext} vs system mismatch?): {e}");
-                eprintln!(
-                    "[warn] daemon running WITHOUT CRDT replication — heartbeat/sync still active"
-                );
+                // FAIL-FAST: CRDT replication is the sole sync path since v20.
+                // The daemon MUST NOT start without crsqlite.
+                return Err(MeshError::Internal(format!(
+                    "crsqlite load failed (CRDT replication required): {e}"
+                )));
             }
         }
     }

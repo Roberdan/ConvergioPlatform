@@ -1,4 +1,5 @@
-/// Background sync loop — syncs with active mesh peers via HTTP (timestamp-based LWW).
+/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420) is the
+/// sole replication path. Retained for fallback — do NOT spawn in production.
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -177,7 +178,9 @@ pub fn sync_table_with_peer(
     (sent, received, applied)
 }
 
-/// Spawn the background sync loop. Abortable via the returned JoinHandle.
+/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420)
+/// is the sole replication path. Callers should NOT spawn this loop.
+#[deprecated(note = "v20: use CRDT over TCP (port 9420) instead of HTTP LWW sync")]
 pub fn spawn_sync_loop(
     db: Arc<Mutex<Connection>>,
     interval_secs: u64,

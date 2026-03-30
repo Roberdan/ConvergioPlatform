@@ -23,14 +23,17 @@ pub use sync::io_as_sql_error;
 // file_snapshots, collector_runs, debt_items, env_vault_log, merge_queue,
 // metrics_history, notification_triggers, schema_metadata, session_state,
 // snapshots. Cleaned 23 Marzo 2026 after DB audit (Plan 706).
-const REQUIRED_CRDT_TABLES: [&str; 48] = [
+const REQUIRED_CRDT_TABLES: [&str; 51] = [
     "agent_activity",
     "agent_runs",
+    "audit_log",
     "chat_messages",
     "chat_sessions",
     "coordinator_events",
     "daemon_config",
     "delegation_log",
+    "domain_skill_map",
+    "execution_runs",
     "github_events",
     "host_heartbeats",
     "idea_notes",
@@ -102,7 +105,8 @@ pub fn required_crdt_tables() -> Vec<&'static str> {
 /// Load the crsqlite extension into a connection.
 ///
 /// Only available when the `crsqlite` feature is enabled. When disabled,
-/// sync is handled by the timestamp-based `libsql_adapter` module instead.
+/// sync was handled by the timestamp-based `libsql_adapter` module
+/// (DEPRECATED v20: CRDT over TCP is the sole replication path).
 #[cfg(feature = "crsqlite")]
 pub fn load_crsqlite(conn: &Connection, extension: &str) -> rusqlite::Result<()> {
     unsafe { conn.load_extension_enable()? };

@@ -90,12 +90,13 @@ pub async fn run_serve(
     info!("boot readiness passed");
 
     if mesh_enabled {
-        // Background CRDT sync
-        if let Ok(sync_conn) = rusqlite::Connection::open(&db_path) {
-            let sync_conn = std::sync::Arc::new(std::sync::Mutex::new(sync_conn));
-            let interval = convergio_core::background_sync::resolve_interval_secs(None);
-            convergio_core::background_sync::spawn_sync_loop(sync_conn, interval);
-        }
+        // DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420)
+        // is the sole replication path. Code kept for potential fallback.
+        // if let Ok(sync_conn) = rusqlite::Connection::open(&db_path) {
+        //     let sync_conn = std::sync::Arc::new(std::sync::Mutex::new(sync_conn));
+        //     let interval = convergio_core::background_sync::resolve_interval_secs(None);
+        //     convergio_core::background_sync::spawn_sync_loop(sync_conn, interval);
+        // }
 
         // Mesh daemon (shares same IPC engine via DB path — Ali spawns inside)
         let peers_conf = default_peers_conf();

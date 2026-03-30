@@ -78,13 +78,12 @@ impl IpcEngine {
     ) -> rusqlite::Result<IpcResponse> {
         // Receiving agent must be identified so inbox filtering works correctly.
         debug_assert!(!agent.is_empty(), "receive: agent must not be empty");
-        // limit=0 would silently return nothing — callers should use a positive limit.
         debug_assert!(limit > 0, "receive: limit must be > 0");
-        _ = peek; // used below by caller-side, suppress dead-code lint in debug
         let conn = self.open_conn()?;
+        // Atomic claim: transaction prevents concurrent consumers from claiming same messages
+        let tx = conn.unchecked_transaction()?;
         let mut conditions = vec!["(to_agent = ?1 OR to_agent IS NULL)".to_string()];
         let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(agent.to_string())];
-
         if let Some(from) = from_filter {
             params.push(Box::new(from.to_string()));
             conditions.push(format!("from_agent = ?{}", params.len()));
@@ -93,17 +92,16 @@ impl IpcEngine {
             params.push(Box::new(ch.to_string()));
             conditions.push(format!("channel = ?{}", params.len()));
         }
-
-        let where_clause = conditions.join(" AND ");
         let sql = format!(
             "SELECT id, from_agent, to_agent, channel, content, msg_type, created_at
-             FROM ipc_messages WHERE {where_clause} AND read_at IS NULL
-             ORDER BY created_at ASC LIMIT {limit}"
+             FROM ipc_messages WHERE {} AND read_at IS NULL
+             ORDER BY created_at ASC LIMIT {limit}",
+            conditions.join(" AND ")
         );
 
         let param_refs: Vec<&dyn rusqlite::types::ToSql> =
             params.iter().map(|p| p.as_ref()).collect();
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = tx.prepare(&sql)?;
         let ids_and_msgs: Vec<(String, MessageInfo)> = stmt
             .query_map(param_refs.as_slice(), |row| {
                 Ok((
@@ -124,18 +122,20 @@ impl IpcEngine {
                 Err(e) => { tracing::warn!("receive: skipping message row: {e}"); None }
             })
             .collect();
+        drop(stmt);
 
         if !peek {
             for (id, _) in &ids_and_msgs {
-                conn.execute(
+                tx.execute(
                     "UPDATE ipc_messages SET read_at = strftime('%Y-%m-%dT%H:%M:%f','now') WHERE id = ?1",
                     rusqlite::params![id],
                 )?;
             }
         }
-
-        let messages: Vec<MessageInfo> = ids_and_msgs.into_iter().map(|(_, m)| m).collect();
-        Ok(IpcResponse::MessageList { messages })
+        tx.commit()?;
+        Ok(IpcResponse::MessageList {
+            messages: ids_and_msgs.into_iter().map(|(_, m)| m).collect(),
+        })
     }
 
     pub async fn receive_wait(

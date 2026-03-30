@@ -1,10 +1,12 @@
 /// HTTP sync endpoints for timestamp-based node-to-node sync.
 ///
+/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420) is the
+/// sole replication path. Export/import endpoints retained for diagnostics.
+///
 /// GET  /api/sync/export?table=<name>&since=<timestamp>  -- export SyncChange[]
 /// POST /api/sync/import                                  -- apply SyncChange[]
-///
-/// These replace the SSH-based crsqlite sync with HTTP transport,
-/// using the `libsql_adapter` module for timestamp-based LWW sync.
+/// GET  /api/sync/conflicts                               -- list unresolved CRDT conflicts
+/// GET  /api/sync/status                                  -- peer lag, CRDT coverage
 use super::state::{ApiError, ServerState};
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
@@ -29,6 +31,7 @@ pub fn router() -> Router<ServerState> {
     Router::new()
         .route("/api/sync/export", get(handle_export))
         .route("/api/sync/status", get(handle_sync_status))
+        .route("/api/sync/conflicts", get(handle_sync_conflicts))
         .route(
             "/api/sync/import",
             post(handle_import).layer(
@@ -81,8 +84,7 @@ async fn handle_import(
     })))
 }
 
-/// GET /api/sync/status — health and policy for background sync.
-/// Returns `healthy: true` when at least one peer synced within 5 minutes.
+/// GET /api/sync/status — health, peer lag, and CRDT table coverage.
     #[tracing::instrument(skip_all)]
 async fn handle_sync_status(
     State(state): State<ServerState>,
@@ -120,12 +122,62 @@ async fn handle_sync_status(
             .map_or(false, |t| t > threshold)
     });
 
+    let crdt_tables = crate::db::crdt::required_crdt_tables();
+    let crdt_count = crdt_tables.len();
+
     Ok(Json(json!({
         "healthy": any_recent,
-        "policy": "daemon-http",
-        "interval_secs": crate::background_sync::resolve_interval_secs(None),
+        "policy": "crdt-tcp-9420",
+        "http_lww_enabled": false,
+        "crdt_tables": crdt_count,
+        "crdt_table_list": crdt_tables,
         "peers": peers,
     })))
+}
+
+/// GET /api/sync/conflicts — list unresolved CRDT sync conflicts.
+    #[tracing::instrument(skip_all)]
+async fn handle_sync_conflicts(
+    State(state): State<ServerState>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = state.get_conn()?;
+
+    // Table may not exist yet on fresh nodes
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='_sync_conflicts'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(false);
+    if !exists {
+        return Ok(Json(json!({ "conflicts": [], "count": 0 })));
+    }
+
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT id, table_name, pk, local_data, remote_data, source_node, created_at \
+             FROM _sync_conflicts WHERE resolved = 0 ORDER BY created_at DESC LIMIT 100",
+        )
+        .map_err(|e| ApiError::internal(format!("prepare: {e}")))?;
+    let conflicts: Vec<Value> = stmt
+        .query_map([], |row| {
+            Ok(json!({
+                "id": row.get::<_, i64>(0)?,
+                "table_name": row.get::<_, String>(1)?,
+                "pk": row.get::<_, Option<i64>>(2)?,
+                "local_data": row.get::<_, Option<String>>(3)?,
+                "remote_data": row.get::<_, Option<String>>(4)?,
+                "source_node": row.get::<_, Option<String>>(5)?,
+                "created_at": row.get::<_, Option<String>>(6)?,
+            }))
+        })
+        .map_err(|e| ApiError::internal(format!("query: {e}")))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let count = conflicts.len();
+    Ok(Json(json!({ "conflicts": conflicts, "count": count })))
 }
 
 #[cfg(test)]
