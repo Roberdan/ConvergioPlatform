@@ -1,17 +1,20 @@
 {
   "name": "@convergio/evolution-engine",
   "version": "0.1.0",
-  "description": "Self-improving optimization engine — standalone Convergio capability",
+  "description": "Self-improving optimization engine \u2014 standalone Convergio capability",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "license": "MPL-2.0",
   "devDependencies": {
+    "@playwright/test": "^1.48.0",
     "@types/node": "^25.5.0",
     "@vitest/coverage-v8": "^4.1.0",
     "jsdom": "^29.0.1",
