@@ -1,0 +1,250 @@
+name: "v20.0.0 — Autonomous Platform (Unified)"
+project: convergio
+description: >
+  Everything needed for v20: internalize LiteLLM (blocked by antivirus),
+  wire all unwired code, security hardening, reliability, nightly job,
+  dead code cleanup. Parallel execution via worktrees + ?task_id= API.
+parallel_mode: standard
+
+waves:
+  # =============================================
+  # W1: INTERNALIZE LITELLM + WIRE INFERENCE (PARALLEL)
+  # Tasks are independent — run on separate worktrees
+  # =============================================
+  - id: W1
+    name: "Internalize LiteLLM + Wire Unused Code"
+    tasks:
+      - id: T1-01
+        do: >
+          CRITICAL: Eliminate LiteLLM dependency. Antivirus blocks it.
+
+          The daemon already has inference infrastructure that's BUILT BUT NOT WIRED:
+          - inference/router.rs: tier-based routing (T1-T4) — TEST ONLY
+          - inference/fallback.rs: retry chain executor — TEST ONLY
+          - inference/health.rs: endpoint health probing — NEVER CALLED
+          - sse_chat.rs:18: provider_for_model() IGNORES parameter, always returns LiteLLM
+
+          IMPLEMENT:
+          1. In sse_chat.rs: replace hardcoded Provider::LiteLLM with actual routing.
+             Wire inference/router.rs InferenceRouter into provider selection.
+          2. Add Provider::Anthropic: POST directly to https://api.anthropic.com/v1/messages
+             with streaming. Parse Claude SSE (code exists in llm_client.rs parse_claude_sse, DISABLED).
+             Enable it. API key from ANTHROPIC_API_KEY env var (secure, from Keychain).
+          3. Add Provider::Local: POST to local MLX/Ollama on localhost:8321.
+             Use OpenAI-compat format (same as LiteLLM was doing).
+          4. Wire health.rs HealthChecker into daemon startup — probe endpoints every 60s.
+          5. Wire fallback.rs FallbackExecutor — if Anthropic fails, try Local, vice versa.
+          6. Read model config from config/llm/litellm.yaml (parse YAML, map to internal config).
+          7. Delete scripts/llm/convergio-llm.sh (LiteLLM startup script — no longer needed).
+          8. Test: send chat message → daemon routes to Anthropic directly → SSE response.
+          9. Add /api/inference/status endpoint showing: active providers, health, latency.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test inference 2>&1 | grep -v FAILED"
+          - "rg 'Provider::LiteLLM' daemon/src/server/sse_chat.rs | wc -l | xargs test 1 -ge"
+
+      - id: T1-02
+        do: >
+          Wire all orphaned daemon endpoints and clean dead code.
+
+          ORPHANED ENDPOINTS (have router() but not merged in routes/mod.rs):
+          1. api_decisions.rs — merge router into routes or DELETE if not needed
+          2. api_repositories.rs — merge router into routes or DELETE if not needed
+
+          DEAD CODE (remove entirely):
+          3. resilience/watchdog.rs — deprecated, superseded by kernel/monitor.rs. DELETE.
+          4. resilience/circuit_breaker.rs — zero imports. DELETE.
+          5. inference/ipc.rs — never instantiated outside tests. Wire it or DELETE.
+
+          WIRING CHECK IMPROVEMENT:
+          6. Extend scripts/check-rust-wiring.sh to also check:
+             - Every pub fn router() in api_*.rs is merged in routes/mod.rs
+             - Every pub fn in non-test modules has at least 1 caller outside its module
+             Output warnings (not errors) for unused pub fns.
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "test ! -f daemon/src/resilience/watchdog.rs"
+
+      - id: T1-03
+        do: >
+          Security hardening: signed auth + audit trail.
+
+          1. JWT auth (already implemented in security/jwt.rs from T2-01 of plan 10018).
+             Verify it's wired into middleware.rs and ALL routes use it.
+          2. Remove --dangerously-skip-permissions from delegation paths:
+             - Search: rg 'dangerously.skip' daemon/src/ claude-config/scripts/
+             - Replace with per-worktree .claude/settings.json that has explicit allow rules
+             - copilot-worker.sh: generate task-specific settings with allowed tools
+          3. Audit trail: add audit_log table, log every state-changing API call.
+             INSERT INTO audit_log(timestamp, agent, action, resource, detail)
+          4. Add migration for audit_log table.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test audit 2>&1 | grep -v FAILED"
+
+  # =============================================
+  # W2: RELIABILITY + NIGHTLY (PARALLEL)
+  # =============================================
+  - id: W2
+    name: "Reliability + Nightly Autonomy"
+    tasks:
+      - id: T2-01
+        do: >
+          Conflict-aware DB sync + rollback model.
+
+          SYNC (currently timestamp LWW, no conflict detection):
+          1. Add sync envelope: {source_node, seq_no, checksum, changes[]}
+          2. Conflict detection: local updated_at != incoming AND content differs → conflict
+          3. Resolution: coordinator wins for plans, LWW for tasks, merge for knowledge_base
+          4. _sync_conflicts table for rejected changes
+          5. GET /api/sync/conflicts endpoint
+
+          ROLLBACK:
+          6. rollback_snapshots table: (task_id, git_ref, changed_files, db_rows_json)
+          7. Save snapshot before every task execution
+          8. POST /api/rollback/:task_id — revert git + restore DB rows
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test sync_conflict 2>&1 | grep -v FAILED"
+
+      - id: T2-02
+        do: >
+          Nightly autonomy job on M1 Pro.
+
+          Create daemon/src/orchestrator/nightly_job.rs (split into sub-files if >250 lines):
+
+          CLEANUP (runs every night 02:00 CET):
+          - Worktree prune (>7d, no active plan)
+          - Zombie process reap (copilot/claude >4h, no active task)
+          - Stale agent cleanup (not seen 24h)
+          - Evidence cache clear
+          - Git gc + prune remote branches
+
+          EVALUATION (daily):
+          - Git log analysis: commits, failures, fix-chains
+          - Token audit: agent definitions total tokens, flag >200 lines
+          - Memory audit: stale files, suggest GC
+          - Test health: cargo test --lib
+          - Dependency check: cargo outdated
+          - Model version check: compare Claude API version with config
+
+          OPTIMIZATION (weekly, Sundays):
+          - Agent prompt compression suggestions
+          - Key learnings extraction from git log fix: commits
+          - Issue scanning: gh issue list on all repos, assess and create micro-plans
+
+          REPORT:
+          - /tmp/nightly-report-YYYY-MM-DD.md
+          - Telegram notification
+          - DB storage in nightly_reports table
+
+          Wire: POST /api/nightly/run + launchd plist for M1 Pro.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test nightly 2>&1 | grep -v FAILED"
+
+      - id: T2-03
+        do: >
+          Autonomous execution policy + goal decomposer.
+
+          POLICY (risk-based auto-progression):
+          1. Risk classification per task: LOW/MEDIUM/HIGH/CRITICAL
+          2. LOW (config, docs, tests): auto-progress without human gate
+          3. MEDIUM (code with tests): auto-progress, double Thor validation
+          4. HIGH/CRITICAL: require human approval (current behavior)
+          5. Store policy in DB, configurable per project
+          6. Wire into plan execution: check risk before asking approval
+
+          GOAL DECOMPOSER:
+          7. POST /api/goal/decompose {goal: "Launch recipe SaaS"}
+             Returns: {domains, agents, waves}
+          8. Maps goal keywords to Ali's 10-domain routing table
+          9. Generates multi-domain plan with domain-specific tasks
+          10. POST /api/goal/execute starts the plan automatically
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test policy 2>&1 | grep -v FAILED"
+
+  # =============================================
+  # W3: CLOSURE
+  # =============================================
+  - id: W3
+    name: "Verification & Release"
+    tasks:
+      - id: TF-tests
+        do: >
+          Full system verification:
+          - cargo test (all)
+          - scripts/check-rust-wiring.sh (extended)
+          - /api/inference/status shows providers
+          - /api/sync/status shows healthy
+          - /api/ipc/send-direct works
+          - /api/nightly/run triggers cleanup
+          - Zero orphan processes
+          - Zero unwired modules
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo test --lib -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+
+      - id: TF-doc
+        do: >
+          Release v20.0.0:
+          - CHANGELOG.md (breaking: LiteLLM removed, new auth, conflict sync)
+          - VERSION.md + Cargo.toml → 20.0.0
+          - ADR-0125 daemon-autonomous-platform
+          - ADR-0126 conflict-aware-sync
+          - ADR-0127 litellm-internalization
+          - ADR-0128 nightly-autonomy-job
+          - Update SECURITY.md with JWT auth model
+          - Update convergio-capabilities.md
+          - Update TROUBLESHOOTING.md
+        type: documentation
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "head -3 CHANGELOG.md | grep -q '20.0.0'"
+          - "test -f docs/adr/ADR-0127-litellm-internalization.md"
