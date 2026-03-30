@@ -234,8 +234,8 @@ fn test_sync_table_with_peer_handles_unreachable_peer() {
     )
     .expect("schema");
     // Use a non-routable address to ensure HTTP fails fast
-    let applied = sync_table_with_peer(&conn, "192.0.2.1:9999", "tasks");
-    assert_eq!(applied, 0, "unreachable peer should yield 0 applied");
+    let (sent, recv, applied) = sync_table_with_peer(&conn, "192.0.2.1:9999", "tasks");
+    assert_eq!((sent, recv, applied), (0, 0, 0), "unreachable peer should yield all zeros");
 }
 
 #[test]

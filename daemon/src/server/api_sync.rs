@@ -28,6 +28,7 @@ pub struct ImportPayload {
 pub fn router() -> Router<ServerState> {
     Router::new()
         .route("/api/sync/export", get(handle_export))
+        .route("/api/sync/status", get(handle_sync_status))
         .route(
             "/api/sync/import",
             post(handle_import).layer(
@@ -77,6 +78,53 @@ async fn handle_import(
     Ok(Json(json!({
         "ok": true,
         "applied": applied,
+    })))
+}
+
+/// GET /api/sync/status — health and policy for background sync.
+/// Returns `healthy: true` when at least one peer synced within 5 minutes.
+    #[tracing::instrument(skip_all)]
+async fn handle_sync_status(
+    State(state): State<ServerState>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = state.get_conn()?;
+    let now: i64 = conn
+        .query_row("SELECT strftime('%s','now')", [], |r| r.get(0))
+        .unwrap_or(0);
+    let threshold = now - 300; // 5 minutes
+
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT peer_name, last_sync_at, last_latency_ms, last_error \
+             FROM mesh_sync_stats ORDER BY last_sync_at DESC",
+        )
+        .map_err(|e| ApiError::internal(format!("prepare: {e}")))?;
+    let peers: Vec<Value> = stmt
+        .query_map([], |row| {
+            let last: Option<i64> = row.get(1)?;
+            Ok(json!({
+                "peer": row.get::<_, String>(0)?,
+                "last_sync_at": last,
+                "last_sync_ago_s": last.map(|t| now - t),
+                "latency_ms": row.get::<_, Option<i64>>(2)?,
+                "error": row.get::<_, Option<String>>(3)?,
+            }))
+        })
+        .map_err(|e| ApiError::internal(format!("query: {e}")))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let any_recent = peers.iter().any(|p| {
+        p.get("last_sync_at")
+            .and_then(Value::as_i64)
+            .map_or(false, |t| t > threshold)
+    });
+
+    Ok(Json(json!({
+        "healthy": any_recent,
+        "policy": "daemon-http",
+        "interval_secs": crate::background_sync::resolve_interval_secs(None),
+        "peers": peers,
     })))
 }
 

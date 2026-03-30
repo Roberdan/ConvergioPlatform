@@ -105,6 +105,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/node/readiness",
     "/api/node/roles",
     "/api/voice/status",
+    "/api/sync/status",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/ideas",

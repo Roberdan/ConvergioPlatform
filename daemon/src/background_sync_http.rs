@@ -116,3 +116,31 @@ pub fn peers_conf_path_from_env() -> String {
         format!("{home}/.claude/config/peers.conf")
     })
 }
+
+/// Update mesh_sync_stats so the dashboard reflects background sync activity.
+/// Bridges the gap between HTTP-based background sync and the mesh stats table.
+pub fn update_mesh_sync_stats(
+    conn: &rusqlite::Connection,
+    peer_addr: &str,
+    sent: usize,
+    received: usize,
+    applied: usize,
+    latency_ms: i64,
+) {
+    let result = conn.execute(
+        "INSERT INTO mesh_sync_stats(peer_name, total_sent, total_received, total_applied, \
+         last_sync_at, last_latency_ms, last_error) \
+         VALUES(?1, ?2, ?3, ?4, strftime('%s','now'), ?5, NULL) \
+         ON CONFLICT(peer_name) DO UPDATE SET \
+           total_sent = total_sent + excluded.total_sent, \
+           total_received = total_received + excluded.total_received, \
+           total_applied = total_applied + excluded.total_applied, \
+           last_sync_at = excluded.last_sync_at, \
+           last_latency_ms = excluded.last_latency_ms, \
+           last_error = NULL",
+        rusqlite::params![peer_addr, sent as i64, received as i64, applied as i64, latency_ms],
+    );
+    if let Err(e) = result {
+        warn!("background_sync: update mesh_sync_stats failed: {e}");
+    }
+}

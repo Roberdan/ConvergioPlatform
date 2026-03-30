@@ -44,53 +44,41 @@ CREATE TABLE IF NOT EXISTS peer_heartbeats (
     ts TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS mesh_sync_stats (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    peer_id TEXT NOT NULL,
-    last_sync_at TEXT,
-    changes_sent INTEGER DEFAULT 0,
-    changes_received INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'idle'
+    peer_name TEXT PRIMARY KEY,
+    total_sent INTEGER NOT NULL DEFAULT 0,
+    total_received INTEGER NOT NULL DEFAULT 0,
+    total_applied INTEGER NOT NULL DEFAULT 0,
+    last_sent_at INTEGER,
+    last_sync_at INTEGER,
+    last_latency_ms INTEGER,
+    last_db_version INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT
 );
 ";
 
-fn test_router() -> axum::Router {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+use std::sync::atomic::{AtomicU64, Ordering};
+static DB_CTR: AtomicU64 = AtomicU64::new(0);
+
+fn make_router(extra_sql: Option<&str>) -> axum::Router {
+    let n = DB_CTR.fetch_add(1, Ordering::SeqCst);
     let tmp = std::env::temp_dir()
         .join(format!("claude-sync-test-{}-{n}.db", std::process::id()));
     let conn = rusqlite::Connection::open(&tmp).expect("open tmp db");
     conn.execute_batch(SCHEMA).expect("schema");
+    if let Some(sql) = extra_sql { conn.execute_batch(sql).expect("seed"); }
     drop(conn);
     super::super::middleware::set_dev_mode(true);
     super::super::routes::build_router_with_db(
-        std::path::PathBuf::from("/tmp"),
-        tmp,
-        None,
+        std::path::PathBuf::from("/tmp"), tmp, None,
     )
 }
-
+fn test_router() -> axum::Router { make_router(None) }
 fn test_router_seeded() -> axum::Router {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(200);
-    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let tmp = std::env::temp_dir()
-        .join(format!("claude-sync-test-{}-{n}.db", std::process::id()));
-    let conn = rusqlite::Connection::open(&tmp).expect("open tmp db");
-    conn.execute_batch(SCHEMA).expect("schema");
-    conn.execute_batch(
+    make_router(Some(
         "INSERT INTO tasks(id, title, status, updated_at) VALUES
          (1, 'Implement sync API', 'done', '2026-03-27T09:00:00'),
          (2, 'Wire background loop', 'pending', '2026-03-28T12:00:00');",
-    )
-    .expect("seed");
-    drop(conn);
-    super::super::middleware::set_dev_mode(true);
-    super::super::routes::build_router_with_db(
-        std::path::PathBuf::from("/tmp"),
-        tmp,
-        None,
-    )
+    ))
 }
 
 async fn get_json(router: axum::Router, path: &str) -> (StatusCode, Value) {
@@ -214,4 +202,32 @@ async fn import_rejects_empty_changes() {
         post_json_body(router, "/api/sync/import", payload).await;
     assert_eq!(status, StatusCode::OK, "expected 200: {body}");
     assert_eq!(body["applied"], 0);
+}
+
+#[tokio::test]
+async fn sync_status_returns_unhealthy_when_no_peers() {
+    let router = test_router();
+    let (status, body) =
+        get_json(router, "/api/sync/status").await;
+    assert_eq!(status, StatusCode::OK, "expected 200: {body}");
+    assert_eq!(body["healthy"], false, "no peers = unhealthy");
+    assert_eq!(body["policy"], "daemon-http");
+    assert!(body["interval_secs"].as_u64().unwrap() > 0);
+    assert!(body["peers"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn sync_status_returns_healthy_with_recent_peer() {
+    let router = make_router(Some(
+        "INSERT INTO mesh_sync_stats(peer_name, total_sent, total_received, \
+         total_applied, last_sync_at, last_latency_ms) \
+         VALUES('10.0.0.2:8420', 100, 50, 50, strftime('%s','now'), 12)",
+    ));
+    let (status, body) = get_json(router, "/api/sync/status").await;
+    assert_eq!(status, StatusCode::OK, "expected 200: {body}");
+    assert_eq!(body["healthy"], true, "recent peer = healthy");
+    assert_eq!(body["policy"], "daemon-http");
+    let peers = body["peers"].as_array().unwrap();
+    assert_eq!(peers.len(), 1);
+    assert_eq!(peers[0]["peer"], "10.0.0.2:8420");
 }

@@ -6,7 +6,7 @@ use tracing::{error, info, warn};
 
 use crate::background_sync_http::{
     detect_local_tailscale_ip, fetch_changes_from_peer, peers_conf_path_from_env,
-    resolve_best_addr, send_changes_to_peer,
+    resolve_best_addr, send_changes_to_peer, update_mesh_sync_stats,
 };
 use crate::db::libsql_adapter::{self, SyncMeta};
 
@@ -70,15 +70,9 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
     let local_ts_ip = detect_local_tailscale_ip();
     let mut addrs = Vec::new();
     for name in &online_names {
-        let peer = match conf.get(name.as_str()) {
-            Some(p) => p,
-            None => {
-                error!(
-                    "background_sync: peer '{name}' online (heartbeat) but NOT in peers.conf — \
-                     check that peer_heartbeats.peer_name matches peers.conf section name"
-                );
-                continue;
-            }
+        let Some(peer) = conf.get(name.as_str()) else {
+            error!("background_sync: peer '{name}' online but NOT in peers.conf");
+            continue;
         };
         if let Some(ts_ip) = peer.get("tailscale_ip") {
             if Some(ts_ip.as_str()) == local_ts_ip.as_deref() {
@@ -104,12 +98,12 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
 }
 
 /// Sync one table with a peer: export local → POST → GET remote → apply → checkpoint.
-/// Returns changes applied, or 0 on failure.
+/// Returns (sent, received, applied) counts; all zero on failure.
 pub fn sync_table_with_peer(
     conn: &Connection,
     peer_addr: &str,
     table: &str,
-) -> usize {
+) -> (usize, usize, usize) {
     let since = match libsql_adapter::get_sync_meta(conn, peer_addr, table) {
         Ok(meta) => meta.map(|m| m.last_sync_at),
         Err(e) => {
@@ -127,14 +121,14 @@ pub fn sync_table_with_peer(
         Ok(c) => c,
         Err(e) => {
             warn!(peer = %peer_addr, table, error = %e, "export failed");
-            return 0;
+            return (0, 0, 0);
         }
     };
 
     if !local_changes.is_empty() {
         if let Err(e) = send_changes_to_peer(peer_addr, &local_changes) {
             error!(peer = %peer_addr, error = %e, "send changes failed — aborting sync tick to prevent data loss");
-            return 0;
+            return (0, 0, 0);
         }
     }
 
@@ -147,7 +141,7 @@ pub fn sync_table_with_peer(
         Ok(c) => c,
         Err(e) => {
             warn!(peer = %peer_addr, table, error = %e, "fetch changes failed");
-            return 0;
+            return (0, 0, 0);
         }
     };
 
@@ -155,7 +149,7 @@ pub fn sync_table_with_peer(
         Ok(n) => n,
         Err(e) => {
             warn!(peer = %peer_addr, table, error = %e, "apply changes failed");
-            return 0;
+            return (0, 0, 0);
         }
     };
 
@@ -170,15 +164,17 @@ pub fn sync_table_with_peer(
         warn!(peer = %peer_addr, table, error = %e, "upsert sync meta failed");
     }
 
+    let sent = local_changes.len();
+    let received = remote_changes.len();
     info!(
         peer = %peer_addr,
         table,
-        sent = local_changes.len(),
-        received = remote_changes.len(),
+        sent,
+        received,
         applied,
         "background_sync: table sync complete"
     );
-    applied
+    (sent, received, applied)
 }
 
 /// Spawn the background sync loop. Abortable via the returned JoinHandle.
@@ -227,9 +223,18 @@ pub fn spawn_sync_loop(
                     Err(e) => { error!("background_sync: open DB: {e}"); return; }
                 };
                 for peer in &peers {
+                    let t0 = std::time::Instant::now();
+                    let (mut total_sent, mut total_recv, mut total_applied) = (0usize, 0, 0);
                     for table in SYNC_TABLES {
-                        sync_table_with_peer(&conn, peer, table);
+                        let (s, r, a) = sync_table_with_peer(&conn, peer, table);
+                        total_sent += s;
+                        total_recv += r;
+                        total_applied += a;
                     }
+                    let latency_ms = t0.elapsed().as_millis() as i64;
+                    update_mesh_sync_stats(
+                        &conn, peer, total_sent, total_recv, total_applied, latency_ms,
+                    );
                 }
             }).await;
         }
