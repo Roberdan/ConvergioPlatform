@@ -104,7 +104,6 @@ impl PlanDb {
     }
 }
 
-pub mod libsql_adapter_task_sync;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
