@@ -52,8 +52,11 @@ Convergio runs on **your hardware first**. Apple Silicon Macs run local LLMs (Qw
 | **Local (Ollama on any machine)** | Any GGUF model | $0 | Linux/Windows workers, experimentation |
 | **Anthropic Claude (your subscription)** | Opus 4.6, Sonnet 4.6, Haiku 4.5 | Subscription | Complex reasoning, architecture, validation |
 | **GitHub Copilot (your subscription)** | GPT-5.3 Codex, GPT-5.1 Codex Mini, GPT-5.4, Claude Sonnet 4.6, Gemini 3 Pro | Subscription | Code generation, deep debugging, large-context research |
+| **Any CLI-based LLM** | Gemini (`gemini`), Grok, Mistral, OpenAI (`openai`), or any future model | Varies | Add via config — any LLM with a CLI is a valid provider |
 
 The inference router picks the cheapest provider that meets the task tier — and falls back automatically if one is unavailable.
+
+The architecture is **provider-agnostic**: the daemon spawns CLI subprocesses, so any LLM with a command-line interface can be added as a provider (Gemini, Mistral, Grok, Llama, or any future model). Adding a new provider is a config change, not a code change.
 
 ---
 
