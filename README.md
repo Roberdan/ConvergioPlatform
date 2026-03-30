@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
 # Convergio Platform
 
-AI orchestration platform — Rust daemon (650+ modules), local LLM kernel (Qwen 7B), MCP server, mesh P2P, 89 agents, Telegram bot, Siri integration.
+AI orchestration platform — Rust daemon (755 modules), local LLM kernel (Qwen 7B), MCP server, mesh P2P, 69 agents, Telegram bot, voice pipeline.
 
 **Free and source-available** under the [Convergio Community License](./LICENSE). Use it, learn from it, build with it. If it helps you, consider supporting [FightTheStroke Foundation](https://fightthestroke.org) — a non-profit for children affected by pediatric stroke.
 
@@ -19,7 +19,7 @@ Convergio Platform is a self-improving AI orchestration system. You describe a g
 convergio solve "Build a SaaS MVP for fitness tracking"
 ```
 
-Ali handles everything: domain analysis, talent selection (89 agents, 119 skills), plan creation, agent dispatch, real-time monitoring, validation, and knowledge capture.
+Ali handles everything: domain analysis, talent selection (69 agents across 12 domains), plan creation, agent dispatch, real-time monitoring, validation, and knowledge capture.
 
 ---
 
@@ -29,7 +29,7 @@ Ali handles everything: domain analysis, talent selection (89 agents, 119 skills
 git clone https://github.com/Roberdan/ConvergioPlatform.git
 cd ConvergioPlatform
 ./setup.sh                         # env vars, CLI aliases, enable overlay
-cd daemon && cargo build --release # build Rust daemon
+cd daemon && cargo build --release # build Rust daemon (~2 min)
 convergio daemon install           # auto-start on boot
 convergio solve "your goal"        # Ali assembles a team and solves
 ```
@@ -38,70 +38,65 @@ The `cvg` CLI (short alias) provides direct access to all daemon operations:
 
 ```bash
 cvg plan list                              # list active plans
-cvg task update 8792 done "Summary"        # mark task done
-cvg wave merge 685 2075                    # merge wave to main
-cvg checkpoint save 685                    # save plan state
-cvg kb search "error keywords"             # search knowledge base
+cvg plan show 10022                        # plan details + task status
+cvg task update 9678 submitted             # mark task submitted
+cvg checkpoint save 10022                  # save plan state
 cvg agent list                             # list active agents
 cvg kernel status                          # local LLM health
 cvg mesh status                            # peer topology
 cvg workspace list                         # list active workspaces
 ```
 
-Common options:
-
-```bash
-convergio solve "problem" --autonomous      # no approval gates
-convergio solve "problem" --approve-each    # approve every step
-convergio solve "problem" --context doc.pdf # attach document context
-convergio pause [run_id]                    # suspend, preserve state
-convergio resume [run_id]                   # resume paused run
-convergio stop [run_id]                     # abort execution
-```
-
 ---
 
-## Architecture
+## Architecture (v20 target)
 
 ```mermaid
 graph TB
     %% ── User Interfaces ──────────────────────────
     subgraph UI["User Interfaces"]
-        DASH["Dashboard Web<br><small>Vanilla JS + Maranello DS</small>"]
+        WEB["convergio-web<br><small>Next.js 15 + Tauri 2.0<br>Maranello Luce DS (6 themes)</small>"]
         TUI["TUI<br><small>ratatui terminal</small>"]
         CLI["CLI (cvg)<br><small>50+ subcommands</small>"]
-        SIRI["Siri / Voice<br><small>Swift CommandCenter</small>"]
-        MCP["MCP Server<br><small>17 tools, ring security</small>"]
+        VOICE["Voice / Siri<br><small>Wake word → Whisper → TTS</small>"]
+        MCP["MCP Server<br><small>18 tools, ring security</small>"]
     end
 
     %% ── Daemon Core ──────────────────────────────
     subgraph DAEMON["Daemon Core — Rust — :8420"]
-        SERVER["HTTP Server (axum)<br><small>26 API modules<br>REST + SSE + WebSocket</small>"]
-        ORCH["Orchestrator<br><small>reactor → executor<br>delegation, reaper</small>"]
-        IPC["IPC Engine<br><small>budget, locks, worktrees<br>agent coordination</small>"]
-        KERN["Kernel / Jarvis<br><small>engine, monitor, recover<br>STT (Whisper) → TTS</small>"]
-        SEC["Security<br><small>ACL, audit chain<br>egress, kill switch</small>"]
-        RES["Resilience<br><small>circuit breaker, watchdog<br>checkpoint, retry</small>"]
-        INF["Inference Router<br><small>classifier → tier routing<br>local > cloud preference</small>"]
-        THOR["Thor Validator<br><small>10-gate checklist<br>submitted → done</small>"]
-        MEM["Memory<br><small>vector store, embeddings<br>blob store, attestation</small>"]
-        VOICE["Voice Pipeline<br><small>VAD → wake word → Whisper<br>intent → pipeline</small>"]
-        WS["Workspace<br><small>git connector, merge ops<br>quality gate, release agent</small>"]
-        CHAN["Channels<br><small>Slack, Telegram, Email</small>"]
+        SERVER["HTTP Server (axum)<br><small>250+ endpoints<br>REST + SSE + WebSocket</small>"]
+        ORCH["Orchestrator<br><small>reactor, executor<br>reaper, delegation</small>"]
+        INF["Inference Router<br><small>tier T1→T4<br>health probe, fallback chain</small>"]
+        IPC["IPC Bus<br><small>named sessions, budget<br>send-direct, channels</small>"]
+        KERN["Kernel / Jarvis<br><small>monitor 30s, recover<br>Telegram, Ali escalation</small>"]
+        SEC["Security<br><small>JWT RBAC, audit trail<br>agent sandboxing</small>"]
+        THOR["Thor Validator<br><small>10-gate checklist<br>queue, durable verdicts</small>"]
+        SYNC["Background Sync<br><small>conflict-aware LWW<br>multi-transport</small>"]
+        MEM["Memory<br><small>vector store, CRUD<br>GC + tiering</small>"]
+        WS["Workspace<br><small>worktree per task<br>quality gate, release agent</small>"]
+        NIGHT["Nightly Job<br><small>cleanup, eval, optimize<br>issue scan, token audit</small>"]
+        POLICY["Autonomous Policy<br><small>risk classification<br>auto-progress LOW/MED</small>"]
     end
 
     %% ── Data Layer ───────────────────────────────
     subgraph DATA["Data Layer"]
-        DB[("dashboard.db<br><small>SQLite WAL + CRDT</small>")]
-        GIT["Git Repos<br><small>GitHub API + subprocess</small>"]
-        VEC[("Vector Store<br><small>embeddings + blob</small>")]
+        DB[("dashboard.db<br><small>SQLite WAL<br>timestamp sync</small>")]
+        GIT["Git Repos<br><small>GitHub API<br>worktree isolation</small>"]
+        AUDIT[("Audit Log<br><small>append-only<br>immutable trail</small>")]
     end
 
     %% ── Mesh Network ─────────────────────────────
     subgraph MESH["Mesh Network — Tailscale P2P"]
-        COORD["Mesh Coordinator<br><small>peers, topology, sync<br>HMAC-SHA256 + AES-GCM</small>"]
-        PEER1["Peer Node :8420"]
-        PEER2["Peer Node :8420"]
+        M5["M5Max<br><small>Coordinator<br>100.89.245.79</small>"]
+        M1["M1 Pro<br><small>Kernel node<br>100.106.173.118</small>"]
+        FUTURE["Future nodes<br><small>worker role</small>"]
+    end
+
+    %% ── LLM Providers (no external proxy) ────────
+    subgraph LLM["LLM Providers — Native Rust"]
+        CLISUB["Claude Subscription<br><small>claude -p subprocess<br>SSE stdout capture</small>"]
+        COPSUB["Copilot Subscription<br><small>gh copilot -p<br>fallback provider</small>"]
+        LOCAL["Local LLM<br><small>Ollama / MLX :8321<br>Qwen 7B (Jarvis)</small>"]
     end
 
     %% ── Evolution Engine ─────────────────────────
@@ -110,31 +105,28 @@ graph TB
         EADAPT["Adapters<br><small>claude, dashboard<br>maranello, telemetry</small>"]
     end
 
-    %% ── LLM Infrastructure ──────────────────────
-    subgraph LLM["LLM Infrastructure"]
-        LOCAL["Local LLM<br><small>oMLX :8321 + LiteLLM :4000<br>Qwen 7B (Jarvis)</small>"]
-        CLOUD["Cloud LLMs<br><small>Opus 4.6 · Sonnet 4.6<br>GPT-5.3 Codex · Gemini 3 Pro</small>"]
+    %% ── External Ecosystem ──────────────────────
+    subgraph ECO["Ecosystem Repos"]
+        DS["convergio-design<br><small>Maranello DS, 6 themes<br>31 WC, WCAG 2.2 AA</small>"]
+        COMM["convergio-community<br><small>community skills</small>"]
     end
 
-    %% ── External Services ────────────────────────
     TG["Telegram Bot API"]
-    OCLAW["OpenClaw Bridge<br><small>30+ platforms</small>"]
+    OCLAW["OpenClaw<br><small>30+ platforms</small>"]
 
     %% ── Governance ───────────────────────────────
-    subgraph GOV["Agent Governance — Hook-Enforced"]
-        HOOKS["10 Enforcement Hooks<br><small>SecretScan, SqliteBlock<br>EvidenceGate, TestGate, ...</small>"]
-        CMDS["Commands<br><small>/solve → /planner → /execute</small>"]
-        AGENTS["89 Agents · 119 Skills<br><small>12 domains · 27 validation gates</small>"]
+    subgraph GOV["Agent Governance"]
+        HOOKS["10 Hard Rules<br><small>SecretScan, SqliteBlock<br>EvidenceGate, Wiring</small>"]
+        AGENTS["69 Agents · 12 Domains<br><small>Ali orchestrator<br>10-domain routing</small>"]
     end
 
     %% ── CONNECTIONS ──────────────────────────────
 
     %% UI → Daemon
-    DASH -- "HTTP + WS<br>/api/* + /ws/dashboard" --> SERVER
+    WEB -- "HTTP + WS + SSE" --> SERVER
     TUI -- "WS /ws/brain" --> SERVER
-    CLI -- "HTTP localhost:8420" --> SERVER
-    CLI -. "Unix socket<br>~/.claude/ipc.sock" .-> IPC
-    SIRI -- "HTTP /api/voice" --> KERN
+    CLI -- "HTTP :8420" --> SERVER
+    VOICE -- "/api/voice/*" --> KERN
     MCP -. "stdio → HTTP" .-> SERVER
 
     %% Internal daemon
@@ -142,33 +134,39 @@ graph TB
     SERVER --> IPC
     SERVER --> KERN
     ORCH --> THOR
+    ORCH --> POLICY
+    ORCH --> NIGHT
     KERN --> INF
-    VOICE --> KERN
-    WS --> GIT
-    CHAN --> SERVER
+    SEC --> SERVER
+    SYNC --> DB
 
     %% Daemon → Data
     SERVER --> DB
+    SERVER --> AUDIT
     IPC --> DB
-    MEM --> VEC
-    WS -- "api.github.com" --> GIT
+    WS --> GIT
 
-    %% Daemon → Mesh
-    SERVER -. "Tailscale + HMAC" .-> COORD
-    COORD -- "/api/sync/*" --> PEER1
-    PEER1 -- "CRDT" --> COORD
-    COORD -- "/api/sync/*" --> PEER2
-    PEER2 -- "CRDT" --> COORD
+    %% Daemon → Mesh (conflict-aware sync)
+    M5 -- "sync + delegate" --> M1
+    M1 -- "sync + Jarvis" --> M5
+    M5 -. "future" .-> FUTURE
+
+    %% Daemon → LLM (subscription, no API keys)
+    INF -- "subprocess" --> CLISUB
+    INF -- "fallback" --> COPSUB
+    INF -- "HTTP :8321" --> LOCAL
 
     %% Daemon → External
     KERN -- "Bot API" --> TG
-    INF -- ":8321" --> LOCAL
-    INF -- "HTTPS" --> CLOUD
     SERVER --> OCLAW
 
     %% Evolution → Daemon
-    EADAPT -- "HTTP adapters → /api/*" --> SERVER
+    EADAPT -- "HTTP /api/*" --> SERVER
     ECORE --> EADAPT
+
+    %% Ecosystem
+    WEB -. "npm" .-> DS
+    DS -. "tokens + WC" .-> WEB
 
     %% Governance (cross-cutting)
     GOV -. "enforcement" .-> DAEMON
@@ -182,168 +180,175 @@ graph TB
     classDef llm fill:#221822,stroke:#b07ee8,color:#d4dae4
     classDef gov fill:#221818,stroke:#e85454,color:#d4dae4
     classDef ext fill:#1a1a22,stroke:#6b7a8d,color:#d4dae4
+    classDef eco fill:#1a2222,stroke:#4dc8a8,color:#d4dae4
 
-    class DASH,TUI,CLI,SIRI,MCP ui
-    class SERVER,ORCH,IPC,KERN,SEC,RES,INF,THOR,MEM,VOICE,WS,CHAN daemon
-    class DB,GIT,VEC data
-    class COORD,PEER1,PEER2 mesh
+    class WEB,TUI,CLI,VOICE,MCP ui
+    class SERVER,ORCH,INF,IPC,KERN,SEC,THOR,SYNC,MEM,WS,NIGHT,POLICY daemon
+    class DB,GIT,AUDIT data
+    class M5,M1,FUTURE mesh
     class ECORE,EADAPT evo
-    class LOCAL,CLOUD llm
-    class HOOKS,CMDS,AGENTS gov
+    class CLISUB,COPSUB,LOCAL llm
+    class HOOKS,AGENTS gov
     class TG,OCLAW ext
+    class DS,COMM eco
 ```
 
-> Full interactive diagram: [`convergio-architecture.html`](./convergio-architecture.html)
+### Current vs In Progress (Plan 10022)
 
-### Execution Flow (hook-enforced)
-
-```
-/solve (Opus) → /planner (Opus 1M) → Review (Sonnet) → DB → /execute (Codex) → Thor (Opus, 10 gates) → Merge → Done
-```
+| Area | v19.5.0 (current) | v20.0.0 (Plan 10022, in progress) |
+|---|---|---|
+| **LLM routing** | Hardcoded to LiteLLM :4000 (Python, blocked by antivirus) | Native Rust: CLI subscription + local LLM, tier-based routing |
+| **Inference** | router/fallback/health exist but test-only | Fully wired in production chat pipeline |
+| **Budget** | ipc/budget.rs exists, not wired to chat | Wired with alert Telegram + dashboard WebSocket |
+| **DB sync** | Timestamp LWW, no conflict detection | Conflict-aware with _sync_conflicts table |
+| **Security** | JWT on all routes, skip-permissions in delegation | Skip-permissions removed, audit trail, agent sandboxing |
+| **Worker** | Sequential only, no worktree support | Parallel via --plan + ?task_id= API + worktrees |
+| **Sessions** | No inter-session communication | Named sessions + IPC send-direct |
+| **Validation** | Inline in API handler | Thor as durable service with queue + verdicts |
+| **Autonomy** | All tasks need human approval | Risk-based policy: LOW auto-progress, HIGH gated |
+| **Nightly** | Manual maintenance | Auto cleanup + eval + optimize (launchd M1 Pro) |
+| **Dead code** | 6 unwired modules, 2 orphaned endpoints | All wired or deleted |
 
 ### Layer Summary
 
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
-| **Daemon** | `daemon/` | Rust | HTTP/WS/SSE API (:8420), mesh P2P, IPC, SQLite WAL + CRDT, TUI, `cvg` CLI |
-| **Kernel** | `daemon/src/kernel/` | Rust | Local LLM (Qwen 7B), health monitor, verify gate, TTS, Telegram bot |
-| **MCP Server** | `daemon/src/mcp_server/` | Rust | Expose daemon as MCP tools for any LLM client (17 tools, ring-based security) |
-| **Workspace** | `daemon/src/workspace/` | Rust | Agent isolation, git abstraction, Release Agent, quality gates, event log |
+| **Daemon** | `daemon/` | Rust | HTTP/WS/SSE API (:8420), mesh P2P, IPC, SQLite WAL, TUI, `cvg` CLI |
+| **Kernel** | `daemon/src/kernel/` | Rust | Local LLM (Qwen 7B), health monitor, verify gate, TTS (Voxtral 4B), Telegram bot |
+| **Inference** | `daemon/src/inference/` | Rust | Tier-based routing (T1-T4), fallback chain, health probing |
+| **MCP Server** | `daemon/src/mcp_server/` | Rust | 18 tools for any LLM client, ring-based security (0-3) |
+| **Workspace** | `daemon/src/workspace/` | Rust | Worktree isolation, git abstraction, Release Agent, quality gates |
 | **Evolution** | `evolution/` | TS | Self-improvement: telemetry → proposals → experiments |
-| **Scripts** | `scripts/` | Bash | Mesh ops, platform tooling, document ingestion |
-| **Config** | `claude-config/` | MD | 89 agents, 119 skills, 8 rules, 27 validation gates |
+| **Scripts** | `scripts/` | Bash | Mesh ops, sync tests, platform tooling |
+| **Config** | `claude-config/` | MD | 69 agents, 2 rule files (10 hard + best practices) |
 
 Daemon stack: axum · rusqlite WAL · tokio · ssh2 · ratatui · serde · hmac+sha2+aes-gcm · reqwest · tracing
 
-### Model Routing (8 models, 3 providers)
+### Execution Flow
 
-| Alias | Model ID | Tier | Provider | Used for |
-|-------|----------|------|----------|----------|
-| `opus` | claude-opus-4.6 | Premium | Anthropic | Architecture, triage, validation (Thor) |
-| `opus-1m` | claude-opus-4.6-1m | Premium (1M ctx) | Anthropic | Planning (full codebase context) |
-| `sonnet` | claude-sonnet-4.6 | Standard | Anthropic | Coordinator, plan review |
-| `haiku` | claude-haiku-4.5 | Fast/Cheap | Anthropic | Exploration, documentation |
-| `codex` | gpt-5.3-codex | Standard | OpenAI | Task execution, bulk code gen |
-| `codex-mini` | gpt-5.1-codex-mini | Fast/Cheap | OpenAI | Config, mechanical edits |
-| `gpt-5.4` | gpt-5.4 | Deep reasoning | OpenAI | Deep debugging, design tradeoffs |
-| `gemini-3-pro` | gemini-3-pro-preview | Standard (1M ctx) | Google | Large-context research |
+```
+/solve (Opus) → /planner (Opus 1M) → Review (Sonnet) → DB → /execute (workers) → Thor (10 gates) → Merge → Done
+```
 
-Inference Router: classifier → tier routing, local > cloud preference, fallback chain, parallelization control.
+Workers execute in isolated worktrees. Plan runner auto-spawns fresh CLI sessions per task (ADR-0122 recursive session continuity).
 
-### Key Capabilities
+### Model Routing
 
-| Capability | Detail |
-|---|---|
-| **250+ API endpoints** | Plans(14), agents(9), mesh(12), kernel(8), node(1), metrics(5), chat(7), nightly(6), workspace(8), memory(4), voice(5) |
-| **Voice Engine** | Audio capture (cpal) → VAD (webrtc) → Wake word → STT (Whisper, Metal) → TTS (Voxtral 4B) → Intent classifier |
-| **Telegram Bot** | Bidirectional text + voice, long polling, quiet hours (23:00-07:00 CET), daily/weekly reports |
-| **Ali Escalation** | "ali dimmi..." → Claude CLI (Opus) subprocess with full system context, fallback to Qwen local |
-| **Evolution Engine** | Observe → Measure → Propose → Experiment → Validate → Learn. A/B testing, multi-armed bandit, cost calibration |
-| **OpenClaw Bridge** | 30+ messaging platforms (WhatsApp, Slack, Discord, etc.) via webhook + polling |
-| **Document Ingestion** | PDF → MD, DOCX → MD, XLSX → CSV, URL, images, folder recursive |
-| **MCP Server** | 17 tools (plans, agents, mesh, metrics, kernel, actions, control), ring-based security (0-3) |
-| **Nightly Jobs** | Model calibration (Sunday 03:00), guardian checks (daily), auto-rebuild on git pull |
+All LLM calls use logged-in subscriptions (Claude Pro, Copilot Pro). No API keys.
+
+| Tier | Models | Used for |
+|------|--------|----------|
+| T1 (fast/cheap) | Local Qwen 7B, Haiku 4.5 | Exploration, docs, simple tasks |
+| T2 (standard) | Sonnet 4.6 | Coordination, review, general tasks |
+| T3 (premium) | Opus 4.6 | Architecture, planning, validation |
+| T4 (critical) | Opus 4.6 1M | Full-codebase planning, complex reasoning |
+
+Inference Router: tier selection → health probe → fallback chain (Claude → Local → Copilot).
 
 ---
 
 ## Ecosystem
 
-ConvergioPlatform is the core of a multi-repo ecosystem:
+```mermaid
+graph LR
+    PLAT["ConvergioPlatform<br><small>Rust daemon, 755 modules</small>"]
+    WEB["convergio-web<br><small>Next.js 15 + Tauri 2.0</small>"]
+    DS["convergio-design<br><small>Maranello Luce DS<br>6 themes, 31 WC, WCAG AA</small>"]
+    COMM["convergio-community<br><small>Community skills</small>"]
+
+    PLAT -- "API :8420" --> WEB
+    DS -- "npm tokens + elements" --> WEB
+    COMM -- "skills + agents" --> PLAT
+
+    classDef core fill:#142218,stroke:#42d392,color:#d4dae4
+    classDef ui fill:#1a2744,stroke:#4d9cf6,color:#d4dae4
+    classDef ds fill:#221828,stroke:#e87ab0,color:#d4dae4
+    classDef com fill:#1a2222,stroke:#4dc8a8,color:#d4dae4
+
+    class PLAT core
+    class WEB ui
+    class DS ds
+    class COMM com
+```
 
 | Repository | Purpose | Status |
 |---|---|---|
-| [**convergio-web**](https://github.com/Roberdan/convergio-web) | Web + desktop UI (Next.js 15 + Tauri 2.0) | Active |
-| [**convergio-design**](https://github.com/Roberdan/convergio-design) | Maranello Luce Design System — 5 themes, 36 components, WCAG 2.2 AA | Active |
-| [**convergio**](https://github.com/Roberdan/convergio) | Specs, ADRs, OpenAPI, governance, CI workflows | Active |
+| [**convergio-web**](https://github.com/Roberdan/convergio-web) | Web + desktop UI (Next.js 15 + Tauri 2.0 + Maranello DS) | Active |
+| [**convergio-design**](https://github.com/Roberdan/convergio-design) | Maranello Luce Design System — 6 themes, 31 components, WCAG 2.2 AA | v6.1.1 |
 | [**convergio-community**](https://github.com/Roberdan/convergio-community) | Community-contributed skills and extensions | Active |
-
----
-
-## Kernel
-
-The kernel runs Qwen 2.5 7B locally on Apple Silicon, providing:
-
-- **Monitor loop** (30s) — health checks, stall detection, rate limit tracking
-- **Verify gate** — blocks task completion without evidence (tests pass, build green)
-- **Recovery** — restart crashed daemons, checkpoint state, notify operators
-- **TTS** — macOS Siri voices via Shortcuts
-- **Telegram bot** — bidirectional text + voice, long polling, quiet hours (23:00-07:00 CET)
-- **Ali escalation** — "ali dimmi..." triggers Claude CLI (Opus) subprocess with full context
-
-```bash
-cvg kernel status          # health report
-cvg kernel here            # set this machine as active audio node (8h)
-cvg kernel say "hello"     # TTS on active node
-```
 
 ---
 
 ## Mesh (P2P Multi-Node)
 
-Tailscale-based peer-to-peer networking with HMAC-SHA256 authentication and CRDT sync.
+Tailscale-based peer-to-peer networking with HMAC-SHA256 authentication.
 
-- Multi-transport: Tailscale, SSH, LAN mDNS, HTTP fallback
-- One-command node deployment: `scripts/mesh/deploy-node.sh <node> --kernel`
-- Safe DB sync: `scripts/kernel/sync-db.sh <source> <target>`
-- Self-healing topology — node failure triggers automatic swarm reorganization
+```mermaid
+graph LR
+    M5["M5Max<br>Coordinator<br>100.89.245.79"]
+    M1["M1 Pro<br>Kernel (Jarvis)<br>100.106.173.118"]
+
+    M5 -- "Tailscale + Thunderbolt<br>conflict-aware sync" --> M1
+    M1 -- "Jarvis health<br>Telegram alerts" --> M5
+
+    classDef coord fill:#142218,stroke:#42d392,color:#d4dae4
+    classDef kernel fill:#221822,stroke:#b07ee8,color:#d4dae4
+
+    class M5 coord
+    class M1 kernel
+```
+
+| Feature | Detail |
+|---|---|
+| **Transport** | Tailscale (primary), Thunderbolt (LAN), SSH fallback |
+| **Sync** | Timestamp-based LWW with conflict detection (v20) |
+| **Deploy** | `scripts/mesh/deploy-node.sh <node> --kernel` |
+| **Health** | 30s monitor loop, stall detection, auto-recovery |
+| **Readiness** | `/api/node/readiness` — 10 checks at boot |
 
 ```bash
 cvg mesh status            # peer topology
 cvg mesh sync              # force sync
-cvg who agents             # list active agents across mesh
+```
+
+---
+
+## Kernel
+
+The kernel runs Qwen 2.5 7B locally on Apple Silicon (M1 Pro), providing:
+
+- **Monitor loop** (30s) — health checks, stall detection, rate limit tracking
+- **Verify gate** — blocks task completion without evidence
+- **Recovery** — restart crashed daemons, checkpoint state, notify operators
+- **TTS** — Voxtral 4B (primary), Siri fallback
+- **Voice pipeline** — cpal audio → VAD (webrtc) → wake word "convergio" → Whisper STT → intent → response
+- **Telegram bot** — bidirectional text + voice, long polling, quiet hours (23:00-07:00 CET)
+- **Ali escalation** — "ali dimmi..." triggers Claude CLI (Opus) subprocess with full context
+
+```bash
+cvg kernel status          # health report
+cvg kernel here            # set active audio node (8h)
+cvg kernel say "hello"     # TTS on active node
 ```
 
 ---
 
 ## Agents
 
-See [AGENTS.md](AGENTS.md) for the full catalog — 89 agents across 12 domains.
+See [AGENTS.md](AGENTS.md) for the full catalog — 69 agents across 12 domains.
 
 | Domain | Count | Examples |
 |---|---|---|
-| Core Utility | 19 | Ali, Thor, planner, reviewer, optimizer |
-| Technical Dev | 11 | task-executor, Rex reviewer, Dario debugger |
-| Business Ops | 11 | Davide PM, Oliver PM, Andrea customer success |
-| Specialized | 14 | Omri data scientist, Fiona analyst, Ava analytics |
-| Leadership | 7 | Amy CFO, Antonio strategy, Satya board |
-| Compliance | 5 | Elena legal, Luca security, Dr. Enzo healthcare |
+| Core Utility | 15 | Ali orchestrator, Thor validator, planner, reviewer |
+| Technical Dev | 8 | task-executor, Rex reviewer, Dario debugger, Baccio architect |
+| Business Ops | 8 | Davide PM, Sofia marketing, Fabio sales, Andrea CS |
+| Leadership | 6 | Amy CFO, Antonio strategy, Domik McKinsey, Sam startup |
+| Specialized | 10 | Omri data scientist, Fiona analyst, coach, Jenny a11y |
+| Compliance | 5 | Elena legal, Luca security, Sophia govaffairs |
+| Design | 3 | Sara UX/UI, Jony creative, Stefano design thinking |
+| Release | 3 | app-release-manager, feature-release, ecosystem-sync |
 
-All agents support: Claude Code, Copilot CLI, OpenCode, local LLMs.
-
----
-
-## Workspace Layer
-
-Git is invisible to agents. The daemon manages workspaces internally — agents edit files normally, hooks register operations in the event log, and the Release Agent automates the git export pipeline.
-
-```bash
-cvg workspace create --plan 698 --wave 1   # daemon creates isolated worktree
-# ... agents work via Read/Edit/Write tools ...
-cvg workspace release ws-1234              # quality gate → commit → PR → merge
-```
-
-| Component | What |
-|---|---|
-| Workspace API | `/api/workspace/create`, `/delete`, `/list`, `/status`, `/events`, `/quality-gate`, `/release` |
-| GitConnector | Trait abstraction — GitHub impl via reqwest. Supports GitHub/GitLab/Gitea. |
-| Release Agent | Rust module: quality gate pass → auto-commit → auto-push → auto-PR → auto-merge |
-| Event Log | `workspace_events` table — CRDT-enabled audit trail independent of git history |
-| Quality Gate | Mechanical checks in Rust: clean tree, file sizes, cargo check/test |
-
----
-
-## OpenClaw Bridge
-
-Convergio agents are accessible via 30+ messaging platforms (WhatsApp, Telegram, Slack, Discord, etc.) through the [OpenClaw](https://openclaw.ai) bridge.
-
-```bash
-curl http://localhost:8420/api/openclaw/agents    # list agents
-curl -X POST http://localhost:8420/api/openclaw/invoke \
-  -H 'Content-Type: application/json' \
-  -d '{"message": "Review my code for security issues"}'
-```
-
-All requests route to Ali orchestrator, who dispatches to the right specialist. See [`integrations/openclaw-bridge/`](integrations/openclaw-bridge/) for the TypeScript plugin source.
+All agents support: Claude Code, Copilot CLI, and local LLMs. Ali orchestrator routes goals to the right team using 10-domain routing (market, legal, finance, architecture, UX, people, product, startup, data, quality).
 
 ---
 
@@ -351,33 +356,44 @@ All requests route to Ali orchestrator, who dispatches to the right specialist. 
 
 ### Prerequisites
 
-- Rust (stable toolchain, `rustup` recommended)
-- Node.js 20+
+- Rust stable toolchain (`rustup`)
+- Node.js 20+ (for evolution engine)
 - Tailscale (for mesh networking)
+- macOS or Linux (Apple Silicon recommended for kernel)
 
 ### Build
 
 ```bash
-cd daemon && cargo build --release   # build daemon
-cd daemon && cargo test              # run daemon tests (1800+ tests)
-cd evolution && npx tsc --noEmit     # type-check evolution
-cd evolution && npx vitest run       # run evolution tests
+cd daemon && cargo build --release   # build daemon (~2 min)
+cd daemon && cargo test              # 2200+ tests
+cd evolution && npx vitest run       # evolution tests
 ```
 
-### Optional ingestion tools
+### Deploy to mesh node
 
 ```bash
-brew install poppler pandoc tesseract && pip install trafilatura openpyxl
+scripts/mesh/deploy-node.sh roberdandev-m1Pro --kernel   # full provision
+scripts/kernel/sync-db.sh roberdandev-m1Pro              # sync database
 ```
+
+### Node readiness
+
+```bash
+cvg node readiness    # 10-point health check
+```
+
+Checks: DB integrity, disk space, models downloaded, Telegram token, daemon version, role capabilities.
 
 ---
 
 ## Governance
 
-Convergio Platform is governed by a formal constitution and agentic manifesto:
-
-- [CONSTITUTION.md](CONSTITUTION.md) — operating principles, decision rights, escalation paths
-- [AgenticManifesto.md](AgenticManifesto.md) — design philosophy for autonomous AI systems
+| Document | Purpose |
+|---|---|
+| [CONSTITUTION.md](CONSTITUTION.md) | 12 articles, 5 NON-NEGOTIABLE (identity, quality, verification, resilience, swarm) |
+| [AgenticManifesto.md](AgenticManifesto.md) | Design philosophy — "Human purpose. AI momentum." |
+| [claude-config/rules/hard-enforcement.md](claude-config/rules/hard-enforcement.md) | 10 hook-enforced rules |
+| [claude-config/rules/best-practices.md](claude-config/rules/best-practices.md) | Suggested coding standards |
 
 ---
 
