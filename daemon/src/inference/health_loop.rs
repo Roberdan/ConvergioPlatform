@@ -35,23 +35,19 @@ pub fn spawn_health_probe_loop(state: SharedHealthState) {
                 checker.probe_http("local-llm", &local_url).await;
             }
 
-            // Claude: CLI-based; probe the Anthropic API as reachability signal.
-            let claude_cli_ok = tokio::process::Command::new("which")
-                .arg("claude")
-                .output()
-                .await
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-
-            if claude_cli_ok {
+            // Claude: CLI-based; verify the local binary exists — no external HTTP.
+            // Hitting the Anthropic API is wrong: we use subscription (no API key),
+            // and an external call every 60s adds unnecessary load.
+            {
                 let mut checker = state.write().await;
-                checker
-                    .probe_http("claude", "https://api.anthropic.com/v1/models")
-                    .await;
+                checker.probe_cli("claude", "claude").await;
             }
 
-            // Copilot: CLI-based (gh); no public health endpoint, skip HTTP probe.
-            // Status is inferred at read-time from CLI availability in the handler.
+            // Copilot: CLI-based; verify the binary exists locally.
+            {
+                let mut checker = state.write().await;
+                checker.probe_cli("copilot", "copilot").await;
+            }
 
             tokio::time::sleep(std::time::Duration::from_secs(60)).await;
         }

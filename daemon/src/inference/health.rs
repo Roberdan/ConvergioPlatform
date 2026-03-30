@@ -161,6 +161,30 @@ impl HealthChecker {
         self.endpoints.iter().map(|ep| ep.name.clone()).collect()
     }
 
+    /// Run a local CLI availability check (via `which <cmd>`) and record the result.
+    /// Used for CLI-based providers (claude, copilot) that have no HTTP health endpoint.
+    pub async fn probe_cli(&mut self, name: &str, cmd: &str) -> ProbeResult {
+        let start = std::time::Instant::now();
+        let result = match tokio::process::Command::new("which")
+            .arg(cmd)
+            .output()
+            .await
+        {
+            Ok(o) if o.status.success() => ProbeResult::Success(start.elapsed()),
+            Ok(o) => ProbeResult::Error(format!(
+                "which {cmd} exited {}",
+                o.status.code().unwrap_or(-1)
+            )),
+            Err(e) => ProbeResult::Error(e.to_string()),
+        };
+
+        if let Some(ep) = self.endpoints.iter_mut().find(|ep| ep.name == name) {
+            ep.record_probe(result.clone());
+        }
+
+        result
+    }
+
     /// Run a single probe against an HTTP endpoint and record the result.
     /// Returns the measured `ProbeResult` for the caller to act on.
     pub async fn probe_http(
