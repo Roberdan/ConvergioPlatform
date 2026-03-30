@@ -33,11 +33,14 @@ pub(crate) fn resolve_memory_dir(slug: Option<&str>) -> Result<PathBuf, ApiError
     let slug = match slug {
         Some(s) if !s.is_empty() => s.to_string(),
         _ => {
-            let cwd = std::env::current_dir()
-                .map_err(|e| ApiError::internal(format!("cwd: {e}")))?;
+            // Prefer CONVERGIO_REPO_ROOT (set by start.sh) over cwd,
+            // since daemon cwd is daemon/ not the repo root.
+            let root = std::env::var("CONVERGIO_REPO_ROOT")
+                .or_else(|_| std::env::current_dir().map(|p| p.to_string_lossy().into_owned()))
+                .map_err(|e| ApiError::internal(format!("no repo root: {e}")))?;
             format!(
                 "-{}",
-                cwd.to_string_lossy().replace('/', "-").trim_start_matches('-')
+                root.replace('/', "-").trim_start_matches('-')
             )
         }
     };
