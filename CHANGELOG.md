@@ -1,5 +1,36 @@
 # Changelog
 
+## [20.0.0] - 2 Aprile 2026
+
+### Breaking Changes
+- **LiteLLM removed**: zero Python dependencies; `Provider::LiteLLM` variant eliminated from the provider enum. Migrate to `ClaudeSubscription`, `CopilotSubscription`, or `LocalLLM`.
+
+### Added
+- CLI subscription providers: `ClaudeSubscription`, `CopilotSubscription`, `LocalLLM` replacing LiteLLM proxy
+- Budget tracking integrated into chat pipeline (per-session and cumulative spend)
+- Session IPC endpoints: `agents/list`, `agents/deregister`, `agents/send-direct`
+- Conflict-aware CRDT sync; HTTP LWW merge strategy disabled in favour of CRDT vector clocks
+- Rollback snapshots: daemon persists pre-apply snapshots for plan/task rollback
+- Agent sandboxing: per-agent capability isolation enforced at IPC layer
+- Thor validator service: dedicated long-running quality-gate daemon
+- Nightly autonomy job: scheduled risk-based goal evaluation (cron via daemon scheduler)
+- Risk-based autonomous policy: decisions gated by configurable risk score thresholds
+- Goal decomposer: hierarchical goal-to-task decomposition engine
+- Mesh convergence proofs: deterministic eventual-consistency verification
+- Node self-provisioning: mesh nodes bootstrap configuration on first contact
+- Approval UX: interactive approval flow for high-risk autonomous actions
+- Playwright e2e test suite covering core dashboard flows
+
+### Security
+- Audit trail: all IPC calls logged with agent identity and timestamp
+- `--dangerously-skip-permissions` flag removed; permission checks are now non-bypassable
+- Per-worktree `settings.json` isolation; settings no longer bleed across worktrees
+
+### Fixed
+- Plan counter off-by-one bug causing duplicate plan IDs under concurrent creation
+- Pre-existing test imports breaking cargo test on clean checkout
+- Memory endpoint path corrected from `/api/memory` to `/api/memory/list`
+
 ## [19.5.0] - 29 Marzo 2026
 
 ### Added

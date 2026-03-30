@@ -64,12 +64,25 @@ When experimenting with Convergio Platform:
 - HMAC-SHA256 authenticates all mesh node messages
 - No unauthenticated remote access is permitted by design
 
+### Audit Trail (v20.0.0+)
+
+All IPC calls are logged with agent identity, timestamp, and action type in the `ipc_audit` SQLite table. Query with:
+```
+curl http://localhost:8420/api/ipc/audit
+```
+Audit records are append-only; the daemon will warn on startup if the audit table has been tampered with.
+
+### Agent Sandboxing (v20.0.0+)
+
+Each agent operates within a declared capability set (e.g. `["code", "test"]`). The IPC layer rejects actions outside the declared capabilities at the enforcement point, before the action reaches the daemon core. Per-worktree `settings.json` files ensure capability settings do not bleed across worktrees.
+
+The `--dangerously-skip-permissions` flag has been **removed** as of v20.0.0. Permission checks are non-bypassable.
+
 ### Known Limitations
 
-- No built-in sandboxing beyond Claude Code's default protections
+- Agent sandboxing enforces declared capabilities; it does not restrict filesystem access outside the daemon IPC path
 - No encrypted storage of agent interactions
-- No audit logging beyond standard Claude Code logs and daemon traces
-- No access controls beyond tool-level restrictions
+- No access controls beyond tool-level restrictions and IPC capability sets
 
 ## Supported Versions
 
