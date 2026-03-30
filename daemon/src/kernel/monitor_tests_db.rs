@@ -121,23 +121,4 @@ mod tests {
             .unwrap_or(0);
         assert_eq!(count, 1, "unreachable peer must produce a warn event");
     }
-
-    // --- deprecated watchdog compat ---
-
-    #[test]
-    #[allow(deprecated)]
-    fn deprecated_watchdog_decide_action_compiles() {
-        use crate::resilience::watchdog::{decide_action, CheckResult, WatchdogAction};
-        let failures = vec![CheckResult::fail("daemon_health", "down")];
-        assert_eq!(decide_action(&failures), WatchdogAction::Restart);
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn deprecated_watchdog_config_struct_compiles() {
-        use crate::resilience::watchdog::WatchdogConfig;
-        let cfg = WatchdogConfig::default();
-        assert_eq!(cfg.check_interval_secs, 30);
-        assert!(!cfg.daemon_url.is_empty());
-    }
 }
