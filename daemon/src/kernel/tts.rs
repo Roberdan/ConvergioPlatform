@@ -209,7 +209,8 @@ impl TtsEngine {
 
     fn speak_via_voxtral(&self, text: &str, locale: &str) -> Result<Vec<u8>, TtsError> {
         let wav_dir = self.temp_wav_path();
-        let voice = if locale.starts_with("it") { "it_female" } else { "it_male" };
+        let _ = locale; // all locales use the same voice — casual_female sounds best
+        let voice = "casual_female";
         let python = crate::ipc::models::apple_fm::AppleFmBridge::resolve_python();
         let status = std::process::Command::new(&python)
             .args([
