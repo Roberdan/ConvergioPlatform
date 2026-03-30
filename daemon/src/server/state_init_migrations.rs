@@ -207,4 +207,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL DEFAULT (datetime('now')), agent TEXT, action TEXT NOT NULL, resource TEXT, detail TEXT, ip_addr TEXT)",
     // Mesh convergence tracking (T4-06)
     "CREATE TABLE IF NOT EXISTS mesh_peer_state (peer_id TEXT PRIMARY KEY, state_version INTEGER NOT NULL DEFAULT 0, state_checksum TEXT NOT NULL DEFAULT '', last_seen TEXT NOT NULL DEFAULT (datetime('now')))",
+    // Plan 720 T2-02 — LWW conflict log for sync diagnostics
+    "CREATE TABLE IF NOT EXISTS _sync_conflicts (id INTEGER PRIMARY KEY, table_name TEXT NOT NULL, pk INTEGER, local_data TEXT, remote_data TEXT, source_node TEXT DEFAULT '', resolved INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))",
 ];
