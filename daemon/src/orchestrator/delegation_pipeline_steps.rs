@@ -1,7 +1,5 @@
 // Individual steps for the full automated delegation pipeline.
 // Each step uses tokio::process::Command with explicit timeouts.
-// Why: separated from orchestration so each step stays testable and under 250 lines.
-
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;

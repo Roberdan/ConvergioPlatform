@@ -5,92 +5,34 @@ pub mod rate_limiter;
 
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
-use super::api_validation;
-use super::api_agent_catalog;
-use super::api_agent_triage;
-use super::api_agents;
-use super::api_agent_profiles;
-use super::api_build_exec;
-use super::api_audit;
-use super::api_budget;
-use super::api_capabilities;
-use super::api_channels;
-use super::api_delegation;
-use super::api_chat;
-use super::api_coordinator;
-use super::api_crdt;
-use super::api_sync;
-use super::api_dashboard;
-use super::api_digest;
-use super::api_deliverables;
-use super::api_domain;
-use super::api_evolution;
-use super::api_github;
-use super::api_health_deep;
-use super::api_health_post_merge;
-use super::api_heartbeat;
-use super::api_ideas;
-use super::api_ingest;
-use super::api_ipc;
-use super::api_kernel_audio;
-use super::api_voice;
-use super::api_memory;
-use super::api_memory_mgmt;
-use super::api_mesh;
-use super::api_metrics;
-use super::api_nightly;
-use super::api_notify;
-use super::api_openclaw;
-use super::api_peers;
-use super::api_peers_ext;
-use super::api_plan_db;
-use super::api_plan_db_checkpoint;
-use super::api_plan_db_execution_context;
-use super::api_plan_db_import;
-use super::api_plan_db_lifecycle;
-use super::api_plan_db_ops;
-use super::api_plan_db_query;
-use super::api_plan_db_review;
-use super::api_plans;
-use super::api_project_tree;
-use super::api_agent_control;
-use super::api_node_readiness;
-use super::api_node_roles;
-use super::api_readiness;
-use super::api_rollback;
-use super::api_runs;
-use super::api_tracking;
-use super::api_workers;
-use super::api_workspace;
-use super::api_workspace_events;
-use super::api_decisions;
-use super::api_goal;
-use super::api_repositories;
-use super::api_inference_status;
-use super::api_policy;
+use super::{
+    api_agent_catalog, api_agent_control, api_agent_profiles, api_agent_triage, api_agents,
+    api_audit, api_budget, api_build_exec, api_capabilities, api_channels, api_chat,
+    api_coordinator, api_crdt, api_dashboard, api_decisions, api_delegation, api_deliverables,
+    api_digest, api_domain, api_evolution, api_github, api_goal, api_health_deep,
+    api_health_post_merge, api_heartbeat, api_ideas, api_inference_status, api_ingest, api_ipc,
+    api_kernel_audio, api_memory, api_memory_mgmt, api_mesh, api_metrics, api_nightly, api_notify,
+    api_node_readiness, api_node_roles, api_openclaw, api_peers, api_peers_ext, api_plan_db,
+    api_plan_db_checkpoint, api_plan_db_execution_context, api_plan_db_import,
+    api_plan_db_lifecycle, api_plan_db_ops, api_plan_db_query, api_plan_db_review, api_plans,
+    api_policy, api_project_tree, api_readiness, api_repositories, api_rollback, api_runs,
+    api_sync, api_tracking, api_validation, api_voice, api_workers, api_workspace,
+    api_workspace_events, mesh_provision, middleware as server_mw, middleware_audit, sse,
+    state::ServerState, telemetry, ws, ws_pty,
+};
 use crate::inference::health_loop::{create_shared_health, spawn_health_probe_loop};
-use super::mesh_provision;
-use super::middleware as server_mw;
-use super::middleware_audit;
-use super::sse;
-use super::state::ServerState;
-use super::telemetry;
-use super::ws;
-use super::ws_pty;
 use api_routes::{endpoint_category, RateLimiter};
-use axum::body::Body;
-use axum::extract::DefaultBodyLimit;
-use axum::extract::State;
-use axum::http::{Request, StatusCode};
-use axum::middleware::{from_fn, from_fn_with_state, Next};
-use axum::response::{IntoResponse, Response};
-use axum::routing::{get, get_service};
-use axum::Router;
-use std::env;
-use std::path::PathBuf;
-use std::time::Duration;
-use tower_http::services::ServeDir;
-use tower_http::timeout::TimeoutLayer;
+use axum::{
+    body::Body,
+    extract::{DefaultBodyLimit, State},
+    http::{Request, StatusCode},
+    middleware::{from_fn, from_fn_with_state, Next},
+    response::{IntoResponse, Response},
+    routing::{get, get_service},
+    Router,
+};
+use std::{env, path::PathBuf, time::Duration};
+use tower_http::{services::ServeDir, timeout::TimeoutLayer};
 
 pub fn build_router(static_dir: PathBuf, crsqlite_path: Option<String>) -> Router {
     let db_path = env::var("HOME")
