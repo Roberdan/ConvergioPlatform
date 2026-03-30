@@ -16,10 +16,14 @@ pub fn send_changes_to_peer(
 ) -> Result<(), String> {
     let url = format!("http://{peer_addr}/api/sync/import");
     let payload = serde_json::json!({ "changes": changes });
-    let resp = reqwest::blocking::Client::new()
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client build failed: {e}"))?;
+    let resp = client
         .post(&url)
         .json(&payload)
-        .timeout(Duration::from_secs(120))
         .send()
         .map_err(|e| format!("HTTP POST failed: {e}"))?;
     if !resp.status().is_success() {
@@ -40,9 +44,13 @@ pub fn fetch_changes_from_peer(
     if let Some(ts) = since {
         url.push_str(&format!("&since={ts}"));
     }
-    let resp = reqwest::blocking::Client::new()
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client build failed: {e}"))?;
+    let resp = client
         .get(&url)
-        .timeout(Duration::from_secs(120))
         .send()
         .map_err(|e| format!("HTTP GET failed: {e}"))?;
     if !resp.status().is_success() {
@@ -77,10 +85,14 @@ pub fn resolve_best_addr(
 
     for (transport, ip) in &candidates {
         let addr = format!("{ip}:8420");
-        match TcpStream::connect_timeout(
-            &addr.parse().expect("valid socket addr"),
-            Duration::from_secs(2),
-        ) {
+        let sock_addr = match addr.parse() {
+            Ok(a) => a,
+            Err(e) => {
+                warn!("background_sync: peer {name} {transport} bad addr {addr}: {e}");
+                continue;
+            }
+        };
+        match TcpStream::connect_timeout(&sock_addr, Duration::from_secs(2)) {
             Ok(_) => {
                 info!("background_sync: peer {name} reachable via {transport} ({addr})");
                 return Some(addr);
