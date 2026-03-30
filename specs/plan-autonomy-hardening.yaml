@@ -1,0 +1,441 @@
+name: "Autonomy & Reliability Hardening — v20.0.0"
+project: convergio
+description: >
+  Unified plan combining operational fixes (mesh, telegram, orphans, memory)
+  with architectural hardening (auth, rollback, sync conflicts, sandboxing,
+  validator-as-service, autonomous policy). Goal: system runs unattended.
+parallel_mode: standard
+
+# ============================================================
+# SOURCES:
+#   1. Operational audit (30 Mar 2026) — 14 items, 12 done, gaps found
+#   2. convergio-autonomy-reliability-security-report-2026-03-30.md
+# ============================================================
+
+waves:
+  # =============================================
+  # W1: OPERATIONAL — make what exists actually work
+  # =============================================
+  - id: W1
+    name: "Operational Fixes — Make It Work Now"
+    tasks:
+      - id: T1-01
+        do: >
+          Fix mesh connectivity and DB sync between M5Max and M1 Pro.
+
+          PROBLEMS:
+          1. SSH alias roberdandev-m1Pro doesn't resolve — fix ~/.ssh/config or use Tailscale IP
+          2. /api/sync/status shows healthy:false, last sync 12+ hours ago
+          3. Sync fallback_policy is "manual-rsync-only" — should be "daemon-http"
+
+          STEPS:
+          1. Fix SSH: add entry to ~/.ssh/config mapping roberdandev-m1Pro to 100.106.173.118
+          2. Verify: ssh roberdandev-m1Pro "curl -s http://localhost:8420/api/health"
+          3. Debug daemon/src/background_sync.rs — why is sync loop not running?
+          4. Ensure background sync spawns at daemon startup (check main_dispatch.rs or ipc_handler)
+          5. Fix the sync status to show healthy:true after successful round
+          6. Test: create plan on M5Max → appears on M1 Pro within 60s and vice versa
+          7. Verify /api/sync/status shows both peers with recent timestamps
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "ssh roberdandev-m1Pro 'curl -s http://localhost:8420/api/health' 2>/dev/null | grep -q ok"
+          - "curl -s http://localhost:8420/api/sync/status | python3 -c \"import sys,json;d=json.load(sys.stdin);exit(0 if d.get('healthy') else 1)\""
+
+      - id: T1-02
+        do: >
+          Fix Telegram bot and notifications.
+
+          PROBLEMS:
+          1. CONVERGIO_TELEGRAM_TOKEN not set in daemon env (node readiness shows it missing)
+          2. Bot getMe returns ok:false
+          3. Memory endpoint /api/memory-mgmt/stats returns 500 "No such file or directory"
+          4. 14 orphan copilot processes still alive despite reaper code existing
+
+          STEPS:
+          1. Telegram: load token from macOS Keychain into daemon env at startup.
+             Reference: reference_telegram_token.md says it's in Keychain.
+             Add to daemon/start.sh or launchd plist: export CONVERGIO_TELEGRAM_TOKEN=$(security find-generic-password -s convergio-telegram -w)
+          2. Verify: curl "https://api.telegram.org/bot$TOKEN/getMe" returns ok:true
+          3. Memory endpoint: the daemon cwd must be repo root for memory paths to resolve.
+             Fix api_memory_mgmt.rs to use absolute path from env or config, not cwd.
+          4. Reaper: verify orchestrator/reaper.rs is actually being called by the monitor loop.
+             If not wired: add reap() call to kernel/monitor.rs every 5 minutes.
+          5. Kill current orphans: pkill -f 'copilot.*yolo' for processes older than 2 hours
+        type: fix
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "curl -s http://localhost:8420/api/kernel/status | grep -q Jarvis"
+          - "curl -s http://localhost:8420/api/memory-mgmt/stats | grep -q ok"
+
+      - id: T1-03
+        do: >
+          Configure auto-approve for safe tool calls to stop constant permission prompts.
+
+          PROBLEM: .claude/settings.json has allow:0, deny:0 — everything asks approval.
+
+          Add to .claude/settings.json permissions.allow:
+          - Read, Glob, Grep (always safe)
+          - Bash with safe patterns: cargo check, cargo test, cargo build, git status,
+            git log, git diff, curl localhost, cvg *, scripts/check-*
+          - Edit for daemon/src/** (own code)
+          - Write for specs/**, docs/**
+
+          Keep deny rules for:
+          - rm -rf, git push --force, git reset --hard
+          - Any command touching .env, credentials, secrets
+          - sqlite3 direct (except one-time override)
+
+          Also add to .claude/settings.local.json for project-specific allows.
+        type: config
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "python3 -c \"import json;d=json.load(open('.claude/settings.json'));print(len(d.get('permissions',{}).get('allow',[])))\" | xargs test 0 -lt"
+
+  # =============================================
+  # W2: SECURITY — close the safety loop (report S1-S4)
+  # =============================================
+  - id: W2
+    name: "Security Hardening — Identity & Authorization"
+    tasks:
+      - id: T2-01
+        do: >
+          Replace shared bearer token auth with signed agent identities + RBAC.
+          (Report items S1, S2)
+
+          CURRENT: daemon/src/server/middleware.rs uses a single shared CONVERGIO_API_TOKEN.
+          dev-mode bypass allows unauthenticated access.
+
+          IMPLEMENT:
+          1. Agent identity: each agent gets a unique signed JWT at registration
+             (cvg agent start returns a token, stored in agent's env)
+          2. Token contains: agent_name, role, capabilities[], issued_at, expires_at
+          3. Middleware validates JWT signature (HMAC-SHA256 with daemon secret)
+          4. Route-level RBAC: define which roles can access which endpoints
+             - coordinator: all endpoints
+             - executor: task update, plan read, build, test
+             - kernel: kernel/*, notify, health
+             - worker: task read, delegate/status
+          5. Remove dev-mode bypass from production (keep behind --dev-mode flag only)
+          6. Log every authenticated request with agent identity
+
+          Files: daemon/src/server/middleware.rs, daemon/src/security/
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test auth 2>&1 | grep -v FAILED"
+          - "rg 'dev.mode.*bypass' daemon/src/server/middleware.rs | wc -l | xargs test 1 -ge"
+
+      - id: T2-02
+        do: >
+          Remove --dangerously-skip-permissions from all delegation paths.
+          (Report item S3)
+
+          CURRENT: daemon/src/server/sse_delegate_util.rs:87-101 constructs commands with
+          --dangerously-skip-permissions flag.
+
+          IMPLEMENT:
+          1. Search ALL files for "dangerously-skip-permissions" and "skip-perm"
+          2. Replace with scoped credential passing:
+             - Delegated agent receives a short-lived JWT (from T2-01)
+             - JWT encodes: allowed tools, allowed paths, time limit
+             - Claude Code respects the token scope
+          3. For copilot --yolo: replace with explicit tool allowlist file
+             that copilot-worker.sh generates per-task based on task type
+          4. Update copilot-worker.sh, copilot-plan-runner.sh, and any other scripts
+
+          NOTE: This may break the plan-runner workflow. Test thoroughly.
+          If Claude Code doesn't support scoped tokens yet, use .claude/settings.json
+          with per-worktree permission overrides instead.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "rg 'dangerously.skip.permissions' daemon/src/ claude-config/scripts/ | wc -l | xargs test 2 -ge"
+
+      - id: T2-03
+        do: >
+          Add immutable audit trail for all agent actions.
+          (Report item S2)
+
+          IMPLEMENT:
+          1. Create daemon/src/db/audit_log.rs with table:
+             audit_log(id, timestamp, agent_name, action, resource, details, ip, success)
+          2. Log every: task update, plan create/start/complete, delegation, merge,
+             deploy, notification send, sync operation
+          3. Audit log is append-only — no UPDATE or DELETE allowed
+          4. Add GET /api/audit-log?since=&agent=&action= query endpoint
+          5. Add migration for the table
+          6. Wire logging into all API handlers that modify state
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test audit 2>&1 | grep -v FAILED"
+          - "rg 'audit_log' daemon/src/server/ | wc -l | xargs test 3 -gt"
+
+  # =============================================
+  # W3: RELIABILITY — rollback, validation, sync (report R1-R5)
+  # =============================================
+  - id: W3
+    name: "Reliability — Rollback, Validation, Sync"
+    tasks:
+      - id: T3-01
+        do: >
+          Implement rollback model with transactional metadata.
+          (Report item R1)
+
+          CURRENT: evolution/guardrails/reversibility.ts expects rollback metadata
+          but daemon has no matching schema.
+
+          IMPLEMENT:
+          1. Add rollback_snapshots table: (id, task_id, plan_id, snapshot_type,
+             data_json, created_at). Types: git_ref, db_state, config_state
+          2. Before every task execution, save snapshot:
+             - git HEAD ref
+             - changed file list
+             - DB row states for affected tables
+          3. Add POST /api/rollback/:task_id endpoint:
+             - Reverts git to snapshot ref
+             - Restores DB rows
+             - Marks task as "rolled_back"
+          4. Add migration + tests
+          5. Wire snapshot creation into task-executor flow
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test rollback 2>&1 | grep -v FAILED"
+
+      - id: T3-02
+        do: >
+          Upgrade DB sync to conflict-aware reconciliation.
+          (Report item R4)
+
+          CURRENT: timestamp-based LWW (last-write-wins) with no conflict detection.
+          Split-brain causes silent data loss.
+
+          IMPLEMENT:
+          1. Add sync envelope: {version, source_node, seq_no, checksum, changes[]}
+          2. Conflict detection: if local row has different updated_at AND different
+             content from incoming → conflict (not just overwrite)
+          3. Conflict resolution policy: configurable per-table
+             - plans: source_node=coordinator wins
+             - tasks: latest updated_at wins (LWW, current behavior)
+             - knowledge_base: merge (append, deduplicate)
+          4. Rejected changes go to _sync_conflicts table for manual review
+          5. Add GET /api/sync/conflicts endpoint
+          6. Add conflict count to /api/sync/status
+          7. Tests with concurrent writes from 2 simulated nodes
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test sync_conflict 2>&1 | grep -v FAILED"
+
+      - id: T3-03
+        do: >
+          Extract Thor validator into a daemon service with durable verdicts.
+          (Report item R2)
+
+          CURRENT: Thor validation is inline in API handler — no retries,
+          no durable result storage, no failure semantics.
+
+          IMPLEMENT:
+          1. Create daemon/src/orchestrator/validator_service.rs
+          2. Validation requests go into a queue (DB table: validation_queue)
+          3. Service processes queue: run mechanical gates, store result durably
+          4. Verdicts stored in validation_verdicts table with full gate results
+          5. API returns verdict from DB (idempotent — re-calling gives same result)
+          6. Failed validations can be retried (re-queue)
+          7. Stale validations (>1h without verdict) auto-fail with reason
+          8. Wire into existing plan validate flow
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test validator_service 2>&1 | grep -v FAILED"
+
+  # =============================================
+  # W4: AUTONOMY — policy, goal decomposition (report A1-A3)
+  # =============================================
+  - id: W4
+    name: "Autonomy — Policy & Goal Decomposition"
+    tasks:
+      - id: T4-01
+        do: >
+          Implement autonomous execution policy for low-risk scopes.
+          (Report item A1)
+
+          CURRENT: All plan execution requires human approval steps.
+          evolution/guardrails/pr-only-enforcer.ts blocks autonomous merges.
+
+          IMPLEMENT:
+          1. Create daemon/src/orchestrator/policy.rs with risk classification:
+             - LOW: config changes, doc updates, test additions, agent prompt edits
+             - MEDIUM: code changes with passing tests in non-critical modules
+             - HIGH: security changes, DB migrations, deployment, auth changes
+             - CRITICAL: anything touching secrets, mesh auth, production endpoints
+          2. Low-risk tasks auto-progress: pending→in_progress→submitted→done
+             without human gate (Thor still validates mechanically)
+          3. Medium-risk: auto-progress but require 2 Thor passes (double validation)
+          4. High/Critical: require human approval (current behavior)
+          5. Policy stored in DB (configurable per project)
+          6. Add PUT /api/policy/scope endpoint to adjust per-project
+          7. Wire into plan execution flow: before asking for approval,
+             check if task's risk class allows auto-progress
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test policy 2>&1 | grep -v FAILED"
+
+      - id: T4-02
+        do: >
+          Implement goal-to-team assembly pipeline.
+          (Report item A2)
+
+          CURRENT: Ali orchestrator has domain routing table but no code that
+          automatically decomposes a goal into multi-domain tasks.
+
+          IMPLEMENT:
+          1. Create daemon/src/orchestrator/goal_decomposer.rs
+          2. POST /api/goal/decompose {goal: "Launch a SaaS for recipe management"}
+             Returns: {domains: ["market", "legal", "architecture", "ux", "code"],
+                       agents: [{name, role, domain, tasks}], waves: [...]}
+          3. Decomposition logic:
+             - Parse goal for domain keywords
+             - Match to Ali's 10-domain routing table
+             - For each domain: select agent, generate task description
+             - Organize into waves (research first, then design, then build)
+          4. POST /api/goal/execute {goal, auto_approve_low_risk: true}
+             Creates plan from decomposition and starts execution
+          5. This is the "give it a problem, it builds the business" pipeline
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test goal_decomp 2>&1 | grep -v FAILED"
+
+      - id: T4-03
+        do: >
+          Complete stubbed execution adapters.
+          (Report item A3)
+
+          CURRENT: evolution/adapters/ has template and maranello adapters
+          with stubbed openPR, rollback, healthCheck methods.
+          daemon/src/channels/email.rs has partial inbound processing.
+
+          IMPLEMENT:
+          1. evolution/adapters/template-adapter.ts: implement openPR() using
+             gh CLI, rollback() using git revert, healthCheck() using /api/health
+          2. evolution/adapters/maranello-adapter.ts: same + design system specific
+             checks (pnpm build, pnpm test in convergio-design repo)
+          3. daemon/src/channels/email.rs: replace stub inbound with real IMAP polling
+             or webhook receiver. If IMAP too complex, implement webhook-only
+             with POST /api/channels/email/inbound endpoint.
+          4. All methods must return proper errors, not empty Ok(())
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "rg 'todo!\\(\\)|unimplemented!' evolution/adapters/ daemon/src/channels/email.rs | wc -l | xargs test 2 -ge"
+
+  # =============================================
+  # W5: VERIFICATION & CLOSURE
+  # =============================================
+  - id: W5
+    name: "Verification & Closure"
+    tasks:
+      - id: TF-tests
+        do: >
+          Full system verification:
+          1. cargo test --lib (all unit tests)
+          2. cargo test --test (integration tests)
+          3. scripts/check-rust-wiring.sh
+          4. Mesh sync healthy on both nodes
+          5. Telegram bot responds to /status
+          6. Memory endpoint returns stats
+          7. Audit log has entries
+          8. Zero orphan copilot processes
+          9. /api/node/readiness passes on M5Max
+          10. SSH to M1 Pro works
+        type: refactor
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "cd daemon && cargo test --lib -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+          - "bash scripts/check-rust-wiring.sh"
+
+      - id: TF-doc
+        do: >
+          1. CHANGELOG.md — v20.0.0 major release (breaking: new auth model)
+          2. VERSION.md + Cargo.toml → 20.0.0
+          3. ADR-0125: Daemon as autonomous execution platform
+          4. ADR-0126: Conflict-aware DB sync
+          5. ADR-0127: Risk-based autonomous policy
+          6. Update SECURITY.md with new auth model
+          7. Update convergio-capabilities.md with all new endpoints
+          8. Update TROUBLESHOOTING.md with new sections
+        type: documentation
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 2
+        verify:
+          - "head -3 CHANGELOG.md | grep -q '20.0.0'"
+          - "test -f docs/adr/ADR-0125-daemon-autonomous-platform.md"
+          - "test -f docs/adr/ADR-0126-conflict-aware-sync.md"
+          - "test -f docs/adr/ADR-0127-risk-based-policy.md"
