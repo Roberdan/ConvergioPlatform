@@ -30,6 +30,12 @@ Code/comments/docs: English | Conversation: Italian or English | Override: expli
 
 NEVER `sqlite3` directly (hook-blocked). Use `cvg` CLI or `curl http://localhost:8420/api/...`
 
+## Worktree Discipline (NON-NEGOTIABLE)
+- NEVER create branches. Always `git worktree add --detach <path> HEAD`
+- Branch creation is blocked by hook. Only worktree detached HEAD is allowed.
+- Branches are created ONLY by the workspace release pipeline at merge time.
+- Deleting branches (`git branch -D`) is allowed for cleanup.
+
 ## Rules
 
 @rules/hard-enforcement.md
