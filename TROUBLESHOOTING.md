@@ -255,3 +255,27 @@ Commands: `cvg repo add <name> --path <p> [--github-url <u>]` | `cvg repo list` 
 **file_sizes gate fails** → split `.rs` files exceeding 250 lines into submodules.
 
 **OpenClaw cannot reach daemon** → `./daemon/start.sh`; `curl http://localhost:8420/api/health`
+
+## Mesh Operations
+
+**SSH alias for roberdandev-m1Pro (100.106.173.118)**
+- Already configured in `~/.ssh/config` with alias `roberdandev-m1Pro` (also: `m1Pro-ts`, `tlm1`, `macProM1`).
+- If missing on another machine, add to `~/.ssh/config`:
+  ```
+  Host roberdandev-m1Pro
+      HostName 100.106.173.118
+      User roberdandev
+      ForwardAgent yes
+  ```
+- Verify: `ssh roberdandev-m1Pro uptime`
+
+**Memory endpoint returns 500**
+- Cause: memory DB was opened from a relative path (`data/dashboard.db`) that fails when daemon cwd differs.
+- Fix (applied): handler now uses `CONVERGIO_MEMORY_PATH` env var, or falls back to `$HOME/.claude/memory/memory.db`.
+- Override: `export CONVERGIO_MEMORY_PATH=/path/to/memory.db` before starting daemon.
+
+**Telegram notifications not delivered after daemon restart**
+- Cause: `CONVERGIO_TELEGRAM_TOKEN` not propagated to daemon process.
+- `daemon/start.sh` loads from macOS Keychain (`convergio-telegram-token`) and exports the var.
+- Verify: `grep CONVERGIO_TELEGRAM_TOKEN daemon/start.sh` — must show `export`.
+- Store token: `security add-generic-password -s convergio-telegram-token -a convergio -w "<token>"`
