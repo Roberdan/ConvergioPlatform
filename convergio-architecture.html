@@ -3,425 +3,522 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ConvergioPlatform — Complete Architecture v19.5.0</title>
+<title>ConvergioPlatform — Architecture v19.5.0</title>
 <style>
-:root {
-  --bg:#090d12; --s1:#111820; --s2:#171e28; --s3:#1d2636;
-  --bdr:#283040; --bdr2:#3a4a60;
-  --txt:#d8dfe8; --m:#728090; --m2:#506070;
-  --blue:#4d9cf6; --green:#42d392; --orange:#e8a838; --red:#e85454;
-  --purple:#b07ee8; --cyan:#38c8d8; --pink:#e87ab0; --rust:#dea584;
-  --yellow:#e8d44d;
-}
+:root{--bg:#0a0e14;--s:#12171f;--s2:#1a2030;--bdr:#2a3040;--txt:#d4dae4;--m:#6b7a8d;--blue:#4d9cf6;--green:#42d392;--orange:#e8a838;--red:#e85454;--purple:#b07ee8;--cyan:#38c8d8;--pink:#e87ab0;--rust:#dea584;--yellow:#e8d44d}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'SF Pro Text',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--txt);line-height:1.5}
-.page{max-width:1400px;margin:0 auto;padding:40px 32px}
-.hdr{margin-bottom:32px;border-bottom:1px solid var(--bdr);padding-bottom:24px}
-.hdr h1{font-size:32px;font-weight:800;letter-spacing:-.8px}
-.hdr .sub{color:var(--m);font-size:13px;margin-top:4px}
-.hdr .stats{display:flex;gap:28px;margin-top:16px;flex-wrap:wrap}
-.hdr .stat-n{font-size:28px;font-weight:800;color:var(--blue)}
-.hdr .stat-l{font-size:10px;color:var(--m);text-transform:uppercase;letter-spacing:1px}
-.section{margin-bottom:36px}
-.section-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.section-hdr h2{font-size:18px;font-weight:700}
-.section-hdr .line{flex:1;height:1px;background:var(--bdr)}
-.grid{display:grid;gap:14px}
-.g2{grid-template-columns:1fr 1fr}
-.g3{grid-template-columns:1fr 1fr 1fr}
-.g4{grid-template-columns:1fr 1fr 1fr 1fr}
-.g5{grid-template-columns:1fr 1fr 1fr 1fr 1fr}
-.g23{grid-template-columns:2fr 3fr}
-.g32{grid-template-columns:3fr 2fr}
-.card{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;transition:border-color .2s}
-.card:hover{border-color:var(--blue)}
-.card h3{font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
-.card .desc{font-size:11px;color:var(--m);margin-bottom:8px}
-.card .detail{font-size:10.5px;color:var(--m);line-height:1.6}
-.card .detail b{color:var(--txt);font-weight:600}
-.tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;letter-spacing:.5px;vertical-align:middle}
-.tag-r{background:rgba(222,165,132,.12);color:var(--rust)}
-.tag-t{background:rgba(49,120,198,.12);color:#5b9bd5}
-.tag-b{background:rgba(66,211,146,.12);color:var(--green)}
-.tag-s{background:rgba(240,81,56,.12);color:#f05138}
-.tag-j{background:rgba(232,212,77,.12);color:var(--yellow)}
-.tag-q{background:rgba(56,200,216,.12);color:var(--cyan)}
-.port{font-size:10px;font-family:'SF Mono',monospace;padding:1px 6px;border-radius:3px;background:rgba(77,156,246,.08);color:var(--blue)}
-.bdr-b{border-left:3px solid var(--blue);padding-left:13px}
-.bdr-g{border-left:3px solid var(--green);padding-left:13px}
-.bdr-o{border-left:3px solid var(--orange);padding-left:13px}
-.bdr-r{border-left:3px solid var(--red);padding-left:13px}
-.bdr-p{border-left:3px solid var(--purple);padding-left:13px}
-.bdr-c{border-left:3px solid var(--cyan);padding-left:13px}
-.bdr-pk{border-left:3px solid var(--pink);padding-left:13px}
-.flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:12px 16px;background:var(--s1);border:1px solid var(--bdr);border-radius:8px}
-.flow .step{font-size:11px;padding:5px 12px;border-radius:6px;font-weight:600;white-space:nowrap}
-.flow .arr{color:var(--m);font-size:16px}
-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}
-th{text-align:left;color:var(--m);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--bdr);font-size:9px;text-transform:uppercase;letter-spacing:.5px}
-td{padding:4px 8px;border-bottom:1px solid rgba(40,48,64,.5)}
-td:first-child{color:var(--blue);font-family:'SF Mono',monospace;font-size:10px}
-.connector{text-align:center;padding:6px 0;color:var(--m);font-size:18px;letter-spacing:4px}
-.pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-.pill{font-size:10px;padding:3px 8px;border-radius:5px;background:var(--s2);border:1px solid var(--bdr);color:var(--m);white-space:nowrap}
-.pill.hi{border-color:var(--blue);color:var(--blue)}
-.pill.gr{border-color:var(--green);color:var(--green)}
-.pill.or{border-color:var(--orange);color:var(--orange)}
-.pill.rd{border-color:var(--red);color:var(--red)}
-.pill.pu{border-color:var(--purple);color:var(--purple)}
-.pill.cy{border-color:var(--cyan);color:var(--cyan)}
-.pill.pk{border-color:var(--pink);color:var(--pink)}
-hr.sep{border:none;border-top:1px dashed var(--bdr);margin:10px 0}
-@media(max-width:900px){.g2,.g3,.g4,.g5,.g23,.g32{grid-template-columns:1fr}}
+body{font-family:'SF Pro Text',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--txt);overflow-x:auto}
+.canvas{position:relative;width:1520px;height:3300px;margin:0 auto;padding:40px}
+
+/* nodes */
+.n{position:absolute;border-radius:10px;border:1.5px solid var(--bdr);background:var(--s);padding:12px 14px;font-size:11px;line-height:1.45;transition:border-color .2s,box-shadow .2s;cursor:default}
+.n:hover{border-color:var(--blue);box-shadow:0 0 20px rgba(77,156,246,.12);z-index:10}
+.n .t{font-weight:700;font-size:13px;margin-bottom:3px;display:flex;align-items:center;gap:5px}
+.n .sub{color:var(--m);font-size:10px;margin-bottom:5px}
+.n .d{color:var(--m);font-size:10px;line-height:1.55}
+.n .d b{color:var(--txt);font-weight:600}
+
+.tag{display:inline-block;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.4px}
+.tr{background:rgba(222,165,132,.12);color:var(--rust)}
+.tt{background:rgba(49,120,198,.12);color:#5b9bd5}
+.tb{background:rgba(66,211,146,.12);color:var(--green)}
+.ts{background:rgba(240,81,56,.12);color:#f05138}
+.tj{background:rgba(232,212,77,.12);color:var(--yellow)}
+.tq{background:rgba(56,200,216,.12);color:var(--cyan)}
+.port{font-size:9px;font-family:'SF Mono',monospace;padding:1px 5px;border-radius:3px;background:rgba(77,156,246,.08);color:var(--blue)}
+
+/* zones */
+.z{position:absolute;border-radius:14px;border:1px dashed;background:transparent}
+.z .zl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;position:absolute;top:8px;left:14px}
+
+/* svg */
+svg.a{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.al{fill:none;stroke-width:1.4;stroke-linecap:round}
+.albl{font-family:'SF Mono',monospace;font-size:8px;fill:var(--m)}
+
+/* table inside nodes */
+.n table{width:100%;border-collapse:collapse;font-size:9.5px;margin-top:4px}
+.n th{text-align:left;color:var(--m);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--bdr);font-size:8px;text-transform:uppercase;letter-spacing:.4px}
+.n td{padding:2px 4px;border-bottom:1px solid rgba(42,48,64,.4);color:var(--txt)}
+.n td:first-child{color:var(--blue);font-family:'SF Mono',monospace;font-size:9px}
+
+.sep{border:none;border-top:1px dashed var(--bdr);margin:6px 0}
+
+@media(max-width:1560px){body::before{content:'Scroll to view full diagram';display:block;text-align:center;padding:6px;font-size:10px;color:var(--m);background:var(--s);border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:100}}
 </style>
 </head>
 <body>
-<div class="page">
+<div class="canvas">
 
-<div class="hdr">
-  <h1>ConvergioPlatform Architecture</h1>
-  <div class="sub">Unified AI Orchestration — Hub-and-Spoke Topology — v19.5.0 — 30 Marzo 2026</div>
-  <div class="stats">
-    <div><div class="stat-n">650+</div><div class="stat-l">Modules</div></div>
-    <div><div class="stat-n">89</div><div class="stat-l">Agents</div></div>
-    <div><div class="stat-n">119</div><div class="stat-l">Skills</div></div>
-    <div><div class="stat-n">250+</div><div class="stat-l">API Endpoints</div></div>
-    <div><div class="stat-n">1800+</div><div class="stat-l">Tests</div></div>
-    <div><div class="stat-n">8</div><div class="stat-l">LLM Models</div></div>
-    <div><div class="stat-n">17</div><div class="stat-l">MCP Tools</div></div>
-    <div><div class="stat-n">30+</div><div class="stat-l">Platforms (OpenClaw)</div></div>
+<!-- HEADER -->
+<div style="position:absolute;top:20px;left:40px">
+  <div style="font-size:28px;font-weight:800;letter-spacing:-.6px">ConvergioPlatform Architecture</div>
+  <div style="color:var(--m);font-size:12px;margin-top:2px">Hub-and-Spoke Topology — v19.5.0 — 650+ modules · 89 agents · 119 skills · 250+ API endpoints · 1800+ tests · 8 LLM models · 3 providers</div>
+</div>
+
+<!-- LEGEND -->
+<div style="position:absolute;top:22px;right:40px;display:flex;gap:14px;flex-wrap:wrap;font-size:9px;color:var(--m)">
+  <span><span style="display:inline-block;width:18px;border-top:2px solid var(--blue)"></span> HTTP</span>
+  <span><span style="display:inline-block;width:18px;border-top:2px solid var(--green)"></span> WebSocket</span>
+  <span><span style="display:inline-block;width:18px;border-top:2px solid var(--orange)"></span> IPC/Socket</span>
+  <span><span style="display:inline-block;width:18px;border-top:2px solid var(--purple)"></span> Function call</span>
+  <span><span style="display:inline-block;width:18px;border-top:2px dashed var(--cyan)"></span> Tailscale</span>
+  <span><span style="display:inline-block;width:18px;border-top:2px solid var(--pink)"></span> Subprocess</span>
+  <span><span style="display:inline-block;width:18px;border-top:2px dashed var(--m)"></span> stdio</span>
+</div>
+
+<!-- =================== SVG ARROWS =================== -->
+<svg class="a" viewBox="0 0 1520 3300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="ab" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#4d9cf6"/></marker>
+  <marker id="ag" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#42d392"/></marker>
+  <marker id="ao" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#e8a838"/></marker>
+  <marker id="ap" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#b07ee8"/></marker>
+  <marker id="ac" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#38c8d8"/></marker>
+  <marker id="apk" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#e87ab0"/></marker>
+  <marker id="am" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#6b7a8d"/></marker>
+  <marker id="ar" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#e85454"/></marker>
+</defs>
+
+<!-- UI → Daemon -->
+<path d="M 180 200 L 180 390" class="al" stroke="#4d9cf6" marker-end="url(#ab)"/>
+<path d="M 195 200 L 195 390" class="al" stroke="#42d392" marker-end="url(#ag)"/>
+<text x="202" y="300" class="albl">/api/* + /ws/dashboard</text>
+
+<path d="M 450 200 L 400 390" class="al" stroke="#42d392" marker-end="url(#ag)"/>
+<text x="416" y="285" class="albl">/ws/brain</text>
+
+<path d="M 680 200 L 540 390" class="al" stroke="#4d9cf6" marker-end="url(#ab)"/>
+<text x="600" y="270" class="albl">localhost:8420</text>
+<path d="M 710 200 L 710 560 L 610 560" class="al" stroke="#e8a838" marker-end="url(#ao)"/>
+<text x="716" y="410" class="albl">~/.claude/ipc.sock</text>
+
+<path d="M 960 200 L 830 620" class="al" stroke="#4d9cf6" marker-end="url(#ab)"/>
+<text x="910" y="380" class="albl">/api/voice</text>
+
+<path d="M 1280 200 L 560 420" class="al" stroke="#4d9cf6" stroke-dasharray="5,3" marker-end="url(#ab)"/>
+<text x="920" y="280" class="albl">stdio → HTTP (MCP)</text>
+
+<!-- Internal daemon -->
+<path d="M 370 480 L 480 480" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 370 510 L 480 550" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 370 440 L 650 440 L 650 465" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 760 540 L 760 600" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 370 460 Q 550 590 650 625" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 830 700 L 1000 700" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<text x="870" y="693" class="albl">route()</text>
+<path d="M 260 700 L 650 665" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<text x="380" y="668" class="albl">audio→STT→engine→TTS</text>
+
+<!-- Daemon → Data -->
+<path d="M 280 580 L 280 1090" class="al" stroke="#38c8d8" marker-end="url(#ac)"/>
+<text x="288" y="900" class="albl">rusqlite (WAL+CRDT)</text>
+<path d="M 140 830 L 140 1090" class="al" stroke="#e87ab0" marker-end="url(#apk)"/>
+<text x="148" y="960" class="albl">git subprocess</text>
+<path d="M 200 830 L 380 1090" class="al" stroke="#4d9cf6" marker-end="url(#ab)"/>
+<text x="245" y="980" class="albl">api.github.com</text>
+
+<!-- Daemon → Mesh -->
+<path d="M 370 520 Q 1060 850 1060 1090" class="al" stroke="#38c8d8" stroke-dasharray="5,3" marker-end="url(#ac)"/>
+<text x="800" y="910" class="albl">Tailscale + HMAC-SHA256</text>
+<path d="M 1180 1140 C 1340 1140 1340 1190 1180 1190" class="al" stroke="#4d9cf6" marker-end="url(#ab)"/>
+<text x="1260" y="1168" class="albl">/api/sync/*</text>
+
+<!-- Kernel → Telegram -->
+<path d="M 770 750 L 770 840" class="al" stroke="#4d9cf6" marker-end="url(#ab)"/>
+<text x="778" y="800" class="albl">Bot API</text>
+
+<!-- Inference → LLM -->
+<path d="M 1100 740 L 1260 840" class="al" stroke="#4d9cf6" marker-end="url(#ab)"/>
+<text x="1165" y="780" class="albl">Cloud HTTPS</text>
+<path d="M 1060 740 L 1060 840" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<text x="1068" y="795" class="albl">:8321 local</text>
+
+<!-- Evolution → Daemon -->
+<path d="M 700 1410 L 360 550" class="al" stroke="#4d9cf6" marker-end="url(#ab)" opacity=".5"/>
+<text x="490" y="1010" class="albl">HTTP adapters → /api/*</text>
+
+<!-- Governance cross-cutting -->
+<path d="M 320 2190 L 320 590" class="al" stroke="#e85454" stroke-dasharray="3,3" marker-end="url(#ar)" opacity=".3"/>
+<path d="M 730 2190 L 730 550" class="al" stroke="#e85454" stroke-dasharray="3,3" marker-end="url(#ar)" opacity=".3"/>
+
+<!-- Execution flow arrows -->
+<path d="M 230 2850 L 350 2850" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 500 2850 L 600 2850" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 720 2850 L 800 2850" class="al" stroke="#38c8d8" marker-end="url(#ac)"/>
+<path d="M 870 2850 L 930 2850" class="al" stroke="#b07ee8" marker-end="url(#ap)"/>
+<path d="M 1060 2850 L 1110 2850" class="al" stroke="#e8a838" marker-end="url(#ao)"/>
+<path d="M 1240 2850 L 1300 2850" class="al" stroke="#42d392" marker-end="url(#ag)"/>
+</svg>
+
+<!-- =================== USER INTERFACES (y~80) =================== -->
+<div class="n" style="left:60px;top:80px;width:210px;border-color:rgba(77,156,246,.4)">
+  <div class="t">Dashboard Web <span class="tag tj">JS</span></div>
+  <div class="sub">Vanilla JS + Maranello Luce DS</div>
+  <div class="d"><b>7 panels</b>: app, KPI, mesh, chat, brain, ideas, IPC<br>Static served by daemon <span class="port">:8420</span><br><b>WS</b>: /ws/dashboard (real-time)<br><b>Design</b>: 5 themes, 36 components, WCAG 2.2 AA</div>
+</div>
+
+<div class="n" style="left:340px;top:80px;width:180px;border-color:rgba(77,156,246,.4)">
+  <div class="t">TUI <span class="tag tr">RUST</span></div>
+  <div class="sub">ratatui terminal</div>
+  <div class="d">Tree nav, drill-down, chat<br>WS → /ws/brain<br>Session persistence, widgets</div>
+</div>
+
+<div class="n" style="left:580px;top:80px;width:200px;border-color:rgba(77,156,246,.4)">
+  <div class="t">CLI (cvg) <span class="tag tr">RUST</span></div>
+  <div class="sub">50+ subcommands</div>
+  <div class="d"><b>HTTP</b> → localhost:8420<br><b>IPC</b> → Unix socket<br>argv[0] routing<br>plan, task, wave, agent, workspace, kernel, mesh, skill, checkpoint, reap, review, memory, channel, delegation, voice, domain, audit</div>
+</div>
+
+<div class="n" style="left:840px;top:80px;width:200px;border-color:rgba(77,156,246,.4)">
+  <div class="t">Siri / Voice <span class="tag ts">SWIFT</span></div>
+  <div class="sub">CommandCenter + speak.swift</div>
+  <div class="d">convergio-parla.sh → Italian<br>convergio-stato.sh → status<br>Siri Shortcuts integration</div>
+</div>
+
+<div class="n" style="left:1100px;top:80px;width:230px;border-color:rgba(77,156,246,.4)">
+  <div class="t">MCP Server <span class="tag tr">RUST</span></div>
+  <div class="sub">stdio → Claude Code / any LLM client</div>
+  <div class="d"><b>17 tools</b>: plans(4), agents(3), mesh(2), metrics(1), kernel(2), actions(2), control(3)<br><b>Ring security</b>: 0=core → 3=sandboxed<br>JSON-RPC, bearer token, .mcp.json</div>
+</div>
+
+<!-- =================== DAEMON ZONE (y~360) =================== -->
+<div class="z" style="left:40px;top:360px;width:1420px;height:500px;border-color:rgba(66,211,146,.25);background:rgba(66,211,146,.015)">
+  <div class="zl" style="color:var(--green)">Daemon Core — Rust — axum + tokio + rusqlite — 650+ modules, 1800+ tests <span class="port">:8420</span></div>
+</div>
+
+<div class="n" style="left:60px;top:400px;width:310px;min-height:180px;border-color:rgba(66,211,146,.4)">
+  <div class="t">HTTP Server (axum)</div>
+  <div class="sub">26 API modules — 250+ endpoints</div>
+  <div class="d">
+    <b>Plans</b>: plans, plan_db, runs, coordinator, delegation, deliverables, tracking<br>
+    <b>Agents</b>: agents, chat, ideas, evolution, voice, decisions, capabilities<br>
+    <b>Infra</b>: mesh, heartbeat, peers, sync, metrics, health, workspace, ipc, notify, github, openclaw, ingest, channels, repos, audit, domain, memory, nightly<br>
+    <hr class="sep">
+    <b>SSE</b>: chat/stream, plan/delegate, plan/preflight<br>
+    <b>WS</b>: /ws/brain, /ws/dashboard, /ws/pty<br>
+    <b>Auth</b>: JWT/bearer, CORS, telemetry
   </div>
 </div>
 
-<!-- 1. USER INTERFACES -->
-<div class="section">
-  <div class="section-hdr"><h2>1. User Interfaces</h2><div class="line"></div></div>
-  <div class="grid g5">
-    <div class="card bdr-b">
-      <h3>Dashboard Web <span class="tag tag-j">JS</span></h3>
-      <div class="desc">Vanilla JS + Maranello Luce DS</div>
-      <div class="detail"><b>7 panels</b>: app, KPI, mesh-actions, chat, brain-canvas, idea-jar, IPC<br>Static served by daemon <span class="port">:8420</span><br><b>WS</b>: /ws/dashboard (real-time)<br><b>Design</b>: 5 themes, 36 components, WCAG 2.2 AA</div>
-    </div>
-    <div class="card bdr-b">
-      <h3>TUI <span class="tag tag-r">RUST</span></h3>
-      <div class="desc">ratatui terminal interface</div>
-      <div class="detail">Tree nav, drill-down, chat handler<br>WS client &rarr; /ws/brain<br>Session persistence, widgets<br>Claude session lifecycle</div>
-    </div>
-    <div class="card bdr-b">
-      <h3>CLI (cvg) <span class="tag tag-r">RUST</span></h3>
-      <div class="desc">50+ subcommands</div>
-      <div class="detail"><b>HTTP</b> &rarr; localhost:8420/api/*<br><b>IPC</b> &rarr; ~/.claude/ipc.sock<br>argv[0] routing (cvg / agent-ipc)<br>plan, task, wave, agent, workspace, kernel, mesh, skill, checkpoint, reap, review, memory, channel, delegation, voice, domain, audit, cheatsheet, commands, api</div>
-    </div>
-    <div class="card bdr-b">
-      <h3>Siri / Voice <span class="tag tag-s">SWIFT</span></h3>
-      <div class="desc">CommandCenter + speak.swift</div>
-      <div class="detail">convergio-parla.sh &rarr; Italian voice<br>convergio-stato.sh &rarr; status report<br>Siri Shortcuts integration<br>macOS native TTS</div>
-    </div>
-    <div class="card bdr-b">
-      <h3>MCP Server <span class="tag tag-r">RUST</span></h3>
-      <div class="desc">stdio transport &rarr; Claude Code</div>
-      <div class="detail"><b>17 tools</b>: plans(4), agents(3), mesh(2), metrics(1), kernel(2), actions(2), control(3)<br><b>Ring security</b>: 0=core, 1=trusted, 2=community, 3=sandboxed<br>JSON-RPC, bearer token auth<br>.mcp.json wiring</div>
-    </div>
+<div class="n" style="left:480px;top:520px;width:210px;border-color:rgba(232,168,56,.4)">
+  <div class="t">IPC Engine</div>
+  <div class="sub">Inter-agent coordination</div>
+  <div class="d"><b>Tables</b>: ipc_agents, ipc_messages, ipc_channels, ipc_file_locks, ipc_worktrees, ipc_context<br>budget, locks, conflicts, skills registry, protocol router</div>
+</div>
+
+<div class="n" style="left:630px;top:400px;width:190px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Orchestrator</div>
+  <div class="sub">Plan execution engine</div>
+  <div class="d"><b>reactor</b> → event loop<br><b>executor</b> → TDD (RED→GREEN→evidence)<br><b>delegation_core</b> → remote dispatch<br><b>reaper</b> → cleanup zombies<br><b>lifecycle_guards</b> → state machine<br><hr class="sep">Max 4 tasks/wave · cascading fix: 3→STOP</div>
+</div>
+
+<div class="n" style="left:680px;top:600px;width:170px;border-color:rgba(232,168,56,.4)">
+  <div class="t">Thor <span style="font-size:9px;color:var(--orange)">10 gates</span></div>
+  <div class="sub">Quality validation — v6.0</div>
+  <div class="d">Checklist engine + NASA rules<br>Wave-level (not task)<br>Only Thor: submitted → done<br>Merge gate: 7 checks (clean tree, no contamination, type-check, tests, lint, version, changelog)</div>
+</div>
+
+<div class="n" style="left:650px;top:620px;width:220px;top:620px;left:640px">
+  <!-- Kernel positioned below orchestrator -->
+</div>
+
+<div class="n" style="left:60px;top:640px;width:200px;border-color:rgba(232,122,176,.4)">
+  <div class="t">Voice Engine</div>
+  <div class="sub">Feature-gated full pipeline</div>
+  <div class="d"><b>Capture</b>: cpal native, 16kHz<br><b>VAD</b>: webrtc-vad, ~10ms<br><b>STT</b>: whisper-rs GGML, Metal accel<br><b>Wake word</b>: "convergio" detection<br><b>TTS</b>: Voxtral 4B (mlx-audio) + Siri<br><b>Intent</b>: rule-based classifier<br><b>State</b>: Idle→Listening→Wake→Processing→Speaking</div>
+</div>
+
+<div class="n" style="left:650px;top:620px;width:220px;border-color:rgba(56,200,216,.4)">
+  <div class="t">Kernel / Jarvis</div>
+  <div class="sub">Qwen 2.5 7B on M1 Pro</div>
+  <div class="d"><b>Engine</b>: context-stuffed state machine<br><b>Monitor</b> (30s): health, stall, rate limits, peer tracker (3-strike)<br><b>Recover</b>: restart daemon, checkpoint, escalation<br><b>Verify gate</b>: blocks "done" without evidence<br><b>Deterministic triage</b>: daemon crash, DB lock, stale worktrees, high FD<br><b>Ali escalation</b>: "ali dimmi..." → Claude Opus subprocess w/ full context</div>
+</div>
+
+<div class="n" style="left:650px;top:845px;width:190px;border-color:rgba(232,122,176,.4)">
+  <div class="t">Telegram Bot</div>
+  <div class="sub">@ConvergioBot — bidirectional</div>
+  <div class="d"><b>Text in</b>: classify → respond<br><b>Voice in</b>: OGG→Whisper→classify→voice+text<br><b>Outbound</b>: alerts, daily/weekly reports<br>Long polling · quiet hours 23-07 CET<br>Health: detect dead poll</div>
+</div>
+
+<div class="n" style="left:860px;top:400px;width:190px;border-color:rgba(232,84,84,.4)">
+  <div class="t">Security</div>
+  <div class="d"><b>ACL</b>: role-based access<br><b>Audit chain</b>: immutable log<br><b>Egress filter</b>: outbound control<br><b>Kill switch</b>: emergency stop<br><b>Keychain</b>: secrets mgmt<br><b>Sandbox</b>: agent isolation<br><b>Budget</b>: token spend tracking</div>
+</div>
+
+<div class="n" style="left:1080px;top:400px;width:190px;border-color:rgba(66,211,146,.4)">
+  <div class="t">Resilience</div>
+  <div class="sub">Art. XI — NON-NEGOTIABLE</div>
+  <div class="d"><b>Circuit breaker</b>: all external boundaries<br><b>Health</b>: /health + /api/node/readiness (10 checks)<br><b>Checkpoint/restart</b>: snapshot + restore<br><b>Retry + backoff</b>: exponential<br><b>Watchdog</b>: stall detection<br><b>Reaper</b>: auto-clean zombies, worktrees</div>
+</div>
+
+<div class="n" style="left:1000px;top:620px;width:210px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Inference Router</div>
+  <div class="sub">8 models, 3 providers</div>
+  <div class="d"><b>Classifier</b> → tier routing<br><b>Preference</b>: local > cloud<br><b>Fallback chain</b>: primary unavailable → next<br><b>Parallelization</b>: ≤3 = sonnet, >3 = opus<br><b>Providers</b>: Anthropic, OpenAI, Google</div>
+</div>
+
+<div class="n" style="left:60px;top:750px;width:200px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Workspace</div>
+  <div class="sub">Git is invisible to agents</div>
+  <div class="d"><b>GitConnector</b>: GitHub/GitLab/Gitea<br><b>merge_ops</b> · <b>wave_ops</b><br><b>Quality gate</b>: mechanical checks<br><b>Release Agent</b>: gate→commit→push→PR→merge<br><b>Event log</b>: CRDT audit trail<br><b>Deliverables</b> tracking</div>
+</div>
+
+<div class="n" style="left:310px;top:750px;width:170px">
+  <div class="t">Channels</div>
+  <div class="d"><b>Slack</b> adapter<br><b>Telegram</b> adapter<br><b>Email</b> adapter<br>Router for multi-channel dispatch</div>
+</div>
+
+<div class="n" style="left:500px;top:750px;width:140px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Memory</div>
+  <div class="d">vector_store<br>embeddings<br>blob_store<br>sqlite_store<br>attestation<br>sharing</div>
+</div>
+
+<div class="n" style="left:870px;top:620px;width:120px">
+  <div class="t" style="font-size:11px">Capabilities</div>
+  <div class="d">MCP proxy<br>permissions (ring)<br>registry<br>yaml_loader</div>
+</div>
+
+<!-- =================== LLM STACK (y~840) =================== -->
+<div class="n" style="left:980px;top:845px;width:190px;border-color:rgba(232,168,56,.4)">
+  <div class="t">Local LLM Stack</div>
+  <div class="sub">Apple Silicon (M1 Pro)</div>
+  <div class="d"><b>oMLX</b> <span class="port">:8321</span> MLX inference<br><b>LiteLLM</b> <span class="port">:4000</span> unified proxy<br><b>Qwen 2.5 7B</b> (Jarvis)<br><b>Voxtral 4B</b> neural TTS<br><b>Whisper GGML</b> STT Metal<br>~/models/ · ~/llm-local/</div>
+</div>
+
+<div class="n" style="left:1210px;top:845px;width:180px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Cloud LLMs</div>
+  <div class="sub">3 providers</div>
+  <div class="d"><b>Anthropic</b>: Opus 4.6, Opus 4.6-1M, Sonnet 4.6, Haiku 4.5<br><b>OpenAI</b>: GPT-5.3 Codex, GPT-5.1 Codex Mini, GPT-5.4<br><b>Google</b>: Gemini 3 Pro (1M ctx)</div>
+</div>
+
+<!-- =================== DATA LAYER (y~1090) =================== -->
+<div class="z" style="left:40px;top:1070px;width:750px;height:150px;border-color:rgba(56,200,216,.25);background:rgba(56,200,216,.015)">
+  <div class="zl" style="color:var(--cyan)">Data Layer</div>
+</div>
+
+<div class="n" style="left:60px;top:1100px;width:210px;border-color:rgba(56,200,216,.4)">
+  <div class="t">dashboard.db <span class="tag tq">SQLite WAL+CRDT</span></div>
+  <div class="d"><b>Tables</b>: plans, waves, tasks, knowledge_base, peer_heartbeats, agents, metrics, workspaces, ipc_*, workspace_events, nightly_jobs<br>Sync via /api/sync/* between peers</div>
+</div>
+
+<div class="n" style="left:310px;top:1100px;width:180px">
+  <div class="t">Git Repos</div>
+  <div class="d"><b>Local</b>: git subprocess<br><b>Remote</b>: api.github.com (reqwest 30s)<br>PRs, CI, merge, branch ops</div>
+</div>
+
+<div class="n" style="left:530px;top:1100px;width:180px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Vector Store</div>
+  <div class="d">Embeddings for semantic search<br>Blob store · sqlite_store<br>Attestation · sharing<br>.claude/agent-memory/</div>
+</div>
+
+<!-- =================== MESH (y~1090 right) =================== -->
+<div class="z" style="left:840px;top:1070px;width:600px;height:180px;border-color:rgba(56,200,216,.25);background:rgba(56,200,216,.015)">
+  <div class="zl" style="color:var(--cyan)">Mesh Network — Art. XII (Parisi) — 40+ Rust modules + 13 Bash scripts</div>
+</div>
+
+<div class="n" style="left:860px;top:1100px;width:280px;border-color:rgba(56,200,216,.4)">
+  <div class="t">Mesh Coordinator</div>
+  <div class="sub">Tailscale P2P + HMAC-SHA256 + AES-GCM</div>
+  <div class="d">
+    <b>Core</b>: coordinator, peers, topology, sync<br>
+    <b>Delegate</b>: handoff SSH/WS, routing, monitor<br>
+    <b>Intelligence</b>: peer_resolver (3-stage fuzzy), profiles<br>
+    <b>Transport</b>: Tailscale, SSH2, WS, HTTP, LAN mDNS<br>
+    <b>Self-healing</b>: node failure → auto swarm reorg<br>
+    <b>No SPOF</b> · <b>Node roles</b>: kernel, executor, coordinator<br>
+    <b>Deploy</b>: deploy-node.sh &lt;node&gt; --kernel
   </div>
 </div>
 
-<div class="connector">&#9660; HTTP &nbsp; &#9660; WS &nbsp; &#9660; SSE &nbsp; &#9660; Unix Socket &nbsp; &#9660; stdio</div>
-
-<!-- 2. DAEMON CORE -->
-<div class="section">
-  <div class="section-hdr"><h2>2. Daemon Core</h2><span class="tag tag-r">RUST</span><span class="port">:8420</span><div class="line"></div></div>
-  <div class="grid g32" style="margin-bottom:14px">
-    <div class="card bdr-g">
-      <h3>HTTP Server (axum + tokio)</h3>
-      <div class="desc">26 API modules — 250+ endpoints — REST + SSE + WebSocket</div>
-      <div class="grid g3" style="gap:8px">
-        <div><div class="detail"><b>Plans & Execution</b></div><div class="pills"><span class="pill hi">plans</span><span class="pill hi">plan_db</span><span class="pill hi">runs</span><span class="pill">coordinator</span><span class="pill">delegation</span><span class="pill">deliverables</span><span class="pill">tracking</span></div></div>
-        <div><div class="detail"><b>Agents & Intelligence</b></div><div class="pills"><span class="pill hi">agents</span><span class="pill">chat</span><span class="pill">ideas</span><span class="pill">evolution</span><span class="pill">voice</span><span class="pill">decisions</span><span class="pill">capabilities</span></div></div>
-        <div><div class="detail"><b>Infrastructure</b></div><div class="pills"><span class="pill gr">mesh</span><span class="pill gr">heartbeat</span><span class="pill gr">peers</span><span class="pill gr">sync</span><span class="pill">metrics</span><span class="pill">health</span><span class="pill">workspace</span><span class="pill">ipc</span><span class="pill">notify</span><span class="pill">github</span><span class="pill">openclaw</span><span class="pill">ingest</span><span class="pill">channels</span><span class="pill">repositories</span><span class="pill">audit</span><span class="pill">domain</span><span class="pill">memory</span><span class="pill">nightly</span></div></div>
-      </div>
-      <hr class="sep">
-      <div class="detail"><b>SSE</b>: /api/chat/stream/:sid, /api/plan/delegate, /api/plan/preflight, /api/plan/start &nbsp;|&nbsp; <b>WS</b>: /ws/brain, /ws/dashboard, /ws/pty &nbsp;|&nbsp; <b>Middleware</b>: auth (JWT/bearer), CORS, telemetry, static serve</div>
-    </div>
-    <div class="card bdr-g">
-      <h3>Orchestrator</h3>
-      <div class="desc">Plan execution engine</div>
-      <div class="detail"><b>reactor</b> &rarr; event loop, dispatches tasks<br><b>executor</b> &rarr; TDD execution (RED &rarr; GREEN &rarr; evidence)<br><b>delegation_core</b> &rarr; delegate to remote nodes<br><b>reaper</b> &rarr; auto-clean stale processes, worktrees<br><b>plan_lifecycle_guards</b> &rarr; state machine enforcement</div>
-      <hr class="sep">
-      <div class="detail"><b>Status flow</b>: pending &rarr; in_progress &rarr; <b>submitted</b> (executor) &rarr; <b>done</b> (Thor only)<br><b>Cascading fix threshold</b>: 3 fails &rarr; STOP, propose rebuild<br><b>Max 4 tasks/wave</b>, checkpoint after each</div>
-    </div>
-  </div>
-  <div class="grid g4" style="margin-bottom:14px">
-    <div class="card bdr-c">
-      <h3>Kernel / Jarvis</h3>
-      <div class="desc">Local LLM brain — Qwen 2.5 7B on M1 Pro</div>
-      <div class="detail"><b>Engine</b>: state machine (context-stuffed intelligent answers)<br><b>Monitor</b> (30s loop): health, stall detection, rate limits, peer failure tracker (3-strike)<br><b>Recover</b>: restart daemon, checkpoint, escalation<br><b>Verify gate</b>: blocks "done" without evidence<br><b>Deterministic triage</b>: auto-fix daemon crash, DB lock, stale worktrees, high FD count<br><b>Ali escalation</b>: "ali dimmi..." &rarr; Claude CLI (Opus) with full context</div>
-    </div>
-    <div class="card bdr-pk">
-      <h3>Voice Engine</h3>
-      <div class="desc">Full pipeline, feature-gated</div>
-      <div class="detail"><b>Capture</b>: cpal native, stereo&rarr;mono, 16kHz<br><b>VAD</b>: webrtc-vad, 4 levels, ~10ms<br><b>STT</b>: whisper-rs GGML, Metal accel<br><b>Wake word</b>: VAD + Whisper micro-transcription<br><b>TTS</b>: Voxtral 4B (mlx-audio) + Siri fallback<br><b>Intent</b>: rule-based &rarr; commands, queries, nav<br><b>State</b>: Idle &rarr; Listening &rarr; WakeDetected &rarr; Processing &rarr; Speaking</div>
-    </div>
-    <div class="card bdr-pk">
-      <h3>Telegram Bot</h3>
-      <div class="desc">@ConvergioBot — bidirectional</div>
-      <div class="detail"><b>Inbound text</b>: classify intent &rarr; respond<br><b>Inbound voice</b>: OGG &rarr; Whisper &rarr; classify &rarr; text + voice<br><b>Outbound</b>: alerts, daily/weekly reports, plan completions<br><b>Long polling</b> (zero wasted requests)<br><b>Quiet hours</b>: 23:00-07:00 CET<br><b>Health check</b>: detect dead poll task</div>
-    </div>
-    <div class="card bdr-o">
-      <h3>Thor Validator</h3>
-      <div class="desc">10-gate QA — v6.0</div>
-      <div class="detail"><b>Checklist engine</b> + NASA rules<br><b>Wave-level validation</b> (not task-level)<br>Only Thor promotes submitted &rarr; done<br>Executors CANNOT set done<br><b>Merge quality gate</b>: clean tree, no contamination, type-check, tests, lint, version, CHANGELOG</div>
-    </div>
-  </div>
-  <div class="grid g4">
-    <div class="card bdr-o">
-      <h3>IPC Engine</h3>
-      <div class="desc">Inter-agent coordination</div>
-      <div class="detail"><b>SQLite tables</b>: ipc_agents, ipc_messages, ipc_channels, ipc_file_locks, ipc_worktrees, ipc_context<br>budget, conflicts, protocol router, compact, skills registry</div>
-    </div>
-    <div class="card bdr-r">
-      <h3>Security</h3>
-      <div class="detail"><b>ACL</b>: role-based access<br><b>Audit chain</b>: immutable log<br><b>Egress filter</b>: outbound control<br><b>Kill switch</b>: emergency stop<br><b>Keychain</b>: secrets<br><b>Sandbox</b>: agent isolation<br><b>Budget</b>: token tracking</div>
-    </div>
-    <div class="card bdr-g">
-      <h3>Resilience</h3>
-      <div class="desc">Art. XI — NON-NEGOTIABLE</div>
-      <div class="detail"><b>Circuit breaker</b>: all external boundaries<br><b>Health</b>: /health + /api/node/readiness (10 checks)<br><b>Checkpoint/restart</b>: snapshot + restore<br><b>Retry + backoff</b>: exponential<br><b>Watchdog</b>: detect stalls<br><b>Reaper</b>: auto-clean zombies</div>
-    </div>
-    <div class="card bdr-p">
-      <h3>Workspace</h3>
-      <div class="desc">Git is invisible to agents</div>
-      <div class="detail"><b>GitConnector</b> trait: GitHub/GitLab/Gitea<br><b>merge_ops</b>: strategy logic<br><b>wave_ops</b>: wave coordination<br><b>Quality gate</b>: mechanical checks in Rust<br><b>Release Agent</b>: gate &rarr; commit &rarr; push &rarr; PR &rarr; merge<br><b>Event log</b>: CRDT audit trail</div>
-    </div>
-  </div>
+<div class="n" style="left:1180px;top:1120px;width:120px">
+  <div class="t" style="font-size:11px">Peer Node</div>
+  <div class="d"><span class="port">:8420</span><br>CRDT sync<br>Auto-rebuild (5min)</div>
 </div>
 
-<div class="connector">&#9660; rusqlite &nbsp; &#9660; CRDT sync &nbsp; &#9660; git subprocess &nbsp; &#9660; reqwest HTTP</div>
-
-<!-- 3. DATA -->
-<div class="section">
-  <div class="section-hdr"><h2>3. Data Layer</h2><div class="line"></div></div>
-  <div class="grid g4">
-    <div class="card bdr-c">
-      <h3>dashboard.db <span class="tag tag-q">SQLITE WAL+CRDT</span></h3>
-      <div class="detail"><b>Tables</b>: plans, waves, tasks, knowledge_base, peer_heartbeats, agents, metrics, workspaces, ipc_*, workspace_events, nightly_jobs<br><b>Sync</b>: CRDT between mesh nodes via /api/sync/*<br><b>Path</b>: data/dashboard.db (env: DASHBOARD_DB)</div>
-    </div>
-    <div class="card bdr-p">
-      <h3>Vector Store</h3>
-      <div class="detail"><b>Embeddings</b> DB for semantic search<br><b>Blob store</b>: large content<br><b>sqlite_store</b>: structured memory<br><b>Attestation</b>: provenance<br><b>Sharing</b>: cross-agent memory</div>
-    </div>
-    <div class="card">
-      <h3>Git Repos</h3>
-      <div class="detail"><b>Local</b>: git subprocess (commit, push, rebase)<br><b>Remote</b>: api.github.com (reqwest, 30s timeout)<br>PRs, CI checks, merge, branch ops</div>
-    </div>
-    <div class="card">
-      <h3>File System</h3>
-      <div class="detail">~/.claude/projects/ &mdash; agent memory<br>~/.convergio/env &mdash; secrets<br>~/.cache/huggingface/hub/ &mdash; MLX models<br>~/Library/LaunchAgents/ &mdash; launchd plists<br>.claude/agent-memory/ &mdash; per-agent state</div>
-    </div>
-  </div>
+<div class="n" style="left:1310px;top:1120px;width:120px">
+  <div class="t" style="font-size:11px">Peer Node</div>
+  <div class="d"><span class="port">:8420</span><br>CRDT sync<br>caffeinate</div>
 </div>
 
-<!-- 4. MESH -->
-<div class="section">
-  <div class="section-hdr"><h2>4. Mesh Network (Swarm Intelligence)</h2><span class="tag tag-r">RUST</span><span class="tag tag-b">BASH</span><div class="line"></div></div>
-  <div class="desc" style="font-size:11px;color:var(--m);margin-bottom:10px">Art. XII Constitution — NON-NEGOTIABLE — Inspired by Giorgio Parisi (Nobel Physics 2021): emergent behavior from local interactions</div>
-  <div class="grid g23">
-    <div class="card bdr-c">
-      <h3>Mesh Coordinator (40+ Rust modules)</h3>
-      <div class="grid g2" style="gap:8px;margin-top:8px">
-        <div class="detail"><b>Core</b>: coordinator, peers, topology, sync<br><b>Delegate</b>: handoff (SSH/WS), routing, monitor<br><b>Intelligence</b>: peer_resolver (3-stage fuzzy match), profiles, runners<br><b>Sync</b>: daemon_sync, frames, batch, DB ops, quota</div>
-        <div class="detail"><b>Transport</b>: Tailscale, SSH2, WebSocket, HTTP, LAN mDNS<br><b>Auth</b>: HMAC-SHA256 + AES-GCM, token-based<br><b>Self-healing</b>: node failure &rarr; auto swarm reorg<br><b>No SPOF</b>: any node failure must not halt swarm</div>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Mesh Scripts (13 Bash)</h3>
-      <div class="pills" style="margin-top:6px"><span class="pill gr">deploy-node.sh</span><span class="pill gr">mesh-provision-node.sh</span><span class="pill gr">mesh-sync.sh</span><span class="pill gr">mesh-sync-all.sh</span><span class="pill gr">mesh-heartbeat.sh</span><span class="pill gr">mesh-auth-sync.sh</span><span class="pill gr">mesh-delegate-task.sh</span><span class="pill gr">mesh-preflight.sh</span><span class="pill gr">mesh-rsync.sh</span><span class="pill">build-dmg.sh</span><span class="pill">build-usb.sh</span><span class="pill">offline-recovery.sh</span><span class="pill">post-commit-sync.sh</span></div>
-      <hr class="sep">
-      <div class="detail"><b>Node roles</b>: kernel, executor, coordinator<br><b>Deploy</b>: one-command &rarr; deploy-node.sh &lt;node&gt; --kernel<br><b>Auto-rebuild</b>: daemon rebuilds after git pull, launchd (5min)</div>
-    </div>
-  </div>
+<!-- =================== MODEL ROUTING TABLE (y~1300) =================== -->
+<div class="n" style="left:40px;top:1290px;width:700px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Model Routing — Phase-based (hook-enforced)</div>
+  <table>
+    <tr><th>Phase</th><th>Model</th><th>Agent</th><th>Rationale</th></tr>
+    <tr><td>Prompt / Requirements</td><td>claude-opus-4.6</td><td>@prompt</td><td>Deep reasoning</td></tr>
+    <tr><td>Planning</td><td>claude-opus-4.6-1m</td><td>@planner</td><td>1M context for full codebase</td></tr>
+    <tr><td>Review (×1)</td><td>claude-sonnet-4.6</td><td>plan-reviewer</td><td>Fast, accurate</td></tr>
+    <tr><td>Execution / TDD</td><td>gpt-5.3-codex</td><td>@execute</td><td>Capable bulk codegen</td></tr>
+    <tr><td>Validation / Thor</td><td>claude-opus-4.6</td><td>@validate</td><td>Deep reasoning for gates</td></tr>
+    <tr><td>Exploration</td><td>claude-haiku-4.5</td><td>explore</td><td>Fast read-only</td></tr>
+    <tr><td>Coordinator</td><td>claude-sonnet-4.6</td><td>—</td><td>Default session</td></tr>
+  </table>
+  <hr class="sep">
+  <div class="d"><b>Task-type routing</b>: Architecture → opus · Standard codegen → codex · Deep debugging → gpt-5.4 · Config → codex-mini · Docs → haiku · Large codebase → opus-1m · Large research → gemini-3-pro</div>
 </div>
 
-<!-- 5. LLM -->
-<div class="section">
-  <div class="section-hdr"><h2>5. LLM Infrastructure — Multi-Model, Multi-Provider</h2><div class="line"></div></div>
-  <div class="grid g2">
-    <div class="card bdr-p">
-      <h3>Model Registry (8 models, 3 providers)</h3>
-      <table>
-        <tr><th>Alias</th><th>Model ID</th><th>Tier</th><th>Provider</th></tr>
-        <tr><td>opus</td><td>claude-opus-4.6</td><td>Premium</td><td>Anthropic</td></tr>
-        <tr><td>opus-1m</td><td>claude-opus-4.6-1m</td><td>Premium (1M ctx)</td><td>Anthropic</td></tr>
-        <tr><td>sonnet</td><td>claude-sonnet-4.6</td><td>Standard</td><td>Anthropic</td></tr>
-        <tr><td>haiku</td><td>claude-haiku-4.5</td><td>Fast/Cheap</td><td>Anthropic</td></tr>
-        <tr><td>codex</td><td>gpt-5.3-codex</td><td>Standard</td><td>OpenAI</td></tr>
-        <tr><td>codex-mini</td><td>gpt-5.1-codex-mini</td><td>Fast/Cheap</td><td>OpenAI</td></tr>
-        <tr><td>gpt-5.4</td><td>gpt-5.4</td><td>Deep reasoning</td><td>OpenAI</td></tr>
-        <tr><td>gemini-3-pro</td><td>gemini-3-pro-preview</td><td>Standard (1M ctx)</td><td>Google</td></tr>
-      </table>
-    </div>
-    <div class="card bdr-p">
-      <h3>Phase Routing (hook-enforced)</h3>
-      <table>
-        <tr><th>Phase</th><th>Model</th><th>Agent</th><th>Rationale</th></tr>
-        <tr><td>Prompt</td><td>opus</td><td>@prompt</td><td>Deep reasoning for requirements</td></tr>
-        <tr><td>Planning</td><td>opus-1m</td><td>@planner</td><td>1M context for full codebase</td></tr>
-        <tr><td>Review</td><td>sonnet</td><td>plan-reviewer</td><td>Fast, accurate review</td></tr>
-        <tr><td>Execution</td><td>codex</td><td>@execute</td><td>Capable bulk code gen</td></tr>
-        <tr><td>Validation</td><td>opus</td><td>@validate</td><td>Deep reasoning for Thor gates</td></tr>
-        <tr><td>Exploration</td><td>haiku</td><td>explore</td><td>Fast read-only search</td></tr>
-        <tr><td>Coordinator</td><td>sonnet</td><td>&mdash;</td><td>Default session</td></tr>
-      </table>
-      <hr class="sep">
-      <div class="detail"><b>Inference Router</b>: classifier &rarr; tier routing, local > cloud preference<br><b>Fallback chain</b>: primary unavailable &rarr; next tier<br><b>Parallelization</b>: &le;3 concurrent = sonnet, >3 = opus required</div>
-    </div>
-  </div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card bdr-o">
-      <h3>Local LLM Stack (Apple Silicon)</h3>
-      <div class="detail"><b>oMLX</b> <span class="port">:8321</span> &mdash; MLX-optimized inference<br><b>LiteLLM Proxy</b> <span class="port">:4000</span> &mdash; unified API routing<br><b>Qwen 2.5 7B</b> (Jarvis) &mdash; context-stuffed local brain<br><b>Voxtral 4B</b> &mdash; neural TTS (Italian/English)<br><b>Whisper GGML</b> &mdash; STT with Metal acceleration<br><br><b>Scripts</b>: convergio-llm.sh (start/stop/status/test/models/logs), setup, download<br><b>Paths</b>: ~/llm-local/ (venv), ~/models/, ~/.convergio-llm/ (PIDs+logs)</div>
-    </div>
-    <div class="card">
-      <h3>Task-Type Routing (ad-hoc)</h3>
-      <table>
-        <tr><th>Task Type</th><th>Model</th><th>Rationale</th></tr>
-        <tr><td>Architecture</td><td>opus</td><td>Deep reasoning</td></tr>
-        <tr><td>Standard codegen</td><td>codex</td><td>Capable, bulk</td></tr>
-        <tr><td>Deep debugging</td><td>gpt-5.4</td><td>Deep reasoning (OpenAI)</td></tr>
-        <tr><td>Config / mechanical</td><td>codex-mini</td><td>Fast, cheap</td></tr>
-        <tr><td>Documentation</td><td>haiku</td><td>Fast, trivial</td></tr>
-        <tr><td>Large codebase</td><td>opus-1m</td><td>1M context</td></tr>
-        <tr><td>Large research</td><td>gemini-3-pro</td><td>1M context, free tier</td></tr>
-      </table>
-    </div>
-  </div>
+<div class="n" style="left:780px;top:1290px;width:660px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Model Registry — 8 models, 3 providers</div>
+  <table>
+    <tr><th>Alias</th><th>Model ID</th><th>Tier</th><th>Provider</th></tr>
+    <tr><td>opus</td><td>claude-opus-4.6</td><td>Premium</td><td>Anthropic</td></tr>
+    <tr><td>opus-1m</td><td>claude-opus-4.6-1m</td><td>Premium (1M ctx)</td><td>Anthropic</td></tr>
+    <tr><td>sonnet</td><td>claude-sonnet-4.6</td><td>Standard</td><td>Anthropic</td></tr>
+    <tr><td>haiku</td><td>claude-haiku-4.5</td><td>Fast/Cheap</td><td>Anthropic</td></tr>
+    <tr><td>codex</td><td>gpt-5.3-codex</td><td>Standard</td><td>OpenAI</td></tr>
+    <tr><td>codex-mini</td><td>gpt-5.1-codex-mini</td><td>Fast/Cheap</td><td>OpenAI</td></tr>
+    <tr><td>gpt-5.4</td><td>gpt-5.4</td><td>Deep reasoning</td><td>OpenAI</td></tr>
+    <tr><td>gemini-3-pro</td><td>gemini-3-pro-preview</td><td>Standard (1M ctx)</td><td>Google</td></tr>
+  </table>
 </div>
 
-<!-- 6. AGENTS -->
-<div class="section">
-  <div class="section-hdr"><h2>6. Agent Catalog — 89 Agents, 12 Domains</h2><div class="line"></div></div>
-  <div class="grid g4">
-    <div class="card bdr-p">
-      <h3>Core Platform (20)</h3>
-      <div class="detail"><b>Ali</b> &mdash; Chief of Staff, orchestration (opus)<br><b>Thor</b> &mdash; QA validation, 10 gates (sonnet v6.0)<br><b>strategic-planner</b> &mdash; plan creation (opus v4.2)<br><b>plan-reviewer</b> &mdash; strategy validation (opus v2.0)<br><b>task-executor</b> &mdash; TDD execution (sonnet)<br>compliance-validator, design-validator, doc-validator, deep-repo-auditor, sentinel, context-optimizer, plan-business-advisor, plan-post-mortem, po-prompt-optimizer, wanda, xavier, explore, Convergio, ConvergioLLM, pr-comment-resolver</div>
-    </div>
-    <div class="card">
-      <h3>Technical Dev (8)</h3>
-      <div class="detail"><b>baccio</b> &mdash; system design, DDD, Clean Arch (opus)<br><b>dario</b> &mdash; root-cause debugging (sonnet)<br><b>rex</b> &mdash; code review, security (sonnet)<br><b>marco</b> &mdash; DevOps, CI/CD, K8s (sonnet)<br>omri (data science, ML), otto (performance), paolo (best practices), adversarial-debugger</div>
-    </div>
-    <div class="card">
-      <h3>Leadership (9)</h3>
-      <div class="detail"><b>ali</b> &mdash; Chief of Staff (opus)<br><b>amy</b> &mdash; CFO, ROI (opus)<br><b>satya</b> &mdash; Board of Directors (opus)<br>antonio (strategy), dan (engineering GM), domik (McKinsey), matteo (business architect), sam (startup), wiz (VC/investor)</div>
-    </div>
-    <div class="card">
-      <h3>Product & PM (5)</h3>
-      <div class="detail"><b>davide</b> &mdash; project delivery, GTM (sonnet v2.0)<br><b>luke</b> &mdash; program coordination (sonnet)<br>marcello (product mgmt), wanda (workflow), taskmaster (task decomposition)</div>
-    </div>
-  </div>
-  <div class="grid g4" style="margin-top:14px">
-    <div class="card"><h3>Design & UX (5)</h3><div class="detail">jony (creative director), nasra (Maranello UI builder), sara (UX/UI), stefano (design thinking), jenny (accessibility WCAG)</div></div>
-    <div class="card"><h3>Legal & Compliance (5)</h3><div class="detail">elena (legal/contracts), luca (security OWASP), dr-enzo (healthcare), guardian (AI security, opus), sophia (gov affairs)</div></div>
-    <div class="card"><h3>Business Ops (7)</h3><div class="detail">andrea (customer success), anna (exec assistant), dave (change mgmt), enrico (BPM), fabio (sales/BD), sofia (marketing), steve (exec comms)</div></div>
-    <div class="card"><h3>Other Domains</h3><div class="detail"><b>People & Culture (3)</b>: behice, coach, giulia<br><b>Research (3)</b>: research-report, socrates, marcus<br><b>Data & Analytics (2)</b>: diana, fiona<br><b>Release Mgmt (3)</b>: app-release, ecosystem-sync, feature-release</div></div>
-  </div>
+<!-- =================== AGENT CATALOG (y~1530) =================== -->
+<div class="z" style="left:40px;top:1510px;width:1420px;height:320px;border-color:rgba(176,126,232,.25);background:rgba(176,126,232,.015)">
+  <div class="zl" style="color:var(--purple)">Agent Catalog — 89 Agents, 12 Domains</div>
 </div>
 
-<!-- 7. EVOLUTION -->
-<div class="section">
-  <div class="section-hdr"><h2>7. Evolution Engine</h2><span class="tag tag-t">TS</span><div class="line"></div></div>
-  <div class="grid g3">
-    <div class="card bdr-pk">
-      <h3>Core</h3>
-      <div class="desc">Self-improvement loop</div>
-      <div class="detail"><b>Cycle</b>: Observe &rarr; Measure &rarr; Propose &rarr; Experiment &rarr; Validate &rarr; Learn<br>evaluators, cadence engine<br>guardrails (safety bounds)<br>A/B testing, multi-armed bandit<br>Cost calibration, model routing optimization<br><b>Proposals require human approval</b></div>
-    </div>
-    <div class="card">
-      <h3>Adapters (7)</h3>
-      <div class="detail"><b>claude-adapter</b> &rarr; daemon HTTP /api/*<br><b>dashboard-adapter</b> &rarr; /ws/dashboard<br><b>maranello-adapter</b> &rarr; DS bridge<br><b>mld-adapter</b> &rarr; model lifecycle data<br><b>template-adapter</b> &rarr; experiment templates<br><b>telemetry-collector</b> &rarr; metrics<br><b>escalation-collector</b> &rarr; failure events</div>
-    </div>
-    <div class="card">
-      <h3>Modules</h3>
-      <div class="pills" style="margin-top:6px"><span class="pill pk">experiments</span><span class="pill pk">canary</span><span class="pill pk">analysis</span><span class="pill pk">research</span><span class="pill pk">roi</span><span class="pill pk">reporting</span><span class="pill pk">runtime</span><span class="pill pk">agents</span><span class="pill pk">telemetry</span></div>
-    </div>
-  </div>
+<div class="n" style="left:60px;top:1550px;width:250px;border-color:rgba(176,126,232,.4)">
+  <div class="t">Core Platform (20)</div>
+  <div class="d"><b>Ali</b> — Chief of Staff (opus)<br><b>Thor</b> — QA 10 gates (sonnet v6.0)<br><b>strategic-planner</b> (opus v4.2)<br><b>plan-reviewer</b> (opus v2.0)<br><b>task-executor</b> (sonnet)<br>compliance-validator, design-validator, doc-validator, deep-repo-auditor, sentinel, context-optimizer, plan-business-advisor, plan-post-mortem, po-prompt-optimizer, wanda, xavier, explore, Convergio, ConvergioLLM, pr-comment-resolver</div>
 </div>
 
-<!-- 8. INTEGRATIONS -->
-<div class="section">
-  <div class="section-hdr"><h2>8. External Integrations & Ecosystem</h2><div class="line"></div></div>
-  <div class="grid g4">
-    <div class="card bdr-pk">
-      <h3>OpenClaw Bridge</h3>
-      <div class="desc">30+ messaging platforms</div>
-      <div class="detail">WhatsApp, Telegram, Slack, Discord, etc.<br>Webhook + polling support<br>All requests &rarr; Ali orchestrator<br>Channel adapters: Slack, Telegram, Email<br>integrations/openclaw-bridge/ (TS)</div>
-    </div>
-    <div class="card"><h3>Channels</h3><div class="detail"><b>Slack</b> adapter<br><b>Telegram</b> adapter (+ kernel bot)<br><b>Email</b> adapter<br>Router for multi-channel dispatch</div></div>
-    <div class="card"><h3>Document Ingestion</h3><div class="detail">PDF &rarr; MD, DOCX &rarr; MD<br>XLSX &rarr; CSV, URL, images<br>Folder recursive ingestion<br>convergio-ingest.sh + graceful fallback</div></div>
-    <div class="card"><h3>Ecosystem (5 repos)</h3><div class="detail"><b>convergio-web</b> &mdash; Next.js 15 + Tauri 2.0<br><b>convergio-design</b> &mdash; Maranello Luce DS<br><b>convergio</b> &mdash; specs, ADR, governance<br><b>convergio-community</b> &mdash; community skills<br><b>convergio.io</b> &mdash; gateway website</div></div>
-  </div>
+<div class="n" style="left:340px;top:1550px;width:230px">
+  <div class="t">Technical Dev (8)</div>
+  <div class="d"><b>baccio</b> — system design, DDD (opus)<br><b>dario</b> — debugging (sonnet)<br><b>rex</b> — code review (sonnet)<br><b>marco</b> — DevOps, CI/CD (sonnet)<br>omri (ML/data science), otto (performance), paolo (best practices), adversarial-debugger</div>
 </div>
 
-<!-- 9. GOVERNANCE -->
-<div class="section">
-  <div class="section-hdr"><h2>9. Agent Governance — Hook-Enforced</h2><div class="line"></div></div>
-  <div class="grid g3">
-    <div class="card bdr-r">
-      <h3>10 Enforcement Hooks (auto-block)</h3>
-      <table>
-        <tr><th>#</th><th>Rule</th><th>Hook</th></tr>
-        <tr><td>1</td><td>No secrets in code</td><td>SecretScan</td></tr>
-        <tr><td>2</td><td>No direct sqlite3</td><td>SqliteBlock</td></tr>
-        <tr><td>3</td><td>Agent identity required</td><td>AgentIdentity</td></tr>
-        <tr><td>4</td><td>cargo check on .rs edits</td><td>RustCheck</td></tr>
-        <tr><td>5</td><td>Evidence before done</td><td>EvidenceGate</td></tr>
-        <tr><td>6</td><td>Max 250 lines/file</td><td>FileSizeGuard</td></tr>
-        <tr><td>7</td><td>Wire mod.rs on new .rs</td><td>RustModWiring</td></tr>
-        <tr><td>8</td><td>Fail-loud, no silent fallback</td><td>FailLoud</td></tr>
-        <tr><td>9</td><td>Conventional commits</td><td>CommitLint</td></tr>
-        <tr><td>10</td><td>Tests before done</td><td>TestGate</td></tr>
-      </table>
-    </div>
-    <div class="card bdr-o">
-      <h3>Commands / Skills</h3>
-      <div class="detail"><b>Workflow</b>: /solve &rarr; /planner &rarr; review &rarr; DB &rarr; /execute &rarr; Thor &rarr; merge &rarr; done<br>Skipping steps = BLOCKED</div>
-      <div class="pills" style="margin-top:8px"><span class="pill hi">/solve</span><span class="pill hi">/planner</span><span class="pill hi">/execute</span><span class="pill">/check</span><span class="pill">/prepare</span><span class="pill">/release</span><span class="pill">/research</span><span class="pill">/prompt</span><span class="pill">/optimize</span></div>
-      <hr class="sep">
-      <div class="detail"><b>119 skills</b> across all agent domains<br><b>27 validation gates</b><br><b>Merge quality gate</b>: 7 checks (clean tree, no contamination, type-check, tests, lint, version, changelog)</div>
-    </div>
-    <div class="card">
-      <h3>Constitution (12 Articles)</h3>
-      <div class="detail"><b>I</b> Identity &bull; <b>II</b> Safety &bull; <b>III</b> Compliance (GDPR, CCPA, WCAG 2.1 AA) &bull; <b>IV</b> Transparency &bull; <b>V</b> Quality (NN) &bull; <b>VI</b> Verification (NN) &bull; <b>VII</b> Accessibility &bull; <b>VIII</b> Accountability &bull; <b>IX</b> Token Economy &bull; <b>X</b> No Advice &bull; <b>XI</b> Resilience (NN) &bull; <b>XII</b> Swarm Intelligence (NN)<br><br><b>5 NON-NEGOTIABLE</b>: Identity, Quality, Verification, Resilience, Swarm<br>Agentic Manifesto (Milano, 23 June 2025)</div>
-    </div>
-  </div>
+<div class="n" style="left:600px;top:1550px;width:220px">
+  <div class="t">Leadership & Strategy (9)</div>
+  <div class="d"><b>ali</b> — Chief of Staff (opus)<br><b>amy</b> — CFO, ROI (opus)<br><b>satya</b> — Board (opus)<br>antonio (strategy), dan (engineering GM), domik (McKinsey), matteo (business arch), sam (startup), wiz (VC/investor, haiku)</div>
 </div>
 
-<!-- 10. EXECUTION FLOW -->
-<div class="section">
-  <div class="section-hdr"><h2>10. End-to-End Execution Flow</h2><div class="line"></div></div>
-  <div class="flow">
-    <span class="step" style="background:rgba(176,126,232,.15);color:var(--purple)">/solve (Opus)</span><span class="arr">&rarr;</span>
-    <span class="step" style="background:rgba(176,126,232,.15);color:var(--purple)">/planner (Opus 1M)</span><span class="arr">&rarr;</span>
-    <span class="step" style="background:rgba(77,156,246,.15);color:var(--blue)">Review (Sonnet)</span><span class="arr">&rarr;</span>
-    <span class="step" style="background:rgba(56,200,216,.15);color:var(--cyan)">DB persist</span><span class="arr">&rarr;</span>
-    <span class="step" style="background:rgba(66,211,146,.15);color:var(--green)">/execute (Codex)</span><span class="arr">&rarr;</span>
-    <span class="step" style="background:rgba(232,168,56,.15);color:var(--orange)">Thor (Opus, 10 gates)</span><span class="arr">&rarr;</span>
-    <span class="step" style="background:rgba(66,211,146,.15);color:var(--green)">Merge + Done</span>
-  </div>
-  <div style="margin-top:12px;font-size:11px;color:var(--m)">Each step is <b>hook-enforced</b>. Skipping = blocked. After every task: <code style="color:var(--cyan)">cvg checkpoint save</code> &rarr; update DB &rarr; next task or Thor. Max 4 tasks/wave. Cascading fix threshold: 3 &rarr; STOP. Executors cannot set done &mdash; only Thor (via <code style="color:var(--cyan)">cvg plan validate</code>) promotes submitted &rarr; done.</div>
+<div class="n" style="left:850px;top:1550px;width:220px">
+  <div class="t">Product & PM (5)</div>
+  <div class="d"><b>davide</b> — project delivery (sonnet v2.0)<br><b>luke</b> — program coord (sonnet)<br>marcello (product mgmt), wanda (workflow), taskmaster (decomposition, haiku)</div>
+  <hr class="sep">
+  <div class="t">Design & UX (5)</div>
+  <div class="d">jony (creative dir), nasra (Maranello UI), sara (UX/UI), stefano (design thinking), jenny (WCAG accessibility)</div>
 </div>
 
-<!-- 11. NIGHTLY -->
-<div class="section">
-  <div class="section-hdr"><h2>11. Nightly Jobs & Automation</h2><div class="line"></div></div>
-  <div class="grid g3">
-    <div class="card"><h3>Scheduled Jobs</h3><div class="detail"><b>Model Calibration</b>: Sunday 03:00 &mdash; local vs cloud<br><b>MirrorBuddy Guardian</b>: daily 01:30<br><b>VirtualBPM Guardian</b>: daily 02:15<br>CRUD: GET/POST /api/nightly/jobs</div></div>
-    <div class="card"><h3>Node Auto-Management</h3><div class="detail"><b>Auto-rebuild</b>: daemon rebuilds after git pull<br><b>launchd plist</b>: 5-minute check interval<br><b>caffeinate</b>: anti-sleep for kernel node<br><b>Secrets replication</b>: ~/.convergio/env</div></div>
-    <div class="card"><h3>Background Sync</h3><div class="detail"><b>DB sync</b> via HTTP between mesh nodes<br><b>post-commit-sync</b>: auto-push after commit<br><b>Telemetry</b>: collect-telemetry.ts<br><b>Daily run</b>: run-daily.ts</div></div>
-  </div>
+<div class="n" style="left:1100px;top:1550px;width:240px">
+  <div class="t">Business Ops (7)</div>
+  <div class="d">andrea (customer success), anna (exec asst), dave (change mgmt), enrico (BPM), fabio (sales/BD), sofia (marketing), steve (exec comms)</div>
+  <hr class="sep">
+  <div class="t">Other Domains</div>
+  <div class="d"><b>Legal (5)</b>: elena, luca, dr-enzo, guardian (opus), sophia<br><b>People (3)</b>: behice, coach, giulia<br><b>Research (3)</b>: research-report, socrates, marcus<br><b>Analytics (2)</b>: diana, fiona<br><b>Release (3)</b>: app-release, ecosystem-sync, feature-release</div>
 </div>
 
-<div style="text-align:center;color:var(--m2);font-size:10px;margin-top:32px;padding-top:16px;border-top:1px solid var(--bdr)">
-  ConvergioPlatform v19.5.0 &mdash; Copyright &copy; 2026 Roberto D'Angelo &mdash; Convergio Community License<br>
-  Built for solopreneurs who dare to build alone.
+<!-- =================== EVOLUTION ENGINE (y~1880) =================== -->
+<div class="z" style="left:40px;top:1870px;width:780px;height:180px;border-color:rgba(232,122,176,.25);background:rgba(232,122,176,.015)">
+  <div class="zl" style="color:var(--pink)">Evolution Engine — TypeScript</div>
+</div>
+
+<div class="n" style="left:60px;top:1910px;width:230px;border-color:rgba(232,122,176,.4)">
+  <div class="t">Core <span class="tag tt">TS</span></div>
+  <div class="sub">Self-improvement loop</div>
+  <div class="d"><b>Cycle</b>: Observe → Measure → Propose → Experiment → Validate → Learn<br>evaluators, cadence engine<br>guardrails (safety bounds)<br>A/B testing, multi-armed bandit<br>Cost calibration, model routing optimization<br><b>Proposals require human approval</b></div>
+</div>
+
+<div class="n" style="left:320px;top:1910px;width:220px">
+  <div class="t">Adapters (7)</div>
+  <div class="d"><b>claude-adapter</b> → daemon HTTP<br><b>dashboard-adapter</b> → /ws/dashboard<br><b>maranello-adapter</b> → DS bridge<br><b>mld-adapter</b> → model lifecycle<br><b>template-adapter</b> → experiments<br><b>telemetry-collector</b> → metrics<br><b>escalation-collector</b> → failures</div>
+</div>
+
+<div class="n" style="left:570px;top:1910px;width:200px">
+  <div class="t">Modules</div>
+  <div class="d">experiments · canary · analysis · research · roi · reporting · runtime · agents · telemetry · cadence</div>
+</div>
+
+<!-- =================== INTEGRATIONS (y~1880 right) =================== -->
+<div class="z" style="left:860px;top:1870px;width:600px;height:180px;border-color:rgba(176,126,232,.25);background:rgba(176,126,232,.015)">
+  <div class="zl" style="color:var(--purple)">External Integrations & Ecosystem</div>
+</div>
+
+<div class="n" style="left:880px;top:1910px;width:200px;border-color:rgba(232,122,176,.4)">
+  <div class="t">OpenClaw Bridge</div>
+  <div class="sub">30+ platforms</div>
+  <div class="d">WhatsApp, Telegram, Slack, Discord, etc.<br>Webhook + polling<br>All requests → Ali orchestrator<br>integrations/openclaw-bridge/ (TS)</div>
+</div>
+
+<div class="n" style="left:1110px;top:1910px;width:160px">
+  <div class="t">Doc Ingestion</div>
+  <div class="d">PDF→MD, DOCX→MD<br>XLSX→CSV, URL, images<br>Folder recursive<br>convergio-ingest.sh</div>
+</div>
+
+<div class="n" style="left:1300px;top:1910px;width:140px">
+  <div class="t">Ecosystem</div>
+  <div class="d"><b>convergio-web</b> (Next.js+Tauri)<br><b>convergio-design</b> (DS)<br><b>convergio</b> (specs)<br><b>convergio-community</b></div>
+</div>
+
+<!-- =================== GOVERNANCE (y~2100) =================== -->
+<div class="z" style="left:40px;top:2100px;width:1420px;height:220px;border-color:rgba(232,84,84,.25);background:rgba(232,84,84,.015)">
+  <div class="zl" style="color:var(--red)">Agent Governance — Hook-Enforced · Constitution 12 Articles (5 NON-NEGOTIABLE)</div>
+</div>
+
+<div class="n" style="left:60px;top:2140px;width:290px;border-color:rgba(232,84,84,.4)">
+  <div class="t">10 Enforcement Hooks</div>
+  <div class="sub">Violations auto-blocked</div>
+  <div class="d"><b>SecretScan</b> · <b>SqliteBlock</b> · <b>AgentIdentity</b> · <b>RustCheck</b> · <b>EvidenceGate</b> · <b>FileSizeGuard</b> (250 lines) · <b>RustModWiring</b> · <b>FailLoud</b> · <b>CommitLint</b> · <b>TestGate</b><br><hr class="sep">+ workflow-enforcer, worktree-guard, session-reaper, track-tokens, env-vault-guard, model-registry-refresh (22 total)</div>
+</div>
+
+<div class="n" style="left:380px;top:2140px;width:240px;border-color:rgba(232,168,56,.4)">
+  <div class="t">Commands & Skills</div>
+  <div class="d"><b>Workflow</b>: /solve → /planner → review → DB → /execute → Thor → merge → done<br>Skipping = BLOCKED<br><hr class="sep"><b>/solve</b> · <b>/planner</b> · <b>/execute</b> · /check · /prepare · /release · /research · /prompt · /optimize<br><hr class="sep"><b>119 skills</b> · <b>27 validation gates</b><br>Merge quality gate: 7 checks</div>
+</div>
+
+<div class="n" style="left:650px;top:2140px;width:220px">
+  <div class="t">Status Machine</div>
+  <div class="d">pending → in_progress → <b>submitted</b> (executor) → <b>done</b> (Thor only)<br><hr class="sep">Cascading fix: 3 → STOP, propose rebuild<br>Band-aid chains = REJECTED<br>Executors CANNOT set done<br>cvg plan validate promotes</div>
+</div>
+
+<div class="n" style="left:900px;top:2140px;width:250px">
+  <div class="t">Constitution (12 Articles)</div>
+  <div class="d"><b>I</b> Identity · <b>II</b> Safety · <b>III</b> Compliance (GDPR, CCPA, WCAG) · <b>IV</b> Transparency · <b>V</b> Quality (NN) · <b>VI</b> Verification (NN) · <b>VII</b> Accessibility · <b>VIII</b> Accountability · <b>IX</b> Token Economy · <b>X</b> No Advice · <b>XI</b> Resilience (NN) · <b>XII</b> Swarm Intelligence (NN)<br><hr class="sep"><b>5 NON-NEGOTIABLE</b>: I, V, VI, XI, XII<br>Agentic Manifesto (Milano, 23 June 2025)</div>
+</div>
+
+<div class="n" style="left:1180px;top:2140px;width:230px">
+  <div class="t">Nightly Jobs</div>
+  <div class="d"><b>Model Calibration</b>: Sunday 03:00 (local vs cloud)<br><b>MirrorBuddy Guardian</b>: daily 01:30<br><b>VirtualBPM Guardian</b>: daily 02:15<br>CRUD: /api/nightly/jobs<br><hr class="sep"><b>Auto-rebuild</b>: daemon after git pull<br><b>launchd</b>: 5-min check<br><b>caffeinate</b>: anti-sleep for kernel<br>Background DB sync via HTTP</div>
+</div>
+
+<!-- =================== EXECUTION FLOW (y~2780) =================== -->
+<div class="z" style="left:40px;top:2770px;width:1420px;height:140px;border-color:rgba(176,126,232,.25);background:rgba(176,126,232,.015)">
+  <div class="zl" style="color:var(--purple)">End-to-End Execution Flow (hook-enforced)</div>
+</div>
+
+<div class="n" style="left:100px;top:2810px;width:120px;padding:8px 10px;border-color:rgba(176,126,232,.4)">
+  <div class="t" style="font-size:11px">/solve</div>
+  <div class="d">Opus 4.6<br>Triage</div>
+</div>
+<div class="n" style="left:350px;top:2810px;width:140px;padding:8px 10px;border-color:rgba(176,126,232,.4)">
+  <div class="t" style="font-size:11px">/planner</div>
+  <div class="d">Opus 4.6-1M<br>Plan creation</div>
+</div>
+<div class="n" style="left:600px;top:2810px;width:120px;padding:8px 10px;border-color:rgba(77,156,246,.4)">
+  <div class="t" style="font-size:11px">Review</div>
+  <div class="d">Sonnet 4.6<br>Plan review</div>
+</div>
+<div class="n" style="left:800px;top:2810px;width:70px;padding:8px 10px;border-color:rgba(56,200,216,.4)">
+  <div class="t" style="font-size:11px">DB</div>
+  <div class="d">Persist</div>
+</div>
+<div class="n" style="left:930px;top:2810px;width:120px;padding:8px 10px;border-color:rgba(66,211,146,.4)">
+  <div class="t" style="font-size:11px">/execute</div>
+  <div class="d">GPT-5.3 Codex<br>TDD code gen</div>
+</div>
+<div class="n" style="left:1110px;top:2810px;width:120px;padding:8px 10px;border-color:rgba(232,168,56,.4)">
+  <div class="t" style="font-size:11px">Thor</div>
+  <div class="d">Opus 4.6<br>10-gate validate</div>
+</div>
+<div class="n" style="left:1300px;top:2810px;width:80px;padding:8px 10px;border-color:rgba(66,211,146,.4)">
+  <div class="t" style="font-size:11px;color:var(--green)">Done</div>
+  <div class="d">Merge</div>
+</div>
+
+<!-- Footer -->
+<div style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:var(--m);font-size:9px">
+  ConvergioPlatform v19.5.0 — Copyright &copy; 2026 Roberto D'Angelo — Convergio Community License — Built for solopreneurs who dare to build alone.
 </div>
 
 </div>
