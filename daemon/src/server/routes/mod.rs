@@ -53,6 +53,7 @@ use super::api_agent_control;
 use super::api_node_readiness;
 use super::api_node_roles;
 use super::api_readiness;
+use super::api_rollback;
 use super::api_runs;
 use super::api_tracking;
 use super::api_workers;
@@ -141,6 +142,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_workers::router())
         .merge(api_delegation::router())
         .merge(api_evolution::router())
+        .merge(api_rollback::router())
         .merge(api_runs::router())
         .merge(api_metrics::router())
         .merge(api_ingest::router())
