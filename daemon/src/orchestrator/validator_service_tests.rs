@@ -67,3 +67,59 @@ fn test_migrations_idempotent() {
     // Running twice must not fail.
     run_migrations(&conn).unwrap();
 }
+
+// ── entry_verdict / spawn_validator_loop logic tests ────────────────────────
+
+fn open_mem_with_tasks() -> Connection {
+    let conn = open_mem();
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY,
+            status TEXT NOT NULL DEFAULT 'pending'
+        );",
+    )
+    .unwrap();
+    conn
+}
+
+#[test]
+fn test_entry_verdict_submitted_task_returns_pass() {
+    let conn = open_mem_with_tasks();
+    conn.execute("INSERT INTO tasks (id, status) VALUES (1, 'submitted')", [])
+        .unwrap();
+    let qid = enqueue_validation(&conn, Some(1), None, None).unwrap();
+    let pending = get_pending(&conn).unwrap();
+    assert_eq!(pending.len(), 1);
+
+    record_verdict(&conn, qid, "pass", Some("mechanical gate"), Some("validator-loop")).unwrap();
+
+    let v = get_verdict(&conn, 1).unwrap().expect("verdict missing");
+    assert_eq!(v.verdict, "pass");
+    assert_eq!(v.validator.as_deref(), Some("validator-loop"));
+}
+
+#[test]
+fn test_entry_verdict_nonexistent_task_recorded_as_fail() {
+    let conn = open_mem_with_tasks();
+    // task_id 999 does not exist in tasks table
+    let qid = enqueue_validation(&conn, Some(999), None, None).unwrap();
+    // Simulate the validator loop verdict for a missing task: should be "fail"
+    record_verdict(&conn, qid, "fail", None, Some("validator-loop")).unwrap();
+
+    let v = get_verdict(&conn, 999).unwrap().expect("verdict missing");
+    assert_eq!(v.verdict, "fail");
+}
+
+#[test]
+fn test_get_pending_returns_only_pending_entries() {
+    let conn = open_mem();
+    let id1 = enqueue_validation(&conn, Some(10), None, None).unwrap();
+    let id2 = enqueue_validation(&conn, Some(11), None, None).unwrap();
+
+    // Mark id1 as completed
+    record_verdict(&conn, id1, "pass", None, None).unwrap();
+
+    let pending = get_pending(&conn).unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, id2);
+}

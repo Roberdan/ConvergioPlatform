@@ -57,3 +57,45 @@ pub fn spawn_health_probe_loop(state: SharedHealthState) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_shared_health_has_three_endpoints() {
+        let state = create_shared_health();
+        // Use try_read to access without async runtime — state just created, no writers.
+        let checker = state.try_read().expect("lock must be uncontested");
+        let names = checker.endpoint_names();
+        assert_eq!(names.len(), 3, "expected 3 endpoints, got: {names:?}");
+        assert!(names.contains(&"claude".to_string()), "missing claude");
+        assert!(names.contains(&"copilot".to_string()), "missing copilot");
+        assert!(names.contains(&"local-llm".to_string()), "missing local-llm");
+    }
+
+    #[test]
+    fn test_shared_health_state_can_be_cloned() {
+        let state = create_shared_health();
+        let clone = Arc::clone(&state);
+        // Both handles must point to the same underlying RwLock.
+        let names_orig = state.try_read().unwrap().endpoint_names();
+        let names_clone = clone.try_read().unwrap().endpoint_names();
+        assert_eq!(names_orig, names_clone);
+    }
+
+    #[test]
+    fn test_shared_health_state_initial_endpoints_healthy() {
+        let state = create_shared_health();
+        let checker = state.try_read().unwrap();
+        for name in &["claude", "copilot", "local-llm"] {
+            let status = checker.status(name);
+            // No probes recorded yet — should be Healthy.
+            assert_eq!(
+                status,
+                crate::inference::health::EndpointHealthStatus::Healthy,
+                "endpoint '{name}' must be Healthy before any probes"
+            );
+        }
+    }
+}

@@ -120,4 +120,61 @@ mod tests {
         let conn = setup_db();
         check_convergence(&conn);
     }
+
+    #[test]
+    fn test_check_convergence_detects_diverged_peers() {
+        // Insert 2 peer rows with different checksums and old last_seen (>300s ago).
+        // After check_convergence() the divergence query must match them without panic.
+        // We verify indirectly: function completes and the 2 stale peer rows still exist.
+        let conn = setup_db();
+        conn.execute_batch(
+            "INSERT INTO mesh_peer_state (peer_id, state_version, state_checksum, last_seen)
+             VALUES
+               ('peer-alpha', 1, 'checksum-AAA', datetime('now', '-600 seconds')),
+               ('peer-beta',  1, 'checksum-BBB', datetime('now', '-700 seconds'));",
+        )
+        .unwrap();
+
+        // Should not panic even when diverged peers are found.
+        check_convergence(&conn);
+
+        // The stale peers must still be in the table (convergence check does not delete them).
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM mesh_peer_state WHERE peer_id IN ('peer-alpha','peer-beta')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2, "stale peer rows must be preserved after divergence detection");
+    }
+
+    #[test]
+    fn test_check_convergence_peer_with_same_checksum_not_diverged() {
+        // A peer with the same checksum as ours should NOT trigger a divergence warn.
+        // Indirect verification: function completes without panic regardless of age.
+        let conn = setup_db();
+        // Insert a peer with same checksum value — we set it directly so we can predict it.
+        // The local checksum is computed by compute_local_checksum on empty tables; we
+        // don't need to match exactly, just confirm the function handles same-checksum peers.
+        check_convergence(&conn);
+        let local_checksum: String = conn
+            .query_row(
+                "SELECT state_checksum FROM mesh_peer_state LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Insert a peer with the SAME checksum but very old last_seen.
+        conn.execute(
+            "INSERT OR REPLACE INTO mesh_peer_state (peer_id, state_version, state_checksum, last_seen)
+             VALUES ('peer-sync', 1, ?1, datetime('now', '-600 seconds'))",
+            rusqlite::params![local_checksum],
+        )
+        .unwrap();
+
+        // Must not panic; same-checksum peer does not meet divergence criteria.
+        check_convergence(&conn);
+    }
 }

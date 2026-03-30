@@ -233,4 +233,36 @@ mod tests {
         run_migrations(&conn).unwrap();
         run_migrations(&conn).unwrap();
     }
+
+    // ── Sandbox delegation tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_profile_blocks_delegate_command() {
+        // A profile that does NOT include "delegate" must block it.
+        let profile = test_profile(&["cargo test", "git status"]);
+        let result = validate_command(&profile, "delegate");
+        assert!(result.is_err(), "delegate must be blocked when not in allowlist");
+        let msg = result.unwrap_err();
+        assert!(msg.contains("delegate"), "error must mention the blocked command");
+    }
+
+    #[test]
+    fn test_no_profile_means_delegation_allowed() {
+        // executor.rs: `profile = get_profile(&conn, peer)` — None means no restriction.
+        // Verify that get_profile returns None for an unknown agent, which executor.rs
+        // treats as backward-compatible allow (no profile = no sandbox).
+        let conn = in_memory_conn();
+        let profile = get_profile(&conn, "unknown-peer");
+        assert!(
+            profile.is_none(),
+            "unknown agent must have no profile (backward compat = allow)"
+        );
+    }
+
+    #[test]
+    fn test_profile_with_delegate_allows_delegation() {
+        // When "delegate" is explicitly allowed, validate_command must pass.
+        let profile = test_profile(&["cargo test", "delegate"]);
+        assert!(validate_command(&profile, "delegate").is_ok());
+    }
 }

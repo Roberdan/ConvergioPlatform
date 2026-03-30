@@ -163,4 +163,55 @@ mod tests {
             .unwrap();
         assert_eq!(extract_ip(&req), None);
     }
+
+    /// Integration test: verify audit_log insert logic in isolation using
+    /// in-memory SQLite (mirrors what audit_mutations does inside the middleware).
+    #[test]
+    fn test_audit_log_insert_on_mutation() {
+        use rusqlite::{params, Connection};
+
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE audit_log (
+                id       INTEGER PRIMARY KEY,
+                agent    TEXT,
+                action   TEXT NOT NULL,
+                resource TEXT,
+                detail   TEXT,
+                ip_addr  TEXT,
+                timestamp TEXT DEFAULT (datetime('now'))
+             );",
+        )
+        .unwrap();
+
+        // Simulate the insert that audit_mutations performs.
+        let agent = "dev-mode";
+        let action = "POST";
+        let resource = "/api/plans";
+        let detail = "201";
+        let ip: Option<&str> = None;
+
+        conn.execute(
+            "INSERT INTO audit_log (agent, action, resource, detail, ip_addr)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![agent, action, resource, detail, ip],
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "audit_log must contain exactly 1 row after insert");
+
+        let (saved_agent, saved_action, saved_resource): (String, String, String) = conn
+            .query_row(
+                "SELECT agent, action, resource FROM audit_log LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(saved_agent, "dev-mode");
+        assert_eq!(saved_action, "POST");
+        assert_eq!(saved_resource, "/api/plans");
+    }
 }

@@ -246,3 +246,7 @@ pub async fn launch_peer_execution(
     tracing::info!("delegation: plan {plan_id} launched in tmux:plan-{plan_id} on {}", cfg.ssh_alias);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "delegation_pipeline_steps_tests.rs"]
+mod tests;
