@@ -5,6 +5,7 @@ export default {
       '**/dist/**',
       'dashboard/tests/e2e/**',
       'dashboard_web/tests/e2e/**',
+      'evolution/tests/e2e/**',
     ],
   },
 };
