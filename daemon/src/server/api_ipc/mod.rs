@@ -1,6 +1,7 @@
 // api_ipc: IPC coordination and intelligence endpoints
 mod handlers;
 mod handlers_ext;
+mod handlers_ext2;
 mod routes;
 
 use super::state::ServerState;
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS ipc_agents (
     agent_type  TEXT NOT NULL DEFAULT 'claude',
     pid         INTEGER,
     metadata    TEXT,
+    parent_agent TEXT,
     registered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
     last_seen   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
     PRIMARY KEY (name, host)
@@ -61,6 +63,8 @@ pub fn ensure_ipc_schema(state: &ServerState) -> Result<(), super::state::ApiErr
     conn.execute_batch(IPC_SCHEMA).map_err(|err| {
         super::state::ApiError::internal(format!("ipc schema init failed: {err}"))
     })?;
+    // Migration: add parent_agent column to existing tables (idempotent)
+    let _ = conn.execute_batch("ALTER TABLE ipc_agents ADD COLUMN parent_agent TEXT;");
     // Drop CRDT triggers on IPC tables — IPC is local-only, not replicated
     if let Err(e) = conn.execute_batch(
         "DROP TRIGGER IF EXISTS ipc_agents__crsql_itrig;
@@ -158,6 +162,11 @@ pub fn router() -> Router<ServerState> {
         .route(
             "/api/ipc/agents/deregister",
             post(handlers::api_ipc_agents_deregister),
+        )
+        // Issue 23: Agent parentage tree
+        .route(
+            "/api/ipc/agents/tree",
+            get(handlers::api_ipc_agents_tree),
         )
         // Plan 635: Intelligence endpoints
         .route("/api/ipc/budget", get(routes::api_ipc_budget))

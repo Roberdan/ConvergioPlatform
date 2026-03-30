@@ -48,6 +48,7 @@ pub mod api_peers;
 pub mod api_peers_ext;
 pub mod api_plan_db;
 pub mod api_plan_db_agents;
+mod api_plan_db_counters;
 pub mod api_policy;
 pub mod api_plan_db_checkpoint;
 pub mod api_plan_db_execution_context;
@@ -84,6 +85,7 @@ pub mod api_inference_status;
 pub mod routes;
 pub mod sse;
 pub mod sse_chat;
+pub mod sse_chat_budget;
 pub mod sse_delegate;
 pub mod sse_preflight;
 pub mod sse_stream;
@@ -101,134 +103,71 @@ pub mod api_decisions;
 pub mod api_goal;
 pub mod api_repositories;
 
-#[cfg(test)]
-mod api_memory_mgmt_tests;
-#[cfg(test)]
-mod api_voice_tests;
-#[cfg(test)]
-mod api_agent_catalog_tests;
-#[cfg(test)]
-mod api_agents_brain_tests;
-#[cfg(test)]
-mod api_channels_tests;
-#[cfg(test)]
-mod api_health_deep_tests;
-#[cfg(test)]
-mod api_agents_legacy_tests;
-#[cfg(test)]
-mod api_agents_tests;
-#[cfg(test)]
-mod api_cli_integration_tests;
-#[cfg(test)]
-mod api_audit_tests;
-#[cfg(test)]
-mod api_chat_tests;
-#[cfg(test)]
-mod api_chat_tests_msg;
-#[cfg(test)]
-mod api_coordinator_tests;
-#[cfg(test)]
-mod api_cross_feature_helpers;
-#[cfg(test)]
-mod api_cross_feature_plan_tests;
-#[cfg(test)]
-mod api_cross_feature_tests;
-#[cfg(test)]
-mod api_deliverables_tests;
-#[cfg(test)]
-mod api_domain_tests;
-#[cfg(test)]
-mod api_evolution_tests;
-#[cfg(test)]
-mod api_github_tests;
-#[cfg(test)]
-mod api_heartbeat_tests;
-#[cfg(test)]
-mod api_ideas_tests;
-#[cfg(test)]
-mod api_ideas_tests_filter;
-#[cfg(test)]
-mod api_ingest_tests;
-#[cfg(test)]
-mod api_ipc_tests;
-#[cfg(test)]
-mod api_ipc_integration_tests;
-#[cfg(test)]
-mod api_ipc_integration_tests2;
-#[cfg(test)]
-mod api_ipc_intel_tests;
-#[cfg(test)]
-mod api_metrics_tests;
-#[cfg(test)]
-mod api_openclaw_tests;
-#[cfg(test)]
-mod api_peers_tests;
-#[cfg(test)]
-mod api_plan_db_checkpoint_tests;
-#[cfg(test)]
-mod api_plan_db_execution_context_tests;
-#[cfg(test)]
-mod api_plan_db_query_tests;
-#[cfg(test)]
-mod api_plans_tests;
-#[cfg(test)]
-mod api_runs_tests;
-#[cfg(test)]
-mod api_runs_tests_lifecycle;
-#[cfg(test)]
-mod api_tests;
-#[cfg(test)]
-mod api_tracking_tests;
-#[cfg(test)]
-mod api_workspace_events_tests;
-#[cfg(test)]
-mod api_workspace_integration_tests;
-#[cfg(test)]
-mod api_delegation_tests;
-#[cfg(test)]
-mod api_delegation_unit_tests;
-#[cfg(test)]
-mod api_workspace_tests;
-#[cfg(test)]
-mod api_agent_control_tests;
-#[cfg(test)]
-mod api_capabilities_tests;
-#[cfg(test)]
-mod api_capabilities_tests2;
-#[cfg(test)]
-mod api_nightly_tests;
-#[cfg(test)]
-mod api_nightly_tests2;
-#[cfg(test)]
-mod api_telemetry_tests;
-#[cfg(test)]
-mod api_plan_db_lifecycle_integration_tests;
-#[cfg(test)]
-mod api_plan_db_review_integration_tests;
-#[cfg(test)]
-mod api_plan_db_review_integration_tests2;
-#[cfg(test)]
-mod api_plan_db_import_integration_tests;
-#[cfg(test)]
-mod state_init_tests;
-#[cfg(test)]
-mod ws_pty_tests;
-#[cfg(test)]
-mod api_cli_integration_tests_ipc;
-#[cfg(test)]
-mod api_sync_replication_lww_tests;
-#[cfg(test)]
-mod api_sync_replication_tests;
-#[cfg(test)]
-mod api_sync_status_tests;
-#[cfg(test)]
-mod state_sync_runtime_tests;
-#[cfg(test)]
-mod api_decisions_tests;
-#[cfg(test)]
-mod api_goal_tests;
-#[cfg(test)]
-mod api_repositories_tests;
+#[cfg(test)] mod api_memory_mgmt_tests;
+#[cfg(test)] mod api_voice_tests;
+#[cfg(test)] mod api_agent_catalog_tests;
+#[cfg(test)] mod api_agents_brain_tests;
+#[cfg(test)] mod api_channels_tests;
+#[cfg(test)] mod api_health_deep_tests;
+#[cfg(test)] mod api_agents_legacy_tests;
+#[cfg(test)] mod api_agents_tests;
+#[cfg(test)] mod api_cli_integration_tests;
+#[cfg(test)] mod api_audit_tests;
+#[cfg(test)] mod api_audit_tests2;
+#[cfg(test)] mod api_chat_tests;
+#[cfg(test)] mod api_chat_tests_msg;
+#[cfg(test)] mod api_coordinator_tests;
+#[cfg(test)] mod api_cross_feature_helpers;
+#[cfg(test)] mod api_cross_feature_plan_tests;
+#[cfg(test)] mod api_cross_feature_tests;
+#[cfg(test)] mod api_deliverables_tests;
+#[cfg(test)] mod api_domain_tests;
+#[cfg(test)] mod api_evolution_tests;
+#[cfg(test)] mod api_github_tests;
+#[cfg(test)] mod api_heartbeat_tests;
+#[cfg(test)] mod api_ideas_tests;
+#[cfg(test)] mod api_ideas_tests_filter;
+#[cfg(test)] mod api_ingest_tests;
+#[cfg(test)] mod api_ipc_tests;
+#[cfg(test)] mod api_ipc_integration_tests;
+#[cfg(test)] mod api_ipc_integration_tests2;
+#[cfg(test)] mod api_ipc_intel_tests;
+#[cfg(test)] mod api_metrics_tests;
+#[cfg(test)] mod api_openclaw_tests;
+#[cfg(test)] mod api_peers_tests;
+#[cfg(test)] mod api_plan_db_checkpoint_tests;
+#[cfg(test)] mod api_plan_db_execution_context_tests;
+#[cfg(test)] mod api_plan_db_query_tests;
+#[cfg(test)] mod api_plans_tests;
+#[cfg(test)] mod api_runs_tests;
+#[cfg(test)] mod api_runs_tests_lifecycle;
+#[cfg(test)] mod api_tests;
+#[cfg(test)] mod api_tracking_tests;
+#[cfg(test)] mod api_workspace_events_tests;
+#[cfg(test)] mod api_workspace_integration_tests;
+#[cfg(test)] mod api_delegation_tests;
+#[cfg(test)] mod api_delegation_unit_tests;
+#[cfg(test)] mod api_workspace_tests;
+#[cfg(test)] mod api_agent_control_tests;
+#[cfg(test)] mod api_capabilities_tests;
+#[cfg(test)] mod api_capabilities_tests2;
+#[cfg(test)] mod api_nightly_tests;
+#[cfg(test)] mod api_nightly_tests2;
+#[cfg(test)] mod api_telemetry_tests;
+#[cfg(test)] mod api_plan_db_lifecycle_integration_tests;
+#[cfg(test)] mod api_plan_db_review_integration_tests;
+#[cfg(test)] mod api_plan_db_review_integration_tests2;
+#[cfg(test)] mod api_plan_db_import_integration_tests;
+#[cfg(test)] mod state_init_tests;
+#[cfg(test)] mod ws_pty_tests;
+#[cfg(test)] mod api_cli_integration_tests_ipc;
+#[cfg(test)] mod api_sync_replication_lww_tests;
+#[cfg(test)] mod api_sync_replication_tests;
+#[cfg(test)] mod api_sync_status_tests;
+#[cfg(test)] mod state_sync_runtime_tests;
+#[cfg(test)] mod api_decisions_tests;
+#[cfg(test)] mod api_goal_tests;
+#[cfg(test)] mod api_repositories_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

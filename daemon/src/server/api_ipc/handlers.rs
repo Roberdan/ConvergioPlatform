@@ -2,8 +2,9 @@
 // Agent write handlers (register/unregister/heartbeat/list/deregister) → handlers_ext.rs
 pub use super::handlers_ext::{
     api_ipc_agents_deregister, api_ipc_agents_heartbeat, api_ipc_agents_list,
-    api_ipc_agents_register, api_ipc_agents_unregister,
+    api_ipc_agents_register, api_ipc_agents_tree, api_ipc_agents_unregister,
 };
+pub use super::handlers_ext2::api_ipc_send_direct;
 
 use super::super::state::{query_rows, ApiError, ServerState};
 use super::ensure_ipc_schema;
@@ -20,7 +21,7 @@ pub async fn api_ipc_agents(State(state): State<ServerState>) -> Result<Json<Val
     let conn = state.get_conn()?;
     let rows = query_rows(
         &conn,
-        "SELECT name, host, agent_type, pid, metadata, registered_at, last_seen
+        "SELECT name, host, agent_type, pid, metadata, parent_agent, registered_at, last_seen
          FROM ipc_agents ORDER BY last_seen DESC",
         [],
     )?;
@@ -220,42 +221,5 @@ pub async fn api_ipc_send(
         tracing::debug!("ws ipc_message broadcast (no subscribers): {e}");
     }
 
-    Ok(Json(json!({ "ok": true })))
-}
-
-#[derive(Deserialize)]
-pub struct SendDirectMessage {
-    from: String,
-    to: String,
-    content: String,
-}
-
-/// POST /api/ipc/send-direct — send a message to a named session/agent.
-pub async fn api_ipc_send_direct(
-    State(state): State<ServerState>,
-    Json(body): Json<SendDirectMessage>,
-) -> Result<Json<Value>, ApiError> {
-    if let Some(ref ipc) = state.ipc_engine {
-        ipc.send_message(&body.from, &body.to, &body.content, "direct", 0)
-            .map_err(|e| ApiError::internal(format!("ipc send_direct failed: {e}")))?;
-    } else {
-        ensure_ipc_schema(&state)?;
-        let conn = state.get_conn()?;
-        conn.execute(
-            "INSERT INTO ipc_messages(id, channel, from_agent, to_agent, content) VALUES (
-                 lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(6))),
-                 'direct', ?1, ?2, ?3)",
-            rusqlite::params![body.from, body.to, body.content],
-        ).map_err(|e| ApiError::internal(format!("direct message insert failed: {e}")))?;
-    }
-
-    if let Err(e) = state.ws_tx.send(json!({
-        "type": "ipc_direct_message",
-        "from": body.from,
-        "to": body.to,
-        "content": body.content,
-    })) {
-        tracing::debug!("ws direct_message (no subscribers): {e}"); // intentional: no subscribers is normal
-    }
     Ok(Json(json!({ "ok": true })))
 }

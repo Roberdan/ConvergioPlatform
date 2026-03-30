@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tower::ServiceExt;
 
-fn test_router() -> (axum::Router, std::path::PathBuf) {
+pub(crate) fn test_router() -> (axum::Router, std::path::PathBuf) {
     static CTR: AtomicU64 = AtomicU64::new(0);
     let n = CTR.fetch_add(1, Ordering::SeqCst);
     let tmp = std::env::temp_dir().join(format!("claude-audit-test-{}-{n}.db", std::process::id()));
@@ -210,7 +210,7 @@ async fn audit_kb_learnings_match_by_domain() {
     assert_eq!(kb[0]["title"], "OWASP Top 10");
 }
 
-// ── audit_log tests ──────────────────────────────────────────────────────────
+// ── audit_log tests (continued in api_audit_tests2.rs) ───────────────────────
 
 #[tokio::test]
 async fn audit_log_empty_returns_ok() {
@@ -247,22 +247,4 @@ async fn audit_log_after_insert() {
     assert_eq!(entries[0]["agent"], "test-agent");
     assert_eq!(entries[0]["action"], "task_update");
 }
-
-#[tokio::test]
-async fn audit_log_filter_by_agent() {
-    let (app, db) = test_router();
-    let conn = rusqlite::Connection::open(&db).unwrap();
-    conn.execute_batch(
-        "INSERT INTO audit_log (agent, action) VALUES ('alice', 'task_update');
-         INSERT INTO audit_log (agent, action) VALUES ('bob', 'task_update');",
-    ).unwrap();
-    drop(conn);
-
-    let resp = app
-        .oneshot(Request::builder().uri("/api/audit/log?agent=alice").body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-    let json = body_json(resp.into_body()).await;
-    assert_eq!(json["total"], 1);
-    assert_eq!(json["entries"][0]["agent"], "alice");
-}
+// audit_log_filter_by_agent → api_audit_tests2.rs

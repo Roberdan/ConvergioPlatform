@@ -40,7 +40,7 @@ pub fn spawn_ali(engine: Arc<IpcEngine>, db_path: PathBuf) {
         if let Err(e) = engine.channel_create(CHANNEL, Some("Plan orchestration events"), ALI_AGENT) {
             tracing::warn!("ali-orchestrator: channel create failed: {e}");
         }
-        if let Err(e) = engine.register(ALI_AGENT, "orchestrator", None, &IpcEngine::hostname(), None) {
+        if let Err(e) = engine.register(ALI_AGENT, "orchestrator", None, &IpcEngine::hostname(), None, None) {
             tracing::warn!("ali-orchestrator: register failed: {e}");
         }
         reactor::run(engine, db_path).await;

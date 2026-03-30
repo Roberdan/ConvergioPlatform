@@ -237,15 +237,4 @@ fn test_sync_table_with_peer_handles_unreachable_peer() {
     let (sent, recv, applied) = sync_table_with_peer(&conn, "192.0.2.1:9999", "tasks");
     assert_eq!((sent, recv, applied), (0, 0, 0), "unreachable peer should yield all zeros");
 }
-
-#[test]
-fn test_db_path_from_env_fallback_to_home() {
-    let _guard = env_lock().lock().expect("env lock");
-    std::env::remove_var("DASHBOARD_DB");
-    let path = db_path_from_env();
-    assert!(
-        path.to_str().unwrap().ends_with(".claude/data/dashboard.db"),
-        "fallback must resolve to ~/.claude/data/dashboard.db, got: {}",
-        path.display()
-    );
-}
+// test_db_path_from_env_fallback_to_home → background_sync_tests2.rs

@@ -5,12 +5,12 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing::{info, warn};
 
-const POLL_INTERVAL: Duration = Duration::from_secs(30);
-const READINESS_INTERVAL: Duration = Duration::from_secs(300);
-const MEMORY_MAINTENANCE_INTERVAL: Duration = Duration::from_secs(6 * 3600);
+pub const POLL_INTERVAL: Duration = Duration::from_secs(30);
+pub const READINESS_INTERVAL: Duration = Duration::from_secs(300);
+pub const MEMORY_MAINTENANCE_INTERVAL: Duration = Duration::from_secs(6 * 3600);
 pub const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 const STALL_SECS: u64 = 300;
 const RATE_LIMIT_WARN: u64 = 3;
@@ -219,51 +219,5 @@ pub async fn run_and_store_cycle(pool: &Pool<SqliteConnectionManager>, config: &
     if critical { info!("jarvis.monitor: CRITICAL — communicate stub (wired W2/W3)"); }
 }
 
-/// Check whether the Telegram long-poll background task is still alive.
-///
-/// Pass the `JoinHandle` returned by `spawn_telegram_poll`. If the task has
-/// exited (crash or early return) this returns a failing check result so the
-/// monitor loop can surface and log the event.
-pub fn check_telegram_poll_alive(handle: &tokio::task::JoinHandle<()>) -> KernelCheckResult {
-    if handle.is_finished() {
-        KernelCheckResult::fail("telegram_poll_alive", "Telegram poll task has exited")
-    } else {
-        KernelCheckResult::pass("telegram_poll_alive")
-    }
-}
-
-/// Spawn background monitor loop (30s poll, 5min readiness check).
-pub fn spawn_monitor_loop(pool: Pool<SqliteConnectionManager>, config: MonitorConfig) {
-    tokio::spawn(async move {
-        info!("jarvis.monitor: started (poll every {}s)", POLL_INTERVAL.as_secs());
-        let mut last_readiness_check: Option<Instant> = None;
-        let mut last_memory_maintenance: Option<Instant> = None;
-        loop { // UNBOUNDED: event loop
-            tokio::time::sleep(POLL_INTERVAL).await;
-            run_and_store_cycle(&pool, &config).await;
-            let should_check = last_readiness_check
-                .map(|t| t.elapsed() >= READINESS_INTERVAL).unwrap_or(true);
-            if should_check && !config.peer_urls.is_empty() {
-                info!("jarvis.monitor: running node readiness check on {} peers", config.peer_urls.len());
-                for peer_url in &config.peer_urls { check_peer_readiness(&pool, peer_url).await; }
-                last_readiness_check = Some(Instant::now());
-            }
-            let should_maintain_memory = last_memory_maintenance
-                .map(|t| t.elapsed() >= MEMORY_MAINTENANCE_INTERVAL)
-                .unwrap_or(true);
-            if should_maintain_memory {
-                let summaries = crate::server::api_memory_mgmt_gc::garbage_collect_all_projects();
-                let changed = summaries
-                    .iter()
-                    .map(|(_, result)| result.total_changed())
-                    .sum::<usize>();
-                info!(
-                    projects = summaries.len(),
-                    changed,
-                    "jarvis.monitor: completed automatic memory maintenance"
-                );
-                last_memory_maintenance = Some(Instant::now());
-            }
-        }
-    });
-}
+// check_telegram_poll_alive + spawn_monitor_loop → monitor_ext.rs
+pub use super::monitor_ext::{check_telegram_poll_alive, spawn_monitor_loop};

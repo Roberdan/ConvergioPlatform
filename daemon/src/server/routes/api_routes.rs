@@ -38,6 +38,8 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/chat/sessions",
     "/api/optimize/signals",
     "/api/ipc/agents",
+    "/api/ipc/agents/list",
+    "/api/ipc/agents/tree",
     "/api/ipc/messages",
     "/api/ipc/channels",
     "/api/ipc/context",
@@ -203,56 +205,8 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/goal/execute",
     "/api/health/post-merge-check",
 ];
-pub const PUT_ROUTES: &[&str] = &[
-    "/api/ideas/:id",
-    "/api/chat/requirement",
-    "/api/peers/:name",
-    "/api/nightly/config/:project_id",
-    "/api/runs/:id",
-];
-pub const DELETE_ROUTES: &[&str] = &[
-    "/api/ideas/:id",
-    "/api/chat/session",
-    "/api/peers/:name",
-    "/api/delegate/:session_id",
-    "/api/memory/forget/:id",
-    "/api/memory-mgmt/file/:filename",
-];
-pub const SSE_ROUTES: &[&str] = &[
-    "/api/chat/stream/:sid",
-    "/api/mesh/action/stream",
-    "/api/mesh/fullsync",
-    "/api/plan/preflight",
-    "/api/plan/delegate",
-    "/api/plan/start",
-    "/api/mesh/pull-db",
-];
-pub const WS_ROUTES: &[&str] = &["/ws/brain", "/ws/dashboard", "/ws/pty"];
+// PUT, DELETE, SSE, WS routes + tests → api_routes_ext.rs
+pub use super::api_routes_ext::{DELETE_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
 // RateLimiter and endpoint_category live in rate_limiter.rs.
 pub use super::rate_limiter::{endpoint_category, RateLimiter};
-
-#[cfg(test)]
-mod tests {
-    use super::{GET_ROUTES, POST_ROUTES, SSE_ROUTES, WS_ROUTES};
-
-    #[test]
-    fn includes_http_ws_and_sse_routes() {
-        assert!(POST_ROUTES.contains(&"/api/mesh/init"));
-        assert!(SSE_ROUTES.contains(&"/api/chat/stream/:sid"));
-        assert!(WS_ROUTES.contains(&"/ws/brain"));
-        assert!(WS_ROUTES.contains(&"/ws/dashboard"));
-    }
-
-    #[test]
-    fn includes_ported_get_routes() {
-        assert!(GET_ROUTES.contains(&"/api/overview"));
-        assert!(GET_ROUTES.contains(&"/api/chat/sessions"));
-        assert!(GET_ROUTES.contains(&"/api/projects"));
-        assert!(GET_ROUTES.contains(&"/api/nightly/jobs/:id"));
-        assert!(GET_ROUTES.contains(&"/api/nightly/config/:project_id"));
-        assert!(POST_ROUTES.contains(&"/api/nightly/jobs/trigger"));
-        assert!(POST_ROUTES.contains(&"/api/nightly/jobs/:id/retry"));
-        assert!(POST_ROUTES.contains(&"/api/nightly/jobs/definitions/:id/toggle"));
-    }
-}

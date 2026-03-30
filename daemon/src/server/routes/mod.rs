@@ -1,9 +1,9 @@
 pub mod api_routes;
+pub mod api_routes_ext;
 mod health;
 pub mod rate_limiter;
 
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
-
 
 use super::api_validation;
 use super::api_agent_catalog;

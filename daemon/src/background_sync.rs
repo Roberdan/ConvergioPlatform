@@ -244,6 +244,5 @@ pub fn spawn_sync_loop(
     })
 }
 
-#[cfg(test)]
-#[path = "background_sync_tests.rs"]
-mod tests;
+#[cfg(test)] #[path = "background_sync_tests.rs"] mod tests;
+#[cfg(test)] #[path = "background_sync_tests2.rs"] mod tests2;

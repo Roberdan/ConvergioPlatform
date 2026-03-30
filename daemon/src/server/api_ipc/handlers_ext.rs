@@ -15,6 +15,7 @@ pub struct RegisterAgent {
     agent_type: String,
     pid: Option<i64>,
     metadata: Option<String>,
+    parent_agent: Option<String>,
 }
 
 fn default_agent_type() -> String {
@@ -42,8 +43,8 @@ pub async fn api_ipc_agents_register(
     let conn = state.get_conn()?;
     conn.execute(
         "INSERT OR REPLACE INTO ipc_agents
-         (name, host, agent_type, pid, metadata, registered_at, last_seen)
-         VALUES (?1, ?2, ?3, ?4, ?5,
+         (name, host, agent_type, pid, metadata, parent_agent, registered_at, last_seen)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6,
                  strftime('%Y-%m-%dT%H:%M:%f','now'),
                  strftime('%Y-%m-%dT%H:%M:%f','now'))",
         rusqlite::params![
@@ -51,7 +52,8 @@ pub async fn api_ipc_agents_register(
             body.host,
             body.agent_type,
             body.pid,
-            body.metadata
+            body.metadata,
+            body.parent_agent
         ],
     )
     .map_err(|e| ApiError::internal(format!("agent register failed: {e}")))?;
@@ -112,7 +114,8 @@ pub async fn api_ipc_agents_list(
                 CASE WHEN last_seen >= strftime('%Y-%m-%dT%H:%M:%f','now','-10 minutes')
                      THEN 'active' ELSE 'inactive' END AS status,
                 pid,
-                registered_at
+                registered_at,
+                parent_agent
          FROM ipc_agents ORDER BY last_seen DESC",
         [],
     )?;
@@ -171,4 +174,75 @@ pub async fn api_ipc_agents_heartbeat(
     .map_err(|e| ApiError::internal(format!("agent heartbeat failed: {e}")))?;
 
     Ok(Json(json!({ "ok": true })))
+}
+
+/// GET /api/ipc/agents/tree — hierarchical agent tree (parentage).
+pub async fn api_ipc_agents_tree(
+    State(state): State<ServerState>,
+) -> Result<Json<Value>, ApiError> {
+    ensure_ipc_schema(&state)?;
+    let conn = state.get_conn()?;
+    let rows = query_rows(
+        &conn,
+        "SELECT name, host, agent_type, pid, parent_agent,
+                CASE WHEN last_seen >= strftime('%Y-%m-%dT%H:%M:%f','now','-10 minutes')
+                     THEN 'active' ELSE 'inactive' END AS status,
+                registered_at, last_seen
+         FROM ipc_agents ORDER BY registered_at ASC",
+        [],
+    )?;
+
+    // Build tree: group by parent_agent
+    let mut roots: Vec<Value> = Vec::new();
+    let mut children_map: std::collections::HashMap<String, Vec<Value>> =
+        std::collections::HashMap::new();
+
+    for row in &rows {
+        let name = row["name"].as_str().unwrap_or("");
+        let parent = row["parent_agent"].as_str();
+        let node = json!({
+            "name": name,
+            "host": row["host"],
+            "type": row["agent_type"],
+            "pid": row["pid"],
+            "status": row["status"],
+            "registered_at": row["registered_at"],
+            "last_seen": row["last_seen"],
+            "children": [],
+        });
+        match parent {
+            Some(p) if !p.is_empty() => {
+                children_map.entry(p.to_string()).or_default().push(node);
+            }
+            _ => roots.push(node),
+        }
+    }
+
+    fn attach_children(node: &mut Value, children_map: &std::collections::HashMap<String, Vec<Value>>) {
+        let name = node["name"].as_str().unwrap_or("").to_string();
+        if let Some(kids) = children_map.get(&name) {
+            let mut kids = kids.clone();
+            for kid in &mut kids {
+                attach_children(kid, children_map);
+            }
+            node["children"] = json!(kids);
+        }
+    }
+
+    for root in &mut roots {
+        attach_children(root, &children_map);
+    }
+
+    // Orphaned children whose parent is not registered become roots
+    let known_names: std::collections::HashSet<String> = rows
+        .iter()
+        .filter_map(|r| r["name"].as_str().map(String::from))
+        .collect();
+    for (parent, kids) in &children_map {
+        if !known_names.contains(parent) {
+            roots.extend(kids.clone());
+        }
+    }
+
+    Ok(Json(json!({ "ok": true, "tree": roots, "total": rows.len() })))
 }

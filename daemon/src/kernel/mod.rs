@@ -9,6 +9,7 @@ pub mod engine_context;
 pub mod tools;
 pub mod monitor;
 pub mod monitor_checks;
+pub mod monitor_ext;
 pub mod monitor_peer_tracker;
 #[cfg(test)]
 mod monitor_checks_tests;
@@ -20,6 +21,7 @@ pub mod telegram;
 pub mod telegram_poll;
 pub mod telegram_voice;
 pub mod tts;
+pub mod tts_ext;
 pub mod tts_templates;
 pub mod verify;
 pub mod verify_checks;
@@ -32,6 +34,8 @@ pub mod voice_routes;
 pub mod api;
 #[cfg(feature = "kernel")]
 pub mod api_ask;
+#[cfg(feature = "kernel")]
+pub mod api_listen;
 
 #[cfg(test)]
 mod api_ask_tests;
