@@ -281,34 +281,105 @@ graph LR
 
 ## Mesh (P2P Multi-Node)
 
-Tailscale-based peer-to-peer networking with HMAC-SHA256 authentication.
+Scalable peer-to-peer mesh. Any Mac, Linux, or Windows machine can join as a node with a single command. Nodes auto-discover via Tailscale and communicate over multiple transports with automatic fallback.
 
 ```mermaid
-graph LR
-    M5["M5Max<br>Coordinator<br>100.89.245.79"]
-    M1["M1 Pro<br>Kernel (Jarvis)<br>100.106.173.118"]
+graph TB
+    subgraph TRANSPORT["Transport Layer — auto-negotiated"]
+        TB["Thunderbolt<br><small>10 Gbps, <1ms<br>same desk</small>"]
+        LAN["LAN / Wi-Fi<br><small>1 Gbps<br>same network</small>"]
+        TS["Tailscale VPN<br><small>WireGuard<br>anywhere on earth</small>"]
+        SSH["SSH fallback<br><small>direct tunnel<br>legacy / NAT</small>"]
+    end
 
-    M5 -- "Tailscale + Thunderbolt<br>conflict-aware sync" --> M1
-    M1 -- "Jarvis health<br>Telegram alerts" --> M5
+    subgraph ROLES["Node Roles"]
+        COORD["Coordinator<br><small>plan orchestration<br>sync authority<br>delegation dispatch</small>"]
+        KERNEL["Kernel<br><small>local LLM (Qwen 7B)<br>Jarvis monitor<br>TTS, Telegram</small>"]
+        EXECUTOR["Executor<br><small>task execution<br>claude/copilot CLI<br>worktree isolation</small>"]
+        WORKER["Worker<br><small>delegated tasks<br>build, test<br>headless</small>"]
+    end
 
-    classDef coord fill:#142218,stroke:#42d392,color:#d4dae4
-    classDef kernel fill:#221822,stroke:#b07ee8,color:#d4dae4
+    subgraph NODES["Example Topology"]
+        N1["macOS M5 Max<br><small>coordinator + executor</small>"]
+        N2["macOS M1 Pro<br><small>kernel + executor</small>"]
+        N3["Linux server<br><small>worker</small>"]
+        N4["macOS M4 Mini<br><small>worker</small>"]
+    end
 
-    class M5 coord
-    class M1 kernel
+    N1 <-- "Thunderbolt" --> N2
+    N1 <-- "Tailscale" --> N3
+    N1 <-- "LAN" --> N4
+    N2 <-- "Tailscale" --> N3
+
+    TB --> N1
+    LAN --> N4
+    TS --> N3
+    SSH --> N3
+
+    COORD --> N1
+    KERNEL --> N2
+    EXECUTOR --> N1
+    EXECUTOR --> N2
+    WORKER --> N3
+    WORKER --> N4
+
+    classDef transport fill:#18232e,stroke:#38c8d8,color:#d4dae4
+    classDef role fill:#221828,stroke:#e87ab0,color:#d4dae4
+    classDef node fill:#142218,stroke:#42d392,color:#d4dae4
+
+    class TB,LAN,TS,SSH transport
+    class COORD,KERNEL,EXECUTOR,WORKER role
+    class N1,N2,N3,N4 node
 ```
 
-| Feature | Detail |
-|---|---|
-| **Transport** | Tailscale (primary), Thunderbolt (LAN), SSH fallback |
-| **Sync** | Timestamp-based LWW with conflict detection (v20) |
-| **Deploy** | `scripts/mesh/deploy-node.sh <node> --kernel` |
-| **Health** | 30s monitor loop, stall detection, auto-recovery |
-| **Readiness** | `/api/node/readiness` — 10 checks at boot |
+### Node Roles
+
+| Role | Capabilities | Requirements |
+|---|---|---|
+| **Coordinator** | Plan orchestration, sync authority, delegation dispatch | Daemon + DB |
+| **Kernel** | Local LLM, Jarvis monitor, TTS, Telegram, Ali escalation | + Python venv, MLX models, Telegram token |
+| **Executor** | Run tasks via Claude/Copilot CLI in worktrees | + claude/copilot CLI logged in |
+| **Worker** | Receive delegated tasks, build, test | Daemon only (minimal) |
+
+A node can have multiple roles (e.g., coordinator + executor).
+
+### Transport Negotiation
+
+The daemon probes each peer in priority order and uses the fastest reachable transport:
+
+| Priority | Transport | Latency | Use case |
+|---|---|---|---|
+| 1 | Thunderbolt (10.0.0.x) | <1ms | Same desk, macOS ↔ macOS |
+| 2 | LAN / Wi-Fi | 1-5ms | Same network |
+| 3 | Tailscale VPN (100.x.x.x) | 5-50ms | Anywhere, encrypted WireGuard tunnel |
+| 4 | SSH direct | 10-100ms | Legacy, NAT traversal, fallback |
+
+If a transport disappears (e.g., Thunderbolt dock unplugged), the daemon falls back to the next available transport within 5 seconds — no restart needed.
+
+### Sync
+
+- Conflict-aware timestamp-based replication (v20)
+- Coordinator wins for plans, LWW for tasks, merge for knowledge_base
+- Conflicted changes → `_sync_conflicts` table for review
+- `/api/sync/status` shows per-peer, per-table health
+
+### Deploy a New Node
 
 ```bash
-cvg mesh status            # peer topology
-cvg mesh sync              # force sync
+# Provision any machine (macOS or Linux) as a mesh node
+scripts/mesh/deploy-node.sh <hostname> --role executor
+
+# Or with kernel capabilities (needs Apple Silicon for MLX)
+scripts/mesh/deploy-node.sh <hostname> --role kernel
+
+# Verify readiness
+ssh <hostname> "cvg node readiness"
+```
+
+```bash
+cvg mesh status            # peer topology + transport
+cvg mesh sync              # force sync all tables
+cvg node readiness         # 10-point health check
 ```
 
 ---
