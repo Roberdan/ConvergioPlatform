@@ -178,9 +178,9 @@ pub fn sync_table_with_peer(
     (sent, received, applied)
 }
 
-/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420)
-/// is the sole replication path. Callers should NOT spawn this loop.
-#[deprecated(note = "v20: use CRDT over TCP (port 9420) instead of HTTP LWW sync")]
+/// HTTP LWW sync re-enabled as primary replication path.
+/// CRDT over TCP (crsqlite, port 9420) is an optional enhancement, not required.
+/// crsqlite C extension is not compiled/deployed on nodes, so this path handles replication.
 pub fn spawn_sync_loop(
     db: Arc<Mutex<Connection>>,
     interval_secs: u64,
