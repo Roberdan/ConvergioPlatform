@@ -167,8 +167,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "INSERT OR IGNORE INTO plan_reviews_v2 (id, plan_id, spec_file, reviewer_agent, verdict, suggestions, raw_report, reviewed_at) SELECT id, plan_id, spec_file, reviewer_agent, verdict, suggestions, raw_report, reviewed_at FROM plan_reviews",
     "DROP TABLE IF EXISTS plan_reviews",
     "ALTER TABLE plan_reviews_v2 RENAME TO plan_reviews",
-    // Add updated_at to tasks and waves for timestamp-based sync.
-    // SQLite ALTER TABLE cannot use function defaults — use NULL, filled by triggers.
+    // Add updated_at to sync tables. SQLite ALTER TABLE cannot use function defaults.
+    "ALTER TABLE plans ADD COLUMN updated_at DATETIME",
     "ALTER TABLE tasks ADD COLUMN updated_at DATETIME",
     "ALTER TABLE waves ADD COLUMN updated_at DATETIME",
     // Timestamp-based sync metadata (replaces crsqlite CRDT sync checkpoints)
@@ -193,10 +193,11 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE TRIGGER IF NOT EXISTS trg_waves_updated_at_update AFTER UPDATE ON waves FOR EACH ROW WHEN NEW.updated_at IS NULL OR NEW.updated_at = OLD.updated_at BEGIN UPDATE waves SET updated_at = datetime('now') WHERE id = NEW.id; END",
     "CREATE TRIGGER IF NOT EXISTS trg_kb_updated_at_insert AFTER INSERT ON knowledge_base FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE knowledge_base SET updated_at = datetime('now') WHERE id = NEW.id; END",
     "CREATE TRIGGER IF NOT EXISTS trg_notif_updated_at_insert AFTER INSERT ON notifications FOR EACH ROW WHEN NEW.updated_at IS NULL BEGIN UPDATE notifications SET updated_at = datetime('now') WHERE id = NEW.id; END",
-    // Backfill updated_at for ALL sync tables — rows without updated_at break replication
-    "UPDATE plans SET updated_at = COALESCE(completed_at, started_at, created_at, datetime('now')) WHERE updated_at IS NULL",
-    "UPDATE tasks SET updated_at = COALESCE(completed_at, started_at, datetime('now')) WHERE updated_at IS NULL",
-    "UPDATE waves SET updated_at = COALESCE(completed_at, started_at, datetime('now')) WHERE updated_at IS NULL",
-    "UPDATE knowledge_base SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL",
-    "UPDATE notifications SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL",
+    // Backfill updated_at for ALL sync tables — rows without updated_at break replication.
+    // Use datetime('now') only — COALESCE with other columns fails on test DBs that lack them.
+    "UPDATE plans SET updated_at = datetime('now') WHERE updated_at IS NULL",
+    "UPDATE tasks SET updated_at = datetime('now') WHERE updated_at IS NULL",
+    "UPDATE waves SET updated_at = datetime('now') WHERE updated_at IS NULL",
+    "UPDATE knowledge_base SET updated_at = datetime('now') WHERE updated_at IS NULL",
+    "UPDATE notifications SET updated_at = datetime('now') WHERE updated_at IS NULL",
 ];
