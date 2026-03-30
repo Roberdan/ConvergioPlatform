@@ -10,6 +10,8 @@ pub mod worktree_settings;
 mod reactor;
 pub mod reaper;
 pub mod rollback;
+pub mod sandbox;
+pub mod validator_service;
 
 use crate::ipc::IpcEngine;
 use std::path::PathBuf;

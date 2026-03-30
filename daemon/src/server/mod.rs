@@ -1,3 +1,4 @@
+pub mod api_validation;
 pub mod api_agent_catalog;
 mod api_agent_catalog_parse;
 mod api_agent_catalog_security;
