@@ -1,5 +1,5 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
-# Convergio Platform · v20.0.0
+# Convergio Platform · v20.1.0
 
 Give it a problem. It builds the business. — 69 AI agents across 12 domains (code, strategy, legal, finance, marketing, design, HR, data, security, ops, product, research) orchestrated by a Rust daemon on your own hardware. No cloud lock-in.
 
