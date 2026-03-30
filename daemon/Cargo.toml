@@ -21,7 +21,7 @@ harness = false
 
 [features]
 default = ["kernel"]
-crsqlite = []
+crsqlite = ["rusqlite/load_extension"]
 kernel = []
 voice = ["dep:cpal", "dep:webrtc-vad", "dep:whisper-rs", "dep:hound", "dep:ringbuf"]
 __disabled_pending_api_migration = []

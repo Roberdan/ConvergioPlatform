@@ -146,7 +146,7 @@ async fn handle_sync_status(
         "last_success_at": snapshot.last_success_at,
         "last_error": snapshot.last_error,
         "interval_secs": 300u64,
-        "http_lww_enabled": false,
+        "http_lww_enabled": true,
         "crdt_tables": crdt_count,
         "crdt_table_list": crdt_tables,
         "peer_count": peer_count,

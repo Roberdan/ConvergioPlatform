@@ -134,13 +134,13 @@ async fn sync_plan_to_peer(plan_id: i64, cfg: &steps::PeerConfig) -> Result<(), 
     Ok(())
 }
 
-/// Record delegation event in local daemon DB.
+/// Record delegation event in local daemon DB. Warns on failure (non-blocking).
 async fn record_delegation(plan_id: i64, peer_name: &str, delegation_id: &str, _db_path: &Path) {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .unwrap_or_default();
-    let _ = client
+    match client
         .post("http://localhost:8420/api/mesh/delegate")
         .json(&serde_json::json!({
             "plan_id": plan_id,
@@ -148,7 +148,19 @@ async fn record_delegation(plan_id: i64, peer_name: &str, delegation_id: &str, _
             "delegation_id": delegation_id,
         }))
         .send()
-        .await;
+        .await
+    {
+        Ok(resp) if !resp.status().is_success() => {
+            tracing::warn!(
+                "delegation-pipeline: failed to record delegation {delegation_id}: HTTP {}",
+                resp.status()
+            );
+        }
+        Err(e) => {
+            tracing::warn!("delegation-pipeline: failed to record delegation {delegation_id}: {e}");
+        }
+        _ => {}
+    }
 }
 
 /// Resolve peers.conf path: CONVERGIO_PEERS_CONF env → ~/.claude/config/peers.conf.
