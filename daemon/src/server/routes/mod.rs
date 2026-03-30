@@ -27,6 +27,7 @@ use super::api_domain;
 use super::api_evolution;
 use super::api_github;
 use super::api_health_deep;
+use super::api_health_post_merge;
 use super::api_heartbeat;
 use super::api_ideas;
 use super::api_ingest;
@@ -163,6 +164,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_capabilities::router())
         .merge(api_channels::router())
         .merge(api_health_deep::router())
+        .merge(api_health_post_merge::router())
         .merge(api_kernel_audio::router())
         .merge(api_voice::router())
         .merge(api_memory::router())

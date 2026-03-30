@@ -2,12 +2,13 @@
 // Listens on #orchestration IPC channel and delegates work to mesh peers.
 
 pub mod actions;
-pub mod policy;
+pub mod auto_rollback;
 pub mod delegation_core;
 mod executor;
 pub mod goal_decomposer;
 pub mod handlers;
 pub mod nightly;
+pub mod policy;
 pub mod reaper;
 mod reactor;
 pub mod rollback;

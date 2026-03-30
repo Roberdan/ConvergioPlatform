@@ -201,6 +201,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/voice/test",
     "/api/goal/decompose",
     "/api/goal/execute",
+    "/api/health/post-merge-check",
 ];
 pub const PUT_ROUTES: &[&str] = &[
     "/api/ideas/:id",

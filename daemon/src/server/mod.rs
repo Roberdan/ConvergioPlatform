@@ -26,6 +26,7 @@ pub mod api_evolution;
 pub mod api_github;
 pub mod api_github_handlers;
 pub mod api_health_deep;
+pub mod api_health_post_merge;
 pub mod api_heartbeat;
 pub mod api_heartbeat_handlers;
 pub mod api_ideas;
