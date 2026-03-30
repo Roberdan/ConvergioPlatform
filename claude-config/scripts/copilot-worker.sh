@@ -102,10 +102,10 @@ fi
 # Preflight checks — support both claude and copilot CLI
 if command -v claude &>/dev/null; then
 	CLI="claude"
-	CLI_ARGS="--dangerously-skip-permissions -p"
+	CLI_ARGS="-p"
 elif command -v copilot &>/dev/null; then
 	CLI="copilot"
-	CLI_ARGS="--yolo -p"
+	CLI_ARGS="-p"
 else
 	echo '{"error":"Neither claude nor copilot CLI found"}' >&2
 	exit 1
@@ -153,8 +153,8 @@ if [[ -z "$STATUS" ]]; then
 	echo '{"error":"task not found"}' >&2
 	exit 1
 fi
-if [[ "$STATUS" != "pending" && "$STATUS" != "in_progress" ]]; then
-	echo "{\"error\":\"task status is $STATUS, expected pending\"}" >&2
+if [[ "$STATUS" != "pending" && "$STATUS" != "in_progress" && "$STATUS" != "submitted" ]]; then
+	echo "{\"error\":\"task status is $STATUS, expected pending/in_progress\"}" >&2
 	exit 1
 fi
 
