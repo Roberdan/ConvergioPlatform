@@ -1,5 +1,29 @@
 # Troubleshooting
 
+## v20.0.0 Migration Notes
+
+### LiteLLM Removed
+
+`Provider::LiteLLM` no longer exists. If your config references `litellm`, update to one of:
+- `ClaudeSubscription` — Anthropic API via API key or subscription
+- `CopilotSubscription` — GitHub Copilot chat endpoint
+- `LocalLLM` — Ollama-compatible local endpoint (`http://localhost:11434`)
+
+**Error**: `unknown provider "litellm"` on startup
+**Fix**: Edit `config/providers.toml` and replace the `litellm` block with the appropriate native provider.
+
+The Python runtime and LiteLLM proxy process are no longer started by `start.sh`. You can remove any `pip install litellm` steps from your local setup.
+
+### `--dangerously-skip-permissions` Removed
+
+This flag was silently accepted in v19 and is now a hard error in v20.
+**Error**: `error: unexpected argument '--dangerously-skip-permissions'`
+**Fix**: Remove the flag. Configure capability sets in the agent's `settings.json` instead.
+
+### Memory Endpoint Path Changed
+
+`/api/memory` → `/api/memory/list`. Update any scripts or dashboards that call the old path.
+
 ## Silent Error Patterns (fail-loud policy, ADR-0124)
 
 **Problem: errors silently swallowed, tasks appear "done" but aren't**
