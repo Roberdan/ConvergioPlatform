@@ -117,4 +117,80 @@ if [ ${#UNWIRED[@]} -gt 0 ]; then
   exit 1
 fi
 
+# ─── Check 1: Router merge coverage ─────────────────────────────────────────
+# Every pub fn router() in daemon/src/server/api_*.rs must be merged in
+# daemon/src/server/routes/mod.rs.
+check_router_merge() {
+  local server_dir="$SRC/server"
+  local routes_mod="$server_dir/routes/mod.rs"
+
+  if [ ! -d "$server_dir" ] || [ ! -f "$routes_mod" ]; then
+    return 0
+  fi
+
+  local router_warnings=0
+
+  while IFS= read -r api_file; do
+    [ -f "$api_file" ] || continue
+    local stem
+    stem=$(basename "$api_file" .rs)
+    # Check if this module's router() call appears in the merge chain
+    if ! grep -q "${stem}::router()" "$routes_mod" 2>/dev/null; then
+      echo "WARNING: pub fn router() defined in $api_file but not merged in $routes_mod" >&2
+      router_warnings=$((router_warnings + 1))
+    fi
+  done < <(grep -rl 'pub fn router()' "$server_dir"/api_*.rs 2>/dev/null || true)
+
+  if [ "$router_warnings" -gt 0 ]; then
+    echo "  $router_warnings router(s) missing from merge chain — routes will be unreachable." >&2
+  fi
+}
+
+check_router_merge
+
+# ─── Check 2: Dead module detection ─────────────────────────────────────────
+# For each .rs file with pub fn, warn if no non-test, non-mod file actually
+# uses the module via `stem::` path notation — potential dead code.
+# mod.rs declarations alone do not count as callers.
+check_dead_modules() {
+  local dead_warnings=0
+
+  while IFS= read -r rs_file; do
+    [ -f "$rs_file" ] || continue
+    local base stem
+    base=$(basename "$rs_file")
+
+    # Skip module roots, test files
+    case "$base" in mod.rs|lib.rs|main.rs) continue ;; esac
+    case "$base" in *_tests.rs|*_test.rs|tests.rs) continue ;; esac
+
+    stem="${base%.rs}"
+
+    # Only examine files that expose public API
+    grep -q 'pub fn' "$rs_file" 2>/dev/null || continue
+
+    # Look for actual usage of this module via `stem::` path notation in
+    # non-mod, non-test files (excluding the file itself).  A bare `mod stem;`
+    # declaration in mod.rs does not count — we want real callers.
+    local callers
+    callers=$(find "$SRC" -name '*.rs' \
+      ! -name '*_tests.rs' ! -name '*_test.rs' ! -name 'tests.rs' \
+      ! -name 'mod.rs' ! -name 'lib.rs' ! -name 'main.rs' \
+      ! -path "$rs_file" \
+      -print0 2>/dev/null \
+      | xargs -0 grep -l "${stem}::" 2>/dev/null | wc -l || true)
+
+    if [ "${callers:-0}" -eq 0 ]; then
+      echo "WARNING: $rs_file has pub fn but no external callers detected — potential dead code." >&2
+      dead_warnings=$((dead_warnings + 1))
+    fi
+  done < <(find "$SRC" -name '*.rs' | sort)
+
+  if [ "$dead_warnings" -gt 0 ]; then
+    echo "  $dead_warnings module(s) appear unreferenced — review for dead code." >&2
+  fi
+}
+
+check_dead_modules
+
 exit 0
