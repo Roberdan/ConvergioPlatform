@@ -131,7 +131,7 @@ pub fn snapshot() -> Value {
 }
 
 pub fn current_request_id() -> Option<String> {
-    REQUEST_TRACE_ID.try_with(Clone::clone).ok()
+    REQUEST_TRACE_ID.try_with(Clone::clone).ok() // intentional: request ID only available inside telemetry middleware scope
 }
 
 /// Reset all counters (useful for testing).
@@ -149,7 +149,7 @@ pub async fn telemetry_layer(mut req: Request<Body>, next: Next) -> Response {
     let request_id = req
         .headers()
         .get(REQUEST_ID_HEADER)
-        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.to_str().ok()) // intentional: header may not be valid UTF-8 string
         .filter(|value| !value.trim().is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| Uuid::new_v4().to_string());

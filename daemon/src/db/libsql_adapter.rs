@@ -153,8 +153,7 @@ pub fn apply_changes(
                 params![change.pk],
                 |row| row.get(0),
             )
-            // intentional: rows without updated_at timestamp are treated as stale and overwritten.
-            .ok()
+            .ok() // intentional: rows without updated_at are treated as stale and overwritten
         } else {
             None
         };

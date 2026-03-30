@@ -54,8 +54,7 @@ pub(super) fn run_evidence_gate(
     let artifact_strings: Vec<String> =
         output_data_str
             .as_deref()
-            // intentional: malformed JSON means no structured artifacts to inspect.
-            .and_then(|s| serde_json::from_str::<Value>(s).ok())
+            .and_then(|s| serde_json::from_str::<Value>(s).ok()) // intentional: malformed JSON means no structured artifacts to inspect
             .and_then(|v| v.get("artifacts").cloned())
             .and_then(|a| {
                 a.as_array().map(|arr| {

@@ -30,10 +30,9 @@ async fn list_runs(
         params.push(s.clone());
     }
 
-    // intentional: invalid limit falls back to the safe default page size.
     let limit: i64 = qs
         .get("limit")
-        .and_then(|v| v.parse().ok())
+        .and_then(|v| v.parse().ok()) // intentional: invalid limit falls back to safe default
         .unwrap_or(50)
         .min(100);
 

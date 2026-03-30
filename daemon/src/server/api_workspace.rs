@@ -40,8 +40,7 @@ async fn list_workspaces(
     State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, ApiError> {
-    // intentional: malformed plan_id means "list all workspaces".
-    let plan_id: Option<i64> = qs.get("plan_id").and_then(|v| v.parse().ok());
+    let plan_id: Option<i64> = qs.get("plan_id").and_then(|v| v.parse().ok()); // intentional: malformed plan_id means "list all workspaces"
     let mgr = make_manager(&state);
     let workspaces = mgr
         .list_workspaces(plan_id)
@@ -121,8 +120,7 @@ async fn get_workspace_events(
         .filter(|v| !v.is_empty())
         .ok_or_else(|| ApiError::bad_request("workspace_id query param is required"))?
         .clone();
-    // intentional: invalid limit is ignored so the event log uses its default window.
-    let limit: Option<i64> = qs.get("limit").and_then(|v| v.parse().ok());
+    let limit: Option<i64> = qs.get("limit").and_then(|v| v.parse().ok()); // intentional: invalid limit is ignored so the event log uses its default window
     let since = qs.get("since").map(String::as_str).map(str::to_owned);
 
     let logger = EventLogger::new(state.pool());

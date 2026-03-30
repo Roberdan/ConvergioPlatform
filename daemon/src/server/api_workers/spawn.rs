@@ -127,7 +127,7 @@ async fn handle_spawn(
     let pid = String::from_utf8_lossy(&pid_output.stdout)
         .trim()
         .parse::<i64>()
-        .ok();
+        .ok(); // intentional: parse fallback to None when pane PID is not numeric
 
     Ok(Json(json!({
         "ok": true,
@@ -154,16 +154,15 @@ async fn handle_status(
         .lines()
         .filter_map(|line| {
             let (window, pid_str) = line.split_once('|')?;
-            // intentional: skip malformed tmux lines instead of failing the full status listing.
-            let pid = pid_str.parse::<i64>().ok()?;
-            let task_id = window.strip_prefix("plan-").and_then(|v| v.parse::<i64>().ok());
+            let pid = pid_str.parse::<i64>().ok()?; // intentional: skip malformed tmux lines instead of failing the full status listing
+            let task_id = window.strip_prefix("plan-").and_then(|v| v.parse::<i64>().ok()); // intentional: non-plan windows have no task_id
             // intentional: runtime is auxiliary metadata; unknown maps to 0 seconds.
             let runtime = Command::new("ps")
                 .args(["-p", &pid.to_string(), "-o", "etimes="])
                 .output()
-                .ok()
-                .and_then(|o| String::from_utf8(o.stdout).ok())
-                .and_then(|s| s.trim().parse::<i64>().ok())
+                .ok() // intentional: ps command failure means process already exited
+                .and_then(|o| String::from_utf8(o.stdout).ok()) // intentional: non-UTF-8 ps output treated as absent
+                .and_then(|s| s.trim().parse::<i64>().ok()) // intentional: parse fallback to None for non-numeric etimes
                 .unwrap_or(0);
             Some(json!({
                 "session_id": format!("{}:{}", query.session, window),

@@ -98,12 +98,11 @@ async fn list_memories(Query(qs): Query<MemoryQuery>) -> Result<Json<Value>, Api
     let mut memories = Vec::new();
     for (fname, content, path) in read_memory_entries(&dir)? {
         let (name, mem_type, description) = parse_frontmatter(&content);
-        // intentional: stats/listing endpoints degrade gracefully when file metadata is unavailable.
-        let meta = fs::metadata(&path).ok();
+        let meta = fs::metadata(&path).ok(); // intentional: stats degrade gracefully when file metadata is unavailable
         let modified = meta
             .as_ref()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|m| m.modified().ok()) // intentional: mtime unsupported on some FS
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()) // intentional: clock before epoch yields None
             .map(|d| d.as_secs());
         memories.push(json!({
             "filename": fname,

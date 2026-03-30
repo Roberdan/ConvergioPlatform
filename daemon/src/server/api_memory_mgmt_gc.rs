@@ -32,10 +32,9 @@ pub fn garbage_collect_dir(dir: &Path) -> GarbageCollectResult {
 
     for (fname, content, path) in read_memory_entries(dir).unwrap_or_default() {
         let (name, mem_type, _) = parse_frontmatter(&content);
-        // intentional: fs metadata is auxiliary for age-based tiering; unreadable files are kept.
         let is_old = fs::metadata(&path)
-            .ok()
-            .and_then(|meta| meta.modified().ok())
+            .ok() // intentional: fs metadata is auxiliary for age-based tiering; unreadable files are kept
+            .and_then(|meta| meta.modified().ok()) // intentional: mtime unsupported on some FS
             .map(|modified| now.duration_since(modified).map(|age| age > thirty_days).unwrap_or(false))
             .unwrap_or(false);
         let ref_name = name.as_deref().unwrap_or(&fname);

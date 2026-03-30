@@ -180,7 +180,7 @@ fn today_lines_changed(conn: &rusqlite::Connection) -> (i64, i64, i64, i64) {
                                 if let Some(n) = part
                                     .split_whitespace()
                                     .next()
-                                    .and_then(|s| s.parse::<i64>().ok())
+                                    .and_then(|s| s.parse::<i64>().ok()) // intentional: non-numeric stat token skipped
                                 {
                                     sub += n;
                                 }

@@ -138,8 +138,7 @@ async fn stream_litellm(
 #[allow(dead_code)]
 fn parse_claude_sse(block: &str) -> Option<StreamChunk> {
     let data = sse_data(block)?;
-    // intentional: malformed SSE frames are skipped so streaming can continue.
-    let parsed: Value = serde_json::from_str(data).ok()?;
+    let parsed: Value = serde_json::from_str(data).ok()?; // intentional: malformed SSE frames are skipped so streaming can continue
     let event_type = parsed.get("type").and_then(Value::as_str).unwrap_or("");
     if event_type == "content_block_delta" {
         let text = parsed
@@ -176,8 +175,7 @@ fn parse_openai_sse(block: &str) -> Option<StreamChunk> {
     if data.trim() == "[DONE]" {
         return None;
     }
-    // intentional: malformed SSE frames are skipped so streaming can continue.
-    let parsed: Value = serde_json::from_str(data).ok()?;
+    let parsed: Value = serde_json::from_str(data).ok()?; // intentional: malformed SSE frames are skipped so streaming can continue
     if let Some(u) = parsed.get("usage") {
         let inp = u.get("prompt_tokens").and_then(Value::as_u64).unwrap_or(0);
         let out = u

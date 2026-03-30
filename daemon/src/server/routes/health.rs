@@ -43,8 +43,7 @@ pub async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Va
             let aa_ok = conn.prepare("SELECT 1 FROM agent_activity LIMIT 0").is_ok();
             let peers =
                 super::super::state::query_one(&conn, "SELECT COUNT(*) AS c FROM peer_heartbeats", [])
-                    // intentional: health endpoint remains available even when peer count query fails.
-                    .ok()
+                    .ok() // intentional: health endpoint remains available even when peer count query fails
                     .flatten()
                     .and_then(|v| v.get("c").and_then(serde_json::Value::as_i64))
                     .unwrap_or(0);

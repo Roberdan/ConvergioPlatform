@@ -52,8 +52,7 @@ pub(super) fn build_peer(
         thunderbolt_ip: kv.get("thunderbolt_ip").cloned(),
         mac_address: kv.get("mac_address").cloned(),
         gh_account: kv.get("gh_account").cloned(),
-        // intentional: malformed runner count should not fail the entire peer record parse.
-        runners: kv.get("runners").and_then(|v| v.parse::<u32>().ok()),
+        runners: kv.get("runners").and_then(|v| v.parse::<u32>().ok()), // intentional: malformed runner count should not fail peer record parse
         runner_paths: kv.get("runner_paths").cloned(),
     })
 }

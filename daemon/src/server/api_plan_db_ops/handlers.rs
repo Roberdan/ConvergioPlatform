@@ -14,9 +14,8 @@ pub fn canonicalize_project_path(raw: &str) -> Option<String> {
         return None;
     }
     std::fs::canonicalize(raw)
-        // intentional: nonexistent paths preserve the raw value for backward compatibility.
-        .ok()
-        .and_then(|p| p.into_os_string().into_string().ok())
+        .ok() // intentional: nonexistent paths preserve the raw value for backward compatibility
+        .and_then(|p| p.into_os_string().into_string().ok()) // intentional: non-UTF-8 paths fallback to None
 }
 
 pub fn router() -> Router<ServerState> {

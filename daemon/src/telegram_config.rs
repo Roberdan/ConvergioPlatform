@@ -1,6 +1,5 @@
 fn env_non_empty(name: &str) -> Option<String> {
-    // intentional: missing env simply means Telegram is not configured on this node.
-    std::env::var(name).ok().filter(|value| !value.trim().is_empty())
+    std::env::var(name).ok().filter(|value| !value.trim().is_empty()) // intentional: missing env means Telegram is not configured
 }
 
 pub fn telegram_token() -> Option<String> {
@@ -34,8 +33,7 @@ mod tests {
     }
 
     fn snapshot(name: &str) -> Option<String> {
-        // intentional: test helper snapshots absent vars as None.
-        std::env::var(name).ok()
+        std::env::var(name).ok() // intentional: test helper snapshots absent vars as None
     }
 
     fn restore(name: &str, value: Option<String>) {
