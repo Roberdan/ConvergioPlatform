@@ -202,49 +202,36 @@ pub fn spawn_sync_loop(
         // Skip the immediate first tick — let the server finish binding.
         ticker.tick().await;
 
-        loop { // UNBOUNDED: event loop
+        loop {
             ticker.tick().await;
 
-            let peers = match query_active_peers(&db) {
-                Ok(p) => p,
-                Err(e) => {
-                    warn!("background_sync: failed to query peers: {e}");
-                    continue;
+            // Run ALL sync work on a blocking thread to avoid deadlocking
+            // the tokio runtime. reqwest::blocking + rusqlite are both sync.
+            let db_clone = db.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                let peers = match query_active_peers(&db_clone) {
+                    Ok(p) => p,
+                    Err(e) => { warn!("background_sync: query peers: {e}"); return; }
+                };
+                if peers.is_empty() {
+                    error!("background_sync: no reachable peers — sync NOT running");
+                    return;
                 }
-            };
-
-            if peers.is_empty() {
-                error!("background_sync: no reachable peers — sync is NOT running");
-                continue;
-            }
-            info!(
-                count = peers.len(),
-                "background_sync: syncing with {} peer(s)",
-                peers.len()
-            );
-
-            // Open a connection to the real dashboard DB for sync operations.
-            let db_path = crate::db_path_from_env();
-            let conn = match Connection::open(&db_path) {
-                Ok(c) => {
-                    if let Err(e) = c.execute_batch(
-                        "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
-                    ) {
-                        tracing::warn!("background_sync: PRAGMA init: {e}");
+                info!(count = peers.len(), "background_sync: syncing with {} peer(s)", peers.len());
+                let db_path = crate::db_path_from_env();
+                let conn = match Connection::open(&db_path) {
+                    Ok(c) => {
+                        let _ = c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+                        c
                     }
-                    c
+                    Err(e) => { error!("background_sync: open DB: {e}"); return; }
+                };
+                for peer in &peers {
+                    for table in SYNC_TABLES {
+                        sync_table_with_peer(&conn, peer, table);
+                    }
                 }
-                Err(e) => {
-                    error!("background_sync: cannot open DB at {}: {e}", db_path.display());
-                    continue;
-                }
-            };
-
-            for peer in &peers {
-                for table in SYNC_TABLES {
-                    sync_table_with_peer(&conn, peer, table);
-                }
-            }
+            }).await;
         }
     })
 }
