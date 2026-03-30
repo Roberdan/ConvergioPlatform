@@ -113,14 +113,15 @@ fn boot_summary_treats_disk_space_as_blocking() {
 }
 
 #[test]
-fn boot_summary_treats_missing_db_as_warning() {
+fn boot_summary_treats_missing_db_as_blocking() {
     let summary = summarize_for_boot(&[Check {
         name: "db_exists".into(),
         passed: false,
         detail: "not found: /tmp/dashboard.db".into(),
     }]);
-    assert!(summary.blocking_failures.is_empty());
-    assert_eq!(summary.warning_failures.len(), 1);
+    // v20: missing DB is now a critical/blocking failure (fail-loud)
+    assert_eq!(summary.blocking_failures.len(), 1);
+    assert!(summary.warning_failures.is_empty());
 }
 
 #[test]
