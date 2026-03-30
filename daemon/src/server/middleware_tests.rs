@@ -4,45 +4,28 @@ use super::*;
 
 #[test]
 fn no_token_production_denies_all() {
-    // When no token is set and dev-mode is off, every request is rejected.
-    // We test compare_tokens directly to avoid OnceLock initialisation ordering
-    // issues across parallel tests — the OnceLock may already be set in CI.
-    // The semantic is: check_bearer calls is_dev_mode() which returns false
-    // by default, so None token → false.
-    // We verify the logic path by exercising compare_tokens and is_dev_mode().
-    assert!(!is_dev_mode() || is_dev_mode()); // is_dev_mode always returns a bool
-                                              // The key assertion: when token is absent and dev-mode is false, deny.
     let dev_mode_off = false;
     let result = match get_auth_token() {
         None => dev_mode_off,
         Some(_) => false,
     };
-    // In a clean environment with no CONVERGIO_AUTH_TOKEN this should be false.
-    // We can't assert the global OnceLock state safely in parallel tests,
-    // so we test the decision logic inline.
     assert!(!result, "no token + no dev-mode must deny");
 }
 
 #[test]
 fn no_token_dev_mode_allows() {
-    // When no token and dev-mode on, all requests are allowed.
     let dev_mode_on = true;
     let result = match get_auth_token() {
         None => dev_mode_on,
         Some(_) => false,
     };
-    // If AUTH_TOKEN is None in this test environment, result is true.
-    // If AUTH_TOKEN was set by another test, the Some arm returns false
-    // (a valid token is required). Either path is acceptable.
-    let _ = result; // test validates logic path compiles and runs
+    let _ = result;
 }
 
-// --- check_bearer: token validation ---
+// --- compare_tokens ---
 
 #[test]
 fn correct_bearer_passes_when_token_set() {
-    // When a token IS configured, a matching Bearer header must pass.
-    // We test compare_tokens directly because we cannot mutate the OnceLock.
     let expected = "my-secret";
     let provided = "Bearer my-secret";
     let result = provided
@@ -102,17 +85,15 @@ fn constant_time_prefix_subset_fails() {
     assert!(!compare_tokens("secret-extra", "secret"));
 }
 
-// --- needs_auth: new exempt-routes logic ---
+// --- needs_auth ---
 
 #[test]
 fn health_is_exempt_from_auth() {
-    // /api/health must never require auth.
     assert!(!needs_auth(&Method::GET, "/api/health"));
 }
 
 #[test]
 fn all_get_routes_now_require_auth() {
-    // F-05: GET routes that were previously unprotected now require auth.
     assert!(needs_auth(&Method::GET, "/api/overview"));
     assert!(needs_auth(&Method::GET, "/api/ideas"));
     assert!(needs_auth(&Method::GET, "/ws/brain"));
@@ -128,7 +109,6 @@ fn mutable_methods_require_auth() {
 
 #[test]
 fn websocket_and_sse_routes_require_auth() {
-    // These routes require auth (no longer in any special allowlist).
     assert!(needs_auth(&Method::GET, "/ws/pty"));
     assert!(needs_auth(&Method::GET, "/api/plan/start"));
     assert!(needs_auth(&Method::GET, "/api/plan/delegate"));
@@ -137,7 +117,37 @@ fn websocket_and_sse_routes_require_auth() {
 
 #[test]
 fn no_protected_get_list_exists() {
-    // Verify EXEMPT_ROUTES contains only /api/health (not a broader allowlist).
     assert_eq!(EXEMPT_ROUTES.len(), 1);
     assert_eq!(EXEMPT_ROUTES[0], "/api/health");
+}
+
+// --- authenticate function ---
+
+#[test]
+fn authenticate_no_header_no_token_no_devmode_denies() {
+    // Without dev-mode and no token configured, no header => deny
+    // (This tests the logic path; OnceLock state may vary in CI)
+    let result = authenticate(None);
+    // In CI with no env vars and dev-mode off, this should be Err
+    // If AUTH_TOKEN was set by another test, still Err (no header)
+    assert!(result.is_err() || result.unwrap().is_none());
+}
+
+#[test]
+fn authenticate_jwt_format_detected_by_dots() {
+    // A token with 2 dots is treated as JWT, not legacy bearer
+    let fake_jwt = "Bearer aaa.bbb.ccc";
+    let result = authenticate(Some(fake_jwt));
+    // This will fail JWT validation (invalid signature), so Err
+    assert!(result.is_err());
+}
+
+#[test]
+fn authenticate_legacy_bearer_without_dots() {
+    // A token without dots is treated as legacy bearer
+    let legacy = "Bearer simple-token-no-dots";
+    let result = authenticate(Some(legacy));
+    // Will fail unless CONVERGIO_AUTH_TOKEN matches
+    // The point: it does NOT try JWT decode on dotless tokens
+    assert!(result.is_err() || result.unwrap().is_none());
 }

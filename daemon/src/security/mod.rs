@@ -3,12 +3,16 @@ pub mod audit_chain;
 pub mod budget;
 pub mod egress;
 pub mod guard;
+pub mod jwt;
 pub mod keychain;
 pub mod kill_switch;
+pub mod rbac;
 pub mod sandbox;
 pub mod types;
 
 pub use guard::SecurityGuard;
+pub use jwt::{AgentClaims, AgentRole};
+pub use rbac::role_can_access;
 pub use types::{AclRule, AuditEntry, SecurityError};
 
 #[cfg(test)]

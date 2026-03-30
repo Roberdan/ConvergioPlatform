@@ -8,6 +8,9 @@ use std::env;
 use std::sync::OnceLock;
 use tower_http::cors::CorsLayer;
 
+use crate::security::jwt::{self, AgentClaims};
+use crate::security::rbac;
+
 pub fn cors_layer() -> CorsLayer {
     let origins = match env::var("CONVERGIO_CORS_ORIGINS") {
         Ok(value) => {
@@ -52,8 +55,8 @@ pub fn cors_layer() -> CorsLayer {
 static AUTH_TOKEN: OnceLock<Option<String>> = OnceLock::new();
 
 /// Global dev-mode flag — set once at startup via `set_dev_mode(true)`.
-/// When true and no auth token is configured, auth is skipped and binding is
-/// restricted to 127.0.0.1 so the server is never reachable from the network.
+/// When true **and** the `--dev-mode` CLI flag was explicitly passed,
+/// auth is skipped and binding is restricted to 127.0.0.1.
 pub static DEV_MODE: OnceLock<bool> = OnceLock::new();
 
 /// Returns whether dev mode is active (set once at daemon startup).
@@ -66,7 +69,9 @@ pub fn is_dev_mode() -> bool {
 pub fn set_dev_mode(enabled: bool) {
     let _ = DEV_MODE.set(enabled);
     if enabled {
-        tracing::warn!("Auth disabled — dev mode, binding to localhost only");
+        tracing::warn!(
+            "Dev mode active (--dev-mode flag) — auth disabled, localhost only"
+        );
     }
 }
 
@@ -78,44 +83,57 @@ fn get_auth_token() -> &'static Option<String> {
 }
 
 /// Compares two string tokens in constant time to prevent timing attacks.
-/// Uses byte-level comparison; returns true only when both slices are identical.
 pub(crate) fn compare_tokens(a: &str, b: &str) -> bool {
     constant_time_eq(a.as_bytes(), b.as_bytes())
 }
 
-/// Returns true when the provided Bearer token matches the configured secret.
-///
-/// Behaviour:
-/// - Token configured → validate header; reject on mismatch or missing header.
-/// - No token configured + dev-mode → allow all (localhost-only binding enforced separately).
-/// - No token configured + production → deny all (fail-secure default).
-pub fn check_bearer(header_value: Option<&str>) -> bool {
-    match get_auth_token() {
-        None => {
-            // No token set: allow only in explicit dev-mode; deny in production.
-            is_dev_mode()
+/// Authenticate a request. Returns Ok(Some(claims)) for JWT,
+/// Ok(None) for legacy bearer or dev-mode bypass, Err for denied.
+fn authenticate(header_value: Option<&str>) -> Result<Option<AgentClaims>, ()> {
+    // 1. Try JWT first (Bearer <jwt-with-dots>)
+    if let Some(token) = header_value
+        .and_then(|v| v.strip_prefix("Bearer "))
+    {
+        // JWT tokens have 2 dots; legacy tokens do not
+        if token.matches('.').count() == 2 {
+            return match jwt::validate_token(token) {
+                Ok(claims) => Ok(Some(claims)),
+                Err(e) => {
+                    tracing::warn!("JWT validation failed: {e}");
+                    Err(())
+                }
+            };
         }
-        Some(expected) => header_value
-            .and_then(|v| v.strip_prefix("Bearer "))
-            .map(|t| compare_tokens(t, expected.as_str()))
-            .unwrap_or(false),
+        // Legacy shared bearer token
+        if let Some(expected) = get_auth_token() {
+            if compare_tokens(token, expected.as_str()) {
+                return Ok(None);
+            }
+        }
+        return Err(());
+    }
+
+    // 2. No Authorization header
+    match get_auth_token() {
+        None if is_dev_mode() => Ok(None),
+        _ => Err(()),
     }
 }
 
-/// Routes that never require a Bearer token regardless of auth configuration.
+/// Routes that never require a Bearer token regardless of auth config.
 const EXEMPT_ROUTES: &[&str] = &["/api/health"];
 
-/// Returns true if this request requires Bearer auth.
-/// All routes require auth except those listed in EXEMPT_ROUTES.
-/// Dev-mode bypasses auth entirely (handled in `check_bearer`).
+/// Returns true if this request requires auth.
 fn needs_auth(_method: &Method, path: &str) -> bool {
     !EXEMPT_ROUTES.contains(&path)
 }
 
-/// Axum middleware: rejects requests without a valid Bearer token.
-/// Only /api/health is exempt. Auth disabled in dev-mode (localhost binding enforced).
+/// Axum middleware: authenticates via JWT (with RBAC) or legacy bearer.
+/// /api/health is exempt. Dev-mode (--dev-mode flag) bypasses auth.
 pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
-    if !needs_auth(req.method(), req.uri().path()) {
+    let path = req.uri().path().to_string();
+
+    if !needs_auth(req.method(), &path) {
         return next.run(req).await;
     }
 
@@ -127,22 +145,53 @@ pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
             Err(e) => { tracing::debug!("auth header not valid UTF-8: {e}"); None }
         });
 
-    if check_bearer(auth_header) {
-        next.run(req).await
-    } else {
-        (
+    match authenticate(auth_header) {
+        Ok(Some(claims)) => {
+            // JWT authenticated — enforce RBAC
+            if !rbac::role_can_access(&claims.role, &path) {
+                tracing::warn!(
+                    agent = %claims.sub,
+                    role = %claims.role,
+                    path = %path,
+                    "RBAC denied"
+                );
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({
+                        "error": "Forbidden",
+                        "message": format!(
+                            "Role '{}' cannot access {path}",
+                            claims.role
+                        )
+                    })),
+                )
+                    .into_response();
+            }
+            tracing::debug!(
+                agent = %claims.sub,
+                role = %claims.role,
+                path = %path,
+                "Authenticated request"
+            );
+            next.run(req).await
+        }
+        Ok(None) => {
+            // Legacy bearer or dev-mode — no RBAC
+            tracing::debug!(path = %path, "Legacy/dev-mode auth");
+            next.run(req).await
+        }
+        Err(()) => (
             StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({
                 "error": "Unauthorized",
                 "message": "Valid Bearer token required"
             })),
         )
-            .into_response()
+            .into_response(),
     }
 }
 
-/// Middleware that ensures responses include a Cache-Control header when absent.
-/// Simple default: private, max-age=10
+/// Middleware that ensures responses include a Cache-Control header.
 pub async fn set_cache_headers(req: Request<Body>, next: Next) -> Response {
     use axum::http::header::CACHE_CONTROL;
     use axum::http::HeaderValue;

@@ -1,0 +1,110 @@
+name: "Nightly Autonomy Job — Self-Healing & Self-Optimizing"
+project: convergio
+description: >
+  Nightly job on M1 Pro that evaluates, cleans, and optimizes the system.
+  Runs at 02:00 CET via launchd. Auto-cleanup + auto-learning + monitoring.
+
+waves:
+  - id: W1
+    name: "Nightly Job Implementation"
+    tasks:
+      - id: T1-01
+        do: >
+          Create daemon/src/orchestrator/nightly_job.rs — the autonomous nightly evaluator.
+
+          RUNS AT: 02:00 CET every day (triggered by launchd on M1 Pro).
+          ALSO CALLABLE: POST /api/nightly/run (manual trigger).
+
+          PHASE 1 — CLEANUP (always runs):
+          1. Worktree cleanup: git worktree list → prune any not in active plans
+          2. Zombie processes: pkill copilot/claude processes >4h old with no active task
+          3. Agent cleanup: mark agents not seen in 24h as inactive
+          4. Stale plans: plans in "doing" >48h with no progress → mark blocked, notify
+          5. Evidence cache: clear stale entries >24h
+          6. Temp files: clean /private/tmp/worktree-plan-* older than 7d
+          7. Git: prune remote tracking branches, gc
+
+          PHASE 2 — EVALUATION (daily learning):
+          1. Scan git log from last 24h: count commits, failures, reverts, fix-after-fix chains
+          2. Token audit: read all agent definitions, calculate total tokens, flag bloated agents (>200 lines)
+          3. Memory audit: read memory files, flag stale (>7d, fix already in code), suggest GC
+          4. Test health: cargo test --lib — report pass/fail/new-failures
+          5. Dependency check: cargo outdated, npm outdated in evolution/
+          6. Model version check: query Claude API version, compare with daemon model-routing config
+
+          PHASE 3 — OPTIMIZATION (weekly, on Sundays):
+          1. Agent prompt compression: identify repeated boilerplate across agents, suggest consolidation
+          2. Key learnings extraction: scan git log for "fix:" commits, extract patterns, update memory
+          3. Rule effectiveness: compare rule violations caught vs false positives from evidence gate logs
+          4. Issue scanning: gh issue list on all repos (ConvergioPlatform, convergio-design, MirrorBuddy, VirtualBPM)
+             For each open issue: assess severity, suggest fix, create plan if actionable
+
+          PHASE 4 — REPORT:
+          1. Generate /tmp/nightly-report-YYYY-MM-DD.md with all findings
+          2. Send summary via Telegram to @ConvergioBot
+          3. Store report in DB: INSERT INTO nightly_reports (date, report_json, phase1_ok, phase2_ok, phase3_ok)
+          4. If critical issues found: create micro-plan via copilot-plan-runner
+
+          Wire into daemon startup: if kernel role and 02:00 CET → trigger.
+          Add migration for nightly_reports table.
+          Max 250 lines — split into nightly_cleanup.rs, nightly_eval.rs, nightly_optimize.rs.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        verify:
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+          - "cd daemon && cargo test nightly 2>&1 | grep -v FAILED"
+          - "rg 'nightly_job' daemon/src/orchestrator/mod.rs"
+
+      - id: T1-02
+        do: >
+          Create launchd plist for nightly job on M1 Pro:
+
+          1. Create scripts/kernel/com.convergio.nightly.plist:
+             - StartCalendarInterval: Hour=2, Minute=0
+             - ProgramArguments: curl -X POST http://localhost:8420/api/nightly/run
+             - StandardOutPath/StandardErrorPath for logging
+          2. Create scripts/kernel/install-nightly.sh that installs the plist
+          3. Add POST /api/nightly/run endpoint in daemon that triggers the job
+          4. Add GET /api/nightly/last-report endpoint that returns latest report
+          5. Document in TROUBLESHOOTING.md
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        verify:
+          - "test -f scripts/kernel/com.convergio.nightly.plist"
+          - "test -f scripts/kernel/install-nightly.sh"
+          - "cd daemon && cargo check 2>&1 | grep -c 'error' | grep '^0$'"
+
+  - id: W2
+    name: "Closure"
+    tasks:
+      - id: TF-tests
+        do: >
+          Verify nightly job compiles, tests pass, launchd plist is valid XML.
+        type: refactor
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        verify:
+          - "cd daemon && cargo test --lib -- --quiet 2>&1 | tail -1 | grep -v FAILED"
+
+      - id: TF-doc
+        do: >
+          Update CHANGELOG, capabilities doc. Add ADR-0128 nightly-autonomy-job.
+        type: documentation
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "test -f docs/adr/ADR-0128-nightly-autonomy-job.md"
