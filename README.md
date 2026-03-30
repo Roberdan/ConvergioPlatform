@@ -95,7 +95,7 @@ graph TB
         WEB["convergio-web<br><small>Next.js 15 + Tauri 2.0<br>Maranello Luce DS (6 themes)</small>"]
         TUI["TUI<br><small>ratatui terminal</small>"]
         CLI["CLI (cvg)<br><small>50+ subcommands</small>"]
-        VOICE["Voice<br><small>Wake word 'convergio'<br>Whisper STT → Voxtral TTS</small>"]
+        VOICE["Voice<br><small>Wake word 'convergio'<br>Whisper STT → Mistral Voxtral TTS</small>"]
         PHONE["Telegram Mobile<br><small>iPhone / Android<br>text + voice control</small>"]
         MCP["MCP Server<br><small>18 tools, ring security</small>"]
     end
@@ -253,7 +253,7 @@ graph TB
 | Layer | Path | Lang | Purpose |
 |---|---|---|---|
 | **Daemon** | `daemon/` | Rust | HTTP/WS/SSE API (:8420), mesh P2P, IPC, SQLite WAL, TUI, `cvg` CLI |
-| **Kernel** | `daemon/src/kernel/` | Rust | Local LLM (Qwen 7B), health monitor, verify gate, TTS (Voxtral 4B), Telegram bot |
+| **Kernel** | `daemon/src/kernel/` | Rust | Local LLM (Qwen 7B), health monitor, verify gate, TTS (Mistral Voxtral 4B), Telegram bot |
 | **Inference** | `daemon/src/inference/` | Rust | Tier-based routing (T1-T4), fallback chain, health probing |
 | **MCP Server** | `daemon/src/mcp_server/` | Rust | 18 tools for any LLM client, ring-based security (0-3) |
 | **Workspace** | `daemon/src/workspace/` | Rust | Worktree isolation, git abstraction, Release Agent, quality gates |
@@ -478,7 +478,7 @@ The kernel runs Qwen 2.5 7B locally on Apple Silicon, providing:
 - **Monitor loop** (30s) — health checks, stall detection, rate limit tracking
 - **Verify gate** — blocks task completion without evidence
 - **Recovery** — restart crashed daemons, checkpoint state, notify operators
-- **TTS** — Voxtral 4B (primary), Siri fallback
+- **TTS** — Mistral Voxtral 4B (primary), Siri fallback
 - **Voice pipeline** — cpal audio → VAD (webrtc) → wake word "convergio" → Whisper STT → intent → response
 - **Telegram bot** — bidirectional text + voice, long polling, quiet hours (23:00-07:00 CET)
 - **Ali escalation** — "ali dimmi..." triggers Claude CLI (Opus) subprocess with full context
