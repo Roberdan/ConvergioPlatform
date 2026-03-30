@@ -172,6 +172,7 @@ scripts/platform/cvg
 # Session artifacts and runtime data
 .claude/agent-memory/
 .claude/scripts
+.claude/worktrees/
 .copilot-tracking/
 data/runs/
 data/*.bak-*
