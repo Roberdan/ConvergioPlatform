@@ -155,8 +155,8 @@ async fn http_sync_export_returns_plans() {
     .expect("seed plan");
     drop(conn);
 
-    super::super::middleware::set_dev_mode(true);
-    let router = super::super::routes::build_router_with_db(
+    super::middleware::set_dev_mode(true);
+    let router = super::routes::build_router_with_db(
         std::path::PathBuf::from("/tmp"),
         path.clone(),
         None,

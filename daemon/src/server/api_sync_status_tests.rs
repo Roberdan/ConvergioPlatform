@@ -27,8 +27,8 @@ fn test_router_with_sync_meta(seed_sql: &str) -> axum::Router {
     }
     drop(conn);
 
-    super::super::middleware::set_dev_mode(true);
-    super::super::routes::build_router_with_db(
+    super::middleware::set_dev_mode(true);
+    super::routes::build_router_with_db(
         std::path::PathBuf::from("."),
         db_path,
         None,

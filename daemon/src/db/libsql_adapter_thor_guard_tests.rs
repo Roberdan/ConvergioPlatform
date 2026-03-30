@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-use super::SyncChange;
+use super::libsql_adapter::SyncChange;
 
 fn setup_sync_schema(conn: &Connection) {
     conn.execute_batch(
@@ -46,7 +46,7 @@ fn apply_changes_normalises_done_task_for_thor_guard() {
         }),
     }];
 
-    let applied = super::apply_changes(&conn, &changes).expect("apply");
+    let applied = super::libsql_adapter::apply_changes(&conn, &changes).expect("apply");
     assert_eq!(applied, 1);
 
     let (status, validated_by): (String, String) = conn
@@ -93,7 +93,7 @@ fn apply_changes_continues_after_done_task_and_inserts_probe_task() {
         },
     ];
 
-    let applied = super::apply_changes(&conn, &changes).expect("apply");
+    let applied = super::libsql_adapter::apply_changes(&conn, &changes).expect("apply");
     assert_eq!(applied, 2);
 
     let count: i64 = conn
