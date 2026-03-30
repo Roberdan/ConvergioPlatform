@@ -70,6 +70,7 @@ use super::api_inference_status;
 use super::api_policy;
 use super::mesh_provision;
 use super::middleware as server_mw;
+use super::middleware_audit;
 use super::sse;
 use super::state::ServerState;
 use super::telemetry;
@@ -203,6 +204,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .route("/api/mesh/provision", get(mesh_provision::provision_all))
         .route("/api/health", get(health::api_health))
         .route("/api/telemetry", get(health::api_telemetry))
+        .layer(from_fn_with_state(state.clone(), middleware_audit::audit_mutations))
         .layer(from_fn_with_state(rate_limiter, basic_rate_limit))
         .layer(from_fn(server_mw::require_auth))
         .layer(from_fn(server_mw::set_cache_headers))
