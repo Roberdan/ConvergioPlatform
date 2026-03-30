@@ -1,7 +1,7 @@
 # Convergio Platform — Complete Capability Reference
 
 > Single source of truth for what Convergio can do. Load this in every agent session.
-> Updated: 29 Marzo 2026 | v19.2.0
+> Updated: 2 Aprile 2026 | v20.0.0
 
 ## Core Architecture
 

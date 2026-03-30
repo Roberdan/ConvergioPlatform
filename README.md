@@ -1,5 +1,5 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
-# Convergio Platform
+# Convergio Platform · v20.0.0
 
 Give it a problem. It builds the business. — 69 AI agents across 12 domains (code, strategy, legal, finance, marketing, design, HR, data, security, ops, product, research) orchestrated by a Rust daemon on your own hardware. No cloud lock-in.
 
@@ -86,7 +86,7 @@ cvg workspace list                         # list active workspaces
 
 ---
 
-## Architecture (v20 target)
+## Architecture (v20.0.0)
 
 ```mermaid
 graph TB
@@ -232,21 +232,20 @@ graph TB
     class DS,COMM eco
 ```
 
-### Current vs In Progress (Plan 10022)
+### What's New in v20.0.0
 
-| Area | v19.5.0 (current) | v20.0.0 (Plan 10022, in progress) |
-|---|---|---|
-| **LLM routing** | Hardcoded to LiteLLM :4000 (Python, blocked by antivirus) | Native Rust: CLI subscription + local LLM, tier-based routing |
-| **Inference** | router/fallback/health exist but test-only | Fully wired in production chat pipeline |
-| **Budget** | ipc/budget.rs exists, not wired to chat | Wired with alert Telegram + dashboard WebSocket |
-| **DB sync** | Timestamp LWW, no conflict detection | Conflict-aware with _sync_conflicts table |
-| **Security** | JWT on all routes, skip-permissions in delegation | Skip-permissions removed, audit trail, agent sandboxing |
-| **Worker** | Sequential only, no worktree support | Parallel via --plan + ?task_id= API + worktrees |
-| **Sessions** | No inter-session communication | Named sessions + IPC send-direct |
-| **Validation** | Inline in API handler | Thor as durable service with queue + verdicts |
-| **Autonomy** | All tasks need human approval | Risk-based policy: LOW auto-progress, HIGH gated |
-| **Nightly** | Manual maintenance | Auto cleanup + eval + optimize (launchd on kernel node) |
-| **Dead code** | 6 unwired modules, 2 orphaned endpoints | All wired or deleted |
+| Area | Change |
+|---|---|
+| **LLM providers** | `ClaudeSubscription`, `CopilotSubscription`, `LocalLLM` — zero Python deps; `Provider::LiteLLM` removed |
+| **Budget tracking** | Per-session and cumulative spend wired into chat pipeline; alerts via Telegram + dashboard WebSocket |
+| **Session IPC** | Named sessions, `agents/list`, `agents/deregister`, `agents/send-direct` endpoints |
+| **CRDT sync** | Conflict-aware vector-clock merge; HTTP LWW disabled; `_sync_conflicts` table for review |
+| **Nightly autonomy** | Scheduled tokio job (default 02:00): goal decomposer → risk policy → audit trail |
+| **Goal decomposer** | Hierarchical goal-to-task decomposition stored in plan DB |
+| **Risk-based policy** | Configurable risk thresholds; LOW auto-progress, HIGH gates for human approval |
+| **Agent sandboxing** | Per-agent capability sets enforced at IPC layer; `--dangerously-skip-permissions` removed |
+| **Rollback snapshots** | Daemon persists pre-apply snapshots for plan/task rollback |
+| **Audit trail** | All IPC calls logged with agent identity + timestamp in `ipc_audit` (append-only) |
 
 ### Layer Summary
 
@@ -445,8 +444,8 @@ The daemon handles: worktree creation on the target node, context transfer via `
 
 ### Sync
 
-- Conflict-aware timestamp-based replication (v20)
-- Coordinator wins for plans, LWW for tasks, merge for knowledge_base
+- Conflict-aware CRDT sync (vector clocks); HTTP LWW disabled
+- Coordinator wins for plans; CRDT merge for tasks and knowledge_base
 - Conflicted changes → `_sync_conflicts` table for review
 - `/api/sync/status` shows per-peer, per-table health
 
