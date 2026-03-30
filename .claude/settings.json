@@ -1,4 +1,45 @@
 {
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(cargo check*)",
+      "Bash(cargo test*)",
+      "Bash(cargo build*)",
+      "Bash(cargo clippy*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git branch*)",
+      "Bash(git show*)",
+      "Bash(git rev-parse*)",
+      "Bash(curl http://localhost*)",
+      "Bash(curl -sf http://localhost*)",
+      "Bash(cvg *)",
+      "Bash(~/.local/bin/cvg *)",
+      "Bash(scripts/check-*)",
+      "Bash(ls *)",
+      "Bash(wc *)",
+      "Bash(python3 -c *)",
+      "Bash(npx vitest*)",
+      "Bash(npx tsc*)",
+      "Bash(gh auth status*)",
+      "Bash(gh pr *)",
+      "Bash(tailscale status*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git checkout -- *)",
+      "Bash(git clean -f*)",
+      "Bash(sqlite3 *)",
+      "Bash(*credentials*)",
+      "Bash(*.env *)",
+      "Bash(*secrets*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
