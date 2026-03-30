@@ -203,7 +203,9 @@ pub fn timeout_stale(conn: &Connection, max_age_secs: u64) -> Result<usize> {
 }
 
 fn entry_verdict(db: &Connection, entry: &QueueEntry) -> &'static str {
-    let Some(tid) = entry.task_id else { return "pass" };
+    // Wave/plan entries (no task_id) must be explicitly reviewed — never auto-pass.
+    // Why: auto-passing wave/plan validations masks real failures (GPT-5.4 audit).
+    let Some(tid) = entry.task_id else { return "needs_review" };
     match db.query_row("SELECT status FROM tasks WHERE id=?1", params![tid], |r| r.get::<_,String>(0)) {
         Ok(s) if s == "submitted" || s == "done" => "pass",
         Ok(s) => { tracing::warn!("validator_loop: task {tid} status '{s}'"); "needs_review" }

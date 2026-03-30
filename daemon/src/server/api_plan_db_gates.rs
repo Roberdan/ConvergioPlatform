@@ -5,6 +5,7 @@
 
 use super::api_plan_db_task_evidence::has_evidence;
 use super::state::ApiError;
+use crate::orchestrator::validator_service;
 use rusqlite::Connection;
 
 // ── Gate 1: TestGate ─────────────────────────────────────────────────────────
@@ -32,23 +33,11 @@ pub fn run_test_gate(conn: &Connection, task_id: i64) -> Result<(), ApiError> {
 /// If the validation_queue / validation_verdicts tables don't exist yet
 /// (e.g. test DB), the gate is a no-op (best-effort; not punitive during bootstrap).
 pub fn run_validator_gate(conn: &Connection, task_id: i64) -> Result<(), ApiError> {
-    // Check whether the table exists before querying — guard for fresh DBs.
-    let table_exists: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master \
-             WHERE type='table' AND name='validation_verdicts'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
-
-    if table_exists == 0 {
-        // Tables not yet migrated — allow through with a warning logged.
-        tracing::warn!(
-            task_id,
-            "ValidatorGate: validation_verdicts table absent; gate skipped"
-        );
-        return Ok(());
+    // Ensure validation tables exist before querying — idempotent migration.
+    // WHY: previously the gate silently passed on fresh DBs (GPT-5.4 audit).
+    //      Now we run migrations so the gate is always enforced.
+    if let Err(e) = validator_service::run_migrations(conn) {
+        tracing::warn!(task_id, "ValidatorGate: migration failed: {e}; gate enforced anyway");
     }
 
     let pass_count: i64 = conn

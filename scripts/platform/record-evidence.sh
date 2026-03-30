@@ -52,10 +52,18 @@ PAYLOAD=$(printf '{"task_id":%d,"evidence_type":"%s","command":"%s","exit_code":
   "${EXIT_CODE}" \
   "$(echo "${OUTPUT_SUMMARY}" | sed 's/"/\\"/g' | head -c 2000)")
 
-RESPONSE=$(curl -sf -X POST \
-  "${DAEMON_URL}/api/plan-db/task/evidence" \
-  -H 'Content-Type: application/json' \
-  -d "${PAYLOAD}" 2>&1) || {
+# Build auth header: skip in dev mode or when token absent.
+AUTH_HEADER=""
+if [[ "${CONVERGIO_DEV:-}" != "1" && -n "${CONVERGIO_AUTH_TOKEN:-}" ]]; then
+  AUTH_HEADER="Authorization: Bearer ${CONVERGIO_AUTH_TOKEN}"
+fi
+
+CURL_ARGS=(-sf -X POST "${DAEMON_URL}/api/plan-db/task/evidence"
+  -H 'Content-Type: application/json'
+  -d "${PAYLOAD}")
+[[ -n "${AUTH_HEADER}" ]] && CURL_ARGS+=(-H "${AUTH_HEADER}")
+
+RESPONSE=$(curl "${CURL_ARGS[@]}" 2>&1) || {
   echo "ERROR: daemon API call failed: ${RESPONSE}" >&2
   exit 2
 }

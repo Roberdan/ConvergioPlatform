@@ -78,8 +78,15 @@ pub async fn run_full_delegation(
 
     // Step 8: Build prompt and launch execution
     tracing::info!("delegation-pipeline: [8/8] launching execution on peer");
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = auth_token() {
+        if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+            headers.insert(reqwest::header::AUTHORIZATION, val);
+        }
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
+        .default_headers(headers)
         .build()?;
     let prompt = super::delegation_core::build_plan_prompt(plan_id, &client).await;
     steps::launch_peer_execution(&cfg, plan_id, &prompt).await.map_err(|e| {
@@ -102,6 +109,27 @@ pub async fn run_full_delegation(
     Ok(delegation_id)
 }
 
+/// Read auth token from CONVERGIO_AUTH_TOKEN env var.
+/// Returns None in dev mode (CONVERGIO_DEV=1) or when the var is unset.
+fn auth_token() -> Option<String> {
+    // Skip auth in development mode.
+    if std::env::var("CONVERGIO_DEV").as_deref() == Ok("1") {
+        return None;
+    }
+    std::env::var("CONVERGIO_AUTH_TOKEN").ok().filter(|t| !t.is_empty())
+}
+
+/// Add Authorization header to a request builder when a token is available.
+fn with_auth(
+    req: reqwest::RequestBuilder,
+) -> reqwest::RequestBuilder {
+    if let Some(token) = auth_token() {
+        req.header("Authorization", format!("Bearer {token}"))
+    } else {
+        req
+    }
+}
+
 /// Step 6 implementation: export plan JSON from local daemon and POST to peer.
 async fn sync_plan_to_peer(plan_id: i64, cfg: &steps::PeerConfig) -> Result<(), PipelineError> {
     let client = reqwest::Client::builder()
@@ -110,7 +138,7 @@ async fn sync_plan_to_peer(plan_id: i64, cfg: &steps::PeerConfig) -> Result<(), 
 
     // Export plan from local daemon
     let export_url = format!("http://localhost:8420/api/plan-db/json/{plan_id}");
-    let plan_json = client.get(&export_url).send().await?.text().await?;
+    let plan_json = with_auth(client.get(&export_url)).send().await?.text().await?;
 
     if plan_json.trim().is_empty() || plan_json.contains("\"error\"") {
         return Err(format!("plan {plan_id} export returned empty or error").into());
@@ -119,12 +147,14 @@ async fn sync_plan_to_peer(plan_id: i64, cfg: &steps::PeerConfig) -> Result<(), 
     // POST to peer daemon
     let peer_ip = if cfg.tailscale_ip.is_empty() { cfg.ssh_alias.clone() } else { cfg.tailscale_ip.clone() };
     let import_url = format!("http://{peer_ip}:8420/api/plan-db/import");
-    let resp = client
-        .post(&import_url)
-        .header("Content-Type", "application/json")
-        .body(plan_json)
-        .send()
-        .await?;
+    let resp = with_auth(
+        client
+            .post(&import_url)
+            .header("Content-Type", "application/json")
+            .body(plan_json),
+    )
+    .send()
+    .await?;
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
@@ -140,15 +170,17 @@ async fn record_delegation(plan_id: i64, peer_name: &str, delegation_id: &str, _
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .unwrap_or_default();
-    match client
-        .post("http://localhost:8420/api/mesh/delegate")
-        .json(&serde_json::json!({
-            "plan_id": plan_id,
-            "peer": peer_name,
-            "delegation_id": delegation_id,
-        }))
-        .send()
-        .await
+    match with_auth(
+        client
+            .post("http://localhost:8420/api/mesh/delegate")
+            .json(&serde_json::json!({
+                "plan_id": plan_id,
+                "peer": peer_name,
+                "delegation_id": delegation_id,
+            })),
+    )
+    .send()
+    .await
     {
         Ok(resp) if !resp.status().is_success() => {
             tracing::warn!(

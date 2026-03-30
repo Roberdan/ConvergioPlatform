@@ -161,6 +161,14 @@ impl HealthChecker {
         self.endpoints.iter().map(|ep| ep.name.clone()).collect()
     }
 
+    /// Record a pre-computed probe result for a named endpoint.
+    /// WHY: decouples I/O (done without lock) from state mutation (brief write lock).
+    pub fn record_result(&mut self, name: &str, result: ProbeResult) {
+        if let Some(ep) = self.endpoints.iter_mut().find(|ep| ep.name == name) {
+            ep.record_probe(result);
+        }
+    }
+
     /// Run a local CLI availability check (via `which <cmd>`) and record the result.
     /// Used for CLI-based providers (claude, copilot) that have no HTTP health endpoint.
     pub async fn probe_cli(&mut self, name: &str, cmd: &str) -> ProbeResult {

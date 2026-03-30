@@ -92,7 +92,27 @@ while [[ $# -gt 0 ]]; do
 		DRY_RUN=1
 		shift
 		;;
-	--help | -h) exec "$0" --help ;;
+	--help | -h)
+		cat <<'EOF'
+Usage: execute-plan.sh <plan_id> [OPTIONS]
+
+OPTIONS:
+  --from <task_id>          Resume from specific task (e.g. T1-03)
+  --engine <engine>         auto|claude|copilot|opencode (default: auto)
+  --model <model>           Model override (e.g. claude-opus-4-6, gpt-5.3-codex)
+  --timeout <seconds>       Per-task timeout in seconds (default: 900)
+  --dry-run                 Show what would be executed without running
+  --help                    Show this help
+
+  Engine 'auto' picks first authenticated CLI: claude > copilot > opencode
+
+EXAMPLES:
+  execute-plan.sh 180
+  execute-plan.sh 180 --from T1-03
+  execute-plan.sh 180 --engine copilot --model gpt-5.3-codex
+EOF
+		exit 0
+		;;
 	*) shift ;;
 	esac
 done

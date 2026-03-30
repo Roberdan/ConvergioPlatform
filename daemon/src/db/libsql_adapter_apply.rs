@@ -69,7 +69,7 @@ pub fn apply_changes(
                     .map(|v| format!("{{\"updated_at\":{}}}", v))
                     .unwrap_or_else(|| "{}".to_string());
                 if local_data != remote_data {
-                    let _ = conn.execute(
+                    if let Err(e) = conn.execute(
                         "INSERT INTO _sync_conflicts \
                          (table_name, pk, local_data, remote_data, source_node) \
                          VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -80,7 +80,17 @@ pub fn apply_changes(
                             remote_data,
                             "" // source_node not carried in SyncChange; left empty
                         ],
-                    );
+                    ) {
+                        // Non-fatal: conflict logging failure must not block the sync.
+                        // Why: _sync_conflicts is diagnostic; missing a row is acceptable,
+                        //      but silently dropping the error hides schema/lock issues.
+                        tracing::warn!(
+                            "apply_changes: _sync_conflicts insert failed \
+                             (table={}, pk={}): {e}",
+                            change.table_name,
+                            change.pk,
+                        );
+                    }
                 }
 
                 let columns = get_column_names(conn, &change.table_name)?;

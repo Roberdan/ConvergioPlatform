@@ -57,6 +57,12 @@
           {
             "type": "command",
             "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/scripts/platform/pre-tool-guard.sh\" bash"
+          },
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/claude-config/hooks/block-branch-creation.sh\"",
+            "timeout": 5,
+            "statusMessage": "Block branch creation"
           }
         ]
       },

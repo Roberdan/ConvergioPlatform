@@ -1,8 +1,9 @@
 // Background health probe loop for inference providers.
 // Probes configured endpoints every 60s and stores results in shared state.
 
-use super::health::HealthChecker;
+use super::health::{HealthChecker, ProbeResult};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 /// Shared health state accessible from API handlers.
@@ -17,39 +18,61 @@ pub fn create_shared_health() -> SharedHealthState {
     ])))
 }
 
+/// Run a CLI probe without holding any lock.
+/// WHY: holding a write lock across async I/O causes contention and deadlock
+///      risk (GPT-5.4 audit). Collect results first, then write briefly.
+async fn probe_cli_no_lock(cmd: &str) -> ProbeResult {
+    let start = std::time::Instant::now();
+    match tokio::process::Command::new("which").arg(cmd).output().await {
+        Ok(o) if o.status.success() => ProbeResult::Success(start.elapsed()),
+        Ok(o) => ProbeResult::Error(format!(
+            "which {cmd} exited {}",
+            o.status.code().unwrap_or(-1)
+        )),
+        Err(e) => ProbeResult::Error(e.to_string()),
+    }
+}
+
+/// Run an HTTP probe without holding any lock.
+async fn probe_http_no_lock(url: &str) -> ProbeResult {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap_or_default();
+    let start = std::time::Instant::now();
+    match client.get(url).send().await {
+        Ok(resp) if resp.status().is_success() => ProbeResult::Success(start.elapsed()),
+        Ok(resp) => ProbeResult::Error(format!("HTTP {}", resp.status())),
+        Err(e) => ProbeResult::Error(e.to_string()),
+    }
+}
+
 /// Spawn background task that probes provider health every 60s.
 /// Waits 10s before the first probe to allow services to start.
 pub fn spawn_health_probe_loop(state: SharedHealthState) {
     tokio::spawn(async move {
         // Give services time to start before first probe.
-        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
 
         loop {
             let local_port =
                 std::env::var("LOCAL_LLM_PORT").unwrap_or_else(|_| "8321".into());
-
-            // Probe local LLM via HTTP.
             let local_url = format!("http://localhost:{local_port}/v1/models");
+
+            // Run all probes OUTSIDE the lock — I/O must never hold a write lock.
+            let local_result = probe_http_no_lock(&local_url).await;
+            let claude_result = probe_cli_no_lock("claude").await;
+            let copilot_result = probe_cli_no_lock("copilot").await;
+
+            // Acquire write lock briefly only to record collected results.
             {
                 let mut checker = state.write().await;
-                checker.probe_http("local-llm", &local_url).await;
+                checker.record_result("local-llm", local_result);
+                checker.record_result("claude", claude_result);
+                checker.record_result("copilot", copilot_result);
             }
 
-            // Claude: CLI-based; verify the local binary exists — no external HTTP.
-            // Hitting the Anthropic API is wrong: we use subscription (no API key),
-            // and an external call every 60s adds unnecessary load.
-            {
-                let mut checker = state.write().await;
-                checker.probe_cli("claude", "claude").await;
-            }
-
-            // Copilot: CLI-based; verify the binary exists locally.
-            {
-                let mut checker = state.write().await;
-                checker.probe_cli("copilot", "copilot").await;
-            }
-
-            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_secs(60)).await;
         }
     });
 }

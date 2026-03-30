@@ -243,7 +243,7 @@ graph TB
 | **Nightly autonomy** | Scheduled tokio job (default 02:00): goal decomposer → risk policy → audit trail |
 | **Goal decomposer** | Hierarchical goal-to-task decomposition stored in plan DB |
 | **Risk-based policy** | Configurable risk thresholds; LOW auto-progress, HIGH gates for human approval |
-| **Agent sandboxing** | Per-agent capability sets with enforcement in delegation pipeline |
+| **Agent sandboxing** | Per-agent capability sets with command validation in delegation pipeline; filesystem/network enforcement planned |
 | **Rollback snapshots** | Daemon persists pre-apply snapshots for plan/task rollback |
 | **Audit trail** | Mutation requests (POST/PUT/DELETE) logged with agent identity in `audit_log` |
 
