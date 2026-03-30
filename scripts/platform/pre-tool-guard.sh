@@ -101,17 +101,36 @@ guard_bash() {
     fi
   fi
 
-  # TestGate: track when cargo test runs — create marker file
-  if echo "$CMD" | grep -qE '(^|[;&[:space:]])cargo[[:space:]]+test'; then
+  # EvidenceGate: create/refresh marker when any test suite runs.
+  # WHY: marker is checked by the commit gate above to enforce test-before-commit.
+  # Covers: cargo test (Rust), vitest (TS), pytest (Python), bats/shunit2 (Bash).
+  if echo "$CMD" | grep -qE \
+     '(^|[;&[:space:]])(cargo[[:space:]]+test|npx[[:space:]]+vitest|pytest|bats|shunit2)'; then
     touch "/tmp/.convergio-test-ran-$$" 2>/dev/null || true
     touch "/tmp/.convergio-test-ran" 2>/dev/null || true
   fi
 
-  # TestGate: warn on git commit of .rs files if tests not recently run
+  # EvidenceGate: BLOCK git commit of code files when tests not recently run.
+  # WHY: Constitution Article VI — commits must be backed by passing tests.
+  # Marker /tmp/.convergio-test-ran is created when cargo/vitest/pytest runs.
+  # Stale = older than 10 minutes (600 seconds).
   if echo "$CMD" | grep -qE '(^|[;&[:space:]])git[[:space:]]+commit'; then
-    if echo "$CMD" | grep -qE '\.(rs)\b' || git diff --cached --name-only 2>/dev/null | grep -qE '\.rs$'; then
-      if [ ! -f "/tmp/.convergio-test-ran" ]; then
-        warn "TestGate: committing Rust changes but no cargo test run detected in this session. Run cargo test first."
+    # Check if any staged code files match .rs/.ts/.py/.sh
+    STAGED_CODE=$(git diff --cached --name-only 2>/dev/null \
+      | grep -cE '\.(rs|ts|py|sh)$' 2>/dev/null || echo 0)
+    if [ "${STAGED_CODE}" -gt 0 ]; then
+      MARKER="/tmp/.convergio-test-ran"
+      if [ ! -f "${MARKER}" ]; then
+        block "EvidenceGate: committing code files but no test run detected. \
+Run tests (cargo test / npx vitest run / pytest) first."
+      fi
+      # Check staleness: mtime older than 10 minutes
+      if command -v find >/dev/null 2>&1; then
+        FRESH=$(find "${MARKER}" -newer /tmp -mmin -10 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${FRESH}" = "0" ]; then
+          block "EvidenceGate: test marker is older than 10 minutes. \
+Re-run tests before committing."
+        fi
       fi
     fi
   fi

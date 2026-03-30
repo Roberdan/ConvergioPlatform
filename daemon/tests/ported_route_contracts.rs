@@ -6,8 +6,8 @@ use convergio_core::server::routes::{
 
 #[test]
 fn get_route_count_matches_python_port_contract() {
-    // Updated after Plan 756 (fail-loud, voice endpoints, notify refactor)
-    assert_eq!(GET_ROUTES.len(), 98);
+    // Updated after gates plan (task evidence GET endpoints added)
+    assert_eq!(GET_ROUTES.len(), 112);
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn non_get_route_count_matches_python_port_contract() {
             + DELETE_ROUTES.len()
             + SSE_ROUTES.len()
             + WS_ROUTES.len(),
-        101 // Updated after Plan 756 (fail-loud, voice, notify, workspace endpoints)
+        113 // Updated after gates plan (task evidence POST endpoint added)
     );
 }
 
