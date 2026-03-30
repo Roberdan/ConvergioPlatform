@@ -50,8 +50,8 @@ Convergio runs on **your hardware first**. Apple Silicon Macs run local LLMs (Qw
 |---|---|---|---|
 | **Local (MLX on Apple Silicon)** | Qwen 7B, Mistral 7B, Codestral 22B | $0 | Fast tasks, privacy-sensitive, offline |
 | **Local (Ollama on any machine)** | Any GGUF model | $0 | Linux/Windows workers, experimentation |
-| **Cloud (your subscription)** | Claude Opus/Sonnet/Haiku | Subscription | Complex reasoning, architecture, validation |
-| **Cloud (your subscription)** | GPT-5 Codex via Copilot | Subscription | Bulk code generation, mechanical tasks |
+| **Anthropic Claude (your subscription)** | Opus 4.6, Sonnet 4.6, Haiku 4.5 | Subscription | Complex reasoning, architecture, validation |
+| **GitHub Copilot (your subscription)** | GPT-5.3 Codex, GPT-5.1 Codex Mini, GPT-5.4, Claude Sonnet 4.6, Gemini 3 Pro | Subscription | Code generation, deep debugging, large-context research |
 
 The inference router picks the cheapest provider that meets the task tier — and falls back automatically if one is unavailable.
 
