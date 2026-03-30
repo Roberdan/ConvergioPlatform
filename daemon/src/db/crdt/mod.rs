@@ -1,4 +1,5 @@
 mod migration;
+#[cfg_attr(not(feature = "crsqlite"), allow(dead_code))]
 pub(crate) mod migration_helpers;
 mod sync;
 

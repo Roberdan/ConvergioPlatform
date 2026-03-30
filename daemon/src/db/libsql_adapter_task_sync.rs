@@ -3,15 +3,18 @@ use serde_json::Value;
 
 use crate::db::libsql_adapter::SyncChange;
 
+#[allow(dead_code)]
 const AUTHORISED_SYNC_VALIDATORS: &[&str] = &[
     "thor",
     "thor-quality-assurance-guardian",
     "thor-per-wave",
     "forced-admin",
 ];
+#[allow(dead_code)]
 const AUTHORISED_EXECUTOR_STATUSES: &[&str] =
     &["idle", "running", "paused", "completed", "failed"];
 
+#[allow(dead_code)]
 pub(super) fn normalise_task_sync_change(
     conn: &Connection,
     change: &SyncChange,

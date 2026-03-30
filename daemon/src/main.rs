@@ -50,7 +50,6 @@ mod ipc_handler;
 mod main_dispatch;
 mod message_error;
 mod transpiler;
-mod telegram_config;
 
 use clap::Parser;
 use cli_commands::Commands;

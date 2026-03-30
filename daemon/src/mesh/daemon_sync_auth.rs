@@ -7,6 +7,7 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use super::daemon::{publish_event, DaemonState};
 
 /// T1-09: Run challenge-response auth handshake for an outbound connection.
+#[allow(dead_code)]
 pub(super) async fn run_outbound_auth(
     read_half: &mut OwnedReadHalf,
     write_half: &mut OwnedWriteHalf,
@@ -51,6 +52,7 @@ pub(super) async fn run_outbound_auth(
 }
 
 /// T1-09: Run challenge-response auth handshake for an inbound connection.
+#[allow(dead_code)]
 pub(super) async fn run_inbound_auth(
     read_half: &mut OwnedReadHalf,
     write_half: &mut OwnedWriteHalf,
