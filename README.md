@@ -122,8 +122,8 @@ graph TB
 
     %% ── Mesh Network ─────────────────────────────
     subgraph MESH["Mesh Network — Tailscale P2P"]
-        M5["M5Max<br><small>Coordinator<br>100.89.245.79</small>"]
-        M1["M1 Pro<br><small>Kernel node<br>100.106.173.118</small>"]
+        M5["Mac Studio<br><small>Coordinator<br>100.x.x.x</small>"]
+        M1["MacBook Pro<br><small>Kernel node<br>100.y.y.y</small>"]
         FUTURE["Future nodes<br><small>worker role</small>"]
     end
 
@@ -242,7 +242,7 @@ graph TB
 | **Sessions** | No inter-session communication | Named sessions + IPC send-direct |
 | **Validation** | Inline in API handler | Thor as durable service with queue + verdicts |
 | **Autonomy** | All tasks need human approval | Risk-based policy: LOW auto-progress, HIGH gated |
-| **Nightly** | Manual maintenance | Auto cleanup + eval + optimize (launchd M1 Pro) |
+| **Nightly** | Manual maintenance | Auto cleanup + eval + optimize (launchd on kernel node) |
 | **Dead code** | 6 unwired modules, 2 orphaned endpoints | All wired or deleted |
 
 ### Layer Summary
@@ -336,8 +336,8 @@ graph TB
     end
 
     subgraph NODES["Example Topology"]
-        N1["macOS M5 Max<br><small>coordinator + executor</small>"]
-        N2["macOS M1 Pro<br><small>kernel + executor</small>"]
+        N1["macOS (Apple Silicon)<br><small>coordinator + executor</small>"]
+        N2["macOS (Apple Silicon)<br><small>kernel + executor</small>"]
         N3["Linux server<br><small>worker</small>"]
         N4["macOS M4 Mini<br><small>worker</small>"]
         N5["Windows PC<br><small>worker (WSL2)</small>"]
@@ -429,7 +429,7 @@ The coordinator can delegate any plan or individual task to any node in the mesh
 
 ```bash
 # Delegate a full plan to a remote node
-cvg plan delegate 10022 --node m1pro
+cvg plan delegate 10022 --node kernel-node
 
 # Delegate a single task to the best available executor
 cvg task delegate 9678 --auto       # picks node by health + capacity
@@ -470,7 +470,7 @@ cvg node readiness         # 10-point health check
 
 ## Kernel
 
-The kernel runs Qwen 2.5 7B locally on Apple Silicon (M1 Pro), providing:
+The kernel runs Qwen 2.5 7B locally on Apple Silicon, providing:
 
 - **Monitor loop** (30s) — health checks, stall detection, rate limit tracking
 - **Verify gate** — blocks task completion without evidence
@@ -527,8 +527,8 @@ cd evolution && npx vitest run       # evolution tests
 ### Deploy to mesh node
 
 ```bash
-scripts/mesh/deploy-node.sh roberdandev-m1Pro --kernel   # full provision
-scripts/kernel/sync-db.sh roberdandev-m1Pro              # sync database
+scripts/mesh/deploy-node.sh <node-hostname> --kernel   # full provision
+scripts/kernel/sync-db.sh <node-hostname>              # sync database
 ```
 
 ### Node readiness
