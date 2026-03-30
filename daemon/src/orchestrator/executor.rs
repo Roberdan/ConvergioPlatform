@@ -1,5 +1,5 @@
 // Executor — launches claude on a peer via rsync + tmux.
-// Sync model: rsync for working files, CRDT for DB state, git push only for finished commits.
+// Sync model: rsync for working files, HTTP LWW for DB state, git push only for finished commits.
 // NEVER use git push/pull between peers — rsync preserves uncommitted work.
 // Delegates prompt/script building to delegation_core (shared with SSE delegate + CLI).
 

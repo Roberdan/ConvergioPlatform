@@ -1,5 +1,5 @@
-/// DEPRECATED v20: HTTP LWW sync disabled. CRDT over TCP (port 9420) is the
-/// sole replication path. Retained for fallback — do NOT spawn in production.
+// HTTP LWW sync loop: timestamp-based peer replication over Tailscale.
+// CRDT (crsqlite) is an optional enhancement; this is the primary replication path.
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
