@@ -3,6 +3,7 @@ mod handlers;
 mod handlers_ext;
 mod handlers_ext2;
 mod routes;
+mod sse_stream;
 
 use super::state::ServerState;
 use axum::routing::{get, post};
@@ -139,6 +140,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/ipc/worktrees", get(handlers::api_ipc_worktrees))
         .route("/api/ipc/conflicts", get(handlers::api_ipc_conflicts))
         .route("/api/ipc/status", get(handlers::api_ipc_status))
+        .route("/api/ipc/stream", get(sse_stream::api_ipc_stream))
         .route("/api/ipc/send", post(handlers::api_ipc_send))
         .route("/api/ipc/send-direct", post(handlers::api_ipc_send_direct))
         // Plan 668: Agent write endpoints
