@@ -13,8 +13,10 @@ use crate::mcp_server::protocol::{error_codes, JsonRpcRequest, JsonRpcResponse};
 use crate::mcp_server::security::check_ring_access;
 use crate::mcp_server::tools::list_tools;
 
+pub mod agent_chat;
 pub mod handlers;
 pub mod invoke_agent;
+pub mod plan_tools;
 pub mod protocol;
 pub mod security;
 pub mod tool_catalog;
@@ -176,6 +178,8 @@ fn min_ring_for_tool(name: &str) -> Ring {
         // Trusted (Ring 1)
         "cvg_update_task"
         | "cvg_checkpoint_save"
+        | "cvg_agent_send"
+        | "cvg_agent_ask"
         | "cvg_agent_start"
         | "cvg_agent_complete"
         | "cvg_kernel_ask"
@@ -184,10 +188,7 @@ fn min_ring_for_tool(name: &str) -> Ring {
         // Sandboxed (Ring 3) — accessible to all callers
         "cvg_list_plans" | "cvg_list_agents" => Ring::Sandboxed,
         // Community read-only (Ring 2)
-        "cvg_get_plan"
-        | "cvg_mesh_status"
-        | "cvg_node_readiness"
-        | "cvg_cost_summary"
+        "cvg_get_plan" | "cvg_mesh_status" | "cvg_node_readiness" | "cvg_cost_summary"
         | "cvg_kernel_status" => Ring::Community,
         // Unknown — default fail-safe to Core
         _ => Ring::Core,
