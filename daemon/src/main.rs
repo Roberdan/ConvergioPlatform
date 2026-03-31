@@ -26,6 +26,7 @@ mod cli_launch;
 mod cli_lock;
 mod cli_memory;
 mod cli_ops;
+mod cli_org;
 mod cli_plan;
 mod cli_plan_handlers;
 mod cli_plan_template;

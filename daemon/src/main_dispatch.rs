@@ -1,7 +1,7 @@
 use crate::cli_commands::Commands;
 use crate::{
     cli_agent_format, cli_audit, cli_audit_project, cli_bus, cli_checkpoint, cli_delegation,
-    cli_domain,
+    cli_domain, cli_org,
     cli_error::CliError,
     cli_capability, cli_channel, cli_chat, cli_kb, cli_kernel, cli_launch, cli_lock, cli_memory, cli_ops, cli_status, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
     cli_skill, cli_task, cli_wave, cli_who, cli_workspace,
@@ -214,6 +214,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
             ExitCode::SUCCESS
         }
         Commands::Domain { command } => exit_on_err(cli_domain::dispatch(command).await),
+        Commands::Org { command } => exit_on_err(cli_org::handle(command).await),
         Commands::Workspace { command } => {
             cli_workspace::handle(command).await;
             ExitCode::SUCCESS
