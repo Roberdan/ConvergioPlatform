@@ -107,6 +107,19 @@ pub(crate) async fn dispatch(cmd: AgentCommands) -> Result<(), CliError> {
             crate::cli_http::post_and_print(&format!("{api_url}/api/agents/triage"), &body, human)
                 .await?;
         }
+        AgentCommands::History {
+            since,
+            until,
+            status,
+            model,
+            limit,
+            api_url,
+        } => {
+            crate::cli_agent_history::handle_history(
+                &api_url, since, until, status, model, limit,
+            )
+            .await?;
+        }
         AgentCommands::Create {
             name,
             category,

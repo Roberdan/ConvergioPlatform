@@ -33,6 +33,7 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/peers/discover",
     "/api/agents",
     "/api/agents/catalog",
+    "/api/agents/history",
     "/api/sessions",
     "/api/chat/models",
     "/api/chat/sessions",

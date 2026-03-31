@@ -4,6 +4,10 @@
 
 use clap::Subcommand;
 
+// Re-export for tests that use `super::*`
+#[cfg(test)]
+pub use crate::cli_task_format::print_mechanical_human;
+
 #[derive(Debug, Subcommand)]
 pub enum TaskCommands {
     /// Update a task status
@@ -134,7 +138,7 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
                 crate::cli_error::CliError::ApiCallFailed(format!("error parsing response: {e}"))
             })?;
             if human {
-                print_mechanical_human(&val);
+                crate::cli_task_format::print_mechanical_human(&val);
             } else {
                 println!("{val}");
             }
@@ -207,53 +211,6 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
         }
     }
     Ok(())
-}
-
-/// Human-readable output for mechanical gate validation results.
-fn print_mechanical_human(val: &serde_json::Value) {
-    let mechanical = match val.get("mechanical") {
-        Some(m) => m,
-        None => {
-            println!("{}", serde_json::to_string_pretty(val).unwrap_or_default());
-            return;
-        }
-    };
-
-    let status = mechanical
-        .get("status")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("UNKNOWN");
-    let note = mechanical
-        .get("note")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("");
-
-    println!("Mechanical Validation: {status}");
-    println!();
-
-    if let Some(gates) = mechanical.get("gates").and_then(|g| g.as_array()) {
-        for gate in gates {
-            let name = gate.get("gate").and_then(|g| g.as_str()).unwrap_or("?");
-            let passed = gate
-                .get("passed")
-                .and_then(|p| p.as_bool())
-                .unwrap_or(false);
-            let icon = if passed { "PASS" } else { "FAIL" };
-            println!("  [{icon}] {name}");
-            if let Some(details) = gate.get("details").and_then(|d| d.as_array()) {
-                for d in details {
-                    if let Some(s) = d.as_str() {
-                        println!("         {s}");
-                    }
-                }
-            }
-        }
-    }
-
-    if !note.is_empty() {
-        println!();
-        println!("{note}");
-    }
 }
 
 #[cfg(test)]

@@ -10,10 +10,11 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 const AGENT_ACTIVITY_SCHEMA: &str =
-    "CREATE TABLE IF NOT EXISTS agent_activity (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT NOT NULL, task_db_id INTEGER, plan_id INTEGER, agent_type TEXT NOT NULL, model TEXT, description TEXT, status TEXT NOT NULL DEFAULT 'running', tokens_in INTEGER DEFAULT 0, tokens_out INTEGER DEFAULT 0, tokens_total INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, started_at TEXT NOT NULL DEFAULT (datetime('now')), completed_at TEXT, duration_s REAL, host TEXT, region TEXT, metadata TEXT, parent_session TEXT)";
+    "CREATE TABLE IF NOT EXISTS agent_activity (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT NOT NULL, task_db_id INTEGER, plan_id INTEGER, agent_type TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'unknown', model TEXT, description TEXT, status TEXT NOT NULL DEFAULT 'running', tokens_in INTEGER DEFAULT 0, tokens_out INTEGER DEFAULT 0, tokens_total INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, started_at TEXT NOT NULL DEFAULT (datetime('now')), completed_at TEXT, duration_s REAL, host TEXT, region TEXT, metadata TEXT, parent_session TEXT, exit_reason TEXT)";
 
 const AGENT_ACTIVITY_COLUMNS: &[(&str, &str)] = &[
     ("agent_type", "TEXT NOT NULL DEFAULT 'legacy'"),
+    ("action", "TEXT NOT NULL DEFAULT 'unknown'"),
     ("model", "TEXT"),
     ("description", "TEXT"),
     ("status", "TEXT NOT NULL DEFAULT 'completed'"),
@@ -28,6 +29,7 @@ const AGENT_ACTIVITY_COLUMNS: &[(&str, &str)] = &[
     ("region", "TEXT"),
     ("metadata", "TEXT"),
     ("parent_session", "TEXT"),
+    ("exit_reason", "TEXT"),
 ];
 
 fn table_columns(conn: &Connection, table: &str) -> Result<HashSet<String>, ApiError> {

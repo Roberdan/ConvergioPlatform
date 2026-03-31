@@ -61,14 +61,23 @@ fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
-# Check if binary exists
-if [ -f target/release/convergio-platform-daemon ]; then
+# Build isolation: prefer installed binary at ~/.convergio/bin/ so that
+# cargo check/build hooks in worktrees don't lock target/ and crash the
+# running daemon. Install via: scripts/platform/daemon-install.sh
+INSTALLED_BIN="$HOME/.convergio/bin/convergio-platform-daemon"
+
+if [ -f "$INSTALLED_BIN" ]; then
+  "$INSTALLED_BIN" "$@"
+elif [ -f target/release/convergio-platform-daemon ]; then
+  echo "WARN: Running from target/release/ — cargo builds may crash this process." >&2
+  echo "WARN: Run scripts/platform/daemon-install.sh to install to ~/.convergio/bin/" >&2
   ./target/release/convergio-platform-daemon "$@"
 elif [ -f target/debug/convergio-platform-daemon ]; then
-  echo "WARN: Using debug build"
+  echo "WARN: Using debug build from target/ — not isolated from cargo locks" >&2
   ./target/debug/convergio-platform-daemon "$@"
 else
   echo "Building daemon..."
   cargo build --release
+  echo "WARN: Run scripts/platform/daemon-install.sh to install the binary" >&2
   ./target/release/convergio-platform-daemon "$@"
 fi

@@ -2,6 +2,7 @@ mod daemon_logging;
 
 mod cli_agent;
 mod cli_agent_format;
+mod cli_agent_history;
 mod cli_capability;
 mod cli_channel;
 mod cli_chat;
@@ -45,6 +46,7 @@ mod cli_skill_validate;
 mod cli_skill_validators;
 mod cli_task;
 mod cli_task_approve;
+mod cli_task_format;
 mod cli_wave;
 mod cli_wave_handlers;
 mod cli_reap;

@@ -119,6 +119,27 @@ pub enum AgentCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Show agent activity history (completed/failed sessions)
+    History {
+        /// ISO datetime lower bound (default: 7 days ago)
+        #[arg(long)]
+        since: Option<String>,
+        /// ISO datetime upper bound
+        #[arg(long)]
+        until: Option<String>,
+        /// Filter by status (completed, failed, running)
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by model name
+        #[arg(long)]
+        model: Option<String>,
+        /// Max rows (default 20, max 500)
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
     /// Create a new agent in the catalog
     Create {
         /// Agent name

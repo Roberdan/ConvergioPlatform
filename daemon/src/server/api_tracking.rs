@@ -15,9 +15,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// POST /api/tracking/tokens — insert a token_usage row.
-/// Body: {agent, model, input_tokens, output_tokens, cost_usd,
-///        project_id?, plan_id?, wave_id?, task_id?, execution_host?}
-    #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 async fn handle_tokens(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -85,7 +83,7 @@ async fn handle_tokens(
 }
 
 /// POST /api/tracking/agent-activity — upsert agent_activity row by agent_id.
-    #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 async fn handle_agent_activity(
     State(state): State<ServerState>,
     Json(body): Json<Value>,
@@ -119,14 +117,15 @@ async fn handle_agent_activity(
     let duration_s = body.get("duration_s").and_then(Value::as_f64);
     let host = body.get("host").and_then(Value::as_str);
     let metadata = body.get("metadata").and_then(Value::as_str);
+    let exit_reason = body.get("exit_reason").and_then(Value::as_str);
 
     let conn = state.get_conn()?;
     conn.execute(
         "INSERT INTO agent_activity \
          (agent_id, action, status, plan_id, task_db_id, model, description, \
           tokens_in, tokens_out, tokens_total, cost_usd, \
-          started_at, completed_at, duration_s, host, metadata) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) \
+          started_at, completed_at, duration_s, host, metadata, exit_reason) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17) \
          ON CONFLICT(agent_id) DO UPDATE SET \
              action      = excluded.action, \
              status      = excluded.status, \
@@ -142,7 +141,8 @@ async fn handle_agent_activity(
              completed_at= COALESCE(excluded.completed_at, agent_activity.completed_at), \
              duration_s  = COALESCE(excluded.duration_s, agent_activity.duration_s), \
              host        = COALESCE(excluded.host, agent_activity.host), \
-             metadata    = COALESCE(excluded.metadata, agent_activity.metadata)",
+             metadata    = COALESCE(excluded.metadata, agent_activity.metadata), \
+             exit_reason = COALESCE(excluded.exit_reason, agent_activity.exit_reason)",
         rusqlite::params![
             agent_id,
             action,
@@ -159,7 +159,8 @@ async fn handle_agent_activity(
             completed_at,
             duration_s,
             host,
-            metadata
+            metadata,
+            exit_reason
         ],
     )
     .map_err(|e| ApiError::internal(format!("agent_activity upsert failed: {e}")))?;
