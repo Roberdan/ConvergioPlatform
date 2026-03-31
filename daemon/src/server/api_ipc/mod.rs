@@ -1,5 +1,6 @@
 // api_ipc: IPC coordination and intelligence endpoints
 mod handlers;
+mod handlers_ask;
 mod handlers_ext;
 mod handlers_ext2;
 mod routes;
@@ -143,6 +144,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/ipc/stream", get(sse_stream::api_ipc_stream))
         .route("/api/ipc/send", post(handlers::api_ipc_send))
         .route("/api/ipc/send-direct", post(handlers::api_ipc_send_direct))
+        .route("/api/ipc/ask", post(handlers_ask::api_ipc_ask))
         // Plan 668: Agent write endpoints
         .route(
             "/api/ipc/agents/register",

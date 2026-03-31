@@ -145,6 +145,7 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/plans/:plan_id/validate",
     "/api/optimize/clear",
     "/api/ipc/send",
+    "/api/ipc/ask",
     "/api/plan-db/task/update",
     "/api/plan-db/task/evidence",
     "/api/plan-db/agent/start",

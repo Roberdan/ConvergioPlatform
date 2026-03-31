@@ -62,6 +62,21 @@ pub enum BusCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Ask an agent and wait for a direct reply
+    Ask {
+        /// Sender agent name
+        from: String,
+        /// Recipient agent name
+        to: String,
+        /// Message content
+        message: String,
+        /// Timeout in seconds
+        #[arg(long, default_value_t = 120)]
+        timeout: u64,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: BusCommands) {
@@ -121,6 +136,15 @@ pub async fn handle(cmd: BusCommands) {
             if let Err(e) = crate::cli_bus_watch::run_watch(&name, &api_url).await {
                 eprintln!("error: {e}");
             }
+        }
+        BusCommands::Ask {
+            from,
+            to,
+            message,
+            timeout,
+            api_url,
+        } => {
+            crate::cli_bus_ask::run_ask(&from, &to, &message, timeout, &api_url).await;
         }
     }
 }
