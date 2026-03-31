@@ -13,6 +13,7 @@ mod cli_api_list;
 mod cli_audit;
 mod cli_audit_project;
 mod cli_bus;
+mod cli_bus_org;
 mod cli_bus_ask;
 mod cli_bus_watch;
 mod cli_checkpoint;
