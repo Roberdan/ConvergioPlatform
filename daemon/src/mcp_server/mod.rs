@@ -18,6 +18,7 @@ pub mod agent_factory;
 pub mod handlers;
 pub mod invoke_agent;
 pub mod plan_tools;
+pub mod platform_tools;
 pub mod protocol;
 pub mod security;
 pub mod tool_catalog;
@@ -187,12 +188,19 @@ fn min_ring_for_tool(name: &str) -> Ring {
         | "cvg_create_agent"
         | "cvg_kernel_ask"
         | "cvg_notify"
-        | "cvg_invoke_agent" => Ring::Trusted,
+        | "cvg_invoke_agent"
+        | "cvg_create_plan"
+        | "cvg_start_plan"
+        | "cvg_create_task"
+        | "cvg_record_validation"
+        | "cvg_quality_gate" => Ring::Trusted,
         // Sandboxed (Ring 3) — accessible to all callers
         "cvg_list_plans" | "cvg_list_agents" => Ring::Sandboxed,
         // Community read-only (Ring 2)
         "cvg_get_plan" | "cvg_mesh_status" | "cvg_node_readiness" | "cvg_cost_summary"
-        | "cvg_kernel_status" => Ring::Community,
+        | "cvg_kernel_status" | "cvg_health_deep" | "cvg_list_workspaces"
+        | "cvg_remember" | "cvg_recall" | "cvg_budget" | "cvg_agent_catalog"
+        | "cvg_list_messages" => Ring::Community,
         // Unknown — default fail-safe to Core
         _ => Ring::Core,
     }
