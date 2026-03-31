@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Brain Network</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121a30;--text:#e8edff;--muted:#98a4c9;--o1:#5a8bff;--o2:#48dcb0;--o3:#ffad5a;--o4:#da78ff}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 "Inter",system-ui}
+    header{padding:12px 16px;background:var(--panel);border-bottom:1px solid #273259}
+    #meta{color:var(--muted)} canvas{display:block;width:100vw;height:calc(100vh - 52px)}
+  </style>
+</head>
+<body>
+  <header><strong>Vista 1 · Brain Network</strong> <span id="meta">0 agents · ws: connecting…</span></header>
+  <canvas id="network"></canvas>
+  <script>
+    const c=document.getElementById('network'),x=c.getContext('2d'),meta=document.getElementById('meta');
+    const nodes=new Map(),edges=new Map(),particles=[]; let W=0,H=0,t=0;
+    const orgColor=o=>[...['--o1','--o2','--o3','--o4']][(o||'').split('').reduce((a,b)=>a+b.charCodeAt(0),0)%4];
+    const key=(a,b)=>`${a}>${b}`;
+    const fit=()=>{W=c.width=innerWidth*devicePixelRatio;H=c.height=(innerHeight-52)*devicePixelRatio}; addEventListener('resize',fit); fit();
+    const node=(id,org='core')=>nodes.get(id)||nodes.set(id,{id,org,v:1,s:0,x:Math.random()*W,y:Math.random()*H,vx:0,vy:0,birth:performance.now()}).get(id);
+    const link=(a,b,vol=1)=>{const k=key(a,b),e=edges.get(k)||{a,b,w:1};e.w=Math.min(12,e.w+vol);edges.set(k,e)};
+    const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/brain');
+    ws.onopen=()=>meta.textContent=`${nodes.size} agents · ws: connected · /ws/brain`;
+    ws.onclose=()=>meta.textContent=`${nodes.size} agents · ws: closed`;
+    ws.onmessage=e=>{
+      const m=JSON.parse(e.data||'{}'),type=m.type||m.event||'message';
+      if(type==='agent_factory'){const a=node(m.agent_id||m.id||`a-${Date.now()}`,m.org_id||'new');a.s=26;}
+      if(type==='org_message'||type==='message'){const f=node(m.from||m.source||'unknown',m.org_id),to=node(m.to||m.target||'unknown',m.target_org_id||m.org_id);f.v++;to.v++;link(f.id,to.id,m.volume||1);particles.push({a:f.id,b:to.id,p:0,spd:.012+Math.random()*.02});}
+      if(type==='org_topology'&&Array.isArray(m.orgs)){for(const o of m.orgs){for(const a of (o.agents||[]))node(a.id||a.name,o.id);} for(const l of (m.links||[])){node(l.from,l.from_org);node(l.to,l.to_org);link(l.from,l.to,l.volume||1);}}
+      meta.textContent=`${nodes.size} agents · ws: live`;
+    };
+    const tick=()=>{
+      t++; x.clearRect(0,0,W,H); const arr=[...nodes.values()];
+      for(const n of arr){const cx=(.2+((n.org||'').charCodeAt(0)%5)/6)*W,cy=H*(.25+((n.org||'').length%5)/8); n.vx+=(cx-n.x)*.00006; n.vy+=(cy-n.y)*.00006; n.vx*=.96; n.vy*=.96; n.x+=n.vx; n.y+=n.vy;}
+      for(const e of edges.values()){const a=nodes.get(e.a),b=nodes.get(e.b); if(!a||!b)continue; const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1,f=(d-140)*.00008; a.vx+=dx*f;b.vx-=dx*f;a.vy+=dy*f;b.vy-=dy*f; x.strokeStyle='rgba(140,170,255,.25)'; x.lineWidth=Math.min(6,e.w*.6)*devicePixelRatio; x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}
+      for(let i=particles.length-1;i>=0;i--){const p=particles[i],a=nodes.get(p.a),b=nodes.get(p.b); if(!a||!b){particles.splice(i,1);continue;} p.p+=p.spd; if(p.p>=1){particles.splice(i,1);continue;} const px=a.x+(b.x-a.x)*p.p,py=a.y+(b.y-a.y)*p.p; x.fillStyle='#ffffff'; x.beginPath();x.arc(px,py,2.2*devicePixelRatio,0,7);x.fill();}
+      for(const n of arr){const r=(5+Math.min(18,n.v))*devicePixelRatio,g=Math.max(0,1-(performance.now()-n.birth)/1200); x.fillStyle=getComputedStyle(document.documentElement).getPropertyValue(orgColor(n.org)); x.beginPath();x.arc(n.x,n.y,r+n.s,0,7);x.fill(); if(g>0){x.strokeStyle=`rgba(255,255,255,${g})`;x.lineWidth=2*devicePixelRatio;x.beginPath();x.arc(n.x,n.y,r+n.s+8,0,7);x.stroke();} n.s*=.9;}
+      requestAnimationFrame(tick);
+    }; tick();
+  </script>
+</body>
+</html>
