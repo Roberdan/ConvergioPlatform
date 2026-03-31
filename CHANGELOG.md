@@ -1,5 +1,29 @@
 # Changelog
 
+## [20.3.0] - 01 Aprile 2026
+
+### Added
+- `GET /api/agents/history` — filtered agent activity with since/until/status/model/limit params
+- `cvg agent history` CLI — table-formatted agent execution history (last 7 days default)
+- `scripts/platform/daemon-install.sh` — installs daemon binary to `~/.convergio/bin/`
+- `exit_reason` column in `agent_activity` table for post-mortem analysis
+- Build isolation: worktree `cargo check` uses separate `CARGO_TARGET_DIR`
+
+### Changed
+- Agent activity retention expanded from 1 hour to 30 days
+- Copilot worker default timeout: 600s → 1200s
+- Agent reaper stale threshold: 30min → 60min (avoids false reaps on long tasks)
+- Context budget: 2000 → 4000 tokens (30% of subagents were exhausting budget)
+- `daemon/start.sh` prefers installed binary from `~/.convergio/bin/`
+
+### Fixed
+- Daemon no longer crashes when worktree `cargo check` locks `target/` directory
+- MCP agent_complete handler field name mismatch (`name` → `agent_id`)
+- `exit_reason` UPDATE uses COALESCE to avoid overwriting with NULL
+- ISO datetime T-separator parsing in agent history queries
+- Constitution violations: split 3 files over 250 lines (cli_task, api_ipc/mod, background_sync)
+- MCP tool count test assertions updated (19→31 for Ring 1, 21→33 for Ring 0)
+
 ## [20.2.0] - 31 Marzo 2026
 
 ### Added
