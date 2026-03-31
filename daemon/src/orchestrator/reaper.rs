@@ -2,16 +2,18 @@
 // Runs as periodic background task alongside Ali. Also cleans mesh peer tmp files.
 use std::path::Path;
 
-const STALE_AGENT_MINUTES: i64 = 30;
+// 60 min: agents on complex tasks often idle 30+ min while waiting for
+// LLM responses or mesh delegation round-trips. 30 min caused false reaps.
+const STALE_AGENT_MINUTES: i64 = 60;
 const STALE_DELEGATION_HOURS: i64 = 24;
 const DAEMON_BASE: &str = "http://localhost:8420";
 
-/// Reap stale agents (not seen for 30 min), dead delegations, orphan sessions.
+/// Reap stale agents (not seen for 60 min), dead delegations, orphan sessions.
 /// Returns (agents_reaped, delegations_cleaned, sessions_cleaned).
 pub fn reap(db_path: &Path) -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
     let conn = rusqlite::Connection::open(db_path)?;
 
-    // 1. Stale agents: registered but no heartbeat in 30 min
+    // 1. Stale agents: registered but no heartbeat in 60 min
     let agents_reaped = conn.execute(
         "DELETE FROM ipc_agents WHERE last_seen < datetime('now', ?1)",
         rusqlite::params![format!("-{STALE_AGENT_MINUTES} minutes")],
@@ -151,7 +153,9 @@ pub fn spawn_reaper(db_path: std::path::PathBuf) {
                 }
                 Err(e) => tracing::warn!("reaper error: {e}"),
             }
-            // Kill orphan copilot/claude processes older than 2 hours
+            // Kill orphan copilot/claude processes older than 2 hours.
+            // 2h is intentionally longer than STALE_AGENT_MINUTES: process kill
+            // is destructive and should only target truly abandoned processes.
             let killed = reap_orphan_copilot_processes(std::time::Duration::from_secs(7200));
             if killed > 0 {
                 tracing::info!("reaper: killed {killed} orphan copilot processes");

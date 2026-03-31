@@ -2,7 +2,9 @@
 # Shared JSON protocol for worker communication.
 command -v jq &>/dev/null || { echo "ERROR: jq required" >&2; exit 1; }
 
-AGENT_PROTOCOL_CONTEXT_BUDGET="${AGENT_PROTOCOL_CONTEXT_BUDGET:-2000}"
+# 4000 tokens: plans with many wave siblings and prior outputs regularly
+# exceeded 2000, causing context truncation that dropped project rules.
+AGENT_PROTOCOL_CONTEXT_BUDGET="${AGENT_PROTOCOL_CONTEXT_BUDGET:-4000}"
 DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 _ap_tokens() { local p="${1-}"; [[ -n "$p" ]] || p='{}'; printf '%s' "$p" | python3 -c 'import sys,math; print(max(0,math.ceil(len(sys.stdin.read())/4)))'; }

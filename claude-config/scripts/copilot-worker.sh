@@ -14,6 +14,17 @@ command -v jq &>/dev/null || { echo '{"error":"jq required"}' >&2; exit 1; }
 # PATH hardening: ensure copilot CLI is findable in non-login SSH shells
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:$HOME/.claude/scripts:$PATH"
 
+# Worktree build isolation: use a separate CARGO_TARGET_DIR so cargo
+# check/build hooks don't lock the main repo's target/ directory, which
+# would crash the running daemon binary loaded from there.
+if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; then
+	_wt_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+	_main_wt="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)"
+	if [ -n "$_main_wt" ] && [ "$_wt_root" != "$_main_wt" ]; then
+		export CARGO_TARGET_DIR="/tmp/convergio-target-$(basename "$_wt_root")"
+	fi
+fi
+
 # Cleanup temp files AND child processes on exit
 _WORKER_TMPFILES=()
 _WORKER_CHILD_PIDS=()
@@ -87,7 +98,9 @@ shift || true
 
 # Defaults — Opus 4.6 for reliable execution (was gpt-5.3-codex)
 MODEL="claude-opus-4-6"
-TIMEOUT=600
+# 1200s default: complex multi-file tasks regularly exceed 600s, especially
+# on first attempt when the agent must read context, plan, and execute.
+TIMEOUT=1200
 MAX_RETRIES=3
 RETRY_DELAYS=(5 15 30) # Exponential backoff: 5s, 15s, 30s
 AGENT_ROLE="executor"

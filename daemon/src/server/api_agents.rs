@@ -68,7 +68,7 @@ async fn api_agents(State(state): State<ServerState>) -> Result<Json<Value>, Api
     .unwrap_or_default();
     let recent = query_rows(
         &conn,
-        "SELECT agent_id, status, duration_s, tokens_total, cost_usd, agent_type AS type, model, completed_at, parent_session, description FROM agent_activity WHERE status IN ('completed','failed') AND completed_at >= datetime('now', '-1 hour') ORDER BY completed_at DESC LIMIT 20",
+        "SELECT agent_id, status, duration_s, tokens_total, cost_usd, agent_type AS type, model, completed_at, parent_session, description FROM agent_activity WHERE status IN ('completed','failed') AND completed_at >= datetime('now', '-30 days') ORDER BY completed_at DESC LIMIT 20",
         [],
     )
     .unwrap_or_default();
@@ -121,7 +121,7 @@ async fn api_brain(State(state): State<ServerState>) -> Result<Json<Value>, ApiE
     // Recent completed agents (last hour)
     let recent = query_rows(
         &conn,
-        "SELECT agent_id, agent_type AS type, model, description, parent_session, status, tokens_total, cost_usd, duration_s, completed_at FROM agent_activity WHERE status IN ('completed','failed') AND completed_at >= datetime('now', '-1 hour') ORDER BY completed_at DESC LIMIT 30",
+        "SELECT agent_id, agent_type AS type, model, description, parent_session, status, tokens_total, cost_usd, duration_s, completed_at FROM agent_activity WHERE status IN ('completed','failed') AND completed_at >= datetime('now', '-30 days') ORDER BY completed_at DESC LIMIT 30",
         [],
     ).unwrap_or_default();
 

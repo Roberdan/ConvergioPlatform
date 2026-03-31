@@ -7,6 +7,7 @@ mod api_plan_db_evidence;
 mod api_plan_db_gates;
 pub mod api_plan_db_task_evidence;
 pub mod api_agent_triage;
+pub mod api_agent_history;
 pub mod api_agents;
 pub mod api_build_exec;
 pub mod api_audit;

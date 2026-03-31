@@ -5,7 +5,6 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use crate::mcp_server::agent_chat::{handle_agent_ask, handle_agent_send};
 use crate::mcp_server::security::McpError;
-// ── HTTP helpers ──────────────────────────────────────────────────────────────
 fn make_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -39,8 +38,6 @@ fn http_post(url: &str, token: Option<&str>, body: &Value) -> Result<Value, McpE
     resp.json::<Value>().map_err(|e| McpError::DaemonError(e.to_string()))
 }
 
-// ── Tool handlers ─────────────────────────────────────────────────────────────
-
 /// Dispatch a tool call by name. Returns JSON result or McpError.
 pub fn handle_tool_call(
     name: &str,
@@ -73,8 +70,6 @@ pub fn handle_tool_call(
         other => crate::mcp_server::platform_tools::handle_platform_tool(other, daemon_url, token, args),
     }
 }
-
-// ── Plans ─────────────────────────────────────────────────────────────────────
 
 fn list_plans(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Value, McpError> {
     let url = format!("{daemon_url}/api/plan-db/list");
@@ -130,8 +125,6 @@ fn checkpoint_save(daemon_url: &str, token: Option<&str>, args: &Value) -> Resul
     http_post(&url, token, &json!({"plan_id": plan_id}))
 }
 
-// ── Agents ────────────────────────────────────────────────────────────────────
-
 fn list_agents(daemon_url: &str, token: Option<&str>) -> Result<Value, McpError> {
     let url = format!("{daemon_url}/api/ipc/agents");
     http_get(&url, token)
@@ -156,10 +149,12 @@ fn agent_complete(daemon_url: &str, token: Option<&str>, args: &Value) -> Result
         .and_then(|v| v.as_str())
         .ok_or(McpError::InvalidParams("name is required"))?;
     let url = format!("{daemon_url}/api/plan-db/agent/complete");
-    http_post(&url, token, &json!({"name": name}))
+    let mut payload = json!({"name": name});
+    if let Some(reason) = args.get("exit_reason").and_then(|v| v.as_str()) {
+        payload["exit_reason"] = json!(reason);
+    }
+    http_post(&url, token, &payload)
 }
-
-// ── Mesh ──────────────────────────────────────────────────────────────────────
 
 fn mesh_status(daemon_url: &str, token: Option<&str>) -> Result<Value, McpError> {
     let url = format!("{daemon_url}/api/mesh");
@@ -170,8 +165,6 @@ fn node_readiness(daemon_url: &str, token: Option<&str>) -> Result<Value, McpErr
     let url = format!("{daemon_url}/api/node/readiness");
     http_get(&url, token)
 }
-
-// ── Metrics ───────────────────────────────────────────────────────────────────
 
 fn cost_summary(daemon_url: &str, token: Option<&str>) -> Result<Value, McpError> {
     let url = format!("{daemon_url}/api/plan-db/list");
@@ -199,8 +192,6 @@ fn cost_summary(daemon_url: &str, token: Option<&str>) -> Result<Value, McpError
     }))
 }
 
-// ── Kernel ────────────────────────────────────────────────────────────────────
-
 fn kernel_status(daemon_url: &str, token: Option<&str>) -> Result<Value, McpError> {
     let url = format!("{daemon_url}/api/kernel/status");
     http_get(&url, token)
@@ -214,8 +205,6 @@ fn kernel_ask(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Val
     let url = format!("{daemon_url}/api/kernel/ask");
     http_post(&url, token, &json!({"prompt": prompt}))
 }
-
-// ── Actions ───────────────────────────────────────────────────────────────────
 
 fn notify(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Value, McpError> {
     let message = args

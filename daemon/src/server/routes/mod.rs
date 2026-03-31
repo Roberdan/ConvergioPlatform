@@ -6,7 +6,7 @@ pub mod rate_limiter;
 pub use api_routes::{DELETE_ROUTES, GET_ROUTES, POST_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};
 
 use super::{
-    api_agent_catalog, api_agent_control, api_agent_profiles, api_agent_triage, api_agents,
+    api_agent_catalog, api_agent_control, api_agent_history, api_agent_profiles, api_agent_triage, api_agents,
     api_audit, api_budget, api_build_exec, api_capabilities, api_channels, api_chat,
     api_coordinator, api_crdt, api_dashboard, api_decisions, api_delegation, api_deliverables,
     api_digest, api_domain, api_evolution, api_github, api_goal, api_health_deep,
@@ -73,6 +73,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_plans::router())
         .merge(api_agent_catalog::router())
         .merge(api_agent_triage::router())
+        .merge(api_agent_history::router())
         .merge(api_agents::router())
         .merge(api_agent_profiles::router())
         .merge(api_mesh::router())
