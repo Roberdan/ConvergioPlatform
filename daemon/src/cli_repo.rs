@@ -124,7 +124,10 @@ async fn handle_list(as_json: bool, api_url: &str) -> Result<(), CliError> {
         println!("No repositories registered.");
         return Ok(());
     }
-    println!("{:<30} {:<12} {:<12} {}", "NAME", "TRANSPORT", "HEALTH", "PATH");
+    println!(
+        "{:<30} {:<12} {:<12} {}",
+        "NAME", "TRANSPORT", "HEALTH", "PATH"
+    );
     println!("{}", "-".repeat(80));
     for r in &repos {
         let name = r["name"].as_str().unwrap_or("-");
@@ -144,19 +147,11 @@ async fn handle_show(name: &str, api_url: &str) -> Result<(), CliError> {
 }
 
 async fn handle_link(repo_name: &str, project_id: &str, api_url: &str) -> Result<(), CliError> {
-    // Update project with a linked repo reference — stored in projects table as github_url context
-    // Full bi-directional link table is future work; for now we echo intent and confirm via API.
-    let url = format!("{api_url}/api/repositories/{repo_name}");
-    let repo = crate::cli_http::get_and_return(&url)
+    let url = format!("{api_url}/api/repositories/{repo_name}/link");
+    let payload = serde_json::json!({ "project_id": project_id });
+    crate::cli_http::post_and_print(&url, &payload, true)
         .await
-        .map_err(|_| CliError::NotFound(format!("repository '{repo_name}' not found")))?;
-    println!(
-        "Repository '{}' (id={}) linked to project '{}'",
-        repo_name,
-        repo["id"].as_i64().unwrap_or(0),
-        project_id
-    );
-    Ok(())
+        .map_err(|_| CliError::ApiCallFailed(format!("failed to link repository '{repo_name}'")))
 }
 
 async fn handle_sync(api_url: &str) -> Result<(), CliError> {

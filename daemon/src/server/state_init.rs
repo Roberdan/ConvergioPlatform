@@ -44,6 +44,49 @@ fn table_columns(conn: &Connection, table: &str) -> Result<HashSet<String>, ApiE
     Ok(columns.into_iter().collect())
 }
 
+fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+pub(super) fn cleanup_legacy_crdt_objects(conn: &Connection) -> Result<usize, ApiError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT type, name FROM sqlite_master
+             WHERE name NOT LIKE 'sqlite_%'
+               AND (name LIKE 'crsql_%' OR name LIKE '%__crsql_%')
+             ORDER BY CASE type
+                 WHEN 'trigger' THEN 0
+                 WHEN 'index' THEN 1
+                 WHEN 'table' THEN 2
+                 WHEN 'view' THEN 3
+                 ELSE 4
+             END, name",
+        )
+        .map_err(|err| ApiError::internal(format!("legacy CRDT scan failed: {err}")))?;
+    let objects = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|err| ApiError::internal(format!("legacy CRDT query failed: {err}")))?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|err| ApiError::internal(format!("legacy CRDT decode failed: {err}")))?;
+    let mut dropped = 0;
+    for (kind, name) in objects {
+        let drop_sql = match kind.as_str() {
+            "trigger" => format!("DROP TRIGGER IF EXISTS {}", quote_ident(&name)),
+            "index" => format!("DROP INDEX IF EXISTS {}", quote_ident(&name)),
+            "table" => format!("DROP TABLE IF EXISTS {}", quote_ident(&name)),
+            "view" => format!("DROP VIEW IF EXISTS {}", quote_ident(&name)),
+            _ => continue,
+        };
+        conn.execute_batch(&drop_sql).map_err(|err| {
+            ApiError::internal(format!("legacy CRDT cleanup failed for {name}: {err}"))
+        })?;
+        dropped += 1;
+    }
+    Ok(dropped)
+}
+
 pub fn ensure_agent_activity_schema(conn: &Connection) -> Result<(), ApiError> {
     conn.execute_batch(AGENT_ACTIVITY_SCHEMA)
         .map_err(|err| ApiError::internal(format!("agent_activity create failed: {err}")))?;
@@ -98,12 +141,20 @@ pub fn init_db_and_pool(
         #[cfg(feature = "crsqlite")]
         if let Some(ref ext) = crsqlite_path {
             if let Err(e) = crate::db::crdt::load_crsqlite(&conn, ext) {
-                // FAIL-FAST: CRDT replication is the sole sync path since v20.
-                panic!("[FATAL] crsqlite load failed — CRDT replication required: {e}");
+                panic!("[FATAL] crsqlite load failed after explicit enablement: {e}");
             }
         }
+        #[cfg(feature = "crsqlite")]
+        let keep_legacy_crdt = crsqlite_path.is_some();
         #[cfg(not(feature = "crsqlite"))]
-        let _ = &crsqlite_path; // suppress unused warning
+        let keep_legacy_crdt = false;
+        if !keep_legacy_crdt {
+            match cleanup_legacy_crdt_objects(&conn) {
+                Ok(0) => {}
+                Ok(count) => eprintln!("[migration] removed {count} legacy CRDT sqlite objects"),
+                Err(err) => eprintln!("[migration] legacy CRDT cleanup failed: {err:?}"),
+            }
+        }
         if let Err(err) = ensure_agent_activity_schema(&conn) {
             eprintln!("[migration] agent_activity schema repair failed: {err:?}");
         }

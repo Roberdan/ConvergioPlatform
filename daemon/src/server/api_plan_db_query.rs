@@ -20,7 +20,7 @@ pub fn router() -> Router<ServerState> {
 }
 
 /// GET /api/plan-db/list — active plans with task counts
-    #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let plans = query_rows(
@@ -47,7 +47,7 @@ async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, Ap
 }
 
 /// GET /api/plan-db/drift-check/:plan_id — check plan staleness
-    #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 async fn handle_drift_check(
     State(state): State<ServerState>,
     Path(plan_id): Path<i64>,
@@ -95,7 +95,7 @@ async fn handle_drift_check(
 ///
 /// Runs deterministic mechanical gates (status, test_criteria, file checks).
 /// Thor AI validation runs at wave level, not per-task.
-    #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 async fn handle_validate_task(
     State(state): State<ServerState>,
     Path((task_id, plan_id)): Path<(i64, i64)>,
@@ -126,9 +126,27 @@ async fn handle_validate_task(
     let verify_cmds: Vec<&str> = notes
         .map(|n| n.lines().filter(|l| !l.trim().is_empty()).collect())
         .unwrap_or_default();
+    let worktree_path = query_one(
+        conn,
+        "SELECT worktree_path FROM plans WHERE id = ?1",
+        rusqlite::params![plan_id],
+    )?
+    .and_then(|row| {
+        row.get("worktree_path")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    });
 
-    // Run mechanical gates (no file paths stored in DB — use empty slice)
-    let result = mechanical_gates::validate_task(status, test_criteria, &[], &verify_cmds);
+    let result = mechanical_gates::validate_task_in_dir(
+        status,
+        test_criteria,
+        &[],
+        &verify_cmds,
+        worktree_path
+            .as_deref()
+            .filter(|path| !path.is_empty())
+            .map(std::path::Path::new),
+    );
 
     let is_validated = task.get("validated_by").is_some()
         && !task

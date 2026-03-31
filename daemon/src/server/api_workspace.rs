@@ -1,7 +1,5 @@
-// Workspace REST API — CRUD endpoints for agent workspace management.
-// Why: Plan 698 workspace layer; agents need isolated git worktrees tracked in DB.
+use super::api_workspace_support::{bind_workspace_context, make_manager};
 use super::state::{ApiError, ServerState};
-use crate::workspace::core::WorkspaceManager;
 use crate::workspace::deliverables::list_workspace_deliverables;
 use crate::workspace::events::EventLogger;
 use crate::workspace::git_connector::GitHubConnector;
@@ -35,13 +33,12 @@ pub fn router() -> Router<ServerState> {
         )
 }
 
-// GET /api/workspace/list?plan_id=
 async fn list_workspaces(
     State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, ApiError> {
     let plan_id: Option<i64> = qs.get("plan_id").and_then(|v| v.parse().ok()); // intentional: malformed plan_id means "list all workspaces"
-    let mgr = make_manager(&state);
+    let mgr = make_manager(&state, None, None)?;
     let workspaces = mgr
         .list_workspaces(plan_id)
         .map_err(|e| ApiError::internal(format!("list workspaces failed: {e}")))?;
@@ -56,15 +53,16 @@ struct CreateBody {
     wave_db_id: Option<i64>,
 }
 
-// POST /api/workspace/create
 async fn create_workspace(
     State(state): State<ServerState>,
     Json(body): Json<CreateBody>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
-    let mgr = make_manager(&state);
+    let mgr = make_manager(&state, body.plan_id, body.wave_db_id)?;
     let ws = mgr
         .create_workspace(body.plan_id, body.wave_db_id)
         .map_err(|e| ApiError::internal(format!("create workspace failed: {e}")))?;
+    let conn = state.get_conn()?;
+    bind_workspace_context(&conn, &ws)?;
     Ok((
         StatusCode::CREATED,
         Json(json!({"ok": true, "workspace": ws})),
@@ -76,7 +74,6 @@ struct DeleteBody {
     workspace_id: String,
 }
 
-// POST /api/workspace/delete
 async fn delete_workspace(
     State(state): State<ServerState>,
     Json(body): Json<DeleteBody>,
@@ -84,18 +81,17 @@ async fn delete_workspace(
     if body.workspace_id.trim().is_empty() {
         return Err(ApiError::bad_request("workspace_id is required"));
     }
-    let mgr = make_manager(&state);
+    let mgr = make_manager(&state, None, None)?;
     mgr.delete_workspace(&body.workspace_id)
         .map_err(|e| ApiError::internal(format!("delete workspace failed: {e}")))?;
     Ok(Json(json!({"ok": true, "workspace_id": body.workspace_id})))
 }
 
-// GET /api/workspace/status/:workspace_id
 async fn get_workspace_status(
     State(state): State<ServerState>,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let mgr = make_manager(&state);
+    let mgr = make_manager(&state, None, None)?;
     let ws = mgr
         .get_workspace(&workspace_id)
         .map_err(|e| ApiError::internal(format!("get workspace failed: {e}")))?
@@ -110,7 +106,6 @@ async fn get_workspace_status(
     ))
 }
 
-// GET /api/workspace/events?workspace_id=&limit=&since=
 async fn get_workspace_events(
     State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,
@@ -135,9 +130,6 @@ struct QualityGateBody {
     workspace_id: String,
 }
 
-// POST /api/workspace/quality-gate
-// Body: {"workspace_id": "<id>"}
-// Returns: {"ok": true, "gates": [...], "all_passed": bool}
 async fn run_quality_gate(
     State(state): State<ServerState>,
     Json(body): Json<QualityGateBody>,
@@ -145,7 +137,7 @@ async fn run_quality_gate(
     if body.workspace_id.trim().is_empty() {
         return Err(ApiError::bad_request("workspace_id is required"));
     }
-    let mgr = make_manager(&state);
+    let mgr = make_manager(&state, None, None)?;
     let ws = mgr
         .get_workspace(&body.workspace_id)
         .map_err(|e| ApiError::internal(format!("get workspace failed: {e}")))?
@@ -158,7 +150,6 @@ async fn run_quality_gate(
     ))
 }
 
-// GET /api/workspace/deliverables?workspace_id=
 async fn get_workspace_deliverables(
     State(state): State<ServerState>,
     Query(qs): Query<HashMap<String, String>>,
@@ -182,9 +173,6 @@ struct ReleaseBody {
     repo: String,
 }
 
-// POST /api/workspace/release
-// Body: {"workspace_id": "<id>", "repo": "owner/repo"}
-// Returns: ReleaseResult JSON — full pipeline: quality gate → commit → push → PR → merge.
 async fn run_release(
     State(state): State<ServerState>,
     Json(body): Json<ReleaseBody>,
@@ -208,19 +196,4 @@ async fn run_release(
     Ok(Json(
         serde_json::to_value(&result).unwrap_or(json!({"ok": true})),
     ))
-}
-
-fn make_manager(state: &ServerState) -> WorkspaceManager {
-    let repo_root = repo_root_from_env();
-    WorkspaceManager::new(state.pool(), repo_root)
-}
-
-fn repo_root_from_env() -> PathBuf {
-    env::var("CONVERGIO_REPO_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            env::var("HOME")
-                .map(|h| PathBuf::from(h).join("GitHub/ConvergioPlatform"))
-                .unwrap_or_else(|_| PathBuf::from("."))
-        })
 }

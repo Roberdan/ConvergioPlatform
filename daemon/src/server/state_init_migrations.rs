@@ -12,6 +12,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // Missing tables found in DB audit (23 Marzo 2026)
     "CREATE TABLE IF NOT EXISTS delegation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER, task_id INTEGER, peer_name TEXT, delegated_at TEXT DEFAULT (datetime('now')), completed_at TEXT, status TEXT DEFAULT 'pending', cost_usd REAL DEFAULT 0, tokens_total INTEGER DEFAULT 0)",
     "CREATE TABLE IF NOT EXISTS host_heartbeats (hostname TEXT PRIMARY KEY, last_seen INTEGER, status TEXT DEFAULT 'active', metadata TEXT)",
+    "CREATE TABLE IF NOT EXISTS repositories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, path TEXT NOT NULL, github_url TEXT, description TEXT, is_active BOOLEAN DEFAULT 1, transport TEXT DEFAULT 'local', health_status TEXT DEFAULT 'unknown', last_health_check DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE IF NOT EXISTS chat_sessions (id TEXT PRIMARY KEY, project_id INTEGER, plan_id INTEGER, task_db_id INTEGER, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_message_at TEXT)",
     "CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, requirement_id INTEGER, model TEXT, tokens_in INTEGER DEFAULT 0, tokens_out INTEGER DEFAULT 0, metadata_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
     // Core table indexes (high-traffic WHERE columns)
@@ -22,6 +23,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status)",
     "CREATE INDEX IF NOT EXISTS idx_plans_project_id ON plans(project_id)",
     "CREATE INDEX IF NOT EXISTS idx_waves_plan_id ON waves(plan_id)",
+    "CREATE INDEX IF NOT EXISTS idx_repositories_name ON repositories(name)",
     // ── End core tables ──
     "CREATE TABLE IF NOT EXISTS daemon_config (key TEXT PRIMARY KEY NOT NULL, value TEXT, updated_at TEXT DEFAULT (datetime('now')))",
     "CREATE TABLE IF NOT EXISTS coordinator_events (id INTEGER PRIMARY KEY, event_type TEXT NOT NULL DEFAULT '', payload TEXT, source_node TEXT, handled_at TEXT DEFAULT (datetime('now')))",
@@ -180,6 +182,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
      )",
     // Plan 748 — branch_name on plans for execution-context agent delegation
     "ALTER TABLE plans ADD COLUMN branch_name TEXT",
+    "ALTER TABLE waves ADD COLUMN branch_name TEXT",
     // Add updated_at to tables that need timestamp-based sync replication
     "ALTER TABLE knowledge_base ADD COLUMN updated_at DATETIME",
     "ALTER TABLE notifications ADD COLUMN updated_at DATETIME",
