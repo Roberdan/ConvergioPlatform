@@ -94,6 +94,9 @@ pub(crate) fn route_mute() -> String {
 ///
 /// Called from spawn_blocking so blocking HTTP is safe.
 pub(crate) fn route_escalate_to_ali(question: &str, daemon_url: &str) -> String {
+    if let Some(org_answer) = crate::kernel::org_router::try_route_org_question(question, daemon_url) {
+        return org_answer;
+    }
     // Ali = Opus via GitHub Copilot CLI. Uses existing subscription, not API key.
     // Runs: gh copilot explain "question" with system context.
     let context = crate::kernel::engine::smart_context_gather_pub(question, daemon_url);
@@ -140,6 +143,9 @@ pub(crate) fn route_escalate_to_ali(question: &str, daemon_url: &str) -> String 
 }
 
 pub(crate) fn route_ask_ali(question: &str, daemon_url: &str) -> String {
+    if let Some(org_answer) = crate::kernel::org_router::try_route_org_question(question, daemon_url) {
+        return org_answer;
+    }
     // Delegate to /api/kernel/ask — engine.ask() uses MCP tools for intelligent answers.
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(120))

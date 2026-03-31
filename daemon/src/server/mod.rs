@@ -46,6 +46,7 @@ pub mod api_metrics_queries;
 pub mod api_nightly;
 pub mod api_notify;
 pub mod api_openclaw;
+pub mod api_orgs;
 pub mod api_peers;
 pub mod api_peers_ext;
 pub mod api_plan_db;
@@ -100,6 +101,7 @@ mod state_init_migrations;
 pub mod static_serve;
 pub mod ws;
 pub mod ws_brain;
+pub mod ws_brain_org;
 pub mod ws_pty;
 
 pub mod api_decisions;
@@ -171,6 +173,10 @@ pub mod api_repositories;
 #[cfg(test)] mod api_decisions_tests;
 #[cfg(test)] mod api_goal_tests;
 #[cfg(test)] mod api_repositories_tests;
+#[cfg(test)] mod api_orgs_tests;
+#[cfg(test)] mod api_orgs_budget_tests;
+#[cfg(test)] mod api_orgs_telemetry_tests;
+#[cfg(test)] mod api_orgs_digest_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

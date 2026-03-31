@@ -84,6 +84,10 @@ Cherry-picks: delegate to agent. Auth failures: `/login` then re-launch.
 | `./daemon/start.sh` | Run daemon |
 | `cd evolution && npx vitest run` | Evolution tests |
 | `cvg plan show <id>` | Plan details |
+| `cvg org list` | List orgs with status/CEO |
+| `cvg org show <id>` | Show full org detail (members/services/telemetry) |
+| `cvg bus org --human` | Render terminal org hierarchy tree |
+| `cvg bus watch <agent>` | Watch direct messages for an agent via SSE |
 | `cvg project create\|list\|show <id>` | Project ops |
 | `scripts/mesh/mesh-heartbeat.sh` | Mesh health |
 | `cvg delegation start <id> --peer <peer>` | Delegate plan |

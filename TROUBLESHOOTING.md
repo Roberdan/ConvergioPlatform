@@ -1,5 +1,36 @@
 # Troubleshooting
 
+## Agent Network / Org Runtime
+
+### `cvg bus org` shows empty tree
+- Cause: no orgs created yet, or daemon points to different DB/worktree context.
+- Fix:
+  - `cvg org list` (confirm org presence)
+  - `curl -s http://localhost:8420/api/orgs | jq .`
+  - verify daemon is running in expected repo/worktree.
+
+### `POST /api/orgs/:id/members` returns 403/429
+- Cause: org budget gate blocked member action (daily budget exceeded or circuit breaker triggered).
+- Fix:
+  - check org status: `cvg org show <id>` or `GET /api/orgs/<id>`
+  - inspect telemetry: `GET /api/orgs/<id>/telemetry?period=day`
+  - if suspended, reduce load/reset policy then update org status/budget.
+
+### Inter-org message not visible in topology/dashboard
+- Cause: wrong channel format or sender not a source-org member.
+- Required channel: `inter-org:<source_org>:<target_org>`
+- Fix:
+  - verify sender membership in source org (`GET /api/orgs/<source_org>`)
+  - query messages directly: `GET /api/ipc/messages?channel=inter-org:<source_org>:<target_org>`
+  - verify websocket updates on `/ws/brain`.
+
+### SSE direct stream appears idle
+- Cause: `/api/ipc/stream?agent=<name>` only emits `ipc_direct_message` for matching sender/receiver.
+- Fix:
+  - send a direct message: `POST /api/ipc/send-direct {"from":"a","to":"<name>","content":"ping"}`
+  - ensure query uses exact agent name
+  - check response content type is `text/event-stream`.
+
 ## v20.1.0 Notes
 
 ### Sync Replication

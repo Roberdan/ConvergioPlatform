@@ -27,6 +27,7 @@ pub mod verify;
 pub mod verify_checks;
 pub mod verify_hardening;
 pub mod voice_router;
+pub mod org_router;
 pub mod voice_router_helpers;
 pub mod voice_routes;
 

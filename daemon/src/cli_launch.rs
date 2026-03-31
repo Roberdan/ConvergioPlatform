@@ -98,13 +98,8 @@ async fn launch_tool(
 ) -> Result<(), CliError> {
     register_agent(api_url, name, agent_type, parent).await?;
 
-    let status = tokio::process::Command::new(command)
-        .args(args)
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .await;
+    let mut cmd = build_launch_command(api_url, name, command, args);
+    let status = cmd.status().await;
 
     deregister_agent(api_url, name).await;
 
@@ -120,6 +115,22 @@ async fn launch_tool(
             "failed to launch {command}: {e}"
         ))),
     }
+}
+
+fn build_launch_command(
+    api_url: &str,
+    name: &str,
+    command: &str,
+    args: &[&str],
+) -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new(command);
+    cmd.args(args)
+        .env("CONVERGIO_AGENT_NAME", name)
+        .env("CONVERGIO_API_URL", api_url)
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+    cmd
 }
 
 pub async fn handle(cmd: LaunchCommands) -> Result<(), CliError> {
@@ -154,5 +165,22 @@ pub async fn handle(cmd: LaunchCommands) -> Result<(), CliError> {
             )
             .await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_launch_command;
+
+    #[test]
+    fn launch_command_sets_agent_env_vars() {
+        let cmd = build_launch_command("http://localhost:8420", "priya", "echo", &["ok"]);
+        let envs: Vec<(String, String)> = cmd
+            .as_std()
+            .get_envs()
+            .filter_map(|(k, v)| Some((k.to_string_lossy().to_string(), v?.to_string_lossy().to_string())))
+            .collect();
+        assert!(envs.iter().any(|(k, v)| k == "CONVERGIO_AGENT_NAME" && v == "priya"));
+        assert!(envs.iter().any(|(k, v)| k == "CONVERGIO_API_URL" && v == "http://localhost:8420"));
     }
 }

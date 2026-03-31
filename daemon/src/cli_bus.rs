@@ -54,6 +54,38 @@ pub enum BusCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Render org hierarchy tree from org API data
+    Org {
+        /// Human-readable tree output (default true)
+        #[arg(long, default_value_t = true)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Watch direct messages for an agent over SSE
+    Watch {
+        /// Agent name to subscribe as
+        name: String,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Ask an agent and wait for a direct reply
+    Ask {
+        /// Sender agent name
+        from: String,
+        /// Recipient agent name
+        to: String,
+        /// Message content
+        message: String,
+        /// Timeout in seconds
+        #[arg(long, default_value_t = 120)]
+        timeout: u64,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: BusCommands) {
@@ -108,6 +140,23 @@ pub async fn handle(cmd: BusCommands) {
             {
                 eprintln!("error: {e}");
             }
+        }
+        BusCommands::Org { human, api_url } => {
+            crate::cli_bus_org::run_org(&api_url, human).await;
+        }
+        BusCommands::Watch { name, api_url } => {
+            if let Err(e) = crate::cli_bus_watch::run_watch(&name, &api_url).await {
+                eprintln!("error: {e}");
+            }
+        }
+        BusCommands::Ask {
+            from,
+            to,
+            message,
+            timeout,
+            api_url,
+        } => {
+            crate::cli_bus_ask::run_ask(&from, &to, &message, timeout, &api_url).await;
         }
     }
 }
@@ -186,5 +235,14 @@ mod tests {
         let api_url = "http://localhost:8420";
         let url = format!("{api_url}/api/ipc/messages?agent={name}");
         assert!(url.contains("agent=thor"));
+    }
+
+    #[test]
+    fn bus_org_variant_exists() {
+        let cmd = BusCommands::Org {
+            human: true,
+            api_url: "http://localhost:8420".to_string(),
+        };
+        assert!(matches!(cmd, BusCommands::Org { .. }));
     }
 }

@@ -100,6 +100,7 @@ pub fn handle_key(code: KeyCode, modifiers: KeyModifiers, state: &mut Interactiv
         KeyCode::Char('+') | KeyCode::Char('=') => state.increase_interval = true,
         KeyCode::Char('-') => state.decrease_interval = true,
         KeyCode::Char('n') => state.show_notifications = !state.show_notifications,
+        KeyCode::Char('o') => crate::tui::widgets::agents::toggle_org_hierarchy_mode(),
         KeyCode::Char('?') => state.show_help = true,
         KeyCode::Esc => handle_esc(state),
         _ => {}

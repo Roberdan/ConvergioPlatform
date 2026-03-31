@@ -1,9 +1,8 @@
 // CLI Commands enum — all top-level subcommands for claude-core / cvg.
-use crate::{
-    cli_agent, cli_bus, cli_capability, cli_channel, cli_checkpoint, cli_delegation, cli_domain,
-    cli_kb, cli_kernel, cli_lock, cli_memory, cli_ops, cli_plan, cli_project, cli_reap, cli_repo,
-    cli_review, cli_run, cli_skill, cli_task, cli_voice, cli_wave, cli_who, cli_workspace,
-};
+use crate::{cli_agent, cli_bus, cli_capability, cli_channel, cli_checkpoint, cli_delegation,
+    cli_domain, cli_kb, cli_kernel, cli_lock, cli_memory, cli_ops, cli_org, cli_plan,
+    cli_project, cli_reap, cli_repo, cli_review, cli_run, cli_skill, cli_task, cli_voice,
+    cli_wave, cli_who, cli_workspace};
 use crate::ipc_handler::{DaemonCommands, IpcCommands};
 use clap::Subcommand;
 use std::path::PathBuf;
@@ -38,7 +37,6 @@ pub enum Commands {
         #[arg(long)]
         dev_mode: bool,
         /// Enable mesh CRDT sync (Tailscale P2P on :9420). Default: enabled.
-        /// Use --no-mesh to disable.
         #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
         mesh: bool,
     },
@@ -198,12 +196,16 @@ pub enum Commands {
         #[command(subcommand)]
         command: cli_domain::DomainCommands,
     },
+    /// Org management commands (cvg org create)
+    Org {
+        #[command(subcommand)]
+        command: cli_org::OrgCommands,
+    },
     /// Workspace management commands (cvg workspace create/delete/list/status/events)
     Workspace {
         #[command(subcommand)]
         command: cli_workspace::WorkspaceCommands,
     },
-    /// Who is working on what? Show active agents, delegations, per-plan workers.
     Who {
         #[command(subcommand)]
         command: cli_who::WhoCommands,
@@ -213,7 +215,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: cli_delegation::DelegationCommands,
     },
-    /// Reap stale worktrees, merged branches, and expired lock files (zero-zombie enforcement)
     Reap {
         #[command(subcommand)]
         command: cli_reap::ReapCommands,
@@ -223,7 +224,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: cli_repo::RepoCommands,
     },
-    /// Kernel health monitor commands (cvg kernel start/stop/status)
     Kernel {
         #[command(subcommand)]
         command: cli_kernel::KernelCommands,

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // MCP tool registry: struct definition + ring-filtered listing.
-// 18 tools including invoke_agent (tool 18). Definitions in tool_catalog.rs.
+// 20 tools including invoke_agent and chat IPC tools. Definitions in tool_catalog.rs.
 
 use serde_json::Value;
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [20.1.2] - 31 Marzo 2026
+
+### Added
+- Agent Network integration coverage: end-to-end org flow test (`daemon/src/server/api_orgs/integration_tests.rs`) validating org creation, bootstrap steps, intra/inter-org messaging, decision log, telemetry, SSE stream endpoint, org detail payload, and budget gate blocking.
+- CLI org chart command: `cvg bus org` renders terminal hierarchy tree from `/api/orgs`.
+- Architecture decision record: `docs/adr/adr-agent-network.md` documenting the network-of-companies model and operational tradeoffs.
+
+### Changed
+- `ws_brain_org` tests now use unique DB paths per run to prevent cross-test UNIQUE constraint collisions.
+- Troubleshooting and command references updated for org APIs and `cvg org`/`cvg bus` operations.
+
 ## [20.1.1] - 31 Marzo 2026
 
 ### Fixed

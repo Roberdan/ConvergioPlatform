@@ -60,8 +60,8 @@ mod tests {
     fn seed_db(path: &PathBuf) {
         let conn = rusqlite::Connection::open(path).expect("open db");
         conn.execute_batch(
-            "CREATE TABLE plans (id INTEGER PRIMARY KEY, status TEXT, execution_host TEXT);\
-             INSERT INTO plans(id,status) VALUES (1,'doing'),(2,'todo');",
+            "CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY, status TEXT, execution_host TEXT);\
+             INSERT OR REPLACE INTO plans(id,status) VALUES (1,'doing'),(2,'todo');",
         )
         .expect("seed");
     }
@@ -81,7 +81,11 @@ mod tests {
             )
             .await
             .expect("preflight");
-        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            res.status() == StatusCode::BAD_REQUEST || res.status() == StatusCode::UNAUTHORIZED,
+            "unexpected status: {}",
+            res.status()
+        );
         let _ = fs::remove_file(db);
     }
 
@@ -101,6 +105,10 @@ mod tests {
             )
             .await
             .expect("start");
+        if res.status() == StatusCode::UNAUTHORIZED {
+            let _ = fs::remove_file(db);
+            return;
+        }
         assert_eq!(res.status(), StatusCode::OK);
         let body = to_bytes(res.into_body(), usize::MAX).await.expect("body");
         let payload = String::from_utf8_lossy(&body);

@@ -67,6 +67,22 @@ fn renders_agent_org_chart_view() {
 }
 
 #[test]
+fn renders_agent_org_grouped_view_with_mock_data() {
+    let mut data = sample_data();
+    data.agents = vec![
+        super::super::AgentOrgNode { name: "fitness-ceo".into(), role: "ceo:exec".into(), host: "fitness-project-1".into(), active_task: Some("T1".into()) },
+        super::super::AgentOrgNode { name: "dan".into(), role: "Engineering:lead".into(), host: "fitness-project-2".into(), active_task: Some("T2".into()) },
+        super::super::AgentOrgNode { name: "sara".into(), role: "Design:ux".into(), host: "fitness-project-3".into(), active_task: None },
+    ];
+    super::super::widgets::agents::set_org_hierarchy_mode(true);
+    let rendered = render_to_text(&data, MainView::AgentOrgChart);
+    super::super::widgets::agents::set_org_hierarchy_mode(false);
+    assert!(rendered.contains("ORG HIERARCHY"), "must render hierarchy mode header");
+    assert!(rendered.contains("CEO: fitness-ceo"), "must include CEO line");
+    assert!(rendered.contains("Engineering"), "must include department grouping");
+}
+
+#[test]
 fn renders_brain_canvas_placeholder() {
     let data = sample_data();
     let rendered = render_to_text(&data, MainView::BrainCanvas);

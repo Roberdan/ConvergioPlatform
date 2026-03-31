@@ -12,7 +12,7 @@ use super::{
     api_digest, api_domain, api_evolution, api_github, api_goal, api_health_deep,
     api_health_post_merge, api_heartbeat, api_ideas, api_inference_status, api_ingest, api_ipc,
     api_kernel_audio, api_memory, api_memory_mgmt, api_mesh, api_metrics, api_nightly, api_notify,
-    api_node_readiness, api_node_roles, api_openclaw, api_peers, api_peers_ext, api_plan_db,
+    api_node_readiness, api_node_roles, api_openclaw, api_orgs, api_peers, api_peers_ext, api_plan_db,
     api_plan_db_checkpoint, api_plan_db_execution_context, api_plan_db_import,
     api_plan_db_lifecycle, api_plan_db_ops, api_plan_db_query, api_plan_db_review, api_plans,
     api_policy, api_project_tree, api_readiness, api_repositories, api_rollback, api_runs,
@@ -54,11 +54,14 @@ pub fn build_router_with_db(
 /// Build router with a pre-configured ServerState (for unified daemon with shared IPC engine).
 pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Router {
     let static_files = ServeDir::new(static_dir).append_index_html_on_directories(true);
+    let dashboard_web_files =
+        ServeDir::new(PathBuf::from(super::DASHBOARD_STATIC_DIR)).append_index_html_on_directories(true);
     let rate_limiter = RateLimiter::default();
 
     // Shared inference health state: probed every 60s in background.
     let health_state = create_shared_health();
     spawn_health_probe_loop(health_state.clone());
+    api_orgs::spawn_background_jobs(state.clone());
 
     Router::new()
         .merge(api_validation::router())
@@ -107,6 +110,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_audit::router())
         .merge(api_domain::router())
         .merge(api_openclaw::router())
+        .merge(api_orgs::router())
         .merge(api_crdt::router())
         .merge(api_sync::router())
         .merge(api_capabilities::router())
@@ -172,6 +176,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(from_fn(telemetry::telemetry_layer))
         .with_state(state)
+        .nest_service("/scripts/dashboard_web", dashboard_web_files)
         .fallback_service(get_service(static_files))
 }
 

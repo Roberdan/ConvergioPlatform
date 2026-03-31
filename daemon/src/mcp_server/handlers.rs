@@ -1,14 +1,11 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
 // HTTP bridge: each MCP tool handler calls the daemon API at daemon_url.
 // Pattern mirrors daemon/src/kernel/tools.rs — reqwest::blocking, 5-second timeout.
-
 use serde_json::{json, Value};
 use std::time::Duration;
-
+use crate::mcp_server::agent_chat::{handle_agent_ask, handle_agent_send};
 use crate::mcp_server::security::McpError;
-
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
-
 fn make_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -57,6 +54,8 @@ pub fn handle_tool_call(
         "cvg_update_task" => update_task(daemon_url, token, args),
         "cvg_checkpoint_save" => checkpoint_save(daemon_url, token, args),
         "cvg_list_agents" => list_agents(daemon_url, token),
+        "cvg_agent_send" => handle_agent_send(daemon_url, token, args),
+        "cvg_agent_ask" => handle_agent_ask(daemon_url, token, args),
         "cvg_agent_start" => agent_start(daemon_url, token, args),
         "cvg_agent_complete" => agent_complete(daemon_url, token, args),
         "cvg_mesh_status" => mesh_status(daemon_url, token),
@@ -69,6 +68,7 @@ pub fn handle_tool_call(
         "cvg_assign_role" => assign_role(daemon_url, token, args),
         "cvg_interrupt_agent" => interrupt_agent(daemon_url, token, args),
         "cvg_invoke_agent" => crate::mcp_server::invoke_agent::invoke_agent(args),
+        "cvg_create_agent" => crate::mcp_server::agent_factory::handle_create_agent(args, daemon_url, token),
         "cvg_reschedule_task" => reschedule_task(daemon_url, token, args),
         _ => Err(McpError::InvalidParams("unknown tool name")),
     }
