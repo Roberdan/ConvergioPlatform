@@ -1,0 +1,735 @@
+# Plan 10030 — Convergio Agent Network: Live Chat + Org Model + Agent Factory + Animated Dashboard
+#
+# Vision: Transform Convergio from a flat agent mesh into a Network of AI Companies.
+# Each project = a company with a CEO, departments, services, budget.
+# CEO autonomously builds org structure, creates new agents on demand via web research.
+# Jarvis (Kernel) is the user's only interface. All visualized in real-time.
+#
+# Architecture layers (bottom-up):
+#   1. INFRA (exists): daemon, IPC bus, mesh, DB, MCP
+#   2. WORKFLOW (unchanged): /solve → /planner → review → /execute → thor → done
+#   3. ORG MODEL (new): CEO → dept → agents → services → decisions
+#   4. INTERFACE (new): Jarvis routes, digests, voice
+#   5. VISUALIZATION (new): brain network + org hierarchy + timeline + message flow
+#
+# Constraints:
+#   - 250 lines/file max (FileSizeGuard)
+#   - Thor validates all code (non-negotiable)
+#   - CEO cannot mark tasks done (only Thor)
+#   - Budget envelope per org (circuit breaker at 3x expected)
+#   - All new modules wired in same wave (no stubs)
+#   - Org isolation: each org has its own IPC channel namespace (org:<id>)
+#   - No cross-org DB writes without inter-org protocol
+#   - Jarvis daily brief at 06:45 CET via Telegram (aggregate all CEOs)
+#   - Escalation: any unresolved decision >4h auto-escalates to Telegram
+#
+# Review findings integrated:
+#   - handlers.rs at 250 lines → split to agent_chat.rs for MCP tools
+#   - tool_catalog.rs at 242 lines → chat_tools() in separate file
+#   - TUI org chart exists (widgets/agents.rs) → enhance, don't duplicate
+#   - cvg_agent_ask needs daemon-side /api/ipc/ask endpoint (async bridge)
+#
+# Review round 2 fixes (6 blockers):
+#   - T3-01: add pub mod api_orgs to server/mod.rs + .merge() in routes/mod.rs
+#   - T4-01: handler dispatch in agent_factory.rs, NOT in handlers.rs (at 250 limit)
+#   - T5-01: split into digest.rs (<150) + morning_brief.rs (<150)
+#   - T5-01: add ipc_org_digests table creation in api_orgs/mod.rs schema
+#   - T6-02/03/04: add static route for scripts/dashboard_web/ in routes/mod.rs
+#   - tool_catalog.rs: extract existing plan tools to plan_tools() to make room
+
+project: ConvergioPlatform
+name: "Agent Network: Live Chat + Org Model + Agent Factory + Animated Dashboard"
+parallel_mode: sequential
+constraints:
+  max_lines_per_file: 250
+  language: rust
+  test_framework: cargo test
+  no_stubs: true
+
+waves:
+  # ═══════════════════════════════════════════════════════════════
+  # W1: SSE Message Stream + CLI Watch
+  # Foundation: real-time push replaces polling
+  # ═══════════════════════════════════════════════════════════════
+  - id: "1"
+    code: W1
+    name: "SSE Message Stream + CLI Watch"
+    tasks:
+      - id: T1-01
+        do: |
+          Create SSE endpoint GET /api/ipc/stream?agent=<name> that pushes IPC
+          messages in real-time via Server-Sent Events.
+          Use a tokio::sync::broadcast channel (clone from state.ws_tx pattern).
+          When send_message/broadcast fires, push SSE event to matching agents.
+          Event format: data: {"from":"priya","to":"roberto","content":"...","ts":"..."}
+          Handle backpressure: lagged receivers get a reconnect hint, not silent drop.
+          File: daemon/src/server/api_ipc/sse_stream.rs (new, <200 lines)
+          Wire in: daemon/src/server/api_ipc/mod.rs (add route + broadcast sender)
+          Test: 2 tests (event format, backpressure lag detection)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib sse_stream -- --test-threads=1"
+          - "grep -q 'api/ipc/stream' daemon/src/server/api_ipc/mod.rs"
+          - "wc -l < daemon/src/server/api_ipc/sse_stream.rs | awk '{if($1>250) exit 1}'"
+
+      - id: T1-02
+        do: |
+          Add `cvg bus watch <name>` CLI subcommand. Connects to SSE endpoint
+          GET /api/ipc/stream?agent=<name> via reqwest streaming response.
+          Prints messages as they arrive with colored output:
+            [10:32:15] roberto → priya: Come stai?
+          Sender=cyan, content=white, timestamp=dim. Ctrl+C to stop.
+          If cli_bus.rs exceeds 250 lines, extract to cli_bus_watch.rs and wire mod.
+          File: daemon/src/cli_bus_watch.rs (new, <120 lines)
+          Wire: add Watch variant to BusCommands in cli_bus.rs
+          Test: 1 test (parse SSE data line into display format)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_bus -- --test-threads=1"
+          - "wc -l < daemon/src/cli_bus.rs | awk '{if($1>250) exit 1}'"
+
+      - id: T1-03
+        do: |
+          Add `cvg bus ask <from> <to> <message>` CLI subcommand for synchronous
+          round-trip: send message, wait for reply, print it, exit.
+          Implementation: POST /api/ipc/send-direct then connect to SSE stream
+          filtered for messages from <to>. Timeout: 120s (configurable --timeout).
+          Also create daemon-side POST /api/ipc/ask endpoint that does
+          send_message + receive_wait atomically (bridges async IPC engine).
+          File: daemon/src/cli_bus_ask.rs (new, <100 lines)
+          File: daemon/src/server/api_ipc/handlers_ask.rs (new, <80 lines)
+          Wire: add Ask variant to BusCommands, add route to api_ipc/mod.rs
+          Test: 1 test (timeout returns structured error)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_bus_ask -- --test-threads=1"
+          - "grep -q 'api/ipc/ask' daemon/src/server/api_ipc/mod.rs"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W2: MCP Tools + Agent Hook
+  # Agents can natively talk to each other
+  # ═══════════════════════════════════════════════════════════════
+  - id: "2"
+    code: W2
+    name: "MCP Tools + Agent Hook"
+    tasks:
+      - id: T2-01
+        do: |
+          Add 2 MCP tools for agent-to-agent communication:
+          1. cvg_agent_send(to, message) — POST /api/ipc/send-direct. Ring: Trusted.
+          2. cvg_agent_ask(to, message, timeout_secs?) — POST /api/ipc/ask
+             (the endpoint from T1-03). Returns reply content. Ring: Trusted.
+          Put tool definitions in chat_tools() function in new file to avoid
+          exceeding 250 lines in tool_catalog.rs (currently 242 lines).
+          FIRST: extract existing plan tools from tool_catalog.rs into plan_tools()
+          in a separate file to free ~60 lines. Then add chat_tools().
+          File: daemon/src/mcp_server/agent_chat.rs (new, <150 lines)
+          File: daemon/src/mcp_server/plan_tools.rs (new, extracted from tool_catalog.rs)
+          Wire: import chat_tools() + plan_tools() in tool_catalog.rs.
+          handlers.rs is at 250 lines — ALL new handler logic goes in agent_chat.rs,
+          handlers.rs only adds a delegation call (1 line per tool).
+          Test: 2 tests (tool schema validates, handler returns expected shape)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib agent_chat -- --test-threads=1"
+          - "grep -q 'cvg_agent_send' daemon/src/mcp_server/agent_chat.rs"
+          - "wc -l < daemon/src/mcp_server/tool_catalog.rs | awk '{if($1>250) exit 1}'"
+          - "wc -l < daemon/src/mcp_server/handlers.rs | awk '{if($1>250) exit 1}'"
+
+      - id: T2-02
+        do: |
+          Create Claude Code hook that shows incoming IPC messages in agent terminal.
+          Hook type: PreToolUse (fires before every tool call).
+          Logic: curl GET /api/ipc/messages?to_agent=$CONVERGIO_AGENT_NAME&limit=5
+          If messages found, print to stderr: "📨 [priya → you]: Come stai?"
+          Track last-seen message ID in /tmp/.convergio-ipc-cursor-$CONVERGIO_AGENT_NAME
+          to avoid showing the same message twice (dedup via cursor).
+          File: claude-config/hooks/ipc-message-inject.sh (new, <50 lines)
+          Wire: add to .claude/settings.json hooks.PreToolUse array
+          Test: bash -n syntax check + grep for CONVERGIO_AGENT_NAME
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "bash -n claude-config/hooks/ipc-message-inject.sh"
+          - "grep -q 'ipc-message-inject' .claude/settings.json"
+          - "grep -q 'cursor' claude-config/hooks/ipc-message-inject.sh"
+
+      - id: T2-03
+        do: |
+          Update cli_launch.rs: export CONVERGIO_AGENT_NAME=<name> and
+          CONVERGIO_API_URL=<api_url> as env vars before launching claude/copilot.
+          These are needed by the message inject hook (T2-02) and agent identity.
+          Add env vars in the Command builder before spawn.
+          File: daemon/src/cli_launch.rs (modify, keep <250 lines)
+          Test: 1 test (env vars present in command builder)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_launch -- --test-threads=1"
+          - "grep -q 'CONVERGIO_AGENT_NAME' daemon/src/cli_launch.rs"
+          - "wc -l < daemon/src/cli_launch.rs | awk '{if($1>250) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W3: Org Registry + CEO Bootstrap + Budget Gates
+  # The organizational layer
+  # ═══════════════════════════════════════════════════════════════
+  - id: "3"
+    code: W3
+    name: "Org Registry + CEO Bootstrap + Budget Gates"
+    tasks:
+      - id: T3-01
+        do: |
+          Create org registry: 5 new DB tables (ipc_orgs, ipc_org_members,
+          ipc_org_services, ipc_decisions, ipc_org_telemetry).
+          Schema exactly as specified in architecture doc.
+          Add CREATE TABLE + indexes in api_ipc/mod.rs init_ipc_schema().
+          Add API endpoints:
+            POST   /api/orgs              — create org (mission, objectives, ceo_agent, budget)
+            GET    /api/orgs              — list all orgs
+            GET    /api/orgs/:id          — org detail with members + services
+            PUT    /api/orgs/:id          — update status/budget
+            POST   /api/orgs/:id/members  — add member (agent, role, dept)
+            DELETE /api/orgs/:id/members/:agent — remove member
+            POST   /api/orgs/:id/services — register service
+            GET    /api/orgs/:id/services — list services
+          File: daemon/src/server/api_orgs/mod.rs (new, <250 lines)
+          File: daemon/src/server/api_orgs/handlers.rs (new, <250 lines)
+          Org isolation: each org gets channel namespace org:<id>, inter-org
+          messages use inter-org:<src>:<dst> channels. Agents in org A cannot
+          write to org B's channel without going through inter-org protocol.
+          Add index: CREATE INDEX idx_ipc_messages_interorg ON ipc_messages(channel, created_at)
+          WHERE channel LIKE 'inter-org:%'
+          Also create ipc_org_digests table (used by T5-01):
+            CREATE TABLE IF NOT EXISTS ipc_org_digests (id TEXT PK, org_id, type TEXT, content TEXT, created_at TEXT)
+          Wire: add `pub mod api_orgs;` in server/mod.rs, .merge(api_orgs::router()) in routes/mod.rs.
+          Also add ServeDir route for scripts/dashboard_web/ (serves W6 HTML dashboards).
+          Test: 3 tests (create org, add member, list services)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib api_orgs -- --test-threads=1"
+          - "grep -q 'api_orgs' daemon/src/server/routes/mod.rs"
+
+      - id: T3-02
+        do: |
+          Create decision log API:
+            POST /api/orgs/:id/decisions — log decision (decision, rationale, made_by, refs)
+            GET  /api/orgs/:id/decisions — list decisions (paginated, newest first)
+          Decisions are immutable (append-only). refs is JSON array of message/task IDs.
+          File: daemon/src/server/api_orgs/decisions.rs (new, <120 lines)
+          Wire: add routes in api_orgs/mod.rs
+          Test: 2 tests (log decision, query with pagination)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib decisions -- --test-threads=1"
+
+      - id: T3-03
+        do: |
+          Implement budget gates in daemon. Each org has daily_budget_tokens in ipc_orgs.
+          Add middleware/guard that checks token consumption before allowing agent actions.
+          Circuit breaker: if org consumes 3x daily_budget in 10 minutes → auto-suspend
+          org (status='suspended'), send alert via ipc broadcast on org channel.
+          File: daemon/src/server/api_orgs/budget.rs (new, <150 lines)
+          Wire: called from api_orgs handlers on member actions
+          Test: 2 tests (budget check pass, circuit breaker triggers suspension)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib budget -- --test-threads=1"
+
+      - id: T3-04
+        do: |
+          Create CEO agent definition and bootstrap protocol.
+          The CEO is a Claude agent (.md file) that can autonomously build an org:
+          1. Read mission+objectives from /api/orgs/:id
+          2. Determine departments and roles needed
+          3. Assign existing agents via POST /api/orgs/:id/members
+          4. Register services via POST /api/orgs/:id/services
+          5. Create IPC channel org:<org_id> for internal comms
+          6. Log bootstrap decisions via POST /api/orgs/:id/decisions
+          7. Set org status to 'active'
+          File: claude-config/agents/ceo.md (new agent definition, <200 lines)
+          Also add CLI: `cvg org create <name> --mission "..." --objectives "..." --budget <N>`
+          which creates the org in DB and spawns the CEO agent.
+          File: daemon/src/cli_org.rs (new, <200 lines)
+          Wire: add Org subcommand to cli_domain.rs
+          Test: 1 test (CLI parses args correctly)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_org -- --test-threads=1"
+          - "test -f claude-config/agents/ceo.md"
+          - "grep -q 'org' daemon/src/cli_domain.rs"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W4: Agent Factory — CEO creates new agents on demand
+  # ═══════════════════════════════════════════════════════════════
+  - id: "4"
+    code: W4
+    name: "Agent Factory — Dynamic Agent Creation"
+    tasks:
+      - id: T4-01
+        do: |
+          Create Agent Factory: MCP tool cvg_create_agent that allows a CEO to
+          create a new agent definition on the fly.
+          Input: {name, role, expertise, department, org_id}
+          Process:
+          1. Web search for "{role} job description best practices" (via reqwest)
+          2. Synthesize agent .md file with frontmatter (name, description, model, tools)
+          3. Write to claude-config/agents/{name}.md
+          4. Register agent in ipc_agents + ipc_org_members
+          5. Log decision: "Created agent {name} because {rationale}"
+          File: daemon/src/mcp_server/agent_factory.rs (new, <200 lines)
+          Wire: add factory_tools() to tool_catalog.rs, handler dispatch in agent_factory.rs
+          (NOT in handlers.rs which is at 250 limit — all logic stays in agent_factory.rs)
+          Ring: Trusted (CEO only)
+          Test: 2 tests (generates valid frontmatter, registers in DB)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib agent_factory -- --test-threads=1"
+          - "grep -q 'cvg_create_agent' daemon/src/mcp_server/agent_factory.rs"
+
+      - id: T4-02
+        do: |
+          Add web search capability to the Agent Factory. Create a minimal
+          web search helper that queries a search API (DuckDuckGo HTML or
+          similar free endpoint) and extracts relevant text.
+          This is used by the CEO to research job descriptions and best practices
+          before creating new agents.
+          File: daemon/src/mcp_server/web_search.rs (new, <150 lines)
+          Wire: called from agent_factory.rs
+          Returns: Vec<SearchResult> with title, snippet, url
+          Test: 1 test (parse HTML response into structured results)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib web_search -- --test-threads=1"
+
+      - id: T4-03
+        do: |
+          Add telemetry API for org-level metrics:
+            POST /api/orgs/:id/telemetry — record token usage (agent, tokens_in/out, cost)
+            GET  /api/orgs/:id/telemetry  — aggregate by period (day/week)
+            GET  /api/orgs/:id/telemetry/agents — per-agent breakdown
+          Uses ipc_org_telemetry table (upsert on PRIMARY KEY org+agent+period).
+          File: daemon/src/server/api_orgs/telemetry.rs (new, <150 lines)
+          Wire: add routes in api_orgs/mod.rs
+          Test: 2 tests (record telemetry, aggregate query)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib telemetry -- --test-threads=1"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W5: Daily Digest + Jarvis Routing
+  # The user interface layer
+  # ═══════════════════════════════════════════════════════════════
+  - id: "5"
+    code: W5
+    name: "Daily Digest + Jarvis Routing"
+    tasks:
+      - id: T5-01
+        do: |
+          Create daily digest generator. Runs as tokio background task in daemon.
+          Every 24h (configurable) for each active org:
+          1. Query decisions made since last digest
+          2. Query telemetry (tokens spent, cost)
+          3. Query task completion stats from plans linked to org
+          4. Format structured JSON digest
+          5. Store in new table ipc_org_digests
+          6. Broadcast to org channel + push to Telegram if configured
+          Endpoint: GET /api/orgs/:id/digest — latest digest
+          Endpoint: POST /api/orgs/:id/digest/generate — force generate now
+          Also add scheduled Jarvis morning brief:
+          - Cron-like tokio task fires at 06:45 CET daily
+          - Aggregates digests from ALL active orgs
+          - Identifies pending decisions (>4h unresolved → escalation)
+          - Sends structured Telegram message:
+            "🌅 Buongiorno Roberto — 3 org attive
+             ✅ Fitness: 5 task completati, budget 60%
+             ⚠️ Legal: decisione pendente su contratto X (12h)
+             ✅ Platform: in schedule, 0 problemi"
+          - Also available via GET /api/digest/morning (for Jarvis voice)
+          File: daemon/src/server/api_orgs/digest.rs (new, <150 lines — generation + API)
+          File: daemon/src/server/api_orgs/morning_brief.rs (new, <150 lines — cron + Telegram + escalation)
+          Wire: spawn morning_brief cron in server startup, add routes in api_orgs/mod.rs
+          Uses ipc_org_digests table (created in T3-01).
+          Test: 3 tests (generate digest, morning aggregation, escalation detection)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib digest -- --test-threads=1"
+
+      - id: T5-02
+        do: |
+          Add Jarvis routing: extend kernel module to route user requests to
+          the correct org CEO. When user says "come sta il progetto fitness?",
+          Jarvis:
+          1. Extracts project/org reference from natural language
+          2. Queries GET /api/orgs to find matching org
+          3. Fetches latest digest or sends direct question to CEO
+          4. Returns aggregated response to user
+          Add routing logic to existing kernel escalation path.
+          File: daemon/src/kernel/org_router.rs (new, <150 lines)
+          Wire: integrate with existing kernel/jarvis message handler
+          Test: 2 tests (org name extraction, routing to correct org)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib org_router -- --test-threads=1"
+
+      - id: T5-03
+        do: |
+          Add `cvg org list` and `cvg org show <id>` CLI commands.
+          `cvg org list` shows all orgs with status, CEO, member count, budget usage.
+          `cvg org show <id>` shows full detail: members, services, recent decisions,
+          telemetry summary, latest digest.
+          Colored output, table format.
+          File: daemon/src/cli_org.rs (extend from T3-04, keep <250 lines)
+          If exceeds 250, split to cli_org_show.rs
+          Test: 1 test (output format)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_org -- --test-threads=1"
+          - "wc -l < daemon/src/cli_org.rs | awk '{if($1>250) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W6: Animated Dashboard — 4 visualization modes
+  # ═══════════════════════════════════════════════════════════════
+  - id: "6"
+    code: W6
+    name: "Animated Dashboard — Brain + Org + Timeline + Flow"
+    tasks:
+      - id: T6-01
+        do: |
+          Add org-aware WebSocket events to ws_brain.rs:
+          1. "org_update" — when org created/updated/suspended
+          2. "org_message" — inter/intra-org message with org_id label
+          3. "org_topology" — full network map (orgs + links + volumes)
+          4. "agent_factory" — when new agent created on-the-fly
+          Broadcast these on existing state.ws_tx channel.
+          File: daemon/src/server/ws_brain_org.rs (new, <150 lines)
+          Wire: call from api_orgs handlers and ipc send handlers
+          Keep ws_brain.rs <250 lines (currently 115).
+          Test: 2 tests (event format, topology includes inter-org links)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib ws_brain_org -- --test-threads=1"
+
+      - id: T6-02
+        do: |
+          Create web dashboard: Brain Network view (Vista 1).
+          Force-directed graph with animated particles. Vanilla JS + Canvas 2D.
+          Nodes = agents (size = message volume, color = org).
+          Edges = communication (thickness = frequency).
+          Animated particles along edges = messages in transit.
+          Clusters by org (force-directed grouping).
+          Connects to /ws/brain for real-time updates.
+          New nodes appear with animation when Agent Factory creates agents.
+          Uses Maranello DS tokens for colors/typography.
+          File: scripts/dashboard_web/brain-network.html (new, <250 lines)
+          Create scripts/dashboard_web/ directory.
+          Test: file exists, valid HTML, references /ws/brain
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        advisor_agent: nasra-app-builder
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f scripts/dashboard_web/brain-network.html"
+          - "grep -q '/ws/brain' scripts/dashboard_web/brain-network.html"
+          - "wc -l < scripts/dashboard_web/brain-network.html | awk '{if($1>250) exit 1}'"
+
+      - id: T6-03
+        do: |
+          Create web dashboard: Org Hierarchy view (Vista 2).
+          Interactive tree: expand/collapse departments.
+          Each node shows: agent name, role, status (colored badge), activity indicator.
+          Real-time updates via /ws/brain (org_update, org_message events).
+          Animated badges when dept is newly created.
+          Click agent → show recent messages and decisions.
+          Switch between orgs via dropdown.
+          Uses Maranello DS tokens.
+          File: scripts/dashboard_web/org-hierarchy.html (new, <250 lines)
+          Test: file exists, valid HTML, references /api/orgs
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        advisor_agent: nasra-app-builder
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f scripts/dashboard_web/org-hierarchy.html"
+          - "grep -q '/api/orgs' scripts/dashboard_web/org-hierarchy.html"
+          - "wc -l < scripts/dashboard_web/org-hierarchy.html | awk '{if($1>250) exit 1}'"
+
+      - id: T6-04
+        do: |
+          Create web dashboard: Message Flow + Timeline view (Vista 3+4).
+          Split page: top = live message flow (animated lines between agents),
+          bottom = timeline (scrollable event log, click to expand).
+          Message flow: thin lines = intra-org, thick = inter-org, animated particles.
+          Timeline: every event clickable → shows full detail (message, decision, agent def).
+          Time slider: scrub backward to see org structure at any point in time.
+          Connects to /ws/brain for real-time + GET /api/orgs/:id/decisions for history.
+          Uses Maranello DS tokens.
+          File: scripts/dashboard_web/message-flow.html (new, <250 lines)
+          Test: file exists, valid HTML
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        advisor_agent: nasra-app-builder
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f scripts/dashboard_web/message-flow.html"
+          - "grep -q '/ws/brain' scripts/dashboard_web/message-flow.html"
+          - "wc -l < scripts/dashboard_web/message-flow.html | awk '{if($1>250) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W7: TUI Org Chart + Integration Tests
+  # ═══════════════════════════════════════════════════════════════
+  - id: "7"
+    code: W7
+    name: "TUI Org View + Integration Tests"
+    tasks:
+      - id: T7-01
+        do: |
+          Enhance existing TUI agents widget (widgets/agents.rs, 73 lines) to show
+          org hierarchy. Add org grouping: agents clustered by org, with dept sub-groups.
+          Show: org name, CEO, member count, budget %, status colors.
+          Toggle between flat list (current) and org hierarchy view with 'o' key.
+          Keep widgets/agents.rs <250 lines.
+          File: daemon/src/tui/widgets/agents.rs (modify/extend)
+          Test: 1 test (render org-grouped view with mock data)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib widgets -- --test-threads=1"
+          - "wc -l < daemon/src/tui/widgets/agents.rs | awk '{if($1>250) exit 1}'"
+
+      - id: T7-02
+        do: |
+          Add `cvg bus org` CLI command for terminal org chart.
+          Renders agent hierarchy as indented tree with roles and status:
+            🏢 fitness-project [ACTIVE] budget: 72%
+              CEO: fitness-ceo (sonnet, active)
+              ├── Engineering
+              │   ├── dan [lead] (claude, active)
+              │   └── rex [reviewer] (copilot, idle)
+              └── Design
+                  └── sara [UX] (claude, active)
+          File: daemon/src/cli_bus_org.rs (new, <150 lines)
+          Wire: add Org variant to BusCommands
+          Test: 1 test (tree rendering with mock JSON)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_bus_org -- --test-threads=1"
+
+      - id: T7-03
+        do: |
+          Write end-to-end integration tests for the full agent network flow:
+          1. Create org with mission and budget
+          2. CEO bootstrap: auto-add members and services
+          3. Agent A sends message to Agent B (intra-org)
+          4. Agent B replies
+          5. CEO sends inter-org request to another org
+          6. Verify decision log has bootstrap decisions
+          7. Verify telemetry records token usage
+          8. Verify SSE stream delivers messages
+          9. Verify /api/orgs/:id returns full org with members+services
+          10. Verify budget gate blocks when exceeded
+          File: daemon/src/server/api_orgs/integration_tests.rs (new, <250 lines)
+          Wire: #[cfg(test)] mod in api_orgs/mod.rs
+          Test: all tests pass
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && cargo test --features kernel --lib integration_tests -- --test-threads=1"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W8: Closure — Tests + Docs + PR + Deploy
+  # ═══════════════════════════════════════════════════════════════
+  - id: "8"
+    code: W8
+    name: "Closure: Tests + Docs + PR + Deploy"
+    tasks:
+      - id: TF-tests
+        do: |
+          Run full test suite on main:
+          - cargo test --features kernel --lib -- --test-threads=1
+          - cd evolution && npx vitest run
+          - cargo check --features kernel (0 warnings)
+          Fix any failures. Verify no file >250 lines in changed files.
+          Verify no TODO/FIXME/HACK in changed files.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo test --features kernel --lib -- --test-threads=1"
+          - "cd evolution && npx vitest run"
+
+      - id: TF-doc
+        do: |
+          Update CHANGELOG.md: Agent Network features (Live Chat, Org Model,
+          Agent Factory, Animated Dashboard, Jarvis Routing).
+          Create ADR: docs/adr/adr-agent-network.md — architecture decision record
+          for the network-of-companies model.
+          Update TROUBLESHOOTING.md with org-related debugging.
+          Update CLAUDE.md Commands table with new cvg org/bus commands.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "grep -q 'Agent Network' CHANGELOG.md"
+          - "test -f docs/adr/adr-agent-network.md"
+
+      - id: TF-pr
+        do: |
+          Create PR: "feat(network): agent-to-agent live chat + org model +
+          agent factory + animated dashboard". Include test evidence + screenshots.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "git log --oneline -1 | grep -qE '^[a-f0-9]+ feat'"
+
+      - id: TF-deploy-verify
+        do: |
+          Build release binary with all new features.
+          Deploy to M5 Max (local) and M1 Pro (rsync via Thunderbolt/Tailscale).
+          Verify: /api/health returns new version.
+          Verify: /api/orgs endpoint responds.
+          Verify: /ws/brain pushes org events.
+          Verify: dashboard pages load (brain-network, org-hierarchy, message-flow).
+          Restart daemons on both nodes.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo build --release --features kernel"
+          - "curl -sf http://localhost:8420/api/orgs | python3 -c 'import json,sys; json.load(sys.stdin)'"
+          - "curl -sf http://localhost:8420/api/health | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"ok\"]'"

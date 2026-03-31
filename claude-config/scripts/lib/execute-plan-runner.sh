@@ -1,20 +1,50 @@
 #!/bin/bash
-# execute-plan-runner.sh - DB helpers, prompt builder, and per-task run logic
+# execute-plan-runner.sh - API-based helpers, prompt builder, and per-task run logic
 # Sourced by execute-plan-engine.sh
-# Version: 1.0.0
+# Version: 2.0.0 — ALL access via daemon HTTP API (zero sqlite3)
+# API: GET /api/plan-db/execution-tree/:plan_id returns {plan, tree[{wave, tasks[]}]}
+
+DAEMON_URL="${DAEMON_URL:-http://localhost:8420}"
 
 # ============================================================================
-# DB helpers
+# Fetch full plan data once and cache (avoids repeated API calls)
+# ============================================================================
+_PLAN_CACHE=""
+_fetch_plan() {
+	if [[ -z "$_PLAN_CACHE" ]]; then
+		_PLAN_CACHE=$(curl -sf "${DAEMON_URL}/api/plan-db/execution-tree/${PLAN_ID}" 2>/dev/null)
+	fi
+	echo "$_PLAN_CACHE"
+}
+
+# ============================================================================
+# Wave/task helpers (parse cached JSON)
 # ============================================================================
 get_waves() {
-	db_query "$DB_FILE" "SELECT id, wave_id, name, status FROM waves WHERE plan_id=$PLAN_ID ORDER BY id;"
+	_fetch_plan | jq -r '.tree[]? | .tasks[0] as $t |
+		"\($t.wave_id_fk)|\(.wave_id // .code // "?")|\(.name // "")|\(.status // "pending")"' 2>/dev/null
+	# Fallback: try flat waves array
+	if [[ ${PIPESTATUS[1]} -ne 0 ]]; then
+		_fetch_plan | jq -r '.waves[]? | "\(.id)|\(.wave_id // .code)|\(.name)|\(.status)"' 2>/dev/null
+	fi
 }
 
 get_wave_tasks() {
 	local wave_db_id="$1"
-	db_query "$DB_FILE" "SELECT id, task_id, status, title FROM tasks
-		WHERE wave_id_fk=$wave_db_id
-		ORDER BY id;"
+	_fetch_plan | jq -r --argjson wid "$wave_db_id" \
+		'.tree[]? | select(.tasks[0].wave_id_fk == $wid) | .tasks[]? |
+		"\(.id)|\(.task_id)|\(.status)|\(.title | gsub("\n";" ") | .[0:80])"' 2>/dev/null
+	if [[ ${PIPESTATUS[1]} -ne 0 ]]; then
+		_fetch_plan | jq -r --argjson wid "$wave_db_id" \
+			'.tasks[]? | select(.wave_id_fk == $wid) |
+			"\(.id)|\(.task_id)|\(.status)|\(.title | gsub("\n";" ") | .[0:80])"' 2>/dev/null
+	fi
+}
+
+# Force re-fetch (after task status change)
+refresh_plan_cache() {
+	_PLAN_CACHE=""
+	_fetch_plan > /dev/null
 }
 
 # ============================================================================
@@ -22,17 +52,24 @@ get_wave_tasks() {
 # ============================================================================
 build_task_prompt() {
 	local task_db_id="$1"
-	# Use existing prompt generator if available
 	if [[ -x "${SCRIPT_DIR}/copilot-task-prompt.sh" ]]; then
 		"${SCRIPT_DIR}/copilot-task-prompt.sh" "$task_db_id" 2>/dev/null
 	else
-		# Fallback: query DB directly
-		db_query "$DB_FILE" "SELECT 'Task ID: '||task_id||char(10)||
-			'Title: '||title||char(10)||
-			'Description: '||COALESCE(description,'')||char(10)||
-			'Test Criteria: '||COALESCE(test_criteria,'')
-			FROM tasks WHERE id=$task_db_id;"
+		_fetch_plan | jq -r --argjson tid "$task_db_id" \
+			'[.tree[].tasks[] | select(.id == $tid)][0] //
+			 [.tasks[] | select(.id == $tid)][0] |
+			"Task: \(.task_id)\nTitle: \(.title)\nModel: \(.model // "")\nTest: \(.test_criteria // "")"' 2>/dev/null
 	fi
+}
+
+# ============================================================================
+# Get task status (fresh from API, not cache)
+# ============================================================================
+get_task_status() {
+	local task_db_id="$1"
+	refresh_plan_cache
+	_fetch_plan | jq -r --argjson tid "$task_db_id" \
+		'[.tree[].tasks[] | select(.id == $tid)][0].status // "unknown"' 2>/dev/null
 }
 
 # ============================================================================
@@ -42,13 +79,9 @@ run_task() {
 	local task_db_id="$1"
 	local task_code="$2"
 
-	# Resolve worktree: wave-level first (new model), fallback plan-level (old model)
+	# Resolve worktree from plan data
 	local worktree
-	worktree=$(db_query "$DB_FILE" "SELECT COALESCE(w.worktree_path, p.worktree_path, '')
-		FROM tasks t
-		JOIN plans p ON t.plan_id = p.id
-		LEFT JOIN waves w ON t.wave_id_fk = w.id
-		WHERE t.id=$task_db_id;")
+	worktree=$(_fetch_plan | jq -r '.plan.worktree_path // ""' 2>/dev/null)
 	worktree="${worktree/#\~/$HOME}"
 
 	if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -56,99 +89,61 @@ run_task() {
 		return 0
 	fi
 
-	# Build the prompt
 	local prompt
 	prompt="$(build_task_prompt "$task_db_id")"
-
 	local exit_code=0
 
-	# Resolve model: per-task model from DB, or global override, with engine compatibility
+	# Resolve model from plan data
 	local effective_model="${MODEL:-}"
 	if [[ -z "$effective_model" ]]; then
-		effective_model=$(db_query "$DB_FILE" "SELECT COALESCE(model,'') FROM tasks WHERE id=$task_db_id;")
+		effective_model=$(_fetch_plan | jq -r --argjson tid "$task_db_id" \
+			'[.tree[].tasks[] | select(.id == $tid)][0].model // ""' 2>/dev/null)
 	fi
-	# Engine-model compatibility: remap incompatible models
 	case "$ENGINE" in
-		claude)
-			if [[ "$effective_model" == gpt-* ]]; then
-				effective_model="claude-sonnet-4-6"  # safe default for Claude engine
-			fi
-			;;
-		copilot)
-			# Copilot supports both claude-* and gpt-* models — no remapping needed
-			;;
+		claude) [[ "$effective_model" == gpt-* ]] && effective_model="claude-sonnet-4-6" ;;
 	esac
 
-	# --- Strategy 1: delegate.sh (preferred) ---
-	if [[ -x "$DELEGATE_SH" ]]; then
+	# --- Strategy 1: delegate.sh ---
+	if [[ -n "${DELEGATE_SH:-}" && -x "$DELEGATE_SH" ]]; then
 		step "Executing via delegate.sh (engine: $ENGINE)"
 		local model_flag=""
 		[[ -n "$effective_model" ]] && model_flag="--model $effective_model"
-		# delegate.sh accepts: delegate.sh <task_db_id> [--engine <e>] [--model <m>]
 		timeout "$TASK_TIMEOUT" "$DELEGATE_SH" "$task_db_id" \
 			--engine "$ENGINE" $model_flag || exit_code=$?
 		return $exit_code
 	fi
 
-	# --- Strategy 2: engine-specific fallback ---
+	# --- Strategy 2: engine-specific ---
 	case "$ENGINE" in
-
 	copilot)
 		step "Executing via copilot-worker.sh"
-		local model_arg="${effective_model:-}"
-		if [[ -x "$COPILOT_WORKER" ]]; then
+		if [[ -n "${COPILOT_WORKER:-}" && -x "$COPILOT_WORKER" ]]; then
 			local worker_args=("$task_db_id")
-			[[ -n "$model_arg" ]] && worker_args+=(--model "$model_arg")
+			[[ -n "$effective_model" ]] && worker_args+=(--model "$effective_model")
 			worker_args+=(--timeout "$TASK_TIMEOUT")
 			timeout "$TASK_TIMEOUT" "$COPILOT_WORKER" "${worker_args[@]}" || exit_code=$?
 		else
-			# Direct copilot invocation
-			local model_flag=""
-			[[ -n "$MODEL" ]] && model_flag="--model $MODEL"
-			local dir_flag=""
+			local model_flag="" dir_flag=""
+			[[ -n "$effective_model" ]] && model_flag="--model $effective_model"
 			[[ -n "$worktree" && -d "$worktree" ]] && dir_flag="--add-dir $worktree"
-			timeout "$TASK_TIMEOUT" copilot \
-				--allow-all \
-				--no-ask-user \
-				--disable-mcp-server codegraph \
-				$dir_flag \
-				$model_flag \
-				-p "$prompt" || exit_code=$?
-		fi
-		;;
-
+			timeout "$TASK_TIMEOUT" copilot --allow-all --no-ask-user \
+				$dir_flag $model_flag -p "$prompt" || exit_code=$?
+		fi ;;
 	opencode)
 		step "Executing via opencode"
-		local model_flag=""
-		[[ -n "$MODEL" ]] && model_flag="--model $MODEL"
-		local cwd_flag=""
+		local model_flag="" cwd_flag=""
+		[[ -n "$effective_model" ]] && model_flag="--model $effective_model"
 		[[ -n "$worktree" && -d "$worktree" ]] && cwd_flag="--cwd $worktree"
-		timeout "$TASK_TIMEOUT" opencode \
-			$cwd_flag \
-			$model_flag \
-			--prompt "$prompt" || exit_code=$?
-		;;
-
-	claude | *)
+		timeout "$TASK_TIMEOUT" opencode $cwd_flag $model_flag \
+			--prompt "$prompt" || exit_code=$? ;;
+	claude|*)
 		step "Executing via claude CLI"
-		local model_flag=""
-		[[ -n "$MODEL" ]] && model_flag="--model $MODEL"
-		local dir_flag=""
+		local model_flag="" dir_flag=""
+		[[ -n "$effective_model" ]] && model_flag="--model $effective_model"
 		[[ -n "$worktree" && -d "$worktree" ]] && dir_flag="--add-dir $worktree"
-		# cd to worktree so file operations target correct directory
 		[[ -n "$worktree" && -d "$worktree" ]] && cd "$worktree"
-		# Generate per-worktree settings.json (replaces --dangerously-skip-permissions)
-		if [[ -n "$worktree" && -d "$worktree" ]]; then
-			local _sdir="${worktree}/.claude"
-			mkdir -p "$_sdir"
-			printf '{"permissions":{"allow":["Bash(cargo check:*)","Bash(cargo build:*)","Bash(cargo test:*)","Bash(git add:*)","Bash(git commit:*)","Bash(git diff:*)","Bash(git status:*)","Bash(curl http://localhost:*)","Bash(curl http://127.0.0.1:*)"]}}' \
-				> "${_sdir}/settings.json"
-		fi
-		timeout "$TASK_TIMEOUT" claude \
-			$dir_flag \
-			$model_flag \
-			-p "$prompt" || exit_code=$?
-		;;
+		timeout "$TASK_TIMEOUT" claude $dir_flag $model_flag \
+			-p "$prompt" || exit_code=$? ;;
 	esac
 
 	return $exit_code
