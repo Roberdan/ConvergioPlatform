@@ -57,7 +57,98 @@ CREATE TABLE IF NOT EXISTS ipc_worktrees (
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now'))
 );
+CREATE TABLE IF NOT EXISTS ipc_orgs (
+    id TEXT PRIMARY KEY NOT NULL,
+    mission TEXT NOT NULL,
+    objectives TEXT NOT NULL,
+    ceo_agent TEXT NOT NULL,
+    budget REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now'))
+);
+CREATE TABLE IF NOT EXISTS ipc_org_members (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    role TEXT NOT NULL,
+    department TEXT,
+    joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    UNIQUE(org_id, agent),
+    FOREIGN KEY(org_id) REFERENCES ipc_orgs(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS ipc_org_services (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    metadata TEXT,
+    registered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    UNIQUE(org_id, name),
+    FOREIGN KEY(org_id) REFERENCES ipc_orgs(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS ipc_decisions (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    rationale TEXT,
+    decided_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    FOREIGN KEY(org_id) REFERENCES ipc_orgs(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS ipc_org_telemetry (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    value REAL NOT NULL,
+    tags TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    FOREIGN KEY(org_id) REFERENCES ipc_orgs(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS ipc_org_digests (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    FOREIGN KEY(org_id) REFERENCES ipc_orgs(id) ON DELETE CASCADE
+);
 CREATE INDEX IF NOT EXISTS idx_ipc_messages_channel ON ipc_messages(channel, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ipc_messages_interorg
+ON ipc_messages(channel, created_at)
+WHERE channel LIKE 'inter-org:%';
+CREATE INDEX IF NOT EXISTS idx_ipc_org_members_org ON ipc_org_members(org_id, agent);
+CREATE INDEX IF NOT EXISTS idx_ipc_org_services_org ON ipc_org_services(org_id, status);
+CREATE INDEX IF NOT EXISTS idx_ipc_decisions_org ON ipc_decisions(org_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ipc_org_telemetry_org ON ipc_org_telemetry(org_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ipc_org_digests_org ON ipc_org_digests(org_id, created_at DESC);
+CREATE TRIGGER IF NOT EXISTS trg_ipc_messages_org_isolation
+BEFORE INSERT ON ipc_messages
+WHEN NEW.channel LIKE 'org:%'
+  AND NEW.from_agent IS NOT NULL
+  AND NEW.from_agent != ''
+  AND NOT EXISTS (
+      SELECT 1 FROM ipc_org_members m
+      WHERE m.org_id = substr(NEW.channel, 5)
+        AND m.agent = NEW.from_agent
+  )
+BEGIN
+    SELECT RAISE(ABORT, 'org isolation violation');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_ipc_messages_interorg_source_guard
+BEFORE INSERT ON ipc_messages
+WHEN NEW.channel LIKE 'inter-org:%:%'
+  AND NEW.from_agent IS NOT NULL
+  AND NEW.from_agent != ''
+  AND NOT EXISTS (
+      SELECT 1 FROM ipc_org_members m
+      WHERE m.org_id = substr(NEW.channel, 11, instr(substr(NEW.channel, 11), ':') - 1)
+        AND m.agent = NEW.from_agent
+  )
+BEGIN
+    SELECT RAISE(ABORT, 'inter-org source membership required');
+END;
 ";
 
 pub fn ensure_ipc_schema(state: &ServerState) -> Result<(), super::state::ApiError> {
