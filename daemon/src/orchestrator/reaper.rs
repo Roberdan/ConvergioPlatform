@@ -2,14 +2,11 @@
 // Runs as periodic background task alongside Ali. Also cleans mesh peer tmp files.
 use std::path::Path;
 
-// 60 min: agents on complex tasks often idle 30+ min while waiting for
-// LLM responses or mesh delegation round-trips. 30 min caused false reaps.
-const STALE_AGENT_MINUTES: i64 = 60;
+const STALE_AGENT_MINUTES: i64 = 60; // was 30; raised to avoid false reaps on long tasks
 const STALE_DELEGATION_HOURS: i64 = 24;
 const DAEMON_BASE: &str = "http://localhost:8420";
 
-/// Reap stale agents (not seen for 60 min), dead delegations, orphan sessions.
-/// Returns (agents_reaped, delegations_cleaned, sessions_cleaned).
+/// Reap stale agents, dead delegations, orphan sessions.
 pub fn reap(db_path: &Path) -> Result<(usize, usize, usize), Box<dyn std::error::Error>> {
     let conn = rusqlite::Connection::open(db_path)?;
 
