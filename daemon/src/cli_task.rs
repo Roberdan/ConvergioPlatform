@@ -49,6 +49,35 @@ pub enum TaskCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Create a new task in an existing plan/wave
+    Create {
+        /// Plan DB ID
+        plan_id: i64,
+        /// Wave DB ID (wave_id_fk)
+        wave_db_id: i64,
+        /// Task string identifier (e.g. T1-01)
+        task_id: String,
+        /// Task title
+        title: String,
+        /// Priority (default: P2)
+        #[arg(long, default_value = "P2")]
+        priority: String,
+        /// Task type (default: feature)
+        #[arg(long = "type", default_value = "feature")]
+        task_type: String,
+        /// Model override
+        #[arg(long, default_value = "")]
+        model: String,
+        /// Task description
+        #[arg(long, default_value = "")]
+        description: String,
+        /// Human-readable output instead of JSON
+        #[arg(long)]
+        human: bool,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
     /// Approve the deliverable linked to a task
     Approve {
         /// Task DB ID
@@ -129,6 +158,38 @@ pub async fn handle(cmd: TaskCommands) -> Result<(), crate::cli_error::CliError>
         } => {
             if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/kb-search?q={query}&limit={limit}"),
+                human,
+            )
+            .await
+            {
+                eprintln!("error: {e}");
+            }
+        }
+        TaskCommands::Create {
+            plan_id,
+            wave_db_id,
+            task_id,
+            title,
+            priority,
+            task_type,
+            model,
+            description,
+            human,
+            api_url,
+        } => {
+            let body = serde_json::json!({
+                "plan_id": plan_id,
+                "wave_id_fk": wave_db_id,
+                "task_id": task_id,
+                "title": title,
+                "priority": priority,
+                "type": task_type,
+                "model": model,
+                "description": description,
+            });
+            if let Err(e) = crate::cli_http::post_and_print(
+                &format!("{api_url}/api/plan-db/task/create"),
+                &body,
                 human,
             )
             .await

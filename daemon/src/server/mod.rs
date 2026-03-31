@@ -52,6 +52,7 @@ pub mod api_peers_ext;
 pub mod api_plan_db;
 pub mod api_plan_db_agents;
 mod api_plan_db_counters;
+pub mod api_plan_db_task_create;
 pub mod api_policy;
 pub mod api_plan_db_checkpoint;
 pub mod api_plan_db_execution_context;

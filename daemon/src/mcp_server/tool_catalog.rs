@@ -10,7 +10,7 @@ use crate::mcp_server::tools::McpTool;
 
 /// Returns the full catalogue of MCP tools (unfiltered).
 pub fn all_tools() -> Vec<McpTool> {
-    let mut tools = Vec::with_capacity(20);
+    let mut tools = Vec::with_capacity(35);
     tools.extend(plan_tools());
     tools.extend(chat_tools());
     tools.extend(agent_tools());
@@ -19,6 +19,7 @@ pub fn all_tools() -> Vec<McpTool> {
     tools.extend(kernel_tools());
     tools.extend(action_tools());
     tools.extend(control_tools());
+    tools.extend(crate::mcp_server::platform_tools::platform_tools());
     tools
 }
 

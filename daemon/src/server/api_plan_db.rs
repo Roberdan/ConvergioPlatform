@@ -1,5 +1,6 @@
 use super::api_plan_db_evidence;
 use super::api_plan_db_gates;
+use super::api_plan_db_task_create;
 use super::api_plan_db_task_evidence;
 use super::state::{query_one, query_rows, ApiError, ServerState};
 use super::ws_brain::broadcast_brain_task_update;
@@ -17,6 +18,10 @@ pub fn router() -> Router<ServerState> {
         .route("/api/plan-db/context/:plan_id", get(handle_get_context))
         .route("/api/plan-db/json/:plan_id", get(handle_get_json))
         .route("/api/plan-db/task/update", post(handle_task_update))
+        .route(
+            "/api/plan-db/task/create",
+            post(api_plan_db_task_create::handle_create_task),
+        )
         .route(
             "/api/plan-db/task/evidence",
             post(api_plan_db_task_evidence::handle_record_evidence),

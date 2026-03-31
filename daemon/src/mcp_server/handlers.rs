@@ -70,7 +70,7 @@ pub fn handle_tool_call(
         "cvg_invoke_agent" => crate::mcp_server::invoke_agent::invoke_agent(args),
         "cvg_create_agent" => crate::mcp_server::agent_factory::handle_create_agent(args, daemon_url, token),
         "cvg_reschedule_task" => reschedule_task(daemon_url, token, args),
-        _ => Err(McpError::InvalidParams("unknown tool name")),
+        other => crate::mcp_server::platform_tools::handle_platform_tool(other, daemon_url, token, args),
     }
 }
 
