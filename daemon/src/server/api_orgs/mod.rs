@@ -4,6 +4,8 @@ mod budget;
 mod telemetry;
 mod digest;
 mod morning_brief;
+#[cfg(test)]
+mod integration_tests;
 
 use super::state::ServerState;
 use axum::routing::{delete, get, post, put};
