@@ -1,6 +1,7 @@
 use crate::server::api_ipc::ensure_ipc_schema;
 use super::budget::guard_member_action_budget;
 use crate::server::state::{query_one, query_rows, ApiError, ServerState};
+use crate::server::ws_brain_org::{broadcast_agent_factory, broadcast_org_topology, broadcast_org_update};
 use axum::extract::{Path, State};
 use axum::{http::StatusCode, Json};
 use serde::Deserialize;
@@ -68,6 +69,8 @@ pub async fn create_org(
         rusqlite::params![format!("org:{id}"), "Org channel namespace", "system"],
     )
     .map_err(|e| ApiError::internal(format!("create channel failed: {e}")))?;
+    broadcast_org_update(&state, &id, "created");
+    broadcast_org_topology(&state);
     Ok((StatusCode::CREATED, Json(json!({ "ok": true, "org_id": id }))))
 }
 
@@ -136,6 +139,8 @@ pub async fn update_org(
     if changed == 0 {
         return Err(ApiError::not_found("org not found"));
     }
+    broadcast_org_update(&state, &id, "updated");
+    broadcast_org_topology(&state);
     Ok(Json(json!({ "ok": true, "updated": changed })))
 }
 
@@ -159,6 +164,8 @@ pub async fn add_member(
         ],
     )
     .map_err(|e| ApiError::internal(format!("add member failed: {e}")))?;
+    broadcast_agent_factory(&state, &id, &body.agent, &body.role);
+    broadcast_org_topology(&state);
     Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
 }
 

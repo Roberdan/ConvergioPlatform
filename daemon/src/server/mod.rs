@@ -101,6 +101,7 @@ mod state_init_migrations;
 pub mod static_serve;
 pub mod ws;
 pub mod ws_brain;
+pub mod ws_brain_org;
 pub mod ws_pty;
 
 pub mod api_decisions;

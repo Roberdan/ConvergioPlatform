@@ -8,6 +8,7 @@ pub use super::handlers_ext2::api_ipc_send_direct;
 
 use super::super::state::{query_rows, ApiError, ServerState};
 use super::super::ws_brain::broadcast_brain_message_event;
+use super::super::ws_brain_org::{broadcast_org_message, broadcast_org_topology};
 use super::ensure_ipc_schema;
 use axum::extract::{Query, State};
 use axum::Json;
@@ -222,6 +223,12 @@ pub async fn api_ipc_send(
         tracing::debug!("ws ipc_message broadcast (no subscribers): {e}");
     }
     broadcast_brain_message_event(&state, &body.sender_name, channel, &body.content);
+    if channel.starts_with("org:") || channel.starts_with("inter-org:") {
+        broadcast_org_message(&state, channel, &body.sender_name, &body.content);
+        if channel.starts_with("inter-org:") {
+            broadcast_org_topology(&state);
+        }
+    }
 
     Ok(Json(json!({ "ok": true })))
 }
