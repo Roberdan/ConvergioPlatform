@@ -21,6 +21,7 @@ pub fn router() -> Router<ServerState> {
 
 async fn list_queue(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
+    vs::run_migrations(&conn).map_err(|e| ApiError::internal(e.to_string()))?;
     let entries = vs::list_queue(&conn).map_err(|e| ApiError::internal(e.to_string()))?;
     Ok(Json(json!({ "queue": entries })))
 }
@@ -30,6 +31,7 @@ async fn get_verdict(
     Path(task_id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
+    vs::run_migrations(&conn).map_err(|e| ApiError::internal(e.to_string()))?;
     match vs::get_verdict(&conn, task_id).map_err(|e| ApiError::internal(e.to_string()))? {
         Some(v) => Ok(Json(json!({ "verdict": v }))),
         None => Ok(Json(json!({ "verdict": null }))),
