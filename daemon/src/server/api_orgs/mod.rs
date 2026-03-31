@@ -2,6 +2,8 @@ mod handlers;
 mod decisions;
 mod budget;
 mod telemetry;
+mod digest;
+mod morning_brief;
 
 use super::state::ServerState;
 use axum::routing::{delete, get, post, put};
@@ -25,4 +27,11 @@ pub fn router() -> Router<ServerState> {
         .route("/api/orgs/:id/telemetry", post(telemetry::record_telemetry))
         .route("/api/orgs/:id/telemetry", get(telemetry::aggregate_telemetry))
         .route("/api/orgs/:id/telemetry/agents", get(telemetry::per_agent_telemetry))
+        .route("/api/orgs/:id/digest", get(digest::latest_digest))
+        .route("/api/orgs/:id/digest/generate", post(digest::generate_digest))
+        .route("/api/digest/morning", get(morning_brief::get_morning_brief))
+}
+
+pub fn spawn_background_jobs(state: ServerState) {
+    morning_brief::spawn_morning_brief_cron(state);
 }
