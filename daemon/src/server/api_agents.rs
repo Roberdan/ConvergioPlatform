@@ -118,7 +118,7 @@ async fn api_brain(State(state): State<ServerState>) -> Result<Json<Value>, ApiE
         [],
     ).unwrap_or_default();
 
-    // Recent completed agents (last hour)
+    // Recent completed agents (last 30 days)
     let recent = query_rows(
         &conn,
         "SELECT agent_id, agent_type AS type, model, description, parent_session, status, tokens_total, cost_usd, duration_s, completed_at FROM agent_activity WHERE status IN ('completed','failed') AND completed_at >= datetime('now', '-30 days') ORDER BY completed_at DESC LIMIT 30",

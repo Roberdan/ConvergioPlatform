@@ -11,25 +11,25 @@ pub(crate) async fn handle_history(
     model: Option<String>,
     limit: Option<u32>,
 ) -> Result<(), CliError> {
-    let mut query_parts: Vec<String> = Vec::new();
     // Default: 7 days for CLI (API defaults to 30)
     let since_val = since.unwrap_or_else(|| {
         let dt = chrono::Utc::now() - chrono::Duration::days(7);
         dt.format("%Y-%m-%dT%H:%M:%S").to_string()
     });
-    query_parts.push(format!("since={since_val}"));
-    if let Some(u) = until {
-        query_parts.push(format!("until={u}"));
-    }
-    if let Some(s) = status {
-        query_parts.push(format!("status={s}"));
-    }
-    if let Some(m) = model {
-        query_parts.push(format!("model={m}"));
-    }
     let lim = limit.unwrap_or(20).min(500);
-    query_parts.push(format!("limit={lim}"));
-    let qs = query_parts.join("&");
+    let mut pairs = url::form_urlencoded::Serializer::new(String::new());
+    pairs.append_pair("since", &since_val);
+    if let Some(ref u) = until {
+        pairs.append_pair("until", u);
+    }
+    if let Some(ref s) = status {
+        pairs.append_pair("status", s);
+    }
+    if let Some(ref m) = model {
+        pairs.append_pair("model", m);
+    }
+    pairs.append_pair("limit", &lim.to_string());
+    let qs = pairs.finish();
     let url = format!("{api_url}/api/agents/history?{qs}");
     let client = reqwest::Client::new();
     let resp = client

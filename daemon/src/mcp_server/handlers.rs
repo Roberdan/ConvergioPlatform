@@ -136,7 +136,7 @@ fn agent_start(daemon_url: &str, token: Option<&str>, args: &Value) -> Result<Va
         .and_then(|v| v.as_str())
         .ok_or(McpError::InvalidParams("name is required"))?;
     let url = format!("{daemon_url}/api/plan-db/agent/start");
-    let mut payload = json!({"name": name});
+    let mut payload = json!({"agent_id": name});
     if let Some(task_id) = args.get("task_id").and_then(|v| v.as_i64()) {
         payload["task_id"] = json!(task_id);
     }
@@ -149,7 +149,7 @@ fn agent_complete(daemon_url: &str, token: Option<&str>, args: &Value) -> Result
         .and_then(|v| v.as_str())
         .ok_or(McpError::InvalidParams("name is required"))?;
     let url = format!("{daemon_url}/api/plan-db/agent/complete");
-    let mut payload = json!({"name": name});
+    let mut payload = json!({"agent_id": name});
     if let Some(reason) = args.get("exit_reason").and_then(|v| v.as_str()) {
         payload["exit_reason"] = json!(reason);
     }

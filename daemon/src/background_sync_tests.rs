@@ -83,7 +83,7 @@ fn test_interval_arg_overrides_env() {
 
 #[test]
 fn test_query_active_peers_returns_recent_heartbeats() {
-    use super::query_active_peers;
+    use crate::background_sync_peers::query_active_peers;
     let _guard = env_lock().lock().expect("env lock");
     let db = setup_db();
 
@@ -137,7 +137,7 @@ fn test_query_active_peers_returns_recent_heartbeats() {
 fn test_query_active_peers_returns_host_port_without_scheme() {
     // Peer addresses must be "host:port" — the HTTP transport adds the scheme.
     // A double scheme (http://http://...) causes silent sync failure.
-    use super::query_active_peers;
+    use crate::background_sync_peers::query_active_peers;
     let _guard = env_lock().lock().expect("env lock");
     let db = setup_db();
 
@@ -178,7 +178,7 @@ fn test_query_active_peers_returns_host_port_without_scheme() {
 #[test]
 fn test_query_active_peers_peer_not_in_conf() {
     // Peer online in heartbeats but missing from peers.conf → error logged, not panicked.
-    use super::query_active_peers;
+    use crate::background_sync_peers::query_active_peers;
     let _guard = env_lock().lock().expect("env lock");
     let db = setup_db();
 

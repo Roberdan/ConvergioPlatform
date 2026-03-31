@@ -46,12 +46,18 @@ async fn api_agent_history(
     if since == "30_days_ago" {
         conditions.push("started_at >= datetime('now', '-30 days')".to_string());
     } else {
-        conditions.push(format!("started_at >= ?{}", bind_values.len() + 1));
+        conditions.push(format!(
+            "started_at >= datetime(replace(?{}, 'T', ' '))",
+            bind_values.len() + 1
+        ));
         bind_values.push(since);
     }
 
     if let Some(until) = params.until {
-        conditions.push(format!("started_at <= ?{}", bind_values.len() + 1));
+        conditions.push(format!(
+            "started_at <= datetime(replace(?{}, 'T', ' '))",
+            bind_values.len() + 1
+        ));
         bind_values.push(until);
     }
 

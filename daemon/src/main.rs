@@ -46,6 +46,7 @@ mod cli_skill_validate;
 mod cli_skill_validators;
 mod cli_task;
 mod cli_task_approve;
+mod cli_task_format;
 mod cli_wave;
 mod cli_wave_handlers;
 mod cli_reap;

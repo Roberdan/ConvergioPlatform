@@ -78,7 +78,7 @@ pub(super) async fn handle_agent_complete(
             "UPDATE agent_activity SET status = ?1, tokens_in = ?2, tokens_out = ?3, \
          tokens_total = ?2 + ?3, cost_usd = ?4, completed_at = datetime('now'), \
          duration_s = ROUND((julianday('now') - julianday(started_at)) * 86400, 1), \
-         exit_reason = ?5 \
+         exit_reason = COALESCE(?5, exit_reason) \
          WHERE agent_id = ?6",
             rusqlite::params![status, tokens_in, tokens_out, cost, exit_reason, agent_id],
         )
