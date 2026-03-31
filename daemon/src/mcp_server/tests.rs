@@ -56,14 +56,14 @@ mod tests {
     #[test]
     fn list_tools_ring0_returns_all_tools() {
         let tools = list_tools(Ring::Core);
-        assert_eq!(tools.len(), 20, "Ring 0 must expose all 20 tools, got {}", tools.len());
+        assert_eq!(tools.len(), 21, "Ring 0 must expose all 21 tools, got {}", tools.len());
     }
 
     #[test]
     fn list_tools_ring1_returns_16_tools() {
         // Ring 1 (Trusted) sees all tools except cvg_restart_node + cvg_assign_role (Ring 0).
         let tools = list_tools(Ring::Trusted);
-        assert_eq!(tools.len(), 18, "Ring 1 must expose 18 tools, got {}", tools.len());
+        assert_eq!(tools.len(), 19, "Ring 1 must expose 19 tools, got {}", tools.len());
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(!names.contains(&"cvg_restart_node"), "restart_node is ring-0 only");
     }
@@ -200,7 +200,7 @@ mod tests {
         let tools = v.get("result").and_then(|r| r.get("tools")).expect("tools/list must return tools");
         assert!(tools.is_array(), "tools must be an array");
         let arr = tools.as_array().unwrap();
-        assert_eq!(arr.len(), 18, "ring 1 must see 18 tools (restart_node+assign_role are ring-0)");
+        assert_eq!(arr.len(), 19, "ring 1 must see 19 tools (restart_node+assign_role are ring-0)");
     }
 
     #[test]

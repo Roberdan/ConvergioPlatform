@@ -1,6 +1,7 @@
 mod handlers;
 mod decisions;
 mod budget;
+mod telemetry;
 
 use super::state::ServerState;
 use axum::routing::{delete, get, post, put};
@@ -21,4 +22,7 @@ pub fn router() -> Router<ServerState> {
         .route("/api/orgs/:id/services", get(handlers::list_services))
         .route("/api/orgs/:id/decisions", post(decisions::log_decision))
         .route("/api/orgs/:id/decisions", get(decisions::list_decisions))
+        .route("/api/orgs/:id/telemetry", post(telemetry::record_telemetry))
+        .route("/api/orgs/:id/telemetry", get(telemetry::aggregate_telemetry))
+        .route("/api/orgs/:id/telemetry/agents", get(telemetry::per_agent_telemetry))
 }

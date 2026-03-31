@@ -67,6 +67,22 @@ fn agent_tools() -> Vec<McpTool> {
             }),
             min_ring: Ring::Trusted,
         },
+        McpTool {
+            name: "cvg_create_agent".into(),
+            description: "Create an org-specific agent definition and register it via Agent Factory.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "role": {"type": "string"},
+                    "expertise": {"type": "string"},
+                    "department": {"type": "string"},
+                    "org_id": {"type": "string"}
+                },
+                "required": ["name", "role", "expertise", "department", "org_id"]
+            }),
+            min_ring: Ring::Trusted,
+        },
     ]
 }
 

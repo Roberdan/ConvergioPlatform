@@ -6,7 +6,6 @@ use std::time::Duration;
 use crate::mcp_server::agent_chat::{handle_agent_ask, handle_agent_send};
 use crate::mcp_server::security::McpError;
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
-
 fn make_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -69,6 +68,7 @@ pub fn handle_tool_call(
         "cvg_assign_role" => assign_role(daemon_url, token, args),
         "cvg_interrupt_agent" => interrupt_agent(daemon_url, token, args),
         "cvg_invoke_agent" => crate::mcp_server::invoke_agent::invoke_agent(args),
+        "cvg_create_agent" => crate::mcp_server::agent_factory::handle_create_agent(args, daemon_url, token),
         "cvg_reschedule_task" => reschedule_task(daemon_url, token, args),
         _ => Err(McpError::InvalidParams("unknown tool name")),
     }

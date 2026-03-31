@@ -14,6 +14,7 @@ use crate::mcp_server::security::check_ring_access;
 use crate::mcp_server::tools::list_tools;
 
 pub mod agent_chat;
+pub mod agent_factory;
 pub mod handlers;
 pub mod invoke_agent;
 pub mod plan_tools;
@@ -21,6 +22,7 @@ pub mod protocol;
 pub mod security;
 pub mod tool_catalog;
 pub mod tools;
+pub mod web_search;
 
 #[cfg(test)]
 mod tests;
@@ -182,6 +184,7 @@ fn min_ring_for_tool(name: &str) -> Ring {
         | "cvg_agent_ask"
         | "cvg_agent_start"
         | "cvg_agent_complete"
+        | "cvg_create_agent"
         | "cvg_kernel_ask"
         | "cvg_notify"
         | "cvg_invoke_agent" => Ring::Trusted,
