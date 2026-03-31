@@ -20,6 +20,7 @@ pub fn all_tools() -> Vec<McpTool> {
     tools.extend(action_tools());
     tools.extend(control_tools());
     tools.extend(crate::mcp_server::platform_tools::platform_tools());
+    tools.extend(crate::mcp_server::org_tools::org_tools());
     tools
 }
 
