@@ -88,6 +88,13 @@ fn verify_commands_fail() {
     assert!(!r.passed);
     assert!(r.details.iter().any(|d| d.starts_with("FAIL")));
 }
+#[test]
+fn verify_commands_honor_explicit_working_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("ok.txt"), "ok").unwrap();
+    let r = gate_verify_commands_in_dir(&["test -f ok.txt"], Some(dir.path()));
+    assert!(r.passed);
+}
 
 // -- status + criteria --
 #[test]

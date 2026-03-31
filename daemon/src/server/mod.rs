@@ -76,6 +76,7 @@ pub mod api_tracking;
 pub mod api_workers;
 pub mod api_workspace;
 pub mod api_workspace_events;
+mod api_workspace_support;
 pub mod llm_client;
 pub mod mesh_provision;
 pub mod middleware;

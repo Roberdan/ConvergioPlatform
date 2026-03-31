@@ -78,7 +78,6 @@ pub fn gate_credential_scan(files: &[&str]) -> GateResult {
     }
 }
 
-/// Check that no file exceeds the given line limit.
 pub fn gate_line_count(files: &[&str], max_lines: usize) -> GateResult {
     let mut violations = Vec::new();
     for fp in files {
@@ -97,7 +96,6 @@ pub fn gate_line_count(files: &[&str], max_lines: usize) -> GateResult {
     }
 }
 
-/// Scan files for anti-patterns: todo!(), bare TODO, empty catch blocks.
 pub fn gate_pattern_check(files: &[&str]) -> GateResult {
     let todo_macro = Regex::new(r"todo!\(\)").unwrap();
     let todo_line = Regex::new(r"//\s*TODO").unwrap();
@@ -137,19 +135,21 @@ pub fn gate_pattern_check(files: &[&str]) -> GateResult {
     }
 }
 
-/// Run shell commands and verify they all exit 0.
-/// Commands run from the project root (parent of daemon/) so that
-/// verify paths like "test -f daemon/src/foo.rs" or "cd daemon && cargo test"
-/// work regardless of the daemon process cwd.
 pub fn gate_verify_commands(commands: &[&str]) -> GateResult {
+    gate_verify_commands_in_dir(commands, None)
+}
+
+pub fn gate_verify_commands_in_dir(
+    commands: &[&str],
+    working_dir: Option<&std::path::Path>,
+) -> GateResult {
     let mut details = Vec::new();
     let mut all_ok = true;
-    // Why: daemon process cwd is daemon/, but verify commands in plan specs
-    // reference paths relative to project root. Run from parent dir.
-    let project_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    let default_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let project_root = working_dir.unwrap_or(default_root.as_path());
     for cmd in commands {
         match Command::new("sh")
             .arg("-c")
@@ -180,7 +180,6 @@ pub fn gate_verify_commands(commands: &[&str]) -> GateResult {
     }
 }
 
-/// Check that task status is "submitted" (required for validation).
 pub fn gate_status_check(status: &str) -> GateResult {
     let ok = status == "submitted";
     GateResult {
@@ -194,7 +193,6 @@ pub fn gate_status_check(status: &str) -> GateResult {
     }
 }
 
-/// Check that test criteria are defined and non-empty.
 pub fn gate_test_criteria(criteria: Option<&str>) -> GateResult {
     let has = criteria
         .map(|c| !c.is_empty() && c != "null" && c != "[]" && c != "{}")
@@ -210,7 +208,6 @@ pub fn gate_test_criteria(criteria: Option<&str>) -> GateResult {
     }
 }
 
-/// Run file-based mechanical gates (no short-circuit -- all gates always run).
 pub fn run_all_gates(files: &[&str], commands: &[&str]) -> Vec<GateResult> {
     vec![
         gate_credential_scan(files),
@@ -220,12 +217,12 @@ pub fn run_all_gates(files: &[&str], commands: &[&str]) -> Vec<GateResult> {
     ]
 }
 
-/// Run full validation: status + criteria + file gates.
-pub fn validate_task(
+pub fn validate_task_in_dir(
     status: &str,
     test_criteria: Option<&str>,
     files: &[&str],
     verify_commands: &[&str],
+    working_dir: Option<&std::path::Path>,
 ) -> MechanicalValidation {
     let mut gates = vec![gate_status_check(status), gate_test_criteria(test_criteria)];
     if !files.is_empty() {
@@ -234,7 +231,16 @@ pub fn validate_task(
         gates.push(gate_pattern_check(files));
     }
     if !verify_commands.is_empty() {
-        gates.push(gate_verify_commands(verify_commands));
+        gates.push(gate_verify_commands_in_dir(verify_commands, working_dir));
     }
     summarize(gates)
+}
+
+pub fn validate_task(
+    status: &str,
+    test_criteria: Option<&str>,
+    files: &[&str],
+    verify_commands: &[&str],
+) -> MechanicalValidation {
+    validate_task_in_dir(status, test_criteria, files, verify_commands, None)
 }

@@ -173,6 +173,33 @@ fn run_core_table_migrations(conn: &Connection) {
 }
 
 #[test]
+fn test_cleanup_legacy_crdt_objects_removes_shadow_schema() {
+    let conn = Connection::open_in_memory().expect("open_in_memory");
+    conn.execute_batch(
+        "CREATE TABLE workspaces (id INTEGER PRIMARY KEY, path TEXT);
+         CREATE TRIGGER workspaces__crsql_itrig AFTER INSERT ON workspaces BEGIN SELECT 1; END;
+         CREATE TABLE workspaces__crsql_clock (id INTEGER);
+         CREATE INDEX workspaces__crsql_clock_dbv_idx ON workspaces__crsql_clock(id);
+         CREATE TABLE crsql_master (name TEXT);",
+    )
+    .expect("seed legacy schema");
+    let dropped = super::state_init::cleanup_legacy_crdt_objects(&conn).expect("cleanup");
+    assert!(dropped >= 4, "expected CRDT shadow objects to be dropped");
+    assert!(!table_exists(&conn, "workspaces__crsql_clock"));
+    assert!(!table_exists(&conn, "crsql_master"));
+    assert!(!index_exists(&conn, "workspaces__crsql_clock_dbv_idx"));
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name='workspaces__crsql_itrig'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap(),
+        0
+    );
+}
+
+#[test]
 fn test_core_performance_indexes_exist_after_migration() {
     let conn = Connection::open_in_memory().expect("open_in_memory");
     run_core_table_migrations(&conn);

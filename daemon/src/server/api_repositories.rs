@@ -17,11 +17,10 @@ pub fn router() -> Router<ServerState> {
             get(list_repositories).post(create_repository),
         )
         .route("/api/repositories/:name", get(show_repository))
+        .route("/api/repositories/:name/link", axum::routing::post(link_repository))
 }
 
-async fn list_repositories(
-    State(state): State<ServerState>,
-) -> Result<Json<Value>, ApiError> {
+async fn list_repositories(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
     let rows = query_rows(
         &conn,
@@ -60,13 +59,7 @@ async fn create_repository(
     conn.execute(
         "INSERT INTO repositories(name,path,github_url,description,transport) \
          VALUES(?1,?2,?3,?4,?5)",
-        rusqlite::params![
-            name,
-            path,
-            body.github_url,
-            body.description,
-            transport
-        ],
+        rusqlite::params![name, path, body.github_url, body.description, transport],
     )
     .map_err(|e| {
         let msg = e.to_string();
@@ -104,6 +97,68 @@ async fn show_repository(
     )?
     .ok_or_else(|| ApiError::not_found(format!("repository '{name}' not found")))?;
     Ok(Json(row))
+}
+
+#[derive(Deserialize)]
+struct LinkRepoRequest {
+    project_id: Option<String>,
+}
+
+async fn link_repository(
+    State(state): State<ServerState>,
+    Path(name): Path<String>,
+    Json(body): Json<LinkRepoRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let project_id = body
+        .project_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::bad_request("project_id is required"))?;
+    let conn = state.get_conn()?;
+    let repo = query_one(
+        &conn,
+        "SELECT id,name,path,github_url FROM repositories WHERE name=?1",
+        rusqlite::params![name],
+    )?
+    .ok_or_else(|| ApiError::not_found(format!("repository '{name}' not found")))?;
+    let repo_name = repo["name"]
+        .as_str()
+        .ok_or_else(|| ApiError::internal("repository name missing"))?;
+    let repo_path = repo["path"]
+        .as_str()
+        .ok_or_else(|| ApiError::internal("repository path missing"))?;
+    let github_url = repo["github_url"].as_str();
+
+    let updated = conn
+        .execute(
+            "UPDATE projects
+             SET path = ?1,
+                 github_url = COALESCE(?2, github_url),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?3",
+            rusqlite::params![repo_path, github_url, project_id],
+        )
+        .map_err(|e| ApiError::internal(format!("link project update failed: {e}")))?;
+    if updated == 0 {
+        conn.execute(
+            "INSERT INTO projects(id,name,path,github_url)
+             VALUES(?1,?2,?3,?4)",
+            rusqlite::params![project_id, repo_name, repo_path, github_url],
+        )
+        .map_err(|e| ApiError::internal(format!("link project insert failed: {e}")))?;
+    }
+
+    let project = query_one(
+        &conn,
+        "SELECT id,name,path,github_url FROM projects WHERE id=?1",
+        rusqlite::params![project_id],
+    )?
+    .ok_or_else(|| ApiError::internal("linked project not found"))?;
+    Ok(Json(json!({
+        "ok": true,
+        "repository": repo,
+        "project": project
+    })))
 }
 
 #[cfg(test)]
@@ -151,9 +206,17 @@ mod unit_tests {
     fn response_shape_fields_match_schema() {
         // Verify expected column names for integration callers
         let expected = [
-            "id", "name", "path", "github_url", "description",
-            "is_active", "transport", "health_status",
-            "last_health_check", "created_at", "updated_at",
+            "id",
+            "name",
+            "path",
+            "github_url",
+            "description",
+            "is_active",
+            "transport",
+            "health_status",
+            "last_health_check",
+            "created_at",
+            "updated_at",
         ];
         assert_eq!(expected.len(), 11);
         assert!(expected.contains(&"health_status"));

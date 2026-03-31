@@ -3,8 +3,23 @@
 
 use crate::cli_error::CliError;
 
+fn auth_header_value(token: Option<&str>) -> Option<String> {
+    token
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("Bearer {value}"))
+}
+
+fn with_auth(req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    match auth_header_value(std::env::var("CONVERGIO_AUTH_TOKEN").ok().as_deref()) {
+        Some(value) => req.header("Authorization", value),
+        None => req,
+    }
+}
+
 pub async fn fetch_and_print(url: &str, human: bool) -> Result<(), CliError> {
-    match reqwest::get(url).await {
+    let client = reqwest::Client::new();
+    match with_auth(client.get(url)).send().await {
         Ok(resp) => {
             let status = resp.status();
             let val: serde_json::Value = resp
@@ -29,7 +44,7 @@ pub async fn post_and_print(
     human: bool,
 ) -> Result<(), CliError> {
     let client = reqwest::Client::new();
-    match client.post(url).json(body).send().await {
+    match with_auth(client.post(url)).json(body).send().await {
         Ok(resp) => {
             let status = resp.status();
             let val: serde_json::Value = resp
@@ -55,7 +70,7 @@ pub async fn post_and_return(
     body: &serde_json::Value,
 ) -> Result<serde_json::Value, i32> {
     let client = reqwest::Client::new();
-    match client.post(url).json(body).send().await {
+    match with_auth(client.post(url)).json(body).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.json::<serde_json::Value>().await {
@@ -82,7 +97,8 @@ pub async fn post_and_return(
 
 /// GET `url` and return the parsed JSON value without printing.
 pub async fn get_and_return(url: &str) -> Result<serde_json::Value, i32> {
-    match reqwest::get(url).await {
+    let client = reqwest::Client::new();
+    match with_auth(client.get(url)).send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.json::<serde_json::Value>().await {
@@ -115,5 +131,24 @@ pub fn print_value(val: &serde_json::Value, human: bool) {
         );
     } else {
         println!("{val}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::auth_header_value;
+
+    #[test]
+    fn builds_bearer_header_when_token_present() {
+        assert_eq!(
+            auth_header_value(Some("secret")),
+            Some("Bearer secret".to_string())
+        );
+    }
+
+    #[test]
+    fn skips_bearer_header_when_token_missing() {
+        assert!(auth_header_value(None).is_none());
+        assert!(auth_header_value(Some("   ")).is_none());
     }
 }

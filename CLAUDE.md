@@ -47,13 +47,14 @@ NEVER `sqlite3` directly (hook-blocked). Use `cvg` CLI or `curl http://localhost
 ## Rules
 
 @rules/hard-enforcement.md
-@rules/best-practices.md
+
+> Best practices: `@rules/best-practices.md` (on-demand, not hook-enforced)
 
 ## Governance
 
 @CONSTITUTION.md
-@AgenticManifesto.md
-@LEGAL_NOTICE.md
+
+> Manifesto: `AgenticManifesto.md` | Legal: `LEGAL_NOTICE.md` (on-demand, not operational)
 
 ## Model Routing
 
@@ -136,18 +137,16 @@ Max 250 lines/file | English only | Comments: WHY not WHAT, <5% | Mesh: Tailscal
 ## Tools
 
 Priority: LSP → Glob/Grep/Read/Edit → Subagents → Bash (git/npm only)
+NEVER pipe Bash to `tail`/`head`/`grep`/`cat` — hook blocks. Use Read/Grep/Glob.
+CI: `ci-summary.sh`/`ci-digest.sh`/`pr-ops.sh` over raw `npm`/`gh` commands.
+Plans: `Skill(skill="planner")` not EnterPlanMode. Execute: `Skill(skill="execute")`.
+CodeGraph: `.codegraph/` exists → use codegraph_search. Absent → `codegraph init -i`.
 
-@reference/operational/core-tools.md
+> Full tool/routing reference: `@reference/operational/core-tools.md` (on-demand)
+> Agent specs: `.github/agents/` (auto-registered, fetch on-demand via Agent tool)
 
-## CodeGraph
+## On-Demand Context
 
-`.codegraph/` exists → use codegraph_search/callers/callees/impact. Absent → `codegraph init -i`.
-
-## Memory
-
-`~/.claude/projects/{slug}/memory/`. `/memory` to inspect.
-
-## AI Agents
-
-@.github/agents/Convergio.agent.md
-@.github/agents/ConvergioLLM.agent.md
+Skills, agents, and references are lazy-loaded. The daemon dispatches on demand.
+Only hard-enforcement rules and Constitution NN articles are always-on.
+Everything else: fetch when the task requires it, not upfront.
