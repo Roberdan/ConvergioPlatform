@@ -78,14 +78,25 @@ Cherry-picks: delegate to agent. Auth failures: `/login` then re-launch.
 
 | Command | Purpose |
 |---|---|
-| `cd daemon && cargo build --release` | Build |
-| `cd daemon && cargo check` | Type check |
-| `cd daemon && cargo test` | Tests |
+| `cd daemon && cargo build --release --features kernel` | Build |
+| `cd daemon && cargo check --features kernel,crsqlite` | Type check (all features) |
+| `cd daemon && cargo test --features kernel --lib -- --test-threads=1` | Tests |
 | `./daemon/start.sh` | Run daemon |
 | `cd evolution && npx vitest run` | Evolution tests |
 | `cvg plan show <id>` | Plan details |
 | `cvg project create\|list\|show <id>` | Project ops |
 | `scripts/mesh/mesh-heartbeat.sh` | Mesh health |
+| `cvg delegation start <id> --peer <peer>` | Delegate plan |
+| `scripts/platform/record-evidence.sh <task_id> test_pass "<cmd>" 0` | Record test evidence |
+
+## Task Lifecycle (NON-NEGOTIABLE)
+
+Status flow: `pending → in_progress → submitted → done`
+
+Before `submitted`: POST `/api/plan-db/task/evidence` with `evidence_type=test_pass` (TestGate)
+Before `done`: POST `/api/validation/record` with `verdict=pass` (ValidatorGate)
+
+Skipping gates = 400 error. No exceptions.
 
 **Resilience**: `cvg reap` | `cvg checkpoint save|restore` | `cvg kernel start|stop|status`
 
