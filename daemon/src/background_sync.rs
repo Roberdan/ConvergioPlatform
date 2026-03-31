@@ -15,8 +15,10 @@ use crate::db::libsql_adapter::{self, SyncMeta};
 /// Default sync interval in seconds when CONVERGIO_SYNC_INTERVAL_SECS is unset.
 const DEFAULT_INTERVAL_SECS: u64 = 30;
 
-/// Tables eligible for timestamp-based sync. Must have `id` + `updated_at`.
-const SYNC_TABLES: &[&str] = &["tasks", "plans", "waves", "knowledge_base", "notifications"];
+/// Tables eligible for timestamp-based sync. Must have `id INTEGER PRIMARY KEY` + `updated_at`.
+/// Note: `projects` has TEXT PK and is NOT sync-eligible; FK constraints are
+/// handled by disabling foreign_keys during import (see apply_changes).
+const SYNC_TABLES: &[&str] = &["plans", "tasks", "waves", "knowledge_base", "notifications"];
 
 /// Resolve sync interval: explicit arg > env var > 30s default.
 pub fn resolve_interval_secs(override_secs: Option<u64>) -> u64 {

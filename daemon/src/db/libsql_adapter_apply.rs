@@ -17,6 +17,19 @@ pub fn apply_changes(
     conn: &Connection,
     changes: &[SyncChange],
 ) -> rusqlite::Result<usize> {
+    // Disable FK checks during sync import to handle missing parent rows
+    // (e.g., plans referencing projects that haven't been synced yet).
+    // Re-enabled after all changes are applied.
+    conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
+    let result = apply_changes_inner(conn, changes);
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    result
+}
+
+fn apply_changes_inner(
+    conn: &Connection,
+    changes: &[SyncChange],
+) -> rusqlite::Result<usize> {
     let mut applied = 0usize;
     for change in changes {
         if !change
