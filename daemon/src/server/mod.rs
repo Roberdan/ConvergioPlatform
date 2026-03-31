@@ -173,6 +173,7 @@ pub mod api_repositories;
 #[cfg(test)] mod api_goal_tests;
 #[cfg(test)] mod api_repositories_tests;
 #[cfg(test)] mod api_orgs_tests;
+#[cfg(test)] mod api_orgs_budget_tests;
 
 use axum::Router;
 use std::path::{Path, PathBuf};

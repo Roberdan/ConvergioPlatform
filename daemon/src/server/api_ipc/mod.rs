@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS ipc_orgs (
     objectives TEXT NOT NULL,
     ceo_agent TEXT NOT NULL,
     budget REAL NOT NULL DEFAULT 0,
+    daily_budget_tokens INTEGER NOT NULL DEFAULT 1000,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now'))
@@ -156,6 +157,10 @@ pub fn ensure_ipc_schema(state: &ServerState) -> Result<(), super::state::ApiErr
     conn.execute_batch(IPC_SCHEMA).map_err(|err| {
         super::state::ApiError::internal(format!("ipc schema init failed: {err}"))
     })?;
+    let _ = conn.execute_batch(
+        "ALTER TABLE ipc_orgs
+         ADD COLUMN daily_budget_tokens INTEGER NOT NULL DEFAULT 1000;",
+    );
     // Migration: add parent_agent column to existing tables (idempotent)
     let _ = conn.execute_batch("ALTER TABLE ipc_agents ADD COLUMN parent_agent TEXT;");
     // Drop CRDT triggers on IPC tables — IPC is local-only, not replicated

@@ -1,4 +1,5 @@
 use crate::server::api_ipc::ensure_ipc_schema;
+use super::budget::guard_member_action_budget;
 use crate::server::state::{query_one, query_rows, ApiError, ServerState};
 use axum::extract::{Path, State};
 use axum::{http::StatusCode, Json};
@@ -145,6 +146,7 @@ pub async fn add_member(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
+    guard_member_action_budget(&state, &conn, &id, "add_member")?;
     conn.execute(
         "INSERT INTO ipc_org_members(id, org_id, agent, role, department)
          VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -166,6 +168,7 @@ pub async fn remove_member(
 ) -> Result<Json<Value>, ApiError> {
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
+    guard_member_action_budget(&state, &conn, &id, "remove_member")?;
     let deleted = conn
         .execute(
             "DELETE FROM ipc_org_members WHERE org_id = ?1 AND agent = ?2",

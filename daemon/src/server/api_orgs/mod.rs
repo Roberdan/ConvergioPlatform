@@ -1,5 +1,6 @@
 mod handlers;
 mod decisions;
+mod budget;
 
 use super::state::ServerState;
 use axum::routing::{delete, get, post, put};
