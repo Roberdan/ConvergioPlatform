@@ -1,5 +1,23 @@
 # Changelog
 
+## [20.2.0] - 31 Marzo 2026
+
+### Added
+- **MCP Completeness (Plan 10037 W1)**: 12 new MCP tools exposing pre-existing daemon APIs (`cvg_create_plan`, `cvg_start_plan`, `cvg_create_task`, `cvg_record_validation`, `cvg_health_deep`, `cvg_list_workspaces`, `cvg_remember`, `cvg_recall`, `cvg_budget`, `cvg_agent_catalog`, `cvg_quality_gate`, `cvg_list_messages`) in `platform_tools.rs`
+- `POST /api/plan-db/task/create` endpoint + `cvg task create` CLI — add tasks to plans in any status
+- **Workflow hardening** (incident 2026-03-31): MainGuard hook, git pre-commit hook, DaemonCwdGuard, auth token auto-provision, TaskReaper for orphan tasks, MainDirtyReaper for dirty repo detection
+
+### Fixed
+- Daemon no longer starts from worktree CWD (was causing evidence gate failures)
+- `CONVERGIO_AUTH_TOKEN` auto-provisioned if missing (was causing 401 on all API calls after restart)
+- Orphan `in_progress` tasks from crashed copilots auto-reset to `pending` by reaper
+- Removed agent symlinks from `.claude/agents/` (was loading 3.8k tokens of 60+ agents into context)
+
+### Security
+- MainGuard: blocks Edit/Write to `daemon/src/` on main branch (Claude Code hook)
+- git pre-commit: blocks commits on main in main checkout (works for copilot too)
+- MainDirtyReaper: daemon notifies via Telegram/ntfy if main has >5 dirty files
+
 ## [20.1.2] - 31 Marzo 2026
 
 ### Added

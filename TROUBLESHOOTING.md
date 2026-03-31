@@ -31,6 +31,50 @@
   - ensure query uses exact agent name
   - check response content type is `text/event-stream`.
 
+## Workflow Hardening (Incident 2026-03-31)
+
+A copilot session crashed leaving 467 dirty files on main, orphan worktrees, stuck tasks, and a daemon with broken CWD/auth. Six protections were added:
+
+### MainGuard blocks my Edit/Write
+
+- Symptom: `BLOCKED: MainGuard — cannot modify daemon/src/... on branch 'main'`
+- Cause: you're editing daemon source code directly on main. This is now forbidden.
+- Fix: create a worktree: `git worktree add --detach /path HEAD`, work there, then PR.
+
+### pre-commit hook blocks my commit
+
+- Symptom: `BLOCKED: Cannot commit directly on 'main' in the main repo`
+- Cause: git pre-commit hook blocks commits on main branch in the main checkout.
+- Fix: work in a worktree. Commits on main only via PR merge on GitHub.
+- Override (infrastructure only): `git commit --no-verify` (use with extreme caution).
+
+### Daemon refuses to start ("invoked from a worktree")
+
+- Symptom: `FATAL: start.sh invoked from a worktree`
+- Cause: DaemonCwdGuard — daemon must run from the main repo, not a worktree.
+- Fix: `cd ~/GitHub/ConvergioPlatform && ./daemon/start.sh serve`
+
+### All API calls return 401 after daemon restart
+
+- Symptom: `{"error":"Unauthorized","message":"Valid Bearer token required"}`
+- Cause: `CONVERGIO_AUTH_TOKEN` not set in `~/.convergio/env`.
+- Fix: `start.sh` now auto-provisions a `dev-local-<hostname>` token and persists it.
+  If still failing: `echo "CONVERGIO_AUTH_TOKEN=dev-local" >> ~/.convergio/env` and restart daemon.
+  MCP server needs `CONVERGIO_API_TOKEN` in `.mcp.json` matching the daemon token.
+
+### Tasks stuck in `in_progress` after copilot crash
+
+- Symptom: task shows `in_progress` but no agent is working on it.
+- Cause: copilot crashed without deregistering. Agent is dead but task wasn't reset.
+- Fix (automatic): TaskReaper runs every 5 min — resets orphan tasks to `pending`.
+- Fix (manual): `cvg task update <id> pending`
+
+### Warning: "main repo has N dirty files"
+
+- Symptom: warning at session start or in daemon logs.
+- Cause: copilot crash left uncommitted changes on main.
+- Fix: verify all work is in PRs (`gh pr list`), then clean: `git checkout -- . && git clean -fd`
+
 ## v20.1.0 Notes
 
 ### Sync Replication
