@@ -24,6 +24,17 @@ pub enum OrgCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// List orgs with status, CEO, members and budget usage
+    List {
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Show one org with details
+    Show {
+        id: String,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: OrgCommands) -> Result<(), CliError> {
@@ -36,6 +47,8 @@ pub async fn handle(cmd: OrgCommands) -> Result<(), CliError> {
             ceo_agent,
             api_url,
         } => create_org_and_spawn_ceo(&name, &mission, &objectives, budget, &ceo_agent, &api_url).await,
+        OrgCommands::List { api_url } => crate::cli_org_show::list_orgs(&api_url).await,
+        OrgCommands::Show { id, api_url } => crate::cli_org_show::show_org(&id, &api_url).await,
     }
 }
 
@@ -139,6 +152,32 @@ mod tests {
                 assert_eq!(budget, 1200.0);
                 assert_eq!(ceo_agent, "ceo");
             }
+            _ => panic!("expected create command"),
         }
+    }
+
+    #[test]
+    fn parse_org_list_command() {
+        let cli = TestCli::parse_from(["cvg", "list"]);
+        match cli.cmd {
+            OrgCommands::List { api_url } => {
+                assert_eq!(api_url, "http://localhost:8420");
+            }
+            _ => panic!("expected list command"),
+        }
+    }
+
+    #[test]
+    fn format_org_list_contains_expected_columns() {
+        let rendered = crate::cli_org_show::format_org_row(&serde_json::json!({
+            "id": "fitness-project",
+            "status": "active",
+            "ceo_agent": "fitness-ceo",
+            "member_count": 7,
+            "budget_usage_pct": 60.0
+        }));
+        assert!(rendered.contains("fitness-project"));
+        assert!(rendered.contains("fitness-ceo"));
+        assert!(rendered.contains("60.0%"));
     }
 }
