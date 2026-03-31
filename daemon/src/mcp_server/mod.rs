@@ -17,6 +17,7 @@ pub mod agent_chat;
 pub mod agent_factory;
 pub mod handlers;
 pub mod invoke_agent;
+pub mod org_tools;
 pub mod plan_tools;
 pub mod platform_tools;
 pub mod protocol;
@@ -193,14 +194,20 @@ fn min_ring_for_tool(name: &str) -> Ring {
         | "cvg_start_plan"
         | "cvg_create_task"
         | "cvg_record_validation"
-        | "cvg_quality_gate" => Ring::Trusted,
+        | "cvg_quality_gate"
+        | "cvg_org_create"
+        | "cvg_org_members"
+        | "cvg_org_services"
+        | "cvg_org_decide" => Ring::Trusted,
         // Sandboxed (Ring 3) — accessible to all callers
         "cvg_list_plans" | "cvg_list_agents" => Ring::Sandboxed,
         // Community read-only (Ring 2)
         "cvg_get_plan" | "cvg_mesh_status" | "cvg_node_readiness" | "cvg_cost_summary"
         | "cvg_kernel_status" | "cvg_health_deep" | "cvg_list_workspaces"
         | "cvg_remember" | "cvg_recall" | "cvg_budget" | "cvg_agent_catalog"
-        | "cvg_list_messages" => Ring::Community,
+        | "cvg_list_messages"
+        | "cvg_org_list" | "cvg_org_show" | "cvg_org_telemetry"
+        | "cvg_org_digest" | "cvg_org_digest_generate" | "cvg_morning_brief" => Ring::Community,
         // Unknown — default fail-safe to Core
         _ => Ring::Core,
     }

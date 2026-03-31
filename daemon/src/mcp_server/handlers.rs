@@ -67,6 +67,10 @@ pub fn handle_tool_call(
         "cvg_invoke_agent" => crate::mcp_server::invoke_agent::invoke_agent(args),
         "cvg_create_agent" => crate::mcp_server::agent_factory::handle_create_agent(args, daemon_url, token),
         "cvg_reschedule_task" => reschedule_task(daemon_url, token, args),
+        "cvg_org_create" | "cvg_org_list" | "cvg_org_show" | "cvg_org_members"
+        | "cvg_org_services" | "cvg_org_decide" | "cvg_org_telemetry"
+        | "cvg_org_digest" | "cvg_org_digest_generate" | "cvg_morning_brief" =>
+            crate::mcp_server::org_tools::handle_org_tool(name, daemon_url, token, args),
         other => crate::mcp_server::platform_tools::handle_platform_tool(other, daemon_url, token, args),
     }
 }
