@@ -13,6 +13,7 @@ pub mod handlers;
 pub mod nightly;
 pub mod policy;
 pub mod reaper;
+pub mod reaper_main_guard;
 mod reactor;
 pub mod rollback;
 pub mod sandbox;

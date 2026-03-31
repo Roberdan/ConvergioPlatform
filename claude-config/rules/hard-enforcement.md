@@ -1,6 +1,6 @@
 # Hard Enforcement (HOOK-ENFORCED)
 
-Enforcement status reflects what hooks actually do as of 30 Marzo 2026.
+Enforcement status reflects what hooks actually do as of 31 Marzo 2026.
 
 | # | Rule | Hook | Status | Behavior |
 |---|---|---|---|---|
@@ -14,6 +14,9 @@ Enforcement status reflects what hooks actually do as of 30 Marzo 2026.
 | 8 | Fail-loud (no silent fallback) | `FailLoud` | WARNING | PreToolUse/Edit: warns on unwrap_or_default() and let _ = in .rs files |
 | 9 | Conventional commits | `CommitLint` | BLOCK | PreToolUse/Bash: blocks git commit -m with non-conventional message |
 | 10 | Test before done | `TestGate` | WARNING | PreToolUse/Bash: warns on Rust commit if /tmp/.convergio-test-ran absent |
+| 11 | No writes on main branch | `MainGuard` | BLOCK | PreToolUse/Edit+Write: blocks daemon/src/ edits when on main branch. Incident: 2026-03-31 |
+| 12 | Orphan task reset | `TaskReaper` | AUTO | orchestrator/reaper: resets in_progress tasks whose agent is dead back to pending |
+| 13 | Daemon CWD validation | `DaemonCwdGuard` | BLOCK | start.sh: refuses to boot from worktree. Auto-provisions auth token if missing |
 
 **Why WARNING vs BLOCK**: EvidenceGate, AgentIdentity, FailLoud, TestGate are WARNING to avoid
 breaking existing flows. They surface problems without halting valid work. Escalate to BLOCK

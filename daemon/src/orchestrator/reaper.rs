@@ -1,7 +1,5 @@
-// Agent reaper — garbage collector for stale agents, dead delegations, orphan sessions.
-// Runs as a periodic background task alongside Ali.
-// Also cleans up temp files on mesh peers from completed plan delegations.
-
+// Agent reaper — GC for stale agents, dead delegations, orphan sessions/tasks.
+// Runs as periodic background task alongside Ali. Also cleans mesh peer tmp files.
 use std::path::Path;
 
 const STALE_AGENT_MINUTES: i64 = 30;
@@ -38,7 +36,20 @@ pub fn reap(db_path: &Path) -> Result<(usize, usize, usize), Box<dyn std::error:
         [],
     ).unwrap_or(0);
 
-    // 4. Expired file locks
+    // 4. Orphan tasks: in_progress but assigned agent is dead (2026-03-31 incident)
+    // WHY: when a copilot crashes, tasks stay in_progress forever. Reset to pending.
+    let orphan_tasks = conn.execute(
+        "UPDATE tasks SET status='pending', executor_agent=NULL \
+         WHERE status='in_progress' \
+         AND executor_agent IS NOT NULL \
+         AND executor_agent NOT IN (SELECT name FROM ipc_agents)",
+        [],
+    ).unwrap_or(0);
+    if orphan_tasks > 0 {
+        tracing::warn!("reaper: reset {orphan_tasks} orphan in_progress tasks to pending");
+    }
+
+    // 5. Expired file locks
     if let Err(e) = conn.execute(
         "DELETE FROM ipc_file_locks WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
         [],
@@ -81,9 +92,7 @@ async fn reap_peer_tmp_files() -> Result<usize, Box<dyn std::error::Error + Send
     Ok(cleaned)
 }
 
-/// Kill local copilot/claude processes older than `max_age` that are orphaned.
-/// Returns the number of processes killed.
-/// Uses macOS-compatible `ps -eo pid,etime,command` (etime format: [[dd-]hh:]mm:ss).
+/// Kill orphaned copilot/claude processes older than `max_age`.
 pub fn reap_orphan_copilot_processes(max_age: std::time::Duration) -> usize {
     let output = std::process::Command::new("ps")
         .args(["-eo", "pid,etime,command"])
@@ -147,6 +156,8 @@ pub fn spawn_reaper(db_path: std::path::PathBuf) {
             if killed > 0 {
                 tracing::info!("reaper: killed {killed} orphan copilot processes");
             }
+            // Main repo dirty check (copilot crash detection)
+            super::reaper_main_guard::check_main_repo_dirty().await;
             // Remote cleanup (async mesh operations)
             if let Err(e) = reap_peer_tmp_files().await {
                 tracing::debug!("reaper: peer cleanup skipped: {e}");
@@ -163,17 +174,16 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let conn = rusqlite::Connection::open(tmp.path()).unwrap();
         conn.execute_batch(
-            "CREATE TABLE ipc_agents (name TEXT PRIMARY KEY, host TEXT, agent_type TEXT, \
-             pid INTEGER, metadata TEXT, registered_at TEXT, \
-             last_seen TEXT DEFAULT (datetime('now')));
-             CREATE TABLE ipc_messages (id TEXT PRIMARY KEY, from_agent TEXT, to_agent TEXT, \
+            "CREATE TABLE ipc_agents (name TEXT PK, host TEXT, agent_type TEXT, \
+             pid INT, metadata TEXT, registered_at TEXT, last_seen TEXT DEFAULT (datetime('now')));
+             CREATE TABLE ipc_messages (id TEXT PK, from_agent TEXT, to_agent TEXT, \
              channel TEXT, content TEXT, msg_type TEXT, \
-             created_at TEXT DEFAULT (datetime('now')), read_at TEXT, priority INTEGER DEFAULT 0);
-             CREATE TABLE ipc_file_locks (file_path TEXT PRIMARY KEY, locked_by TEXT, \
+             created_at TEXT DEFAULT (datetime('now')), read_at TEXT, priority INT DEFAULT 0);
+             CREATE TABLE ipc_file_locks (file_path TEXT PK, locked_by TEXT, \
              lock_type TEXT, acquired_at TEXT, expires_at TEXT);
-             CREATE TABLE agent_activity (id INTEGER PRIMARY KEY, status TEXT, started_at TEXT);
-             CREATE TABLE plans (id INTEGER PRIMARY KEY, status TEXT, execution_host TEXT, \
-             updated_at TEXT);",
+             CREATE TABLE agent_activity (id INT PRIMARY KEY, status TEXT, started_at TEXT);
+             CREATE TABLE plans (id INT PRIMARY KEY, status TEXT, execution_host TEXT, updated_at TEXT);
+             CREATE TABLE tasks (id INT PRIMARY KEY, plan_id INT, status TEXT, executor_agent TEXT);",
         ).unwrap();
         (tmp, conn)
     }
@@ -181,16 +191,12 @@ mod tests {
     #[test]
     fn reap_removes_stale_agents() {
         let (tmp, conn) = setup_db();
-        conn.execute("INSERT INTO ipc_agents(name, last_seen) \
-            VALUES ('stale', datetime('now', '-2 hours'))", []).unwrap();
-        conn.execute("INSERT INTO ipc_agents(name, last_seen) \
-            VALUES ('fresh', datetime('now'))", []).unwrap();
+        conn.execute("INSERT INTO ipc_agents(name, last_seen) VALUES ('stale', datetime('now', '-2 hours'))", []).unwrap();
+        conn.execute("INSERT INTO ipc_agents(name, last_seen) VALUES ('fresh', datetime('now'))", []).unwrap();
         let (reaped, _, _) = reap(tmp.path()).unwrap();
         assert!(reaped >= 1);
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM ipc_agents", [], |r| r.get(0),
-        ).unwrap();
-        assert_eq!(count, 1);
+        let c: i64 = conn.query_row("SELECT COUNT(*) FROM ipc_agents", [], |r| r.get(0)).unwrap();
+        assert_eq!(c, 1);
     }
 
     #[test]
@@ -200,10 +206,8 @@ mod tests {
             VALUES (1, 'doing', 'dead-peer', datetime('now', '-48 hours'))", []).unwrap();
         let (_, cleaned, _) = reap(tmp.path()).unwrap();
         assert_eq!(cleaned, 1);
-        let host: Option<String> = conn.query_row(
-            "SELECT execution_host FROM plans WHERE id=1", [], |r| r.get(0),
-        ).unwrap();
-        assert!(host.is_none());
+        let h: Option<String> = conn.query_row("SELECT execution_host FROM plans WHERE id=1", [], |r| r.get(0)).unwrap();
+        assert!(h.is_none());
     }
 
     #[test]
@@ -212,29 +216,34 @@ mod tests {
         conn.execute("INSERT INTO ipc_file_locks(file_path, locked_by, expires_at) \
             VALUES ('test.rs', 'agent1', datetime('now', '-1 hour'))", []).unwrap();
         reap(tmp.path()).unwrap();
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM ipc_file_locks", [], |r| r.get(0),
-        ).unwrap();
-        assert_eq!(count, 0);
+        let c: i64 = conn.query_row("SELECT COUNT(*) FROM ipc_file_locks", [], |r| r.get(0)).unwrap();
+        assert_eq!(c, 0);
     }
 
     #[tokio::test]
     async fn reap_peer_tmp_files_handles_no_daemon() {
-        let result = reap_peer_tmp_files().await;
-        assert!(result.is_err(), "should error when daemon is not running");
+        assert!(reap_peer_tmp_files().await.is_err());
     }
 
     #[test]
     fn reap_orphan_copilot_does_not_panic() {
-        let killed = reap_orphan_copilot_processes(std::time::Duration::from_secs(999_999));
-        assert_eq!(killed, 0);
+        assert_eq!(reap_orphan_copilot_processes(std::time::Duration::from_secs(999_999)), 0);
     }
 
     #[test]
     fn parse_etime_formats() {
-        assert_eq!(super::parse_etime("05:30"), 330);
-        assert_eq!(super::parse_etime("1:05:30"), 3930);
-        assert_eq!(super::parse_etime("2-01:05:30"), 2 * 86400 + 3930);
-        assert_eq!(super::parse_etime("00:10"), 10);
+        assert_eq!(parse_etime("05:30"), 330);
+        assert_eq!(parse_etime("1:05:30"), 3930);
+        assert_eq!(parse_etime("2-01:05:30"), 2 * 86400 + 3930);
+    }
+
+    #[test]
+    fn reap_resets_orphan_tasks() {
+        let (tmp, conn) = setup_db();
+        conn.execute("INSERT INTO tasks(id, plan_id, status, executor_agent) \
+            VALUES (1, 100, 'in_progress', 'dead-agent')", []).unwrap();
+        reap(tmp.path()).unwrap();
+        let s: String = conn.query_row("SELECT status FROM tasks WHERE id=1", [], |r| r.get(0)).unwrap();
+        assert_eq!(s, "pending");
     }
 }

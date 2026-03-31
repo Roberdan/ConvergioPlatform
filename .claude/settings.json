@@ -81,6 +81,23 @@
           {
             "type": "command",
             "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/scripts/platform/pre-tool-guard.sh\" edit"
+          },
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/claude-config/hooks/main-guard.sh\"",
+            "timeout": 5,
+            "statusMessage": "MainGuard: block writes on main"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/claude-config/hooks/main-guard.sh\"",
+            "timeout": 5,
+            "statusMessage": "MainGuard: block writes on main"
           }
         ]
       }
@@ -139,6 +156,12 @@
           {
             "type": "command",
             "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null); if [ -n \"$ROOT\" ] && [ -x \"$ROOT/scripts/platform/agent-bridge.sh\" ]; then \"$ROOT/scripts/platform/agent-bridge.sh\" --register 2>/dev/null; fi"
+          },
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); \"$ROOT/claude-config/hooks/main-dirty-check.sh\"",
+            "timeout": 5,
+            "statusMessage": "Main repo dirty check"
           },
           {
             "type": "command",
