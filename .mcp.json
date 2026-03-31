@@ -4,7 +4,8 @@
       "command": "daemon/target/release/convergio-mcp-server",
       "env": {
         "CONVERGIO_MCP_RING": "0",
-        "CONVERGIO_DAEMON_URL": "http://localhost:8420"
+        "CONVERGIO_DAEMON_URL": "http://localhost:8420",
+        "CONVERGIO_API_TOKEN": "dev-local-Roberdans-M5Max"
       }
     }
   }
