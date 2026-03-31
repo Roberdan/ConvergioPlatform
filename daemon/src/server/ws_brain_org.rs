@@ -50,10 +50,17 @@ pub fn broadcast_org_topology(state: &ServerState) {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn test_db_path(prefix: &str) -> PathBuf {
+        static CTR: AtomicU64 = AtomicU64::new(0);
+        let n = CTR.fetch_add(1, Ordering::SeqCst);
+        std::env::temp_dir().join(format!("{prefix}-{}-{n}.db", std::process::id()))
+    }
 
     #[test]
     fn org_update_event_format_is_emitted() {
-        let state = ServerState::new(PathBuf::from("/tmp/test-ws-org.db"), None);
+        let state = ServerState::new(test_db_path("test-ws-org"), None);
         let mut rx = state.ws_tx.subscribe();
         broadcast_org_update(&state, "org-a", "updated");
         let event = rx.try_recv().expect("event");
@@ -63,7 +70,7 @@ mod tests {
 
     #[test]
     fn topology_event_includes_inter_org_links() {
-        let state = ServerState::new(PathBuf::from("/tmp/test-ws-org-topology.db"), None);
+        let state = ServerState::new(test_db_path("test-ws-org-topology"), None);
         let conn = state.get_conn().expect("conn");
         conn.execute_batch("CREATE TABLE IF NOT EXISTS ipc_orgs(id TEXT, status TEXT, ceo_agent TEXT);")
             .expect("schema");
