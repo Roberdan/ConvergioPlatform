@@ -1,5 +1,61 @@
 # Troubleshooting
 
+## v20.1.0 Notes
+
+### Sync Replication
+
+HTTP LWW sync re-enabled as primary replication path. CRDT over TCP (crsqlite) is optional.
+
+**Sync not running ("no reachable peers")**
+- Cause: peers not reachable on port 8420 (firewall or Tailscale relay).
+- Fix: verify connectivity: `curl --max-time 5 http://<peer-tailscale-ip>:8420/api/health`
+- macOS firewall: `sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp daemon/target/release/convergio-platform-daemon`
+
+**Plans sync but tasks don't appear**
+- Cause: FK constraint on `projects` table (TEXT PK not sync-eligible).
+- Fix: v20.1.0 disables FK checks during sync import. Upgrade daemon.
+
+**Validation queue "no such table"**
+- Cause: pre-v20.1.0 endpoints didn't run migrations on first call.
+- Fix: upgrade to v20.1.0 — all validation endpoints now auto-create tables.
+
+### Enforcement Gates
+
+v20.1.0 adds hard gates to `POST /api/plan-db/task/update`:
+
+| Gate | Blocks | Error |
+|---|---|---|
+| TestGate | `status=submitted` without evidence | POST `/api/plan-db/task/evidence` first |
+| ValidatorGate | `status=done` without Thor verdict | POST `/api/validation/record` first |
+
+**TestGate blocks my task update**
+- Fix: record evidence before transitioning: `curl -X POST localhost:8420/api/plan-db/task/evidence -H 'Content-Type: application/json' -d '{"task_id":ID,"evidence_type":"test_pass","command":"cargo test","exit_code":0}'`
+
+**ValidatorGate blocks status=done**
+- Fix: record verdict: `curl -X POST localhost:8420/api/validation/record -H 'Content-Type: application/json' -d '{"task_id":ID,"verdict":"pass","validator":"thor"}'`
+
+### Delegation Pipeline
+
+`cvg delegation start <plan_id> --peer <peer>` now automates the full flow.
+
+**"peer not found in peers.conf"**
+- Fix: check `~/.claude/config/peers.conf` has the peer section with `ssh_alias`, `tailscale_ip`, `user`.
+
+**Delegation auth fails (401)**
+- Cause: `CONVERGIO_AUTH_TOKEN` not set and daemon not in dev-mode.
+- Fix: set `CONVERGIO_AUTH_TOKEN` env var, or start daemon with `--dev-mode` for testing.
+
+### Node Provisioning (fresh node)
+
+To set up a new node from scratch:
+1. `git clone https://github.com/Roberdan/ConvergioPlatform.git`
+2. Rsync binary from coordinator: `rsync -az coordinator:~/GitHub/ConvergioPlatform/daemon/target/release/convergio-platform-daemon daemon/target/release/` (NEVER recompile on target)
+3. `mkdir -p data`
+4. `daemon/target/release/convergio-platform-daemon start --dev-mode`
+5. Verify: `curl http://localhost:8420/api/health` returns version 20.1.0
+6. Ensure `~/.claude/config/peers.conf` is present with mesh peers
+7. Sync starts automatically within 30s
+
 ## v20.0.0 Migration Notes
 
 ### LiteLLM Removed

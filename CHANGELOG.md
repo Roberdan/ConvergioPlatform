@@ -1,5 +1,21 @@
 # Changelog
 
+## [20.1.1] - 31 Marzo 2026
+
+### Fixed
+- Validation queue/verdict endpoints now auto-create tables on fresh nodes (was 500)
+- Sync replication: disable FK checks during import (plans referencing absent projects)
+- Documentation: TROUBLESHOOTING.md updated with v20.1 sync, gates, delegation, provisioning
+- CLAUDE.md: added Task Lifecycle section, updated build commands to include all features
+
+### Verified
+- 4/4 consecutive e2e runs: create plan → sync → cross-node update → reverse sync
+- Fresh node provisioning: clone, rsync binary, start, all endpoints 200
+- Concurrent updates: LWW resolves, conflicts logged (_sync_conflicts)
+- Kill + recovery: daemon restarts, sync resumes within 30s
+- TestGate blocks submitted without evidence (400)
+- ValidatorGate blocks done without verdict (400)
+
 ## [20.1.0] - 30 Marzo 2026
 
 ### Added
