@@ -54,6 +54,14 @@ pub enum BusCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Watch direct messages for an agent over SSE
+    Watch {
+        /// Agent name to subscribe as
+        name: String,
+        /// Daemon API base URL
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: BusCommands) {
@@ -106,6 +114,11 @@ pub async fn handle(cmd: BusCommands) {
             if let Err(e) = crate::cli_http::post_and_print(&format!("{api_url}/api/ipc/broadcast"), &body, human)
                 .await
             {
+                eprintln!("error: {e}");
+            }
+        }
+        BusCommands::Watch { name, api_url } => {
+            if let Err(e) = crate::cli_bus_watch::run_watch(&name, &api_url).await {
                 eprintln!("error: {e}");
             }
         }
