@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Message Flow + Timeline</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121a30;--line:#273259;--text:#edf1ff;--muted:#9ea9cc}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 Inter,system-ui}
+    header{display:flex;gap:10px;align-items:center;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+    #layout{display:grid;grid-template-rows:46vh 1fr;height:calc(100vh - 52px)} canvas{width:100%;height:100%}
+    #timeline{overflow:auto;border-top:1px solid var(--line)} .event{padding:8px 12px;border-bottom:1px solid #1a2748;cursor:pointer}
+    .event small{color:var(--muted)} .event pre{white-space:pre-wrap;margin:6px 0 0;display:none}
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Vista 3+4 · Message Flow + Timeline</strong>
+    <label>Org <input id="org" placeholder="org-id" value="default"/></label>
+    <label>Time <input id="time" type="range" min="0" max="0" value="0"/></label>
+    <small>/ws/brain · /api/orgs/:id/decisions</small>
+  </header>
+  <section id="layout">
+    <canvas id="flow"></canvas>
+    <div id="timeline"></div>
+  </section>
+  <script>
+    const c=document.getElementById('flow'),x=c.getContext('2d'),timeline=document.getElementById('timeline'),orgInput=document.getElementById('org'),time=document.getElementById('time');
+    let W=0,H=0; const nodes=new Map(),events=[],lines=[];
+    const fit=()=>{W=c.width=innerWidth*devicePixelRatio;H=c.height=innerHeight*.46*devicePixelRatio}; addEventListener('resize',fit); fit();
+    const node=id=>nodes.get(id)||nodes.set(id,{id,x:80+Math.random()*(W-160),y:60+Math.random()*(H-120)}).get(id);
+    const draw=()=>{
+      x.clearRect(0,0,W,H);
+      for(const l of lines.slice(-120)){const a=node(l.from),b=node(l.to),inter=l.from_org!==l.to_org; x.strokeStyle=inter?'rgba(255,173,90,.75)':'rgba(90,139,255,.45)';
+        x.lineWidth=(inter?4:1.5)*devicePixelRatio; x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();
+        const p=((Date.now()-l.t)%1600)/1600,px=a.x+(b.x-a.x)*p,py=a.y+(b.y-a.y)*p; x.fillStyle='#fff'; x.beginPath();x.arc(px,py,2.2*devicePixelRatio,0,7);x.fill();}
+      for(const n of nodes.values()){x.fillStyle='#48dcb0';x.beginPath();x.arc(n.x,n.y,7*devicePixelRatio,0,7);x.fill();x.fillStyle='#edf1ff';x.fillText(n.id,n.x+10*devicePixelRatio,n.y);}
+      requestAnimationFrame(draw);
+    }; draw();
+    function renderTimeline(){
+      const ix=Number(time.value||0),list=events.slice(0,ix||events.length).slice(-200).reverse();
+      timeline.innerHTML=list.map((e,i)=>`<article class="event" data-i="${i}"><small>${new Date(e.ts||Date.now()).toLocaleTimeString()} · ${e.type||'event'}</small><div>${e.from||''} → ${e.to||''}</div><pre>${JSON.stringify(e,null,2)}</pre></article>`).join('')||'<p style="padding:12px">No events.</p>';
+      [...timeline.querySelectorAll('.event')].forEach(el=>el.onclick=()=>{const p=el.querySelector('pre'); p.style.display=p.style.display==='block'?'none':'block';});
+    }
+    function ingest(m){events.push(m);time.max=String(events.length);time.value=String(events.length); if(m.from&&m.to){node(m.from);node(m.to);lines.push({from:m.from,to:m.to,from_org:m.org_id,to_org:m.target_org_id||m.org_id,t:Date.now()});} renderTimeline();}
+    async function loadDecisions(){const id=orgInput.value.trim(); if(!id)return; try{const r=await fetch(`/api/orgs/${id}/decisions`);const d=await r.json();(d.decisions||d||[]).forEach(v=>ingest({...v,type:v.type||'decision'}));}catch{}}
+    time.oninput=renderTimeline; orgInput.onchange=loadDecisions; loadDecisions();
+    const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/brain');
+    ws.onmessage=e=>{const m=JSON.parse(e.data||'{}'); if((m.type||'').includes('message')||m.type==='org_update'||m.type==='agent_factory')ingest(m);};
+  </script>
+</body>
+</html>
