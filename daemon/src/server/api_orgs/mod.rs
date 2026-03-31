@@ -1,4 +1,5 @@
 mod handlers;
+mod decisions;
 
 use super::state::ServerState;
 use axum::routing::{delete, get, post, put};
@@ -17,4 +18,6 @@ pub fn router() -> Router<ServerState> {
         )
         .route("/api/orgs/:id/services", post(handlers::register_service))
         .route("/api/orgs/:id/services", get(handlers::list_services))
+        .route("/api/orgs/:id/decisions", post(decisions::log_decision))
+        .route("/api/orgs/:id/decisions", get(decisions::list_decisions))
 }

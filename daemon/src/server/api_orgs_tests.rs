@@ -137,3 +137,114 @@ async fn list_services_endpoint_returns_registered_service() {
     assert_eq!(services.len(), 1);
     assert_eq!(services[0]["name"], "ticketing");
 }
+
+#[tokio::test]
+async fn decisions_endpoint_logs_decision() {
+    let app = test_router();
+    let _ = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/orgs")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "id": "org-delta",
+                        "mission": "Decision quality",
+                        "objectives": "Accuracy",
+                        "ceo_agent": "maya",
+                        "budget": 900.0
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("create");
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/orgs/org-delta/decisions")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "decision": "Use queue backpressure",
+                        "rationale": "Avoid overload",
+                        "made_by": "maya",
+                        "refs": ["msg-1", "T3-02"]
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("log decision");
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn decisions_endpoint_lists_paginated_newest_first() {
+    let app = test_router();
+    let _ = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/orgs")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "id": "org-epsilon",
+                        "mission": "Operate safely",
+                        "objectives": "Reliability",
+                        "ceo_agent": "kai",
+                        "budget": 1100.0
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("create");
+
+    for decision in ["first", "second", "third"] {
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/orgs/org-epsilon/decisions")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "decision": decision,
+                            "rationale": format!("{decision} rationale"),
+                            "made_by": "kai",
+                            "refs": ["msg-2"]
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("log decision");
+    }
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/orgs/org-epsilon/decisions?limit=2&offset=1")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("list decisions");
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp.into_body()).await;
+    let decisions = json["decisions"].as_array().expect("decisions array");
+    assert_eq!(decisions.len(), 2);
+    assert_eq!(decisions[0]["decision"], "second");
+    assert_eq!(decisions[1]["decision"], "first");
+}
