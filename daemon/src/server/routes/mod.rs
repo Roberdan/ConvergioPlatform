@@ -65,6 +65,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
     let health_state = create_shared_health();
     spawn_health_probe_loop(health_state.clone());
     api_orgs::spawn_background_jobs(state.clone());
+    api_plan_org::migrate(&state).ok();
 
     Router::new()
         .merge(api_validation::router())
