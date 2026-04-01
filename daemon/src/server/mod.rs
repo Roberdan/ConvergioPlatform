@@ -48,6 +48,7 @@ pub mod api_metrics_queries;
 pub mod api_nightly;
 pub mod api_notify;
 pub mod api_openclaw;
+pub mod api_org_chart;
 pub mod api_orgs;
 pub mod api_peers;
 pub mod api_peers_ext;

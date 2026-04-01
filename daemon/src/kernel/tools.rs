@@ -55,6 +55,14 @@ pub fn tool_definitions() -> Vec<ToolDef> {
             name: "get_mesh_status",
             description: "Return mesh peer status from /api/heartbeat/status.",
         },
+        ToolDef {
+            name: "create_org",
+            description: "Create a virtual organization from a mission. Args: {\"name\": \"<str>\", \"mission\": \"<str>\"}.",
+        },
+        ToolDef {
+            name: "scan_repo",
+            description: "Scan a repository and create an org to manage it. Args: {\"path\": \"<str>\"}.",
+        },
     ]
 }
 
@@ -80,6 +88,15 @@ pub fn call_tool(name: &str, daemon_url: &str, args: &Value) -> Option<String> {
         "get_health" => Some(get_health(daemon_url)),
         "get_agent_history" => Some(get_agent_history(daemon_url)),
         "get_mesh_status" => Some(get_mesh_status(daemon_url)),
+        "create_org" => {
+            let n = args.get("name").and_then(|v| v.as_str()).unwrap_or("project");
+            let m = args.get("mission").and_then(|v| v.as_str()).unwrap_or("");
+            Some(crate::kernel::voice_route_project::route_create_project(n, m, daemon_url))
+        }
+        "scan_repo" => {
+            let p = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+            Some(crate::kernel::voice_route_project::route_create_org_from(p, daemon_url))
+        }
         _ => None,
     }
 }
@@ -93,20 +110,12 @@ fn make_client() -> reqwest::blocking::Client {
 }
 
 fn fetch_json(url: &str) -> Option<Value> {
-    let resp = match make_client().get(url).send() {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("kernel.tools: fetch_json send error {url}: {e}");
-            return None;
-        }
-    };
-    match resp.json::<Value>() {
-        Ok(v) => Some(v),
-        Err(e) => {
-            tracing::warn!("kernel.tools: fetch_json parse error {url}: {e}");
-            None
-        }
-    }
+    let resp = make_client().get(url).send().map_err(|e| {
+        tracing::warn!("kernel.tools: fetch {url}: {e}");
+    }).ok()?;
+    resp.json::<Value>().map_err(|e| {
+        tracing::warn!("kernel.tools: parse {url}: {e}");
+    }).ok()
 }
 
 fn error_json(msg: &str) -> String {
@@ -143,11 +152,7 @@ pub fn get_plans(daemon_url: &str) -> String {
 
 /// GET /api/plan-db/json/{plan_id} → plan + tasks + waves
 pub fn get_plan_detail(daemon_url: &str, plan_id: u32) -> String {
-    let url = format!("{daemon_url}/api/plan-db/json/{plan_id}");
-    match fetch_json(&url) {
-        Some(v) => serde_json::to_string(&v).unwrap_or_else(|_| error_json("serialization error")),
-        None => error_json("daemon unreachable or plan not found"),
-    }
+    fetch_endpoint(daemon_url, &format!("/api/plan-db/json/{plan_id}"))
 }
 
 /// GET /api/plan-db/list → {total_cost, active_plans, total_plans}
@@ -178,31 +183,11 @@ pub fn get_costs(daemon_url: &str) -> String {
 }
 
 /// GET /api/node/readiness → checks array
-pub fn get_node_status(daemon_url: &str) -> String {
-    let url = format!("{daemon_url}/api/node/readiness");
-    match fetch_json(&url) {
-        Some(v) => serde_json::to_string(&v).unwrap_or_else(|_| error_json("serialization error")),
-        None => error_json("daemon unreachable"),
-    }
-}
-
+pub fn get_node_status(d: &str) -> String { fetch_endpoint(d, "/api/node/readiness") }
 /// GET /api/kernel/status → models, uptime, node
-pub fn get_kernel_status(daemon_url: &str) -> String {
-    let url = format!("{daemon_url}/api/kernel/status");
-    match fetch_json(&url) {
-        Some(v) => serde_json::to_string(&v).unwrap_or_else(|_| error_json("serialization error")),
-        None => error_json("kernel endpoint unreachable"),
-    }
-}
-
+pub fn get_kernel_status(d: &str) -> String { fetch_endpoint(d, "/api/kernel/status") }
 /// GET /api/ipc/agents → agent list
-pub fn get_agents(daemon_url: &str) -> String {
-    let url = format!("{daemon_url}/api/ipc/agents");
-    match fetch_json(&url) {
-        Some(v) => serde_json::to_string(&v).unwrap_or_else(|_| error_json("serialization error")),
-        None => error_json("daemon unreachable"),
-    }
-}
+pub fn get_agents(d: &str) -> String { fetch_endpoint(d, "/api/ipc/agents") }
 
 /// Trigger recovery action for a target node.
 pub fn restart_node(daemon_url: &str, target: &str) -> String {
