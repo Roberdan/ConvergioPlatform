@@ -44,17 +44,19 @@ NN = NON-NEGOTIABLE
 ### Thor Gate (ADR-0001, NON-NEGOTIABLE)
 
 ```
-pending → in_progress → submitted (executor) → done (ONLY Thor)
+Per-task:  pending → in_progress → submitted (executor stops here)
+Per-wave:  ALL wave tasks submitted → cvg plan validate {plan_id} → Thor promotes to done
 ```
 
 | Rule | Requirement |
 |------|-------------|
 | X1 | **ONLY Thor can set task status=done.** No executor, no agent, no forced-admin, no human bypass. |
-| X2 | After ALL wave tasks reach `submitted`: run `cvg plan validate {plan_id}` — Thor batch validates. |
-| X3 | NEVER skip Thor gate. NEVER proceed to next wave without Thor PASS. |
-| X4 | Post test evidence BEFORE submitting: `POST /api/plan-db/task/evidence`. |
-| X5 | Every task must pass its `verify[]` commands before reaching `submitted`. |
-| X6 | Plans execute on worktrees, NEVER on the main repo checkout. |
+| X2 | Executor lifecycle ends at `submitted`. Executors CANNOT set `done`. |
+| X3 | **Thor validates at WAVE level, not per-task.** After ALL tasks in a wave reach `submitted`: `cvg plan validate {plan_id}` — Thor batch-validates the entire wave. |
+| X4 | NEVER validate per-task. NEVER skip Thor. NEVER proceed to next wave without Thor PASS. |
+| X5 | Post test evidence BEFORE submitting: `POST /api/plan-db/task/evidence`. |
+| X6 | Every task must pass its `verify[]` commands before reaching `submitted`. |
+| X7 | Plans execute on worktrees, NEVER on the main repo checkout. |
 
 _Why: Plan 10044 — 46 tasks executed, PR created, typecheck+build clean, but plan could not close because Thor was never invoked. No exceptions._
 

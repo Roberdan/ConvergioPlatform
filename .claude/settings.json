@@ -72,6 +72,12 @@
             "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/claude-config/hooks/block-branch-creation.sh\"",
             "timeout": 5,
             "statusMessage": "Block branch creation"
+          },
+          {
+            "type": "command",
+            "command": "ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo '.'); cat | \"$ROOT/claude-config/hooks/thor-gate-guard.sh\"",
+            "timeout": 5,
+            "statusMessage": "ThorGateGuard: block direct done status"
           }
         ]
       },
@@ -108,7 +114,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"BLOCKED: FileSizeGuard \u2014 $FILE has $LINES lines (max 250). Split this file before proceeding.\" >&2; exit 2; fi; fi"
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"BLOCKED: FileSizeGuard — $FILE has $LINES lines (max 250). Split this file before proceeding.\" >&2; exit 2; fi; fi"
           },
           {
             "type": "command",
@@ -123,7 +129,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"BLOCKED: FileSizeGuard \u2014 $FILE has $LINES lines (max 250). Split this file before proceeding.\" >&2; exit 2; fi; fi"
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then LINES=$(wc -l < \"$FILE\"); if [ \"$LINES\" -gt 250 ]; then echo \"BLOCKED: FileSizeGuard — $FILE has $LINES lines (max 250). Split this file before proceeding.\" >&2; exit 2; fi; fi"
           },
           {
             "type": "command",
@@ -165,7 +171,7 @@
           },
           {
             "type": "command",
-            "command": "FAIL=0; gh auth status >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT FAIL: gh auth expired. Run: gh auth login\"}'; FAIL=1; }; command -v cvg >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT FAIL: cvg not in PATH\"}'; FAIL=1; }; curl -sf http://localhost:8420/api/health >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT WARN: daemon not running on :8420\"}'; }; if [ -z \"${CONVERGIO_AGENT_NAME:-}\" ]; then echo '{\"systemMessage\":\"WARNING: AgentIdentity \u2014 CONVERGIO_AGENT_NAME not set. Run: cvg agent start <name> to register this session.\"}'; fi; exit 0",
+            "command": "FAIL=0; gh auth status >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT FAIL: gh auth expired. Run: gh auth login\"}'; FAIL=1; }; command -v cvg >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT FAIL: cvg not in PATH\"}'; FAIL=1; }; curl -sf http://localhost:8420/api/health >/dev/null 2>&1 || { echo '{\"systemMessage\":\"PRE-FLIGHT WARN: daemon not running on :8420\"}'; }; if [ -z \"${CONVERGIO_AGENT_NAME:-}\" ]; then echo '{\"systemMessage\":\"WARNING: AgentIdentity — CONVERGIO_AGENT_NAME not set. Run: cvg agent start <name> to register this session.\"}'; fi; exit 0",
             "timeout": 10,
             "statusMessage": "Pre-flight auth + identity check"
           }

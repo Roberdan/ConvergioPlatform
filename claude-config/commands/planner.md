@@ -92,3 +92,16 @@ _Why: Plan 616 — reviews skipped. Plan 677 — presented as ready but had no w
 - Start with `cvg plan start {plan_id}` only after approval.
 - Execute with `/execute {plan_id}`.
 - Complete only after Thor + CI/PR closure evidence.
+
+## Thor Gate — NON-NEGOTIABLE (ADR-0001)
+
+```
+pending → in_progress → submitted → done (ONLY Thor)
+```
+
+- **ONLY Thor can set status=done.** No executor, no agent, no forced-admin.
+- After ALL wave tasks reach `submitted`: `cvg plan validate {plan_id}` — Thor batch validates.
+- NEVER skip Thor. NEVER proceed to next wave without Thor PASS.
+- Post test evidence BEFORE submitting: `POST /api/plan-db/task/evidence`.
+- Plans execute on worktrees, NEVER on the main repo checkout.
+- _Why: Plan 10044 — 46 tasks executed but plan couldn't close because Thor was never invoked._
