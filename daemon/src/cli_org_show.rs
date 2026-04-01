@@ -63,6 +63,60 @@ pub async fn show_org(id: &str, api_url: &str) -> Result<(), CliError> {
     Ok(())
 }
 
+pub async fn org_plans(slug: &str, api_url: &str) -> Result<(), CliError> {
+    let client = reqwest::Client::new();
+    let payload: Value = client
+        .get(format!("{api_url}/api/orgs/{slug}/plans"))
+        .send()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("get org plans failed: {e}")))?
+        .json()
+        .await
+        .map_err(|e| CliError::ApiCallFailed(format!("decode org plans failed: {e}")))?;
+    let plans = payload["plans"].as_array();
+    if plans.map(|p| p.is_empty()).unwrap_or(true) {
+        println!("No plans linked to org '{slug}'");
+        return Ok(());
+    }
+    println!("{CYAN}ID | NAME | STATUS | PROGRESS{RESET}");
+    for p in plans.into_iter().flatten() {
+        let id = p["id"].as_i64().unwrap_or(0);
+        let name = p["name"].as_str().unwrap_or("-");
+        let status = p["status"].as_str().unwrap_or("-");
+        let done = p["tasks_done"].as_i64().unwrap_or(0);
+        let total = p["tasks_total"].as_i64().unwrap_or(0);
+        let color = if status == "completed" { GREEN } else { YELLOW };
+        println!("#{id} | {name} | {color}{status}{RESET} | {done}/{total}");
+    }
+    Ok(())
+}
+
+pub async fn org_chart(slug: Option<&str>, api_url: &str) -> Result<(), CliError> {
+    let client = reqwest::Client::new();
+    if let Some(s) = slug {
+        let payload: Value = client
+            .get(format!("{api_url}/api/orgs/{s}/orgchart"))
+            .send()
+            .await
+            .map_err(|e| CliError::ApiCallFailed(format!("get orgchart failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| CliError::ApiCallFailed(format!("decode orgchart failed: {e}")))?;
+        println!("{}", payload["chart"].as_str().unwrap_or("(no chart data)"));
+    } else {
+        let payload: Value = client
+            .get(format!("{api_url}/api/orgs/chart"))
+            .send()
+            .await
+            .map_err(|e| CliError::ApiCallFailed(format!("get global chart failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| CliError::ApiCallFailed(format!("decode global chart failed: {e}")))?;
+        println!("{}", payload["chart"].as_str().unwrap_or("(no chart data)"));
+    }
+    Ok(())
+}
+
 pub fn format_org_row(org_detail: &Value) -> String {
     let id = org_detail["org"]["id"].as_str().or_else(|| org_detail["id"].as_str()).unwrap_or("-");
     let status = org_detail["org"]["status"].as_str().or_else(|| org_detail["status"].as_str()).unwrap_or("-");
