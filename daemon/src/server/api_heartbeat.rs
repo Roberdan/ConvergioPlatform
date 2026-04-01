@@ -9,6 +9,7 @@ pub fn router() -> Router<ServerState> {
     Router::new()
         .route("/api/heartbeat", post(handle_heartbeat))
         .route("/api/heartbeat/status", get(handle_heartbeat_status))
+        .route("/api/heartbeat/prune", post(handle_prune_peers))
         .route("/api/watchdog/status", get(handle_watchdog_status))
         .route("/api/watchdog/diagnostics", get(handle_diagnostics))
 }
@@ -146,6 +147,31 @@ async fn handle_heartbeat_status(
     })))
 }
 
+/// POST /api/heartbeat/prune — remove peers not in the keep list
+/// Body: {"keep": ["m5max", "macProM1", "omarchy"]}
+#[tracing::instrument(skip_all)]
+async fn handle_prune_peers(
+    State(state): State<ServerState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let keep: Vec<&str> = body.get("keep").and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    if keep.is_empty() {
+        return Err(ApiError::bad_request("keep array required"));
+    }
+    let conn = state.get_conn()?;
+    let placeholders: Vec<String> = (1..=keep.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "DELETE FROM peer_heartbeats WHERE peer_name NOT IN ({})",
+        placeholders.join(", ")
+    );
+    let params: Vec<&dyn rusqlite::types::ToSql> = keep.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+    let deleted = conn.execute(&sql, params.as_slice())
+        .map_err(|e| ApiError::internal(format!("prune failed: {e}")))?;
+    Ok(Json(json!({"ok": true, "deleted": deleted})))
+}
+
 /// GET /api/watchdog/status — self-healing watchdog status
     #[tracing::instrument(skip_all)]
 async fn handle_watchdog_status(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
@@ -189,51 +215,12 @@ async fn handle_watchdog_status(State(state): State<ServerState>) -> Result<Json
 }
 
 /// GET /api/watchdog/diagnostics — detailed diagnostics
-    #[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 async fn handle_diagnostics(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
-    let conn = &conn;
-
-    let stale_tasks = query_rows(
-        conn,
-        "SELECT id, task_id, title, status, started_at, plan_id \
-         FROM tasks WHERE status = 'in_progress' \
-         AND started_at < datetime('now', '-24 hours') \
-         ORDER BY started_at LIMIT 20",
-        [],
-    )?;
-
-    let orphan_agents = query_rows(
-        conn,
-        "SELECT agent_id, agent_type, status, started_at \
-         FROM agent_activity WHERE status = 'running' \
-         AND started_at < datetime('now', '-1 hours') \
-         ORDER BY started_at LIMIT 20",
-        [],
-    )?;
-
-    let pending_notifications = query_one(
-        conn,
-        "SELECT COUNT(*) AS c FROM notification_queue WHERE status = 'pending'",
-        [],
-    )?
-    .and_then(|v| v.get("c").and_then(Value::as_i64))
-    .unwrap_or(0);
-
-    let active_plans = query_one(
-        conn,
-        "SELECT COUNT(*) AS c FROM plans WHERE status = 'doing'",
-        [],
-    )?
-    .and_then(|v| v.get("c").and_then(Value::as_i64))
-    .unwrap_or(0);
-
-    Ok(Json(json!({
-        "ok": true,
-        "stale_tasks": stale_tasks,
-        "orphan_agents": orphan_agents,
-        "pending_notifications": pending_notifications,
-        "active_plans": active_plans,
-        "version": env!("CARGO_PKG_VERSION"),
-    })))
+    let stale_tasks = query_rows(&conn, "SELECT id, task_id, title, status, started_at, plan_id FROM tasks WHERE status = 'in_progress' AND started_at < datetime('now', '-24 hours') ORDER BY started_at LIMIT 20", [])?;
+    let orphan_agents = query_rows(&conn, "SELECT agent_id, agent_type, status, started_at FROM agent_activity WHERE status = 'running' AND started_at < datetime('now', '-1 hours') ORDER BY started_at LIMIT 20", [])?;
+    let pending = query_one(&conn, "SELECT COUNT(*) AS c FROM notification_queue WHERE status = 'pending'", [])?.and_then(|v| v.get("c").and_then(Value::as_i64)).unwrap_or(0);
+    let active = query_one(&conn, "SELECT COUNT(*) AS c FROM plans WHERE status = 'doing'", [])?.and_then(|v| v.get("c").and_then(Value::as_i64)).unwrap_or(0);
+    Ok(Json(json!({"ok": true, "stale_tasks": stale_tasks, "orphan_agents": orphan_agents, "pending_notifications": pending, "active_plans": active, "version": env!("CARGO_PKG_VERSION")})))
 }
