@@ -192,7 +192,7 @@ impl AppleFmBridge {
         let cmd = self.cli_cmd();
         let child = std::process::Command::new(&cmd[0])
             .args(&cmd[1..])
-            .args(["--model", &model, "--prompt", &req.prompt, "--max-tokens", "512"])
+            .args(["--model", &model, "--prompt", &req.prompt, "--max-tokens", "2048"])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

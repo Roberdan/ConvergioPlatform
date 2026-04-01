@@ -43,6 +43,18 @@ pub fn tool_definitions() -> Vec<ToolDef> {
             name: "restart_node",
             description: "Trigger recovery for a target node. Args: {\"target\": \"<node>\"}.",
         },
+        ToolDef {
+            name: "get_health",
+            description: "Return platform health from /api/health.",
+        },
+        ToolDef {
+            name: "get_agent_history",
+            description: "Return recent agent activity from /api/agents/history.",
+        },
+        ToolDef {
+            name: "get_mesh_status",
+            description: "Return mesh peer status from /api/heartbeat/status.",
+        },
     ]
 }
 
@@ -65,6 +77,9 @@ pub fn call_tool(name: &str, daemon_url: &str, args: &Value) -> Option<String> {
                 .unwrap_or("unknown");
             Some(restart_node(daemon_url, target))
         }
+        "get_health" => Some(get_health(daemon_url)),
+        "get_agent_history" => Some(get_agent_history(daemon_url)),
+        "get_mesh_status" => Some(get_mesh_status(daemon_url)),
         _ => None,
     }
 }
@@ -205,6 +220,22 @@ pub fn restart_node(daemon_url: &str, target: &str) -> String {
         Err(e) => error_json(&format!("recovery request failed: {e}")),
     }
 }
+
+/// Simple GET → JSON string helper for endpoints without custom parsing.
+fn fetch_endpoint(daemon_url: &str, path: &str) -> String {
+    let url = format!("{daemon_url}{path}");
+    match fetch_json(&url) {
+        Some(v) => serde_json::to_string(&v).unwrap_or_else(|_| error_json("serialization error")),
+        None => error_json(&format!("{path} unreachable")),
+    }
+}
+
+/// GET /api/health → platform health summary
+pub fn get_health(d: &str) -> String { fetch_endpoint(d, "/api/health") }
+/// GET /api/agents/history?limit=10 → recent agent activity
+pub fn get_agent_history(d: &str) -> String { fetch_endpoint(d, "/api/agents/history?limit=10") }
+/// GET /api/heartbeat/status → mesh peer status
+pub fn get_mesh_status(d: &str) -> String { fetch_endpoint(d, "/api/heartbeat/status") }
 
 #[cfg(test)]
 #[path = "tools_tests.rs"]

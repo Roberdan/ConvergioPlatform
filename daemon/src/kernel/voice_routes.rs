@@ -20,6 +20,12 @@ pub fn route_intent(intent: VoiceIntent, daemon_url: &str) -> String {
         VoiceIntent::Mute => route_mute(),
         VoiceIntent::AskAli { ref question } => route_ask_ali(question, daemon_url),
         VoiceIntent::EscalateToAli { ref question } => route_escalate_to_ali(question, daemon_url),
+        VoiceIntent::CreateProject { ref name, ref mission } => {
+            crate::kernel::voice_route_project::route_create_project(name, mission, daemon_url)
+        }
+        VoiceIntent::AskOrg { ref name } => {
+            crate::kernel::voice_route_project::route_ask_org(name, daemon_url)
+        }
         VoiceIntent::Unknown => "Non ho capito. Riprova.".to_string(),
     }
 }

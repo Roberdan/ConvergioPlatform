@@ -8,33 +8,26 @@ use super::test_state;
 #[test]
 fn tailscale_resolve_self() {
     let ts_out = std::process::Command::new("tailscale")
-        .arg("status")
+        .args(["status", "--json"])
         .output();
-    match &ts_out {
-        Ok(o) if o.status.success() => {}
-        _ => return, // skip if tailscale not running
-    }
-    // Use the local hostname to test self-resolution
-    let hostname = std::process::Command::new("hostname")
-        .arg("-s")
-        .output()
-        .ok()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .trim()
-                .to_lowercase()
-                .to_string()
-        })
-        .unwrap_or_default();
-    // Find matching peer name from known peers
-    let peer = if hostname.contains("m3") || hostname.contains("roberto") {
-        "mac-worker-2"
-    } else if hostname.contains("m1") || hostname.contains("mario") {
-        "mac-worker-1"
-    } else {
+    let output = match &ts_out {
+        Ok(o) if o.status.success() => o,
+        _ => return,
+    };
+    let json: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let self_hostname = json
+        .get("Self")
+        .and_then(|s| s.get("HostName"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if self_hostname.is_empty() {
         return;
-    }; // unknown host, skip
-    let result = super::super::ws_pty::tailscale_resolve(peer);
+    }
+    let peer = self_hostname.replace([' ', '\''], "-").to_lowercase();
+    let result = super::super::ws_pty::tailscale_resolve(&peer);
     if let Some((ip, _online, is_self)) = result {
         assert!(ip.starts_with("100."), "expected Tailscale IP, got: {ip}");
         assert!(is_self, "{peer} should be self on this host");
@@ -75,31 +68,26 @@ fn is_local_literal_localhost() {
 fn is_local_self_via_tailscale() {
     let state = test_state();
     let ts_out = std::process::Command::new("tailscale")
-        .arg("status")
+        .args(["status", "--json"])
         .output();
-    match &ts_out {
-        Ok(o) if o.status.success() => {}
-        _ => return, // skip if tailscale not running
-    }
-    let hostname = std::process::Command::new("hostname")
-        .arg("-s")
-        .output()
-        .ok()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .trim()
-                .to_lowercase()
-                .to_string()
-        })
-        .unwrap_or_default();
-    let peer = if hostname.contains("m3") || hostname.contains("roberto") {
-        "mac-worker-2"
-    } else if hostname.contains("m1") || hostname.contains("mario") {
-        "mac-worker-1"
-    } else {
-        return;
+    let output = match &ts_out {
+        Ok(o) if o.status.success() => o,
+        _ => return,
     };
-    assert!(super::super::ws_pty::is_local_peer(&state, peer));
+    let json: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let self_hostname = json
+        .get("Self")
+        .and_then(|s| s.get("HostName"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if self_hostname.is_empty() {
+        return;
+    }
+    let peer = self_hostname.replace([' ', '\''], "-").to_lowercase();
+    assert!(super::super::ws_pty::is_local_peer(&state, &peer));
 }
 
 #[test]
