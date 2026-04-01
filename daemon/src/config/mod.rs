@@ -90,7 +90,7 @@ impl Default for InferenceConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct InferenceFallbackConfig {
     pub max_attempts: usize,
@@ -109,16 +109,6 @@ impl Default for InferenceFallbackConfig {
             t3: vec!["sonnet".into(), "opus".into()],
             t4: vec!["opus".into(), "sonnet".into()],
         }
-    }
-}
-
-impl PartialEq for InferenceFallbackConfig {
-    fn eq(&self, other: &Self) -> bool {
-        self.max_attempts == other.max_attempts
-            && self.t1 == other.t1
-            && self.t2 == other.t2
-            && self.t3 == other.t3
-            && self.t4 == other.t4
     }
 }
 
