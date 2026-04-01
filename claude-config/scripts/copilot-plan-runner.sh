@@ -13,11 +13,17 @@ DAEMON_API="${CVG_URL:-http://localhost:8420}"
 MAX_RETRIES=50
 RETRY=0
 
+# Auth helper — pass Bearer token when CONVERGIO_AUTH_TOKEN is set
+_AUTH_HDR=""
+if [[ -n "${CONVERGIO_AUTH_TOKEN:-}" ]]; then
+	_AUTH_HDR="-H"
+	_AUTH_VAL="Authorization: Bearer ${CONVERGIO_AUTH_TOKEN}"
+fi
+_curl_auth() { curl -sf ${_AUTH_HDR:+"$_AUTH_HDR" "$_AUTH_VAL"} "$@"; }
+
 plan_done() {
-	# Check plan status directly via API — execution-context may be empty when plan is done.
-	# Plan states: todo|doing|done|cancelled (core-workflow.md)
 	local plan_json plan_status
-	plan_json="$(curl -sf "${DAEMON_API}/api/plan-db/json/${PLAN_ID}" 2>/dev/null || echo '{}')"
+	plan_json="$(_curl_auth "${DAEMON_API}/api/plan-db/json/${PLAN_ID}" 2>/dev/null || echo '{}')"
 	plan_status="$(echo "$plan_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo 'unknown')"
 	if [ "$plan_status" = "done" ] || [ "$plan_status" = "completed" ] || [ "$plan_status" = "cancelled" ]; then
 		echo "[RUNNER] Plan #${PLAN_ID} status: ${plan_status} — exiting cleanly."
@@ -27,7 +33,7 @@ plan_done() {
 }
 
 get_context() {
-	curl -sf "${DAEMON_API}/api/plan-db/execution-context/${PLAN_ID}" 2>/dev/null || echo '{}'
+	_curl_auth "${DAEMON_API}/api/plan-db/execution-context/${PLAN_ID}" 2>/dev/null || echo '{}'
 }
 
 echo "=== Plan #${PLAN_ID} Runner (auto-restart) ==="
@@ -69,7 +75,7 @@ print(f'PROMPT_FILE=\"{path}\"')
 	echo "[Run ${RETRY}/${MAX_RETRIES}] Wave: ${WAVE_ID} | Next: ${NEXT_TASK} | Thor: ${NEEDS_THOR}"
 
 	# Reset ONLY in_progress tasks (NOT submitted — those are awaiting Thor)
-	curl -sf "${DAEMON_API}/api/plan-db/json/${PLAN_ID}" 2>/dev/null \
+	_curl_auth "${DAEMON_API}/api/plan-db/json/${PLAN_ID}" 2>/dev/null \
 		| python3 -c "
 import json, sys, urllib.request
 d = json.load(sys.stdin)
