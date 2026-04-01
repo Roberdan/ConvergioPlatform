@@ -595,6 +595,31 @@ Checks: DB integrity, disk space, models downloaded, Telegram token, daemon vers
 
 ---
 
+## Competitive Comparison
+
+How Convergio compares to similar open-source projects:
+
+- [**claw-code**](https://github.com/instructkr/claw-code) — Clean-room Python+Rust rewrite of Claude Code CLI; single-agent tool harness.
+- [**oh-my-codex**](https://github.com/Yeachan-Heo/oh-my-codex) — Workflow layer on OpenAI Codex CLI; adds role keywords and tmux team mode.
+- [**openclaw**](https://github.com/openclaw/openclaw) — Self-hosted Node.js AI assistant gateway with 25+ messaging channels and voice.
+
+| Aspect | claw-code | oh-my-codex | openclaw | Convergio |
+|---|---|---|---|---|
+| Focus | CLI replication | CLI workflow layer | Personal assistant | AI orchestration platform |
+| Architecture | CLI | CLI wrapper | Local gateway | Rust daemon + mesh |
+| Language | Python + Rust | TypeScript | TypeScript | Rust |
+| Agent system | Single agent | Role keywords (`$architect`, `$executor`) | Multi-agent routing | 50+ typed agents |
+| Channels | Terminal | Terminal + tmux | 25+ messaging | Telegram + Siri |
+| Model support | Anthropic only | OpenAI only | Multi-provider + failover | Multi-provider + local Qwen 7B |
+| Planning | None | `$plan` skill | None | Plan + wave + task + Thor QA |
+| Distribution | Local | Local + tmux | Local gateway | Tailscale mesh (3 nodes) |
+| Voice | None | None | Wake word + talk mode | Siri + kernel STT/TTS |
+| Governance | None | None | None | Constitution + Thor 10-gate QA |
+| UI | None | Terminal | Web canvas + A2UI | Dashboard + A2UI SSE |
+| License | MIT | MIT | MIT | Proprietary |
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines, code standards, and the plan-driven development workflow.
