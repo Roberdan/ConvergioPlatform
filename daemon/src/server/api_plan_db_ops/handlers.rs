@@ -58,8 +58,8 @@ pub async fn handle_wave_create(
     ))
 }
 
-/// POST /api/plan-db/wave/update — update wave status
-/// Body: {wave_id, status, notes?}
+/// POST /api/plan-db/wave/update — update wave status and/or PR link
+/// Body: {wave_id, status, notes?, pr_url?, pr_number?}
     #[tracing::instrument(skip_all)]
 pub async fn handle_wave_update(
     State(state): State<ServerState>,
@@ -73,6 +73,11 @@ pub async fn handle_wave_update(
         .get("status")
         .and_then(Value::as_str)
         .ok_or_else(|| ApiError::bad_request("missing status"))?;
+
+    let pr_url = body.get("pr_url").and_then(Value::as_str);
+    let pr_number = body
+        .get("pr_number")
+        .and_then(|v| v.as_i64().map(|n| n.to_string()).or_else(|| v.as_str().map(String::from)));
 
     let conn = state.get_conn()?;
     let conn = &conn;
@@ -104,6 +109,22 @@ pub async fn handle_wave_update(
                 "wave {wave_id} has {pending} incomplete tasks"
             )));
         }
+    }
+
+    // Update PR link fields when provided
+    if let Some(url) = pr_url {
+        conn.execute(
+            "UPDATE waves SET pr_url = ?1 WHERE id = ?2",
+            rusqlite::params![url, wave_id],
+        )
+        .map_err(|e| ApiError::internal(format!("wave pr_url update failed: {e}")))?;
+    }
+    if let Some(ref num) = pr_number {
+        conn.execute(
+            "UPDATE waves SET pr_number = ?1 WHERE id = ?2",
+            rusqlite::params![num, wave_id],
+        )
+        .map_err(|e| ApiError::internal(format!("wave pr_number update failed: {e}")))?;
     }
 
     let changed = conn

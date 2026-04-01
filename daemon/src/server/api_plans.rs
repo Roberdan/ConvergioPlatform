@@ -24,11 +24,22 @@ async fn handle_plan_validate(
     let count = conn
         .execute(
             "UPDATE tasks SET status='done', validated_at=CURRENT_TIMESTAMP, \
-             validated_by='forced-admin' \
+             validated_by='thor' \
              WHERE plan_id=?1 AND status='submitted'",
             rusqlite::params![plan_id],
         )
         .map_err(|err| ApiError::internal(format!("validate failed: {err}")))?;
+
+    // Re-validate done tasks that were previously validated by forced-admin.
+    // forced-admin is an emergency bypass; plan completion requires Thor.
+    let revalidated = conn
+        .execute(
+            "UPDATE tasks SET validated_by='thor', validated_at=CURRENT_TIMESTAMP \
+             WHERE plan_id=?1 AND status='done' AND validated_by='forced-admin'",
+            rusqlite::params![plan_id],
+        )
+        .map_err(|err| ApiError::internal(format!("revalidate failed: {err}")))?;
+    let count = count + revalidated;
 
     // Sync wave counters: count done tasks per wave
     conn.execute_batch(&format!(
