@@ -41,6 +41,25 @@ NN = NON-NEGOTIABLE
 - **TDD mandatory**: RED → GREEN → proof reversible. _Why: Plan v21._
 - **Plan done = ALL PRs merged**: Squash-merged, worktrees clean, branches deleted, CI green. _Why: feedback_plan_done_means_merged.md._
 
+### Thor Gate (ADR-0001, NON-NEGOTIABLE)
+
+```
+Per-task:  pending → in_progress → submitted (executor stops here)
+Per-wave:  ALL wave tasks submitted → cvg plan validate {plan_id} → Thor promotes to done
+```
+
+| Rule | Requirement |
+|------|-------------|
+| X1 | **ONLY Thor can set task status=done.** No executor, no agent, no forced-admin, no human bypass. |
+| X2 | Executor lifecycle ends at `submitted`. Executors CANNOT set `done`. |
+| X3 | **Thor validates at WAVE level, not per-task.** After ALL tasks in a wave reach `submitted`: `cvg plan validate {plan_id}` — Thor batch-validates the entire wave. |
+| X4 | NEVER validate per-task. NEVER skip Thor. NEVER proceed to next wave without Thor PASS. |
+| X5 | Post test evidence BEFORE submitting: `POST /api/plan-db/task/evidence`. |
+| X6 | Every task must pass its `verify[]` commands before reaching `submitted`. |
+| X7 | Plans execute on worktrees, NEVER on the main repo checkout. |
+
+_Why: Plan 10044 — 46 tasks executed, PR created, typecheck+build clean, but plan could not close because Thor was never invoked. No exceptions._
+
 ## Resilience (Article XI, NON-NEGOTIABLE)
 
 Self-recovery + circuit breakers + retry/backoff + checkpoint/restart + graceful degradation + `/health` endpoints + zero zombies. _Inspired by HPC distributed systems._
