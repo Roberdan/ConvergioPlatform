@@ -99,6 +99,37 @@ Thor uses these as gate criteria when validating a wave.
 - Triggers maintain counters automatically — manual updates cause drift
 - Full CLI reference: `cvg --help` (plan-db.sh is DEPRECATED — use cvg)
 
+## New Tables (v20.7.0)
+
+### ipc_org_events
+
+| Column | Type | Key | Notes |
+|--------|------|-----|-------|
+| id | INTEGER | PK | AUTO |
+| org_id | TEXT | FK→orgs | NOT NULL |
+| event_type | TEXT | | NOT NULL |
+| payload | TEXT | | JSON |
+| created_at | DATETIME | | DEFAULT CURRENT_TIMESTAMP |
+
+### ipc_service_requests
+
+| Column | Type | Key | Notes |
+|--------|------|-----|-------|
+| id | INTEGER | PK | AUTO |
+| from_org | TEXT | | NOT NULL |
+| to_org | TEXT | | NOT NULL |
+| service_type | TEXT | | NOT NULL |
+| status | TEXT | | CHECK('pending','approved','rejected') |
+| payload | TEXT | | JSON |
+| created_at | DATETIME | | DEFAULT CURRENT_TIMESTAMP |
+| resolved_at | DATETIME | | |
+
+### plans.org_id (added column)
+
+| Column | Type | Key | Notes |
+|--------|------|-----|-------|
+| org_id | TEXT | FK→orgs | Nullable, links plan to org |
+
 ## Indexes
 
 - `idx_plans_project` ON plans(project_id, status)

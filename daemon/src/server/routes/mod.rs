@@ -13,7 +13,9 @@ use super::{
     api_health_post_merge, api_heartbeat, api_ideas, api_inference_status, api_ingest, api_ipc,
     api_kernel_audio, api_memory, api_memory_mgmt, api_mesh, api_mesh_update, api_metrics,
     api_nightly, api_notify,
-    api_node_readiness, api_node_roles, api_openclaw, api_org_chart, api_orgs, api_peers, api_peers_ext, api_plan_db,
+    api_marketplace, api_marketplace_ops, api_night,
+    api_node_readiness, api_node_roles, api_openclaw, api_org_chart, api_org_chart_global,
+    api_org_metrics, api_org_timeline, api_orgs, api_plan_org, api_peers, api_peers_ext, api_plan_db,
     api_plan_db_checkpoint, api_plan_db_execution_context, api_plan_db_import,
     api_plan_db_lifecycle, api_plan_db_ops, api_plan_db_query, api_plan_db_review, api_plans,
     api_policy, api_project_tree, api_readiness, api_repositories, api_rollback, api_runs,
@@ -114,7 +116,14 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_domain::router())
         .merge(api_openclaw::router())
         .merge(api_orgs::router())
+        .merge(api_org_timeline::router())
+        .merge(api_org_metrics::router())
         .merge(api_org_chart::router())
+        .merge(api_org_chart_global::router())
+        .merge(api_plan_org::router())
+        .merge(api_marketplace::router())
+        .merge(api_marketplace_ops::router())
+        .merge(api_night::router())
         .merge(api_crdt::router())
         .merge(api_sync::router())
         .merge(api_capabilities::router())

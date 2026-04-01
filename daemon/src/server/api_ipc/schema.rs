@@ -115,6 +115,32 @@ CREATE INDEX IF NOT EXISTS idx_ipc_org_services_org ON ipc_org_services(org_id, 
 CREATE INDEX IF NOT EXISTS idx_ipc_decisions_org ON ipc_decisions(org_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ipc_org_telemetry_org ON ipc_org_telemetry(org_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ipc_org_digests_org ON ipc_org_digests(org_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS ipc_org_events (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    agent_id TEXT,
+    description TEXT NOT NULL,
+    metadata_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    FOREIGN KEY(org_id) REFERENCES ipc_orgs(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ipc_org_events_org ON ipc_org_events(org_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS ipc_service_requests (
+    id TEXT PRIMARY KEY NOT NULL,
+    requester_org TEXT NOT NULL,
+    provider_org TEXT NOT NULL,
+    service_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    cost REAL,
+    request_payload TEXT,
+    response_payload TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    completed_at TEXT,
+    FOREIGN KEY(requester_org) REFERENCES ipc_orgs(id),
+    FOREIGN KEY(provider_org) REFERENCES ipc_orgs(id)
+);
+CREATE INDEX IF NOT EXISTS idx_ipc_service_requests ON ipc_service_requests(requester_org, status);
 CREATE TRIGGER IF NOT EXISTS trg_ipc_messages_org_isolation
 BEFORE INSERT ON ipc_messages
 WHEN NEW.channel LIKE 'org:%'

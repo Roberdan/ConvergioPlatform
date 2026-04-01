@@ -1,5 +1,21 @@
 # Changelog
 
+## [20.7.0] - 01 Aprile 2026
+
+### Added
+- Org-plan linkage: plans table has org_id column, GET /api/orgs/:slug/plans endpoint
+- Org timeline: ipc_org_events table, GET/POST /api/orgs/:slug/timeline
+- Org metrics: GET /api/orgs/:slug/metrics (day/week/month aggregation), GET /api/orgs/:slug/report
+- Brain API enrichment: /api/brain now returns orgs array with health/budget/agents and agent_relations
+- Global orgchart: GET /api/orgs/chart — all orgs in one ASCII view
+- Service marketplace: GET /api/services/marketplace, POST /api/services/request, PUT /api/services/requests/:id
+- Night worker config: [night] section in config.toml, GET /api/node/night-status
+- SubagentStop auto-submit hook: scripts/platform/subagent-auto-submit.sh
+
+### Fixed
+- Mesh test fixtures: added missing lan_ip field to PeerConfig/ResolvedPeer test constructors
+- Evidence gate timeout: increased cargo_test timeout from 60s to 180s
+
 ## [20.6.0] - 01 Aprile 2026
 
 ### Added

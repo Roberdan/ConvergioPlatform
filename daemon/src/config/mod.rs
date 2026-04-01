@@ -2,6 +2,7 @@
 // Unified config.toml system — sensible defaults, hot-reload ready.
 
 pub mod defaults;
+pub mod night;
 pub mod validation;
 pub mod watcher;
 
@@ -152,6 +153,7 @@ impl Default for DaemonConfig {
 pub struct ConvergioConfig {
     pub node: NodeConfig,
     pub daemon: DaemonConfig,
+    pub night: night::NightConfig,
     pub mesh: MeshConfig,
     pub inference: InferenceConfig,
     pub kernel: KernelConfig,

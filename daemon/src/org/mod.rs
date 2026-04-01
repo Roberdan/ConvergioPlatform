@@ -1,5 +1,6 @@
 pub mod factory;
 pub mod orgchart;
+pub mod orgchart_global;
 pub mod provisioner;
 pub mod repo_scanner;
 mod repo_scanner_helpers;

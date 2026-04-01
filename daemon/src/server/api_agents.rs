@@ -1,3 +1,4 @@
+use super::api_brain_org;
 use super::state::{query_rows, ApiError, ServerState};
 use super::ws_brain::broadcast_brain_session_update;
 use axum::extract::State;
@@ -163,6 +164,9 @@ async fn api_brain(State(state): State<ServerState>) -> Result<Json<Value>, ApiE
         [],
     ).unwrap_or_default();
 
+    let orgs = api_brain_org::enrich_brain_with_orgs(&conn);
+    let agent_relations = api_brain_org::query_agent_relations(&conn);
+
     Ok(Json(json!({
         "sessions": sessions,
         "agents": agents,
@@ -171,6 +175,8 @@ async fn api_brain(State(state): State<ServerState>) -> Result<Json<Value>, ApiE
         "tasks": tasks,
         "commits": commits,
         "token_summary": token_summary,
-        "ipc_agents": ipc_agents
+        "ipc_agents": ipc_agents,
+        "orgs": orgs,
+        "agent_relations": agent_relations
     })))
 }
