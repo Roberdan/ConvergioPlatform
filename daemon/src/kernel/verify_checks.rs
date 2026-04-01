@@ -14,10 +14,11 @@ pub use crate::kernel::verify_hardening::{
 };
 
 pub(crate) fn run_cargo_check(worktree: Option<&str>) -> EvidenceCheck {
-    run_command_with_timeout("cargo_check", "cargo", &["check"], worktree, 60)
+    run_command_with_timeout("cargo_check", "cargo", &["check", "--features", "kernel"], worktree, 60)
 }
 
 /// Shared helper: run a command with timeout and process-group cleanup.
+/// Uses CARGO_TARGET_DIR isolation to avoid locking the daemon's target/.
 fn run_command_with_timeout(
     check_name: &str,
     program: &str,
@@ -28,8 +29,19 @@ fn run_command_with_timeout(
     use std::time::Duration;
     let mut cmd = Command::new(program);
     cmd.args(args);
-    if let Some(wt) = worktree {
-        cmd.current_dir(wt);
+    // Resolve working directory: worktree > CONVERGIO_REPO_ROOT > CWD
+    let effective_dir = worktree
+        .map(String::from)
+        .or_else(|| std::env::var("CONVERGIO_REPO_ROOT").ok())
+        .map(|d| if std::path::Path::new(&d).join("daemon").exists() {
+            format!("{d}/daemon")
+        } else { d });
+    if let Some(ref dir) = effective_dir {
+        cmd.current_dir(dir);
+    }
+    // Isolate cargo builds so we don't lock the running daemon's target/
+    if program == "cargo" {
+        cmd.env("CARGO_TARGET_DIR", "/tmp/convergio-evidence-build");
     }
     cmd.stderr(std::process::Stdio::piped());
     #[cfg(unix)]
@@ -82,9 +94,13 @@ fn run_command_with_timeout(
 }
 
 pub(crate) fn run_cargo_test(worktree: Option<&str>) -> EvidenceCheck {
-    // --lib only: unit tests are fast (~20s). Full test (bins+integration) takes 45s+
-    // and spawns 400+ threads, risking resource exhaustion.
-    run_command_with_timeout("cargo_test", "cargo", &["test", "--lib"], worktree, 180)
+    // --lib only, 60s timeout. Full test suite runs 100s+ and blocks the daemon.
+    // Uses isolated CARGO_TARGET_DIR to avoid locking the running daemon's target/.
+    run_command_with_timeout(
+        "cargo_test", "cargo",
+        &["test", "--features", "kernel", "--lib", "--", "--test-threads=1"],
+        worktree, 60,
+    )
 }
 
 pub(crate) fn run_npm_check(worktree: Option<&str>) -> EvidenceCheck {
