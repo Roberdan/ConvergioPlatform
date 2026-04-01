@@ -60,13 +60,16 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
         .to_string();
     tokio::spawn(crate::mesh::auto_update::run_auto_update_loop(update_repo));
 
-    // Ali orchestrator — only spawn here if NOT running in unified mode.
-    // In unified mode (`cvg serve --mesh true`), Ali is spawned in ipc_handler/server.rs
-    // with the shared IPC engine. Spawning here would create a SECOND Ali with a
-    // DIFFERENT Notify, unable to receive events from the HTTP server.
-    // The mesh-only daemon (`cvg daemon start`) still spawns Ali here.
+    // LAN mDNS discovery — when transport=lan or discovery=mdns
+    let cfg = crate::config::load_config();
+    if cfg.mesh.transport == "lan" || cfg.mesh.discovery == "mdns" {
+        let ver = env!("CARGO_PKG_VERSION").to_string();
+        tokio::spawn(crate::mesh::lan_discovery::run_discovery_loop(
+            cfg.node.name.clone(), ver, cfg.node.role.clone(),
+        ));
+    }
 
-    // Spawn Ali orchestrator
+    // Ali orchestrator — mesh-only daemon spawns here (unified mode uses ipc_handler)
     let ali_engine = ipc_engine.clone();
     let ali_db = config.db_path.clone();
     crate::orchestrator::spawn_ali(ali_engine, ali_db);

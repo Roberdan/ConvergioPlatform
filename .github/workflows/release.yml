@@ -1,0 +1,147 @@
+# Cross-platform release workflow for Convergio Platform.
+#
+# Triggers on tag push matching vX.Y.Z (e.g., v20.4.0).
+# Builds static binaries for macOS (ARM64, x86_64) and Linux (x86_64, ARM64),
+# then publishes a GitHub Release with tarballs and SHA256 checksums.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: convergio-platform-daemon
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build matrix — one job per target triple
+  # ---------------------------------------------------------------------------
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-14
+            target: aarch64-apple-darwin
+            use_cross: false
+
+          # macOS x86_64 (Intel)
+          - os: macos-13
+            target: x86_64-apple-darwin
+            use_cross: false
+
+          # Linux x86_64 (static musl)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            use_cross: false
+
+          # Linux ARM64 (static musl via cross-rs)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            use_cross: true
+
+    runs-on: ${{ matrix.os }}
+    name: build (${{ matrix.target }})
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Linux x86_64 musl needs musl-tools for the linker
+      - name: Install musl-tools (Linux x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      # Linux ARM64 uses cross-rs for cross-compilation
+      - name: Install cross-rs (Linux ARM64)
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      # Build the release binary
+      - name: Build release binary
+        working-directory: daemon
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --features kernel --target ${{ matrix.target }}
+          else
+            cargo build --release --features kernel --target ${{ matrix.target }}
+          fi
+
+      # Strip debug symbols to reduce binary size
+      - name: Strip binary
+        run: |
+          BINARY="daemon/target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}"
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            # cross-compiled ARM64 — use llvm-strip if available
+            if command -v llvm-strip &>/dev/null; then
+              llvm-strip "$BINARY"
+            else
+              echo "llvm-strip not found, skipping strip for cross target"
+            fi
+          else
+            strip "$BINARY"
+          fi
+
+      # Package as tarball: convergio-v<tag>-<target>.tar.gz
+      - name: Create tarball
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ARCHIVE="convergio-${TAG}-${{ matrix.target }}.tar.gz"
+          tar -czf "$ARCHIVE" \
+            -C "daemon/target/${{ matrix.target }}/release" \
+            "${{ env.BINARY_NAME }}"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: convergio-${{ matrix.target }}
+          path: ${{ env.ARCHIVE }}
+          retention-days: 3
+
+  # ---------------------------------------------------------------------------
+  # Publish GitHub Release with all artifacts + checksums
+  # ---------------------------------------------------------------------------
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: publish release
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd artifacts
+          sha256sum *.tar.gz > SHA256SUMS.txt
+          echo "--- Checksums ---"
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Convergio ${TAG}" \
+            --notes "Release ${TAG}. See CHANGELOG.md for details." \
+            --draft=false \
+            artifacts/*.tar.gz \
+            artifacts/SHA256SUMS.txt

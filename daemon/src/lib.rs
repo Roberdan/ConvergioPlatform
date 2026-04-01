@@ -1,3 +1,4 @@
+pub mod config;
 pub mod background;
 pub mod background_sync;
 pub mod background_sync_convergence;
