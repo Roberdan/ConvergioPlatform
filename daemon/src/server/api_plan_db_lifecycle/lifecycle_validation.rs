@@ -107,6 +107,51 @@ pub(crate) fn run_post_complete_cleanup(plan_id: i64, wt_paths: &[String]) {
     }
 }
 
+/// Verify all done tasks were validated by Thor, not forced-admin.
+/// forced-admin is an emergency bypass — plan completion requires real validation.
+pub(super) fn check_thor_validated(conn: &Connection, plan_id: i64) -> Result<(), ApiError> {
+    let forced = query_one(
+        conn,
+        "SELECT COUNT(*) AS c FROM tasks \
+         WHERE plan_id = ?1 AND status = 'done' \
+         AND validated_by = 'forced-admin'",
+        rusqlite::params![plan_id],
+    )?
+    .and_then(|v| v.get("c").and_then(Value::as_i64))
+    .unwrap_or(0);
+
+    if forced > 0 {
+        return Err(ApiError::bad_request(format!(
+            "plan {plan_id} has {forced} tasks validated by forced-admin, not Thor. \
+             Re-validate with cvg plan validate {plan_id}."
+        )));
+    }
+    Ok(())
+}
+
+/// Verify at least one wave has a merged PR (pr_url or pr_number set).
+/// A plan is not complete until the code is in a PR and merged.
+pub(super) fn check_pr_exists(conn: &Connection, plan_id: i64) -> Result<(), ApiError> {
+    let has_pr = query_one(
+        conn,
+        "SELECT COUNT(*) AS c FROM waves \
+         WHERE plan_id = ?1 \
+         AND (pr_url IS NOT NULL AND pr_url != '' \
+              OR pr_number IS NOT NULL AND pr_number != '')",
+        rusqlite::params![plan_id],
+    )?
+    .and_then(|v| v.get("c").and_then(Value::as_i64))
+    .unwrap_or(0);
+
+    if has_pr == 0 {
+        return Err(ApiError::bad_request(format!(
+            "plan {plan_id} has no PR linked to any wave. \
+             Create a PR and record it before completing."
+        )));
+    }
+    Ok(())
+}
+
 /// Verify all non-code deliverables linked to done tasks are approved.
 /// Returns `Ok(())` or `Err` with a descriptive message.
 pub(super) fn check_deliverables_approved(conn: &Connection, plan_id: i64) -> Result<(), ApiError> {

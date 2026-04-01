@@ -146,11 +146,20 @@ pub(crate) fn run_npm_test(worktree: Option<&str>) -> EvidenceCheck {
 }
 
 pub(crate) fn run_git_clean(worktree: Option<&str>) -> EvidenceCheck {
+    // Resolve effective directory: worktree > CONVERGIO_REPO_ROOT > skip.
+    // NEVER check CWD blindly — it may be main repo dirtied by another agent.
+    let effective_dir = worktree
+        .map(String::from)
+        .or_else(|| std::env::var("CONVERGIO_REPO_ROOT").ok());
+    let effective_dir = match effective_dir {
+        Some(d) => d,
+        None => return EvidenceCheck::pass(
+            "git_clean", "skipped: no worktree or CONVERGIO_REPO_ROOT set",
+        ),
+    };
     let mut cmd = Command::new("git");
     cmd.args(["status", "--porcelain"]);
-    if let Some(wt) = worktree {
-        cmd.current_dir(wt);
-    }
+    cmd.current_dir(&effective_dir);
     match cmd.output() {
         Ok(out) if out.status.success() => {
             let stdout = String::from_utf8_lossy(&out.stdout);

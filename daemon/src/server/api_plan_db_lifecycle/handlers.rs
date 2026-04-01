@@ -1,7 +1,8 @@
 use super::super::plan_lifecycle_guards;
 use super::super::state::{ApiError, ServerState};
 use super::lifecycle_validation::{
-    check_all_tasks_done, check_deliverables_approved, run_post_complete_cleanup,
+    check_all_tasks_done, check_deliverables_approved, check_pr_exists,
+    check_thor_validated, run_post_complete_cleanup,
     worktree_cleanup_paths,
 };
 use axum::extract::{Path, State};
@@ -126,6 +127,8 @@ pub(super) async fn handle_complete(
     let conn = &conn;
 
     check_all_tasks_done(conn, plan_id)?;
+    check_thor_validated(conn, plan_id)?;
+    check_pr_exists(conn, plan_id)?;
     check_deliverables_approved(conn, plan_id)?;
 
     let changed = conn
