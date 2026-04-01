@@ -58,6 +58,12 @@ async fn record(
     State(state): State<ServerState>,
     Json(body): Json<RecordRequest>,
 ) -> Result<Json<Value>, ApiError> {
+    // Constitution X1: no forced-admin bypass. Only real Thor validators.
+    if body.validator.as_deref() == Some("forced-admin") {
+        return Err(ApiError::bad_request(
+            "forced-admin is blocked (Constitution X1). Use cvg plan validate for Thor validation."
+        ));
+    }
     let conn = state.get_conn()?;
     vs::run_migrations(&conn).map_err(|e| ApiError::internal(e.to_string()))?;
     let queue_id = vs::enqueue_validation(&conn, Some(body.task_id), None, None)
