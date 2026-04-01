@@ -64,6 +64,17 @@ _Why: Plan 677 — `command not found` in new session. cvg is in PATH after boot
 | Typecheck | Language-appropriate type checker |
 | Line limits | `wc -l < file` (max 250) |
 
+## Shell Budget Management (NON-NEGOTIABLE)
+
+- **Max ~40 bash calls per sessione.** Dopo 30 calls, l'executor DEVE valutare se è possibile completare il piano nella sessione corrente.
+- **Raggruppare comandi:** usare SEMPRE `cmd1 && cmd2 && cmd3` in una sola bash call, mai 3 call separate per comandi indipendenti.
+- **Sub-agent contesto completo:** ogni task-agent DEVE ricevere nel prompt: worktree path, auth token env var, evidence format completo, verify commands esatti. Il sub-agent non deve mai dover fare tentativi di discovery.
+- **Checkpoint automatico:** dopo la wave W3 o dopo 30 bash calls (quello che viene prima), l'executor DEVE:
+  1. Committare e pushare tutto il lavoro fatto
+  2. Aggiornare plan.md con lo stato corrente
+  3. Informare l'utente: "Shell budget al X%. Consiglio nuova sessione per continuare."
+- _Why: sessione 10040 — debug daemon + evidence gate retry hanno consumato ~30 shell, esaurendo il budget prima della chiusura._
+
 ## CI Batch Fix (NON-NEGOTIABLE)
 
 Wait for FULL CI. Collect ALL failures. Fix ALL in one commit. Push once. Max 3 rounds.

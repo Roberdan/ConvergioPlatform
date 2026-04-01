@@ -24,6 +24,7 @@ Plan creation and orchestration with strict approval, Thor gates, and per-task r
 12. **Multi-domain workstreams** — tasks are NOT limited to code. Supported output_type: `pr` (code), `document`, `analysis`, `design`, `legal_opinion`, `plan`, `review`, `presentation`. Each task MUST have `output_type` and `validator_agent` set. _Why: Convergio is a virtual organization, not just a code factory._
 13. **Validator per domain** — Thor validates code (`output_type: pr`). For other types use: `doc-validator`, `plan-reviewer`, `design-validator`, `compliance-validator`. Set `validator_agent` in spec per task.
 14. **Task types expanded** — beyond code: `research`, `strategy`, `design`, `legal`, `marketing`, `analysis`, `planning`, `communication` are valid task types.
+15. **Session budget planning** — piani con più di 20 task DEVONO includere almeno una session-checkpoint wave (tipo `WC-checkpoint`) ogni 15-20 task. Il checkpoint wave contiene un solo task: "Commit, push, aggiornare plan.md, e suggerire nuova sessione se shell budget è sotto soglia." _Why: sessione 10040 — 50+ shell esaurite prima della chiusura, wave TF bloccata._
 
 ## Spec YAML — Non-Code Task Example
 
