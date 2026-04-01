@@ -41,6 +41,23 @@ NN = NON-NEGOTIABLE
 - **TDD mandatory**: RED → GREEN → proof reversible. _Why: Plan v21._
 - **Plan done = ALL PRs merged**: Squash-merged, worktrees clean, branches deleted, CI green. _Why: feedback_plan_done_means_merged.md._
 
+### Thor Gate (ADR-0001, NON-NEGOTIABLE)
+
+```
+pending → in_progress → submitted (executor) → done (ONLY Thor)
+```
+
+| Rule | Requirement |
+|------|-------------|
+| X1 | **ONLY Thor can set task status=done.** No executor, no agent, no forced-admin, no human bypass. |
+| X2 | After ALL wave tasks reach `submitted`: run `cvg plan validate {plan_id}` — Thor batch validates. |
+| X3 | NEVER skip Thor gate. NEVER proceed to next wave without Thor PASS. |
+| X4 | Post test evidence BEFORE submitting: `POST /api/plan-db/task/evidence`. |
+| X5 | Every task must pass its `verify[]` commands before reaching `submitted`. |
+| X6 | Plans execute on worktrees, NEVER on the main repo checkout. |
+
+_Why: Plan 10044 — 46 tasks executed, PR created, typecheck+build clean, but plan could not close because Thor was never invoked. No exceptions._
+
 ## Resilience (Article XI, NON-NEGOTIABLE)
 
 Self-recovery + circuit breakers + retry/backoff + checkpoint/restart + graceful degradation + `/health` endpoints + zero zombies. _Inspired by HPC distributed systems._
