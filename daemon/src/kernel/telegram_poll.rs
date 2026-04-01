@@ -160,9 +160,9 @@ async fn process_text(
     let intent = classify_intent(text, engine);
     debug!(?intent, text, "jarvis.telegram: classified intent");
 
-    // For AskAli: inject conversation history so the model has context
+    // For EscalateToAli: inject conversation history so the model has context
     // from recent exchanges. Other intents are stateless commands.
-    if matches!(intent, VoiceIntent::AskAli { .. }) {
+    if matches!(intent, VoiceIntent::EscalateToAli { .. }) {
         let history = telegram_conv::format_history_chatml(chat_id);
         let question = text.to_string();
         return engine.ask_with_history(&question, &history);

@@ -1,3 +1,7 @@
+pub mod auto_update;
+#[cfg(test)]
+#[path = "auto_update_tests.rs"]
+mod auto_update_tests;
 pub mod auth;
 pub mod daemon;
 pub mod delegate;

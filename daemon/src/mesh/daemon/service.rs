@@ -52,6 +52,14 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
         }
     });
 
+    // Mesh auto-update background loop
+    let update_repo = config.db_path.parent()
+        .and_then(|p| p.parent())
+        .unwrap_or(std::path::Path::new("."))
+        .to_string_lossy()
+        .to_string();
+    tokio::spawn(crate::mesh::auto_update::run_auto_update_loop(update_repo));
+
     // Ali orchestrator — only spawn here if NOT running in unified mode.
     // In unified mode (`cvg serve --mesh true`), Ali is spawned in ipc_handler/server.rs
     // with the shared IPC engine. Spawning here would create a SECOND Ali with a
@@ -164,10 +172,8 @@ pub async fn run_service(config: DaemonConfig) -> Result<(), MeshError> {
                 &local_config.db_path,
                 local_config.crsqlite_path.as_deref(),
             ) {
-                let load_json = serde_json::to_string(&load).unwrap_or_default();
-                if let Err(e) = conn.execute(
-                    "INSERT OR REPLACE INTO peer_heartbeats (peer_name, last_seen, load_json) VALUES (?1, ?2, ?3)",
-                    rusqlite::params![local_node, now_ts(), load_json],
+                if let Err(e) = super::heartbeat_writer::write_heartbeat(
+                    &conn, &local_node, &load, now_ts(),
                 ) {
                     tracing::warn!("heartbeat DB insert failed: {e}");
                 }

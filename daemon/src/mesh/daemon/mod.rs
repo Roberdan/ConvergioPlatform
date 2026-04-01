@@ -8,6 +8,7 @@ mod daemon_sync;
 mod daemon_tests;
 
 mod events;
+pub mod heartbeat_writer;
 mod net_utils;
 mod peer_loop;
 mod service;

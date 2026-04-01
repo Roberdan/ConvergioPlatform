@@ -42,6 +42,7 @@ pub mod api_memory;
 pub mod api_memory_mgmt;
 pub mod api_memory_mgmt_gc;
 pub mod api_mesh;
+pub mod api_mesh_update;
 pub mod api_metrics;
 pub mod api_metrics_queries;
 pub mod api_nightly;

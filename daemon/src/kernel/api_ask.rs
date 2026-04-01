@@ -28,7 +28,7 @@ mod inner {
     /// Routes through voice_router: classifies intent first.
     /// - Simple queries (stato, costi) → handled by voice_router directly
     /// - EscalateToAli → forwards to Ali (Opus) via chat API
-    /// - AskAli (unrecognized) → Qwen local with context stuffing
+    /// - EscalateToAli (unrecognized) → forwarded to Ali (Opus)
     pub async fn handle_ask(
         State(state): State<KernelState>,
         Json(body): Json<AskRequest>,
@@ -51,7 +51,7 @@ mod inner {
             let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
             let intent = classify_intent(&question, &eng);
             match &intent {
-                VoiceIntent::AskAli { .. } => eng.ask(&question),
+                VoiceIntent::EscalateToAli { .. } => eng.ask(&question),
                 _ => route_intent(intent, "http://localhost:8420"),
             }
         })

@@ -18,7 +18,6 @@ pub fn route_intent(intent: VoiceIntent, daemon_url: &str) -> String {
         VoiceIntent::PlanQuery { plan_id } => route_plan_query(plan_id, daemon_url),
         VoiceIntent::Restart { ref target } => route_restart(target),
         VoiceIntent::Mute => route_mute(),
-        VoiceIntent::AskAli { ref question } => route_ask_ali(question, daemon_url),
         VoiceIntent::EscalateToAli { ref question } => route_escalate_to_ali(question, daemon_url),
         VoiceIntent::CreateProject { ref name, ref mission } => {
             crate::kernel::voice_route_project::route_create_project(name, mission, daemon_url)
@@ -145,34 +144,6 @@ pub(crate) fn route_escalate_to_ali(question: &str, daemon_url: &str) -> String 
             let context = crate::kernel::engine::smart_context_gather_pub(question, daemon_url);
             format!("Ali non disponibile (claude CLI non trovato). Dati:\n{context}")
         }
-    }
-}
-
-pub(crate) fn route_ask_ali(question: &str, daemon_url: &str) -> String {
-    if let Some(org_answer) = crate::kernel::org_router::try_route_org_question(question, daemon_url) {
-        return org_answer;
-    }
-    // Delegate to /api/kernel/ask — engine.ask() uses MCP tools for intelligent answers.
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .build()
-        .unwrap_or_else(|_| reqwest::blocking::Client::new());
-    match client
-        .post(format!("{daemon_url}/api/kernel/ask"))
-        .json(&serde_json::json!({"question": question}))
-        .send()
-    {
-        Ok(r) => match r.json::<serde_json::Value>() {
-            Ok(v) => v
-                .get("answer")
-                .and_then(|a| a.as_str().map(String::from))
-                .unwrap_or_else(|| "Non ho una risposta.".to_string()),
-            Err(e) => {
-                warn!("voice_router: ask_ali response parse error: {e}");
-                "Non ho una risposta.".to_string()
-            }
-        },
-        Err(e) => format!("Errore: {e}"),
     }
 }
 

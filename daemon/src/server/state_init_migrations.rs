@@ -226,4 +226,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
      )",
     "CREATE INDEX IF NOT EXISTS idx_task_evidence_task ON task_evidence(task_db_id)",
     "CREATE INDEX IF NOT EXISTS idx_task_evidence_type  ON task_evidence(task_db_id, evidence_type)",
+    // Plan 10038 — version tracking in peer heartbeats for mesh update-status
+    "ALTER TABLE peer_heartbeats ADD COLUMN version TEXT",
+    "ALTER TABLE peer_heartbeats ADD COLUMN rustc_version TEXT",
 ];

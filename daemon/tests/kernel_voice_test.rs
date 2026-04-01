@@ -169,33 +169,29 @@ fn test_voice_router_classify_costi() {
     );
 }
 
-/// Nonsense input → AskAli (forwarded to Qwen for reasoning).
+/// Nonsense input → EscalateToAli (forwarded to Ali for reasoning).
 #[test]
-fn test_voice_router_classify_unknown_goes_to_ask_ali() {
+fn test_voice_router_classify_unknown_goes_to_escalate_ali() {
     let engine = KernelEngine::new(KernelConfig::default());
     assert!(
-        matches!(classify_intent("abracadabra", &engine), VoiceIntent::AskAli { .. }),
-        "unrecognised input must map to AskAli"
+        matches!(classify_intent("abracadabra", &engine), VoiceIntent::EscalateToAli { .. }),
+        "unrecognised input must map to EscalateToAli"
     );
 }
 
 // ---------------------------------------------------------------------------
-// Voice router — route_intent for Unknown
+// Voice router — route_intent for EscalateToAli
 // ---------------------------------------------------------------------------
 
-/// AskAli intent → non-empty response (error or answer).
+/// EscalateToAli intent → non-empty response (error or answer).
 #[test]
-fn test_voice_router_route_ask_ali() {
-    let response = route_intent(VoiceIntent::AskAli { question: "test".to_string() }, "http://localhost:1");
+fn test_voice_router_route_escalate_to_ali() {
+    let response = route_intent(
+        VoiceIntent::EscalateToAli { question: "test".to_string() },
+        "http://localhost:1",
+    );
     assert!(
         !response.is_empty(),
-        "route_intent(AskAli) must return a non-empty string"
-    );
-    // With unreachable daemon, returns error message — must not panic
-    assert!(
-        response.contains("Errore")
-            || response.contains("Non ho")
-            || response.contains("risposta"),
-        "expected error or answer, got: {response}"
+        "route_intent(EscalateToAli) must return a non-empty string"
     );
 }

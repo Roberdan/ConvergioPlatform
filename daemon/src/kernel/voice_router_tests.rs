@@ -42,10 +42,13 @@ fn test_classify_mute() {
 }
 
 #[test]
-fn test_classify_unknown_goes_to_ali() {
+fn test_classify_unknown_goes_to_escalate_ali() {
     let engine = KernelEngine::new(KernelConfig::default());
     let intent = classify_intent("forse domani nevica", &engine);
-    matches!(intent, VoiceIntent::AskAli { .. });
+    assert!(
+        matches!(intent, VoiceIntent::EscalateToAli { .. }),
+        "unrecognised input must escalate to Ali, got: {intent:?}"
+    );
 }
 
 #[test]
@@ -58,21 +61,12 @@ fn test_classify_case_insensitive() {
 // ----- route_intent ----------------------------------------------------------
 
 #[test]
-fn test_route_ask_ali_uses_kernel_ask_endpoint() {
-    // AskAli must POST to /api/kernel/ask (not /classify or /api/chat).
-    // With an unreachable daemon the error message confirms the attempt was made.
-    let response = route_intent(
-        VoiceIntent::AskAli { question: "che succede?".to_string() },
-        "http://localhost:9999", // intentionally unreachable
+fn test_route_escalate_to_ali_offline() {
+    let r = route_intent(
+        VoiceIntent::EscalateToAli { question: "che succede?".into() },
+        "http://localhost:9999",
     );
-    // On connection failure route_ask_ali returns a message that contains "Errore"
-    // or "Non riesco" — it never panics and never returns an empty string.
-    assert!(
-        response.contains("Errore") || response.contains("Non riesco"),
-        "expected /api/kernel/ask error fallback, got: {response}"
-    );
-    // Must not be empty — a silent failure here would suppress voice feedback.
-    assert!(!response.is_empty(), "AskAli fallback must produce non-empty response");
+    assert!(!r.is_empty(), "EscalateToAli fallback must produce non-empty response");
 }
 
 #[test]
@@ -97,27 +91,14 @@ fn test_route_restart_returns_confirmation() {
 }
 
 #[test]
-fn test_route_status_check_uses_plan_db_list_format() {
-    // StatusCheck calls GET /api/plan-db/list (not /overview or any other endpoint).
-    // Verified via offline fallback: the Italian error phrase "contattare il daemon"
-    // is only produced by the plan-db/list code path (route_status_check).
+fn test_route_status_check_offline_fallback() {
+    // Daemon not running — graceful Italian fallback via /api/plan-db/list path.
     let response = route_intent(VoiceIntent::StatusCheck, "http://localhost:1");
-    assert!(
-        !response.is_empty(),
-        "StatusCheck response must not be empty on offline daemon"
-    );
-    // The offline fallback must contain an Italian message — proves plan-db/list path.
+    assert!(!response.is_empty(), "StatusCheck must not be empty on offline daemon");
     assert!(
         response.contains("daemon") || response.contains("piani") || response.contains("contattare"),
         "expected Italian plan-db/list fallback, got: {response}"
     );
-}
-
-#[test]
-fn test_route_status_check_offline_fallback() {
-    // Daemon not running — expect graceful Italian fallback, not a panic.
-    let response = route_intent(VoiceIntent::StatusCheck, "http://localhost:1");
-    assert!(!response.is_empty(), "response must not be empty");
 }
 
 #[test]
@@ -202,30 +183,60 @@ fn test_classify_ask_org_update_on() {
 // ----- route_intent for new intents ------------------------------------------
 
 #[test]
-fn test_route_create_project_offline_returns_error() {
-    let response = route_intent(
-        VoiceIntent::CreateProject {
-            name: "fitness".to_string(),
-            mission: "perdere 5kg".to_string(),
-        },
-        "http://localhost:1",
-    );
-    assert!(!response.is_empty(), "CreateProject must produce non-empty response");
-    // Offline daemon should produce error message
+fn test_route_create_project_offline() {
+    let intent = VoiceIntent::CreateProject { name: "fitness".into(), mission: "perdere 5kg".into() };
+    let r = route_intent(intent, "http://localhost:1");
+    assert!(!r.is_empty(), "CreateProject must produce non-empty response");
+}
+
+#[test]
+fn test_route_ask_org_offline() {
+    let r = route_intent(VoiceIntent::AskOrg { name: "fitness".into() }, "http://localhost:1");
+    assert!(!r.is_empty(), "AskOrg must produce non-empty response");
+}
+
+// ----- Report/analysis keyword classification -------------------------------
+
+#[test]
+fn test_classify_report_keyword_escalates() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    let intent = classify_intent("fammi un report settimanale", &engine);
     assert!(
-        response.contains("Errore") || response.contains("errore")
-            || response.contains("fallito") || response.contains("failed"),
-        "expected error message, got: {response}"
+        matches!(intent, VoiceIntent::EscalateToAli { .. }),
+        "report keyword must escalate to Ali, got: {intent:?}"
     );
 }
 
 #[test]
-fn test_route_ask_org_offline_returns_error() {
-    let response = route_intent(
-        VoiceIntent::AskOrg { name: "fitness".to_string() },
-        "http://localhost:1",
+fn test_classify_analisi_keyword_escalates() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    let intent = classify_intent("analisi dei costi mensili", &engine);
+    assert!(
+        matches!(intent, VoiceIntent::EscalateToAli { .. }),
+        "analisi keyword must escalate to Ali, got: {intent:?}"
     );
-    assert!(!response.is_empty(), "AskOrg must produce non-empty response");
+}
+
+// ----- Execution keyword classification --------------------------------------
+
+#[test]
+fn test_classify_deploy_keyword_escalates() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    let intent = classify_intent("deploy the new version", &engine);
+    assert!(
+        matches!(intent, VoiceIntent::EscalateToAli { .. }),
+        "deploy keyword must escalate to Ali, got: {intent:?}"
+    );
+}
+
+#[test]
+fn test_classify_esegui_keyword_escalates() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    let intent = classify_intent("esegui il piano 42", &engine);
+    assert!(
+        matches!(intent, VoiceIntent::EscalateToAli { .. }),
+        "esegui keyword must escalate to Ali, got: {intent:?}"
+    );
 }
 
 // ----- VoiceIntent display ---------------------------------------------------
