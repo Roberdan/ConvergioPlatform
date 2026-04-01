@@ -1,6 +1,6 @@
 [package]
 name = "convergio-platform-daemon"
-version = "20.5.0"
+version = "20.6.0"
 edition = "2021"
 
 [lib]

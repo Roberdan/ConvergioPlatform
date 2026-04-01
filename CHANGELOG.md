@@ -1,5 +1,27 @@
 # Changelog
 
+## [20.6.0] - 01 Aprile 2026
+
+### Added
+- **MCP Completeness**: 22 new MCP tools (platform_tools: 12, org_tools: 10) — total 43 MCP tools
+- `POST /api/plan-db/task/create` + `cvg task create` CLI for adding tasks to in-progress plans
+- **3-tier enforcement**: Git hooks (5, both tools), Claude hooks (10), Daemon-side (5) — 20 total checks
+- Multi-transport mesh: peer resolver probes Thunderbolt > LAN > Tailscale with 1s TCP connect
+- `lan_ip` field in peers.conf for LAN-first connectivity
+
+### Fixed
+- Evidence gate uses isolated `CARGO_TARGET_DIR=/tmp/convergio-evidence-build` (was blocking daemon)
+- Evidence gate timeout reduced 180s to 60s
+- Copilot CLI now enforced by git hooks (pre-commit + commit-msg)
+- Daemon CWD guard prevents boot from worktree
+- Auth token auto-provisioned if missing
+- TaskReaper resets orphan in_progress tasks from dead agents
+- MainDirtyReaper notifies when main has >5 dirty files
+
+### Removed
+- M3 Max from mesh (hardware given away)
+- 60+ agent definitions from `.claude/agents/` context (saved 3.8k tokens)
+
 ## [20.5.0] - 01 Aprile 2026
 
 ### Added
