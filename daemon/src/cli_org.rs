@@ -35,6 +35,19 @@ pub enum OrgCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// List plans belonging to an org
+    Plans {
+        slug: String,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Show global orgchart (all orgs) or single org chart
+    Chart {
+        /// Org slug (omit for global ecosystem view)
+        slug: Option<String>,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
     /// Create a virtual organization from a mission/goal
     CreateOrg {
         name: String,
@@ -73,6 +86,8 @@ pub async fn handle(cmd: OrgCommands) -> Result<(), CliError> {
         } => create_org_and_spawn_ceo(&name, &mission, &objectives, budget, &ceo_agent, &api_url).await,
         OrgCommands::List { api_url } => crate::cli_org_show::list_orgs(&api_url).await,
         OrgCommands::Show { id, api_url } => crate::cli_org_show::show_org(&id, &api_url).await,
+        OrgCommands::Plans { slug, api_url } => crate::cli_org_show::org_plans(&slug, &api_url).await,
+        OrgCommands::Chart { slug, api_url } => crate::cli_org_show::org_chart(slug.as_deref(), &api_url).await,
         OrgCommands::CreateOrg { name, mission, budget, yes, api_url } => {
             crate::cli_create_org::handle_create_org(&name, &mission, budget, yes, &api_url).await
         }
