@@ -32,6 +32,13 @@ discovery = "mdns"              # mdns | static | tailscale
 default_model = "claude-sonnet-4-6"
 api_key_env = "ANTHROPIC_API_KEY"  # env var name holding the API key
 
+[inference.fallback]
+max_attempts = 3
+t1 = ["local", "haiku", "sonnet"]
+t2 = ["haiku", "local", "sonnet"]
+t3 = ["sonnet", "opus"]
+t4 = ["opus", "sonnet"]
+
 [kernel]
 model = "none"                  # "none" disables local kernel
 # model_path = ""               # path to local model weights

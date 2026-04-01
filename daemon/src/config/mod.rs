@@ -77,6 +77,7 @@ impl Default for MeshConfig {
 pub struct InferenceConfig {
     pub default_model: String,
     pub api_key_env: String,
+    pub fallback: InferenceFallbackConfig,
 }
 
 impl Default for InferenceConfig {
@@ -84,7 +85,40 @@ impl Default for InferenceConfig {
         Self {
             default_model: "claude-sonnet-4-6".to_string(),
             api_key_env: "ANTHROPIC_API_KEY".to_string(),
+            fallback: InferenceFallbackConfig::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct InferenceFallbackConfig {
+    pub max_attempts: usize,
+    pub t1: Vec<String>,
+    pub t2: Vec<String>,
+    pub t3: Vec<String>,
+    pub t4: Vec<String>,
+}
+
+impl Default for InferenceFallbackConfig {
+    fn default() -> Self {
+        Self {
+            max_attempts: 3,
+            t1: vec!["local".into(), "haiku".into(), "sonnet".into()],
+            t2: vec!["haiku".into(), "local".into(), "sonnet".into()],
+            t3: vec!["sonnet".into(), "opus".into()],
+            t4: vec!["opus".into(), "sonnet".into()],
+        }
+    }
+}
+
+impl PartialEq for InferenceFallbackConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.max_attempts == other.max_attempts
+            && self.t1 == other.t1
+            && self.t2 == other.t2
+            && self.t3 == other.t3
+            && self.t4 == other.t4
     }
 }
 

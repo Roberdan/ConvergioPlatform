@@ -12,6 +12,7 @@ const HOT_RELOADABLE: &[&str] = &[
     "daemon.timezone",
     "daemon.auto_update",
     "inference.default_model",
+    "inference.fallback",
     "kernel.max_tokens",
     "mesh.peers",
     "telegram.enabled",
@@ -71,6 +72,11 @@ pub fn diff_configs(
         old.inference.default_model,
         new.inference.default_model
     );
+    cmp!(
+        "inference.fallback",
+        old.inference.fallback,
+        new.inference.fallback
+    );
     // kernel
     cmp!("kernel.max_tokens", old.kernel.max_tokens, new.kernel.max_tokens);
     // telegram
@@ -88,6 +94,7 @@ fn apply_reloadable(current: &mut ConvergioConfig, new: &ConvergioConfig) {
     current.daemon.timezone = new.daemon.timezone.clone();
     current.daemon.auto_update = new.daemon.auto_update;
     current.inference.default_model = new.inference.default_model.clone();
+    current.inference.fallback = new.inference.fallback.clone();
     current.kernel.max_tokens = new.kernel.max_tokens;
     current.mesh.peers = new.mesh.peers.clone();
     current.telegram.enabled = new.telegram.enabled;

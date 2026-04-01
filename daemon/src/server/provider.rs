@@ -8,7 +8,38 @@ use crate::inference::types::InferenceTier;
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::warn;
+use tracing::{info, warn};
+
+/// Check if a provider is likely available before attempting inference.
+pub fn check_provider_health(provider: &Provider) -> bool {
+    match provider {
+        Provider::ClaudeSubscription => {
+            std::process::Command::new("which")
+                .arg("claude")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        }
+        Provider::CopilotSubscription => {
+            std::process::Command::new("gh")
+                .arg("auth")
+                .arg("status")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        }
+        Provider::LocalLLM => {
+            let port = std::env::var("LOCAL_LLM_PORT").unwrap_or_else(|_| "8321".into());
+            reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(2))
+                .build()
+                .ok()
+                .and_then(|c| c.get(format!("http://localhost:{port}/v1/models")).send().ok())
+                .map(|r| r.status().is_success())
+                .unwrap_or(false)
+        }
+    }
+}
 
 /// Resolve a model name to a concrete provider + model string.
 pub fn provider_for_model(model: &str) -> (Provider, String) {
@@ -114,11 +145,21 @@ pub fn stream_with_fallback(
                 }
             }
             Err(err) => {
-                warn!(model = %primary_model, error = %err, "primary LLM failed, trying fallback");
+                info!(
+                    primary = %primary_model,
+                    error = %err,
+                    "[FALLBACK] primary failed, walking chain"
+                );
                 let mut succeeded = false;
                 for (idx, fb_name) in chain_owned.iter().enumerate() {
                     if idx >= max_attempts { break; }
                     let (fb_provider, fb_model) = provider_for_fallback(fb_name);
+                    info!(
+                        primary = %primary_model,
+                        fallback = %fb_model,
+                        attempt = idx + 1,
+                        "[FALLBACK] trying next model"
+                    );
                     let fb_stream = llm_client::stream_chat(fb_provider, &fb_model, msgs.clone());
                     match collect_stream_result(fb_stream).await {
                         Ok(chunks) => {

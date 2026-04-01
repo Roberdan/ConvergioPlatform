@@ -71,6 +71,19 @@ impl FallbackConfig {
         })
     }
 
+    /// Build from the config.toml `[inference.fallback]` section.
+    pub fn from_config(cfg: &crate::config::InferenceFallbackConfig) -> Self {
+        let mut chains = HashMap::new();
+        chains.insert("t1".into(), FallbackChain::new(cfg.t1.clone()));
+        chains.insert("t2".into(), FallbackChain::new(cfg.t2.clone()));
+        chains.insert("t3".into(), FallbackChain::new(cfg.t3.clone()));
+        chains.insert("t4".into(), FallbackChain::new(cfg.t4.clone()));
+        Self {
+            chains,
+            max_attempts: cfg.max_attempts,
+        }
+    }
+
     /// Hardcoded default chains matching the platform spec:
     /// T1: local -> haiku -> sonnet
     /// T2: haiku -> local -> sonnet

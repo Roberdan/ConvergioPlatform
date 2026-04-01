@@ -3,7 +3,6 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
-const DEFAULT_API_URL: &str = "http://localhost:8420";
 
 pub async fn handle(
     alias: String,
