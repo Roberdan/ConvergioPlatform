@@ -8,6 +8,11 @@
 - `scripts/platform/daemon-install.sh` — installs daemon binary to `~/.convergio/bin/`
 - `exit_reason` column in `agent_activity` table for post-mortem analysis
 - Build isolation: worktree `cargo check` uses separate `CARGO_TARGET_DIR`
+- **Jarvis intelligence**: always-on context (plans, agents, costs, health, mesh, history)
+- **Multi-round tool calling**: Jarvis can call 8 platform tools autonomously (max 3 rounds)
+- **Telegram conversation memory**: sliding window of 5 exchanges per chat
+- **CreateProject intent**: "crea progetto X" via Telegram → org + bootstrap plan + 3 tasks
+- **AskOrg intent**: "come sta X?" → org status summary with members/budget/decisions
 
 ### Changed
 - Agent activity retention expanded from 1 hour to 30 days
@@ -15,6 +20,7 @@
 - Agent reaper stale threshold: 30min → 60min (avoids false reaps on long tasks)
 - Context budget: 2000 → 4000 tokens (30% of subagents were exhausting budget)
 - `daemon/start.sh` prefers installed binary from `~/.convergio/bin/`
+- Jarvis max tokens: 512 → 2048 for complete analytical responses
 
 ### Fixed
 - Daemon no longer crashes when worktree `cargo check` locks `target/` directory
@@ -23,6 +29,9 @@
 - ISO datetime T-separator parsing in agent history queries
 - Constitution violations: split 3 files over 250 lines (cli_task, api_ipc/mod, background_sync)
 - MCP tool count test assertions updated (19→31 for Ring 1, 21→33 for Ring 0)
+- `cvg status` auth: uses Bearer token for protected endpoints (was showing "Cannot reach daemon")
+- 13 TUI tests: `Option<Terminal>` so tests pass without TTY (CI, SSH, GitHub Actions)
+- Tailscale test: dynamic HostName from `tailscale status --json` instead of hardcoded peer mapping
 
 ## [20.2.0] - 31 Marzo 2026
 

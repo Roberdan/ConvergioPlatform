@@ -79,6 +79,26 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Load ~/.convergio/env so CLI commands (cvg) pick up auth tokens
+    // without requiring the user to source the file in their shell profile.
+    if let Ok(contents) = std::fs::read_to_string(
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".convergio/env"),
+    ) {
+        for line in contents.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((k, v)) = line.split_once('=') {
+                if env::var(k.trim()).is_err() {
+                    env::set_var(k.trim(), v.trim());
+                }
+            }
+        }
+    }
+
     // Initialize logging + panic hook before anything else.
     // TUI mode uses file-only logging to avoid corrupting ratatui display.
     let is_tui = env::args().any(|a| a == "tui");
