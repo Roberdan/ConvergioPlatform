@@ -50,6 +50,7 @@ pub(super) fn build_peer(
             .cloned()
             .unwrap_or_else(|| "active".to_owned()),
         thunderbolt_ip: kv.get("thunderbolt_ip").cloned(),
+        lan_ip: kv.get("lan_ip").cloned(),
         mac_address: kv.get("mac_address").cloned(),
         gh_account: kv.get("gh_account").cloned(),
         runners: kv.get("runners").and_then(|v| v.parse::<u32>().ok()), // intentional: malformed runner count should not fail peer record parse
@@ -138,6 +139,9 @@ pub fn peer_to_ini(name: &str, p: &PeerConfig) -> String {
     );
     if let Some(ref tb) = p.thunderbolt_ip {
         out.push_str(&format!("thunderbolt_ip={tb}\n"));
+    }
+    if let Some(ref lan) = p.lan_ip {
+        out.push_str(&format!("lan_ip={lan}\n"));
     }
     if let Some(ref mac) = p.mac_address {
         out.push_str(&format!("mac_address={mac}\n"));

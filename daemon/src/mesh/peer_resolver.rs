@@ -15,6 +15,8 @@ pub struct ResolvedPeer {
     pub ssh_alias: String,
     pub tailscale_ip: String,
     pub thunderbolt_ip: Option<String>,
+    pub lan_ip: Option<String>,
+    pub transport: String,
 }
 
 /// Normalize a peer name by lowercasing and stripping separators for fuzzy matching.
@@ -37,12 +39,13 @@ pub fn resolve_with_conf(peer_name: &str, conf_path: &Path) -> Result<ResolvedPe
 }
 
 /// Resolve from an already-loaded registry (no filesystem I/O).
+/// Uses probe-based transport selection: Thunderbolt > LAN > Tailscale > static fallback.
 pub fn resolve_from_registry(
     peer_name: &str,
     registry: &PeersRegistry,
 ) -> Result<ResolvedPeer, PeersError> {
     let (canonical, config) = find_peer(peer_name, registry)?;
-    let host = select_host(&canonical, &config);
+    let (host, transport) = select_host_with_probe(&config);
     Ok(ResolvedPeer {
         canonical_name: canonical,
         host,
@@ -51,20 +54,39 @@ pub fn resolve_from_registry(
         ssh_alias: config.ssh_alias.clone(),
         tailscale_ip: config.tailscale_ip.clone(),
         thunderbolt_ip: config.thunderbolt_ip.clone(),
+        lan_ip: config.lan_ip.clone(),
+        transport,
     })
 }
 
-/// Fallback chain for host: ssh_alias -> tailscale_ip -> dns_name -> canonical name.
-fn select_host(canonical: &str, config: &PeerConfig) -> String {
-    if !config.ssh_alias.is_empty() {
-        config.ssh_alias.clone()
-    } else if !config.tailscale_ip.is_empty() {
-        config.tailscale_ip.clone()
-    } else if !config.dns_name.is_empty() {
-        config.dns_name.clone()
-    } else {
-        canonical.to_string()
+/// Probe-based transport selection: try each IP with a 1s TCP connect.
+/// Order: Thunderbolt (fastest) > LAN (local) > Tailscale (remote) > static fallback.
+fn select_host_with_probe(config: &PeerConfig) -> (String, String) {
+    use std::net::TcpStream;
+    use std::time::Duration;
+    let candidates: Vec<(&str, &str)> = [
+        ("thunderbolt", config.thunderbolt_ip.as_deref().unwrap_or("")),
+        ("lan", config.lan_ip.as_deref().unwrap_or("")),
+        ("tailscale", &config.tailscale_ip),
+    ]
+    .into_iter()
+    .filter(|(_, ip)| !ip.is_empty())
+    .collect();
+
+    for (transport, ip) in &candidates {
+        let addr = format!("{ip}:22");
+        if let Ok(a) = addr.parse() {
+            if TcpStream::connect_timeout(&a, Duration::from_secs(1)).is_ok() {
+                return (ip.to_string(), transport.to_string());
+            }
+        }
     }
+    // All probes failed — static fallback (ssh_alias > tailscale > dns)
+    let host = if !config.ssh_alias.is_empty() { config.ssh_alias.clone() }
+        else if !config.tailscale_ip.is_empty() { config.tailscale_ip.clone() }
+        else if !config.dns_name.is_empty() { config.dns_name.clone() }
+        else { "localhost".to_string() };
+    (host, "fallback".to_string())
 }
 
 /// Find peer in registry: exact name -> case-insensitive name -> alias/IP/DNS fuzzy match.
@@ -98,10 +120,9 @@ fn find_peer(name: &str, registry: &PeersRegistry) -> Result<(String, PeerConfig
 }
 
 /// Build SSH destination string from resolved peer.
+/// Uses the probed host IP (not ssh_alias) so it works even when Tailscale is down.
 pub fn ssh_destination(resolved: &ResolvedPeer) -> String {
-    if !resolved.ssh_alias.is_empty() {
-        resolved.ssh_alias.clone()
-    } else if !resolved.user.is_empty() {
+    if !resolved.user.is_empty() {
         format!("{}@{}", resolved.user, resolved.host)
     } else {
         resolved.host.clone()

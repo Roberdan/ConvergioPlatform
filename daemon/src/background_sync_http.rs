@@ -88,6 +88,7 @@ pub fn resolve_best_addr(
 ) -> Option<String> {
     let candidates: Vec<(&str, &str)> = [
         ("thunderbolt", fields.get("thunderbolt_ip").map(|s| s.as_str())),
+        ("lan", fields.get("lan_ip").map(|s| s.as_str())),
         ("tailscale", fields.get("tailscale_ip").map(|s| s.as_str())),
     ]
     .into_iter()
