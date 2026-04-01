@@ -23,6 +23,7 @@ pub const SSE_ROUTES: &[&str] = &[
     "/api/plan/delegate",
     "/api/plan/start",
     "/api/mesh/pull-db",
+    "/api/a2ui/stream",
 ];
 pub const WS_ROUTES: &[&str] = &["/ws/brain", "/ws/dashboard", "/ws/pty"];
 
