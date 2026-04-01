@@ -17,9 +17,7 @@ pub enum VoiceIntent {
     PlanQuery { plan_id: u32 },
     Restart { target: String },
     Mute,
-    /// Anything the kernel can't handle locally → forward to Ali (Opus)
-    AskAli { question: String },
-    /// Explicit escalation to Ali via chat API (async polling, up to 60s)
+    /// Escalation to Ali via chat API (async polling, up to 60s)
     EscalateToAli { question: String },
     /// Create a new project (org + plan + tasks) from natural language
     CreateProject { name: String, mission: String },
@@ -133,6 +131,18 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
         let name = extract_org_name_from_text(text);
         return VoiceIntent::AskOrg { name };
     }
+    // Report/analysis keywords → escalate to Ali (before generic cost/plan)
+    if ["report", "analisi", "analizza", "riassumi", "summary", "briefing"]
+        .iter().any(|kw| s.contains(kw))
+    {
+        return VoiceIntent::EscalateToAli { question: text.to_string() };
+    }
+    // Execution keywords → escalate to Ali (before generic plan)
+    if ["lancia", "esegui", "fai", "run", "execute", "deploy"]
+        .iter().any(|kw| s.contains(kw))
+    {
+        return VoiceIntent::EscalateToAli { question: text.to_string() };
+    }
     if s.contains("stato") || s.contains("status") || s.contains("salute") {
         return VoiceIntent::StatusCheck;
     }
@@ -157,8 +167,8 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
         }).next().unwrap_or(0);
         return VoiceIntent::PlanQuery { plan_id: id };
     }
-    // Anything the kernel can't handle → try local Qwen first (AskAli)
-    VoiceIntent::AskAli { question: text.to_string() }
+    // Anything the kernel can't handle → escalate to Ali
+    VoiceIntent::EscalateToAli { question: text.to_string() }
 }
 
 // --- Project/Org text extraction helpers -------------------------------------

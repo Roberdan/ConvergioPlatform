@@ -1,9 +1,9 @@
 use super::*;
 
 #[test]
-fn tool_definitions_returns_seven_tools() {
+fn tool_definitions_returns_all_tools() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 7);
+    assert_eq!(defs.len(), 10);
     let names: Vec<&str> = defs.iter().map(|d| d.name).collect();
     assert!(names.contains(&"get_plans"));
     assert!(names.contains(&"get_plan_detail"));
@@ -12,6 +12,9 @@ fn tool_definitions_returns_seven_tools() {
     assert!(names.contains(&"get_kernel_status"));
     assert!(names.contains(&"get_agents"));
     assert!(names.contains(&"restart_node"));
+    assert!(names.contains(&"get_health"));
+    assert!(names.contains(&"get_agent_history"));
+    assert!(names.contains(&"get_mesh_status"));
 }
 
 #[test]

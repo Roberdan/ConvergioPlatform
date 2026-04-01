@@ -67,17 +67,52 @@ cd "$DIR"
 INSTALLED_BIN="$HOME/.convergio/bin/convergio-platform-daemon"
 
 if [ -f "$INSTALLED_BIN" ]; then
-  "$INSTALLED_BIN" "$@"
+  BINARY="$INSTALLED_BIN"
 elif [ -f target/release/convergio-platform-daemon ]; then
   echo "WARN: Running from target/release/ — cargo builds may crash this process." >&2
   echo "WARN: Run scripts/platform/daemon-install.sh to install to ~/.convergio/bin/" >&2
-  ./target/release/convergio-platform-daemon "$@"
+  BINARY="./target/release/convergio-platform-daemon"
 elif [ -f target/debug/convergio-platform-daemon ]; then
   echo "WARN: Using debug build from target/ — not isolated from cargo locks" >&2
-  ./target/debug/convergio-platform-daemon "$@"
+  BINARY="./target/debug/convergio-platform-daemon"
 else
   echo "Building daemon..."
   cargo build --release
   echo "WARN: Run scripts/platform/daemon-install.sh to install the binary" >&2
-  ./target/release/convergio-platform-daemon "$@"
+  BINARY="./target/release/convergio-platform-daemon"
 fi
+
+# Auto-update restart loop. Daemon exits normally → we exit.
+# If ~/.convergio/restart-requested exists → restart with (potentially new) binary.
+# Note: daemon PID changes on restart. Launchd/systemd should monitor start.sh PID instead.
+while true; do
+  "$BINARY" "$@"
+  EXIT_CODE=$?
+
+  if [ -f "$HOME/.convergio/restart-requested" ]; then
+    rm "$HOME/.convergio/restart-requested"
+    echo "[auto-update] Restarting daemon with updated binary..."
+    sleep 2
+
+    # Rollback: after restart, check health within 30s
+    # If health fails and backup exists, restore and restart once more
+    "$BINARY" "$@" &
+    DAEMON_PID=$!
+    sleep 30
+    if ! curl -sf http://localhost:8420/api/health >/dev/null 2>&1; then
+      if [ -f "$HOME/.convergio/bin/convergio-platform-daemon.bak" ]; then
+        echo "[auto-update] Health check failed. Rolling back to previous binary..."
+        kill "$DAEMON_PID" 2>/dev/null; wait "$DAEMON_PID" 2>/dev/null
+        cp "$HOME/.convergio/bin/convergio-platform-daemon.bak" \
+           "$HOME/.convergio/bin/convergio-platform-daemon"
+        continue  # restart with restored binary
+      fi
+    fi
+    # Health OK or no backup — let the restarted daemon continue
+    wait "$DAEMON_PID"
+    EXIT_CODE=$?
+    continue
+  fi
+
+  exit $EXIT_CODE
+done
