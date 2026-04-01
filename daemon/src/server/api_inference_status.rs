@@ -96,11 +96,13 @@ async fn inference_status_handler(
 
     drop(checker);
 
+    let fallback_cfg = crate::config::InferenceFallbackConfig::default();
     let chains = serde_json::json!({
-        "t1": ["local", "haiku", "sonnet"],
-        "t2": ["haiku", "local", "sonnet"],
-        "t3": ["sonnet", "opus"],
-        "t4": ["opus", "sonnet"],
+        "t1": fallback_cfg.t1,
+        "t2": fallback_cfg.t2,
+        "t3": fallback_cfg.t3,
+        "t4": fallback_cfg.t4,
+        "max_attempts": fallback_cfg.max_attempts,
     });
 
     Ok(Json(InferenceStatus {

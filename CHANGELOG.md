@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `cvg ask` CLI command with agent alias resolution (~/.convergio/aliases.toml)
+- `/interview` deep interview command for iterative requirements extraction (max 7 questions)
+- Interview skill wrapper with skill.yaml and SKILL.md
+- A2UI agent-to-UI block push protocol: POST /api/a2ui/push, GET /api/a2ui/blocks, SSE /api/a2ui/stream
+- A2UI background TTL cleanup for expired blocks
+- Config-driven inference fallback chains (`[inference.fallback]` in config.toml, hot-reloadable)
+- Provider health check before fallback attempt (claude binary, gh auth, local LLM ping)
+- Structured fallback logging: `[FALLBACK] primary/error/fallback`
+- `/api/inference/status` now returns config-driven chains and max_attempts
+- PARITY.md capability audit (17 capabilities verified with evidence)
+- README.md competitive comparison table (vs claw-code, oh-my-codex, openclaw)
+- Default agent aliases generated during `cvg setup`
+
 ## [20.7.0] - 01 Aprile 2026
 
 ### Added

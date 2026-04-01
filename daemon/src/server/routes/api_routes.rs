@@ -115,6 +115,8 @@ pub const GET_ROUTES: &[&str] = &[
     "/api/node/roles",
     "/api/voice/status",
     "/api/sync/status",
+    "/api/a2ui/blocks",
+    "/api/a2ui/blocks/:id",
 ];
 pub const POST_ROUTES: &[&str] = &[
     "/api/validation/enqueue",
@@ -211,6 +213,8 @@ pub const POST_ROUTES: &[&str] = &[
     "/api/goal/decompose",
     "/api/goal/execute",
     "/api/health/post-merge-check",
+    "/api/a2ui/push",
+    "/api/a2ui/dismiss/:id",
 ];
 // PUT, DELETE, SSE, WS routes + tests → api_routes_ext.rs
 pub use super::api_routes_ext::{DELETE_ROUTES, PUT_ROUTES, SSE_ROUTES, WS_ROUTES};

@@ -229,4 +229,20 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // Plan 10038 — version tracking in peer heartbeats for mesh update-status
     "ALTER TABLE peer_heartbeats ADD COLUMN version TEXT",
     "ALTER TABLE peer_heartbeats ADD COLUMN rustc_version TEXT",
+    // Plan 10046 — A2UI agent-to-UI block push protocol
+    "CREATE TABLE IF NOT EXISTS a2ui_blocks (
+         id              TEXT    PRIMARY KEY,
+         agent_id        TEXT    NOT NULL,
+         target_page     TEXT,
+         target_position TEXT    DEFAULT 'top',
+         block_type      TEXT    NOT NULL,
+         block_json      TEXT    NOT NULL,
+         priority        TEXT    DEFAULT 'normal',
+         ttl_seconds     INTEGER,
+         replaces        TEXT,
+         status          TEXT    DEFAULT 'active',
+         created_at      TEXT    DEFAULT (datetime('now')),
+         dismissed_at    TEXT
+     )",
+    "CREATE INDEX IF NOT EXISTS idx_a2ui_status ON a2ui_blocks(status)",
 ];

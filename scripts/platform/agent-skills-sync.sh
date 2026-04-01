@@ -14,6 +14,7 @@ _SKILL_MAP="planner:claude-opus:0.95
 execute:copilot-codex:0.90
 check:claude-sonnet:0.90
 prompt:claude-opus:0.95
+interview:claude-opus:0.95
 research:claude-haiku:0.80
 release:claude-sonnet:0.85
 prepare:claude-opus:0.90

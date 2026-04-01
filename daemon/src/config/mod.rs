@@ -2,7 +2,9 @@
 // Unified config.toml system — sensible defaults, hot-reload ready.
 
 pub mod defaults;
+pub mod inference;
 pub mod night;
+pub use inference::InferenceFallbackConfig;
 pub mod validation;
 pub mod watcher;
 
@@ -77,6 +79,7 @@ impl Default for MeshConfig {
 pub struct InferenceConfig {
     pub default_model: String,
     pub api_key_env: String,
+    pub fallback: InferenceFallbackConfig,
 }
 
 impl Default for InferenceConfig {
@@ -84,6 +87,7 @@ impl Default for InferenceConfig {
         Self {
             default_model: "claude-sonnet-4-6".to_string(),
             api_key_env: "ANTHROPIC_API_KEY".to_string(),
+            fallback: InferenceFallbackConfig::default(),
         }
     }
 }

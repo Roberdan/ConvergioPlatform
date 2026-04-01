@@ -67,6 +67,17 @@ pub(crate) async fn handle_setup(defaults: bool) -> Result<(), CliError> {
     std::fs::write(&config_path, &content)
         .map_err(|e| CliError::Io(e))?;
 
+    // Generate default aliases if not present
+    let aliases_path = config_path
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join("aliases.toml");
+    if !aliases_path.exists() {
+        let defaults = crate::cli_ask::generate_default_aliases();
+        std::fs::write(&aliases_path, &defaults).map_err(CliError::Io)?;
+        println!("Agent aliases written to {}", aliases_path.display());
+    }
+
     println!();
     println!("Configuration saved to {}", config_path.display());
     println!();
