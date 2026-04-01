@@ -1,4 +1,5 @@
 use crate::cli_error::CliError;
+use crate::cli_http::get_and_return;
 use serde_json::{json, Value};
 
 const CYAN: &str = "\x1b[36m";
@@ -7,47 +8,26 @@ const YELLOW: &str = "\x1b[33m";
 const RESET: &str = "\x1b[0m";
 
 pub async fn list_orgs(api_url: &str) -> Result<(), CliError> {
-    let client = reqwest::Client::new();
-    let payload: Value = client
-        .get(format!("{api_url}/api/orgs"))
-        .send()
+    let payload = get_and_return(&format!("{api_url}/api/orgs"))
         .await
-        .map_err(|e| CliError::ApiCallFailed(format!("list orgs failed: {e}")))?
-        .json()
-        .await
-        .map_err(|e| CliError::ApiCallFailed(format!("decode org list failed: {e}")))?;
+        .map_err(|_| CliError::ApiCallFailed("list orgs failed".into()))?;
     println!("{CYAN}ORG ID | STATUS | CEO | MEMBERS | BUDGET{RESET}");
     for org in payload["orgs"].as_array().into_iter().flatten() {
         let id = org["id"].as_str().unwrap_or_default();
-        let details = fetch_org_detail(&client, api_url, id).await?;
+        let details = fetch_org_detail(api_url, id).await?;
         println!("{}", format_org_row(&details));
     }
     Ok(())
 }
 
 pub async fn show_org(id: &str, api_url: &str) -> Result<(), CliError> {
-    let client = reqwest::Client::new();
-    let detail = fetch_org_detail(&client, api_url, id).await?;
-    let decisions: Value = client
-        .get(format!("{api_url}/api/orgs/{id}/decisions"))
-        .send()
-        .await
-        .map_err(|e| CliError::ApiCallFailed(format!("get decisions failed: {e}")))?
-        .json()
-        .await
-        .map_err(|e| CliError::ApiCallFailed(format!("decode decisions failed: {e}")))?;
-    let telemetry: Value = client
-        .get(format!("{api_url}/api/orgs/{id}/telemetry?period=day"))
-        .send()
-        .await
-        .map_err(|e| CliError::ApiCallFailed(format!("get telemetry failed: {e}")))?
-        .json()
-        .await
-        .map_err(|e| CliError::ApiCallFailed(format!("decode telemetry failed: {e}")))?;
-    let digest: Value = match client.get(format!("{api_url}/api/orgs/{id}/digest")).send().await {
-        Ok(resp) => resp.json::<Value>().await.unwrap_or_else(|_| json!({"digest": null})),
-        Err(_) => json!({"digest": null}),
-    };
+    let detail = fetch_org_detail(api_url, id).await?;
+    let decisions = get_and_return(&format!("{api_url}/api/orgs/{id}/decisions"))
+        .await.unwrap_or_else(|_| json!({"decisions": []}));
+    let telemetry = get_and_return(&format!("{api_url}/api/orgs/{id}/telemetry?period=day"))
+        .await.unwrap_or_else(|_| json!({"aggregate": {}}));
+    let digest = get_and_return(&format!("{api_url}/api/orgs/{id}/digest"))
+        .await.unwrap_or_else(|_| json!({"digest": null}));
     let out = json!({
         "org": detail["org"],
         "members": detail["members"],
@@ -64,15 +44,9 @@ pub async fn show_org(id: &str, api_url: &str) -> Result<(), CliError> {
 }
 
 pub async fn org_plans(slug: &str, api_url: &str) -> Result<(), CliError> {
-    let client = reqwest::Client::new();
-    let payload: Value = client
-        .get(format!("{api_url}/api/orgs/{slug}/plans"))
-        .send()
+    let payload = get_and_return(&format!("{api_url}/api/orgs/{slug}/plans"))
         .await
-        .map_err(|e| CliError::ApiCallFailed(format!("get org plans failed: {e}")))?
-        .json()
-        .await
-        .map_err(|e| CliError::ApiCallFailed(format!("decode org plans failed: {e}")))?;
+        .map_err(|_| CliError::ApiCallFailed("get org plans failed".into()))?;
     let plans = payload["plans"].as_array();
     if plans.map(|p| p.is_empty()).unwrap_or(true) {
         println!("No plans linked to org '{slug}'");
@@ -92,67 +66,39 @@ pub async fn org_plans(slug: &str, api_url: &str) -> Result<(), CliError> {
 }
 
 pub async fn org_chart(slug: Option<&str>, api_url: &str) -> Result<(), CliError> {
-    let client = reqwest::Client::new();
-    if let Some(s) = slug {
-        let payload: Value = client
-            .get(format!("{api_url}/api/orgs/{s}/orgchart"))
-            .send()
-            .await
-            .map_err(|e| CliError::ApiCallFailed(format!("get orgchart failed: {e}")))?
-            .json()
-            .await
-            .map_err(|e| CliError::ApiCallFailed(format!("decode orgchart failed: {e}")))?;
-        println!("{}", payload["chart"].as_str().unwrap_or("(no chart data)"));
-    } else {
-        let payload: Value = client
-            .get(format!("{api_url}/api/orgs/chart"))
-            .send()
-            .await
-            .map_err(|e| CliError::ApiCallFailed(format!("get global chart failed: {e}")))?
-            .json()
-            .await
-            .map_err(|e| CliError::ApiCallFailed(format!("decode global chart failed: {e}")))?;
-        println!("{}", payload["chart"].as_str().unwrap_or("(no chart data)"));
-    }
+    let url = match slug {
+        Some(s) => format!("{api_url}/api/orgs/{s}/orgchart"),
+        None => format!("{api_url}/api/orgs/chart"),
+    };
+    let payload = get_and_return(&url)
+        .await
+        .map_err(|_| CliError::ApiCallFailed("get orgchart failed".into()))?;
+    println!("{}", payload["chart"].as_str().unwrap_or("(no chart data)"));
     Ok(())
 }
 
 pub fn format_org_row(org_detail: &Value) -> String {
-    let id = org_detail["org"]["id"].as_str().or_else(|| org_detail["id"].as_str()).unwrap_or("-");
-    let status = org_detail["org"]["status"].as_str().or_else(|| org_detail["status"].as_str()).unwrap_or("-");
-    let ceo = org_detail["org"]["ceo_agent"].as_str().or_else(|| org_detail["ceo_agent"].as_str()).unwrap_or("-");
+    let id = org_detail["org"]["id"].as_str()
+        .or_else(|| org_detail["id"].as_str()).unwrap_or("-");
+    let status = org_detail["org"]["status"].as_str()
+        .or_else(|| org_detail["status"].as_str()).unwrap_or("-");
+    let ceo = org_detail["org"]["ceo_agent"].as_str()
+        .or_else(|| org_detail["ceo_agent"].as_str()).unwrap_or("-");
     let members = org_detail["member_count"].as_u64().unwrap_or(0);
     let budget = org_detail["budget_usage_pct"].as_f64().unwrap_or(0.0);
-    let status_colored = if status == "active" {
-        format!("{GREEN}{status}{RESET}")
-    } else {
-        format!("{YELLOW}{status}{RESET}")
-    };
-    format!("{id} | {status_colored} | {ceo} | {members} | {budget:.1}%")
+    let color = if status == "active" { GREEN } else { YELLOW };
+    format!("{id} | {color}{status}{RESET} | {ceo} | {members} | {budget:.1}%")
 }
 
-async fn fetch_org_detail(client: &reqwest::Client, api_url: &str, id: &str) -> Result<Value, CliError> {
-    let detail: Value = client
-        .get(format!("{api_url}/api/orgs/{id}"))
-        .send()
+async fn fetch_org_detail(api_url: &str, id: &str) -> Result<Value, CliError> {
+    let detail = get_and_return(&format!("{api_url}/api/orgs/{id}"))
         .await
-        .map_err(|e| CliError::ApiCallFailed(format!("get org detail failed: {e}")))?
-        .json()
-        .await
-        .map_err(|e| CliError::ApiCallFailed(format!("decode org detail failed: {e}")))?;
+        .map_err(|_| CliError::ApiCallFailed("get org detail failed".into()))?;
     let member_count = detail["members"].as_array().map(|m| m.len()).unwrap_or(0);
     let budget = detail["org"]["budget"].as_f64().unwrap_or(0.0).max(1.0);
-    let agg: Value = match client
-        .get(format!("{api_url}/api/orgs/{id}/telemetry?period=day"))
-        .send()
+    let agg = get_and_return(&format!("{api_url}/api/orgs/{id}/telemetry?period=day"))
         .await
-    {
-        Ok(resp) => resp
-            .json::<Value>()
-            .await
-            .unwrap_or_else(|_| json!({"aggregate": {"cost": 0.0}})),
-        Err(_) => json!({"aggregate": {"cost": 0.0}}),
-    };
+        .unwrap_or_else(|_| json!({"aggregate": {"cost": 0.0}}));
     let cost = agg["aggregate"]["cost"].as_f64().unwrap_or(0.0);
     Ok(json!({
         "org": detail["org"],
