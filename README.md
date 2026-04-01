@@ -60,6 +60,35 @@ The architecture is **provider-agnostic**: the daemon spawns CLI subprocesses, s
 
 ---
 
+## Installation
+
+### macOS (Homebrew)
+
+```bash
+brew tap Roberdan/convergio
+brew install convergio
+```
+
+### Linux / macOS (binary)
+
+```bash
+curl -sSL https://github.com/Roberdan/ConvergioPlatform/releases/latest/download/install.sh | sh
+```
+
+### From source
+
+```bash
+cargo install --git https://github.com/Roberdan/ConvergioPlatform --features kernel
+```
+
+### First run
+
+```bash
+cvg setup
+```
+
+---
+
 ## Quick Start
 
 ```bash

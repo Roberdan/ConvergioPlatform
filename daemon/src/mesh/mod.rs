@@ -30,6 +30,9 @@ pub mod profiles;
 pub mod qr;
 pub mod token;
 
+// LAN peer discovery
+pub mod lan_discovery;
+
 // Node provisioning / migration modules
 pub mod brew;
 pub mod macos;

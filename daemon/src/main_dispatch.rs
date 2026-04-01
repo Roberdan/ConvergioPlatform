@@ -1,10 +1,10 @@
 use crate::cli_commands::Commands;
 use crate::{
     cli_agent_format, cli_audit, cli_audit_project, cli_bus, cli_checkpoint, cli_delegation,
-    cli_domain, cli_org,
-    cli_error::CliError,
-    cli_capability, cli_channel, cli_chat, cli_kb, cli_kernel, cli_launch, cli_lock, cli_memory, cli_ops, cli_status, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review, cli_run,
-    cli_skill, cli_task, cli_wave, cli_who, cli_workspace,
+    cli_domain, cli_org, cli_error::CliError, cli_setup,
+    cli_capability, cli_channel, cli_chat, cli_kb, cli_kernel, cli_launch, cli_lock, cli_memory,
+    cli_ops, cli_status, cli_voice, cli_plan, cli_project, cli_reap, cli_repo, cli_review,
+    cli_run, cli_skill, cli_task, cli_wave, cli_who, cli_workspace,
     ipc_handler::{self, DaemonCommands},
 };
 use std::env;
@@ -13,6 +13,7 @@ use std::process::ExitCode;
 
 pub(crate) async fn dispatch(command: Commands) -> ExitCode {
     match command {
+        Commands::Setup { defaults } => exit_on_err(cli_setup::handle_setup(defaults).await),
         Commands::Db {
             db_path,
             crsqlite_path,
@@ -166,10 +167,7 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         Commands::Voice { command } => exit_on_err(cli_voice::handle(command).await),
         Commands::Memory { command } => exit_on_err(cli_memory::handle(command).await),
         Commands::Run { command } => exit_on_err(cli_run::handle(command).await),
-        Commands::Mesh { command } => {
-            cli_ops::handle_mesh(command).await;
-            ExitCode::SUCCESS
-        }
+        Commands::Mesh { command } => { cli_ops::handle_mesh(command).await; ExitCode::SUCCESS }
         Commands::Session { command } => {
             cli_ops::handle_session(command).await;
             ExitCode::SUCCESS
@@ -231,8 +229,8 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         }
         Commands::Repo { command } => exit_on_err(cli_repo::handle(command).await),
         Commands::Kernel { command } => cli_kernel::dispatch(command).await,
-        Commands::Cheatsheet => { crate::cli_cheatsheet::print_cheatsheet(); ExitCode::SUCCESS }
-        Commands::Api => { crate::cli_api_list::print_api_list(); ExitCode::SUCCESS }
+        Commands::Cheatsheet => { crate::cli_cheatsheet::print_cheatsheet(); ExitCode::SUCCESS },
+        Commands::Api => { crate::cli_api_list::print_api_list(); ExitCode::SUCCESS },
         Commands::Claude { name, parent, api_url } => {
             exit_on_err(cli_launch::handle(cli_launch::LaunchCommands::Claude { name, parent, api_url }).await)
         }
@@ -242,9 +240,8 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
     }
 }
 fn exit_on_err(result: Result<(), CliError>) -> ExitCode {
-    if let Err(e) = result {
-        eprintln!("{e}");
-        return ExitCode::from(e.exit_code() as u8);
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => { eprintln!("{e}"); ExitCode::from(e.exit_code() as u8) }
     }
-    ExitCode::SUCCESS
 }

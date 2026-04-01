@@ -20,6 +20,8 @@ mod cli_bus_watch;
 mod cli_checkpoint;
 mod cli_commands;
 mod cli_delegation;
+mod cli_setup;
+mod cli_setup_steps;
 mod cli_domain;
 mod cli_error;
 mod cli_http;
@@ -100,6 +102,21 @@ async fn main() -> ExitCode {
         }
     }
 
+    // Load config.toml (falls back to defaults if missing).
+    let _cfg = convergio_core::config::load_config();
+    let cfg_issues = convergio_core::config::validation::validate(&_cfg);
+    for issue in &cfg_issues {
+        eprintln!("[config] warning: {issue}");
+    }
+
+    // Wrap config in Arc<RwLock> for hot-reload and spawn the watcher.
+    let shared_cfg = std::sync::Arc::new(std::sync::RwLock::new(_cfg));
+    if let Err(e) = convergio_core::config::watcher::spawn_config_watcher(
+        std::sync::Arc::clone(&shared_cfg),
+    ) {
+        eprintln!("[config] watcher not started: {e}");
+    }
+
     // Initialize logging + panic hook before anything else.
     // TUI mode uses file-only logging to avoid corrupting ratatui display.
     let is_tui = env::args().any(|a| a == "tui");
@@ -130,6 +147,14 @@ async fn main() -> ExitCode {
         });
         println!("{payload}");
         return ExitCode::SUCCESS;
+    }
+    if let Some(ref command) = cli.command {
+        // First-run hint: suggest `cvg setup` if no config exists yet.
+        if !matches!(command, Commands::Setup { .. })
+            && !convergio_core::config::config_path().exists()
+        {
+            eprintln!("hint: First time? Run `cvg setup` to configure Convergio.");
+        }
     }
     if let Some(command) = cli.command {
         return main_dispatch::dispatch(command).await;
