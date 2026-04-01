@@ -1,0 +1,9 @@
+name: interview
+description: "Deep Interview — iterative one-question-at-a-time requirements extraction loop"
+command: interview
+model: claude-opus
+temperature: 0.95
+tags:
+  - requirements
+  - planning
+  - clarification

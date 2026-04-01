@@ -247,4 +247,23 @@ pub enum Commands {
         #[arg(long)] parent: Option<String>,
         #[arg(long, default_value = "http://localhost:8420")] api_url: String,
     },
+    /// Ask an agent a question using alias resolution
+    #[command(name = "ask")]
+    Ask {
+        /// Agent alias or full name (e.g. "baccio", "rex-code-reviewer")
+        alias: String,
+        /// Message to send
+        message: Option<String>,
+        /// List all configured aliases
+        #[arg(long)]
+        list: bool,
+        /// Set a new alias (use with --agent)
+        #[arg(long)]
+        set: Option<String>,
+        /// Agent name for --set
+        #[arg(long)]
+        agent: Option<String>,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
