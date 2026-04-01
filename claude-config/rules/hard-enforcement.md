@@ -1,26 +1,46 @@
 # Hard Enforcement (HOOK-ENFORCED)
 
-Enforcement status reflects what hooks actually do as of 31 Marzo 2026.
+Enforcement status as of 01 Aprile 2026.
+
+## Git Hooks (work for BOTH Claude Code and Copilot CLI)
+
+| # | Rule | Hook | File | Blocks |
+|---|---|---|---|---|
+| G1 | No commits on main | `MainGuard` | `.git/hooks/pre-commit` | commit on main in main checkout |
+| G2 | Max 250 lines/file | `FileSizeGuard` | `.git/hooks/pre-commit` | commit with .rs/.ts/.js/.sh >250 lines |
+| G3 | No secrets in code | `SecretScan` | `.git/hooks/pre-commit` | commit with API keys, tokens, passwords |
+| G4 | No sqlite3 direct | `SqliteBlock` | `.git/hooks/pre-commit` | commit with `sqlite3` in .sh/.py |
+| G5 | Conventional commits | `CommitLint` | `.git/hooks/commit-msg` | non-conventional commit messages |
+
+## Claude Code Hooks (Claude only — Copilot does NOT see these)
 
 | # | Rule | Hook | Status | Behavior |
 |---|---|---|---|---|
-| 1 | No secrets in code | `SecretScan` | BLOCK | pre-tool-guard + secret-scanner.sh on git commit |
-| 2 | No `sqlite3` direct access | `SqliteBlock` | BLOCK | pre-tool-guard: blocks `sqlite3 ` in Bash |
-| 3 | Agent identity required | `AgentIdentity` | WARNING | SubagentStart + SubagentStop warn if CONVERGIO_AGENT_NAME unset |
-| 4 | `cargo check` on .rs edits | `RustCheck` | BLOCK | PostToolUse/Edit: post-edit-rust-check.sh, exits non-zero |
-| 5 | Evidence before done | `EvidenceGate` | WARNING | SubagentStop: warns if "done/completed" claimed without test/curl evidence |
-| 6 | Max 250 lines/file | `FileSizeGuard` | BLOCK | PostToolUse/Write+Edit: exits 2 if wc -l > 250 |
-| 7 | New .rs file = wire mod.rs | `RustModWiring` | BLOCK | PostToolUse: check-rust-wiring.sh on daemon/src/*.rs |
-| 8 | Fail-loud (no silent fallback) | `FailLoud` | WARNING | PreToolUse/Edit: warns on unwrap_or_default() and let _ = in .rs files |
-| 9 | Conventional commits | `CommitLint` | BLOCK | PreToolUse/Bash: blocks git commit -m with non-conventional message |
-| 10 | Test before done | `TestGate` | WARNING | PreToolUse/Bash: warns on Rust commit if /tmp/.convergio-test-ran absent |
-| 11 | No writes on main branch | `MainGuard` | BLOCK | PreToolUse/Edit+Write: blocks daemon/src/ edits when on main branch. Incident: 2026-03-31 |
-| 12 | Orphan task reset | `TaskReaper` | AUTO | orchestrator/reaper: resets in_progress tasks whose agent is dead back to pending |
-| 13 | Daemon CWD validation | `DaemonCwdGuard` | BLOCK | start.sh: refuses to boot from worktree. Auto-provisions auth token if missing |
+| C1 | No secrets in code | `SecretScan` | BLOCK | pre-tool-guard on Bash |
+| C2 | No `sqlite3` direct | `SqliteBlock` | BLOCK | pre-tool-guard on Bash |
+| C3 | Agent identity required | `AgentIdentity` | WARNING | SubagentStart warns if unset |
+| C4 | `cargo check` on .rs edits | `RustCheck` | BLOCK | PostToolUse/Edit |
+| C5 | Evidence before done | `EvidenceGate` | WARNING | SubagentStop |
+| C6 | Max 250 lines/file | `FileSizeGuard` | BLOCK | PostToolUse/Write+Edit |
+| C7 | New .rs = wire mod.rs | `RustModWiring` | BLOCK | PostToolUse |
+| C8 | Fail-loud | `FailLoud` | WARNING | PreToolUse/Edit |
+| C9 | No writes on main | `MainGuard` | BLOCK | PreToolUse/Edit+Write |
+| C10 | Main dirty check | `MainDirtyCheck` | WARNING | SubagentStart |
 
-**Why WARNING vs BLOCK**: EvidenceGate, AgentIdentity, FailLoud, TestGate are WARNING to avoid
-breaking existing flows. They surface problems without halting valid work. Escalate to BLOCK
-after a confirmed incident per gate.
+## Daemon-Side (work for ALL clients)
+
+| # | Rule | Hook | Behavior |
+|---|---|---|---|
+| D1 | Orphan task reset | `TaskReaper` | reaper resets in_progress tasks of dead agents |
+| D2 | Daemon CWD guard | `DaemonCwdGuard` | start.sh blocks boot from worktree |
+| D3 | Auth auto-provision | `AuthGuard` | start.sh generates token if missing |
+| D4 | Evidence gate isolation | `EvidenceIsolation` | cargo test uses separate CARGO_TARGET_DIR |
+| D5 | Main dirty reaper | `MainDirtyReaper` | daemon notifies if main has >5 dirty files |
+
+**Coverage matrix**: G1-G5 protect against Copilot incidents. C1-C10 add real-time Claude protection. D1-D5 are server-side safety nets.
+
+**Why WARNING vs BLOCK**: EvidenceGate, AgentIdentity, FailLoud are WARNING to avoid
+breaking flows. Escalate to BLOCK after a confirmed incident per gate.
 
 ## Workflow (HOOK-ENFORCED)
 
