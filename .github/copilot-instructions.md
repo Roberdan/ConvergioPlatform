@@ -1,156 +1,133 @@
-# ConvergioPlatform -- Copilot Instructions
+# ConvergioPlatform — Copilot Instructions
 
-Unified control plane: Rust daemon (107 modules) + dashboard + evolution engine.
+Unified AI orchestration: Rust daemon + kernel/Jarvis (Qwen 7B) + mesh + agents + Telegram + Siri.
 
-## Architecture
+## Identity (NON-NEGOTIABLE)
 
-| Layer | Path | Lang | Purpose |
-|---|---|---|---|
-| Daemon | `daemon/` | Rust | Mesh P2P, HTTP/WS/SSE API, TUI, IPC, hooks, SQLite DB |
-| Dashboard | `dashboard/` | JS (Maranello DS) | Control Room web UI served by daemon |
-| Evolution | `evolution/` | TypeScript | Self-improving optimization engine (core + adapters) |
-| Scripts | `scripts/` | Bash | Mesh ops (12), platform tooling (5) |
-| Data | `data/dashboard.db` | SQLite WAL | Plans, tasks, waves, KB, heartbeats |
-
-Stack: axum, rusqlite WAL, tokio, ssh2, ratatui, serde, hmac+sha2+aes-gcm, reqwest, sysinfo, tracing.
-
-## Agent Identity (NON-NEGOTIABLE)
-
-On session start, register with the daemon:
+On session start:
 ```bash
 cvg agent start "copilot-$(hostname -s)-$$"
 ```
-On session end, complete:
-```bash
-cvg agent complete "copilot-$(hostname -s)-$$"
-```
-If working on a plan, include `--task-id`. This is how `cvg who agents` tracks active work. Unregistered agents are invisible zombies.
+On exit: `cvg agent complete "copilot-$(hostname -s)-$$"`
+Unregistered agents are invisible in `cvg who agents`.
 
-## Agent Naming
+## Language (NON-NEGOTIABLE)
 
-Every agent has a unique name. Cross-platform agents share the same plan-db and worktree discipline.
+Code/comments/docs: English | Conversation: Italian or English
 
-| Name | Type | Default Model | Primary Skill |
-|---|---|---|---|
-| planner | claude | claude-opus-4.6 | Plan creation (spec.yaml + gated DB via planner-create.sh) |
-| executor | copilot | gpt-5.3-codex | TDD task execution (one task at a time) |
-| reviewer (thor) | claude | claude-opus-4.6 | Quality validation (9 gates, per-wave) |
-| explorer | claude | claude-haiku-4.5 | Codebase exploration and analysis |
-| prompt | claude | claude-opus-4.6 | Requirements extraction (F-xx features) |
-| researcher | claude | claude-haiku-4.5 | Web research and context gathering |
-| copilot-worker | copilot | gpt-5.3-codex | General coding tasks |
+## DB Access (NON-NEGOTIABLE)
 
-## Workflow Routing
+NEVER `sqlite3` directly (git hook blocks). Use `cvg` CLI or `curl http://localhost:8420/api/...`
 
-| Trigger | Command | NOT |
+## Worktree Discipline (NON-NEGOTIABLE)
+
+- NEVER create branches. Always `git worktree add --detach <path> HEAD`
+- NEVER commit on main (git pre-commit hook blocks it)
+- All work in worktrees, merge via PR only
+- NEVER edit files directly in the main checkout
+
+## File Limits (NON-NEGOTIABLE)
+
+- Max **250 lines per file** (git pre-commit hook blocks oversized files)
+- Split into submodules before committing
+
+## Commits (NON-NEGOTIABLE)
+
+- Conventional format enforced by git commit-msg hook
+- Format: `type(scope): message`
+- Types: feat, fix, docs, chore, refactor, test, perf, ci, style, build
+
+## Security (NON-NEGOTIABLE)
+
+- No secrets in code (git pre-commit scans for API keys, tokens, passwords)
+- No `sqlite3` in shell scripts (pre-commit blocks)
+- All auth via `CONVERGIO_AUTH_TOKEN` env var
+
+## Evidence Before Done
+
+- Status flow: `pending -> in_progress -> submitted -> done`
+- Before `submitted`: POST `/api/plan-db/task/evidence` with test_pass
+- Before `done`: POST `/api/validation/record` with verdict=pass
+- Executors CANNOT set status=done (only Thor/validator)
+
+## Git Hooks (enforced for BOTH Claude and Copilot)
+
+| Hook | What | Blocks |
 |---|---|---|
-| Multi-step work (3+ tasks) | `@planner` | Manual planning, EnterPlanMode |
-| Execute plan tasks | `@execute {id}` | Direct file editing |
-| Validate wave | `@validate` | Self-declaring done |
-| Single isolated fix | Direct edit | Creating unnecessary plan |
+| pre-commit: MainGuard | No commits on main in main checkout | exit 1 |
+| pre-commit: FileSizeGuard | No file >250 lines (.rs .ts .js .sh) | exit 1 |
+| pre-commit: SecretScan | No API keys, tokens, passwords | exit 1 |
+| pre-commit: SqliteBlock | No `sqlite3` in .sh/.py files | exit 1 |
+| commit-msg: CommitLint | Conventional commit format required | exit 1 |
 
-EnterPlanMode bypasses DB registration and is a VIOLATION. Always use `@planner` for plans.
+## Architecture
 
-Workflow sequence: `@prompt` (requirements) -> `@planner` (spec.yaml + review gate + `planner-create.sh` gated DB) -> `@execute {id}` (TDD) -> `@validate` (Thor per-wave) -> merge -> done.
+| Layer | Path | Lang |
+|---|---|---|
+| Daemon | `daemon/` | Rust |
+| Web+Desktop | `convergio-web/` | Next.js+Tauri |
+| Evolution | `evolution/` | TypeScript |
+| Scripts | `scripts/` | Bash |
+| Data | `data/dashboard.db` | SQLite WAL |
 
-Plan creation is gated: `planner-create.sh reset` -> plan-reviewer -> `planner-create.sh register-review` -> `planner-create.sh create` -> `planner-create.sh import`. NEVER use `cvg plan create/import` directly (plan-db.sh is DEPRECATED — use cvg).
+## Model Routing
 
-## IPC Registration
-
-Agents MUST register on start:
-
-```bash
-scripts/platform/agent-bridge.sh --register --name <name> --type <type>
-```
-
-API endpoint: `POST http://localhost:8420/api/ipc/agents/register`
-
-Registration payload:
-
-```json
-{
-  "name": "copilot-worker",
-  "type": "copilot",
-  "model": "gpt-5.3-codex",
-  "capabilities": ["code", "test", "review"]
-}
-```
-
-Without registration, agents cannot participate in coordinated workflows or appear in platform dashboards.
-
-## Code Standards
-
-| Lang | Standard |
-|---|---|
-| Rust | `cargo fmt` + `cargo clippy`, strict warnings |
-| TS/JS | ESLint+Prettier, semicolons, single quotes, 100 char lines, `const` > `let`, `interface` > `type` |
-| Python | Black 88, Google docstrings, type hints, pytest+fixtures |
-| Bash | `set -euo pipefail`, quote all vars, `local`, `trap cleanup EXIT` |
-| CSS | Modules/BEM, `rem`/`px` borders, mobile-first, max 3 nesting levels |
-| Config | 2-space indent |
-
-| Rule | Detail |
-|---|---|
-| Max file size | 250 lines -- split if exceeds |
-| Comments | WHY not WHAT, less than 5% of lines |
-| Commits | Conventional format, 1 subject line |
-| PRs | Summary + Test plan sections |
-| REST API | Plural nouns, kebab-case, max 3 levels, `/api/v1/` prefix |
-| Error format | `{error:{code,message,details?,requestId,timestamp}}` |
-| Coverage | 80% business logic, 100% critical paths |
-| Fail-loud | Empty unexpected data -> `console.warn` + visible UI; silent `return null` = BUG |
-| Zero debt | Touch ANY line -> own ALL issues; no TODO/FIXME/stubs/deferred |
-| Tests | Colocated `.test.ts`, AAA pattern, real data shapes, no `Test Studio` placeholders |
-| Security | Parameterized SQL, CSP, TLS 1.2+, RBAC server-side, no secrets in code |
-| A11y | WCAG 2.1 AA: 4.5:1 contrast, keyboard nav, screen readers, 200% resize |
-
-## Hook Enforcement
-
-These hooks apply to Copilot CLI sessions. All are portable across Claude Code and Copilot.
-
-| Hook | Event | Trigger | Action |
-|---|---|---|---|
-| guard-plan-mode | PreToolUse | EnterPlanMode | Block -- must use @planner |
-| enforce-plan-db-safe | PreToolUse | `plan-db.sh done` | Block -- must use `cvg task update` |
-| enforce-plan-edit | PreToolUse | Edit plan files | Block unless task-executor |
-| worktree-guard | PreToolUse | git on main | Warn/Block -- use worktrees |
-| session-file-lock | PreToolUse | Edit/Write | Lock file to prevent conflicts |
-| prefer-ci-summary | PreToolUse | Raw npm/gh commands | Block -- use digest scripts |
-| warn-bash-antipatterns | PreToolUse | Unsafe Bash patterns | Warn/Block |
-| enforce-line-limit | PostToolUse | File > 250 lines | Warn -- split the file |
-
-Non-portable hooks (Claude Code only, no Copilot event): secret-scanner, env-vault-guard, auto-format, inject-agent-context, preserve-context, model-registry-refresh, version-check.
+| Phase | Model | Agent |
+|---|---|---|
+| Planning | claude-opus-4.6 | @planner |
+| Review | claude-sonnet-4.6 | plan-reviewer |
+| Execution | gpt-5.3-codex | @execute |
+| Validation | claude-opus-4.6 | @validate |
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `cd daemon && cargo build --release` | Build daemon |
-| `cd daemon && cargo check` | Type check (~5s) |
-| `cd daemon && cargo test` | Run daemon tests |
-| `./daemon/start.sh` | Run daemon (auto release/debug/build) |
-| `cd dashboard && ./start.sh` | Run Control Room (reads DASHBOARD_DB) |
-| `cd evolution && npx tsc --noEmit` | Type check evolution engine |
-| `cd evolution && npx vitest run` | Run evolution tests |
-| `cvg plan list` | Check plan status |
-| `cvg plan tree {plan_id}` | View plan execution tree |
-| `scripts/mesh/mesh-heartbeat.sh` | Check mesh node health |
-| `scripts/mesh/mesh-provision-node.sh <peer>` | Provision new mesh node |
-| `scripts/mesh/mesh-sync-all.sh` | Sync all mesh nodes |
-| `scripts/platform/agent-bridge.sh` | Agent IPC registration bridge |
+| `cd daemon && cargo build --release --features kernel` | Build |
+| `cd daemon && cargo check --features kernel` | Type check |
+| `cd daemon && cargo test --features kernel --lib -- --test-threads=1` | Tests |
+| `./daemon/start.sh serve` | Run daemon |
+| `cvg plan show <id>` | Plan details |
+| `cvg plan list` | List plans |
+| `cvg task update <id> <status>` | Update task |
+| `cvg task create <plan_id> <wave_id> <task_id> <title>` | Create task |
+| `cvg org list` | List orgs |
+| `cvg org show <id>` | Org details |
+| `scripts/mesh/mesh-heartbeat.sh` | Mesh health |
 
 ## Key Paths
 
-| Path | What |
+`data/dashboard.db` (env: `DASHBOARD_DB`) | `~/.claude/config/peers.conf` (mesh) | `~/.convergio/config.toml` (runtime config)
+
+## Conventions
+
+Max 250 lines/file | English only | Comments: WHY not WHAT, <5% | Mesh: Tailscale+HMAC | Deploy: rsync binary, NEVER recompile on target
+
+## Quality Principles (NON-NEGOTIABLE)
+
+- Zero tech debt: touch file = own ALL issues
+- Root cause only: no band-aids, escalate after 2 attempts
+- Never hide problems: stop, surface, discuss
+- 3 cascading fixes for same issue = STOP, propose rebuild
+
+## Verification (NON-NEGOTIABLE)
+
+| Claim | Evidence |
 |---|---|
-| `daemon/` | Rust daemon: mesh(40), server(32), ipc(15), db(7), hooks(3), tui(3) |
-| `daemon/Cargo.toml` | Rust deps (axum, rusqlite, tokio, ssh2, ratatui) |
-| `dashboard/` | Vanilla JS + Maranello DS (served by daemon on :8420) |
-| `evolution/` | TypeScript core/types + adapters (claude, maranello, dashboard) |
-| `scripts/mesh/` | 12 mesh operation scripts |
-| `scripts/platform/` | Platform tooling (bootstrap, agent-bridge) |
-| `data/dashboard.db` | Platform DB -- env: `DASHBOARD_DB` |
-| `~/.claude/data/dashboard.db` | Symlink to platform DB |
-| `~/.claude/config/peers.conf` | Mesh config (per-machine) |
-| `.github/agents/` | Agent definitions (Convergio, ConvergioLLM) |
-| `config/llm/` | LiteLLM proxy + model catalog config |
+| "It builds" | Build output |
+| "Tests pass" | Test output |
+| "It works" | Execution demo |
+
+TDD mandatory. Plan done = ALL PRs merged, worktrees clean, branches deleted.
+
+## Scope Management
+
+One session = one plan. Max 5 checkpoints. Scope drift after 3 = split.
+
+## Mesh (active nodes)
+
+| Node | Role | IP |
+|---|---|---|
+| M5 Max | coordinator | 100.89.245.79 |
+| M1 Pro | worker/kernel | 100.106.173.118 |
+| Omarchy | worker (Linux) | 100.127.138.62 |
