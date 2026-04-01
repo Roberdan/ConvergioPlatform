@@ -1,5 +1,21 @@
 # Changelog
 
+## [20.5.0] - 01 Aprile 2026
+
+### Added
+- **Org Factory**: `cvg org create-org` — creates virtual org from mission with CEO, departments, agents, night agents
+- **Org From Repo**: `cvg org create-org-from` — scans existing repo (languages, frameworks, CI, deps) and creates matching org
+- **Repo Scanner**: analyzes folder for tech stack, structure, dependencies, CI configuration
+- **Night Agents**: per-org scheduled agents (daily_report, pr_monitor, issue_triage, dep_update) on Haiku for cost savings
+- **Orgchart Renderer**: ASCII orgchart (full box-drawing + compact for Telegram)
+- **Orgchart API**: `GET /api/orgs/:slug/orgchart` (JSON + `?format=ascii`)
+- **Telegram intents**: "crea org X", "analizza repo /path" wired to org factory
+- **Jarvis tools**: `create_org` + `scan_repo` for autonomous tool calling (12 tools total)
+
+### Changed
+- `CreateProject` Telegram intent now uses full org factory instead of basic org creation
+- Voice router: broader keyword matching for org creation ("crea org", "crea organizzazione")
+
 ## [20.4.0] - 01 Aprile 2026
 
 ### Added
