@@ -31,3 +31,12 @@ If parallel waves (e.g. W2a, W2b, W2c) modify the same file:
 - BLOCK and escalate — do NOT force merge
 - User decides which change wins
 - This should not happen if plan is well-designed (each wave touches different dirs)
+
+## Infrastructure Gate Retry Limit
+
+- Se un gate (evidence, kernel, Thor) fallisce **2 volte consecutive**, l'executor DEVE:
+  1. Fermarsi
+  2. Riportare all'utente il messaggio di errore esatto
+  3. Chiedere se procedere o risolvere manualmente
+- **MAI debuggare infrastruttura daemon** (porte, auth token, endpoint mismatch, schema DB) nella stessa sessione di esecuzione piano. Se il daemon non risponde o risponde con errori di schema, FERMARSI e segnalare.
+- _Why: sessione 10040 — 15+ shell bruciate su retry evidence gate perché il worktree_path era null e il kernel eseguiva cargo_test su un progetto Next.js._
