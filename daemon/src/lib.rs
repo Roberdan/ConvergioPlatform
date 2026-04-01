@@ -23,6 +23,7 @@ pub mod memory;
 pub mod mesh;
 pub mod message_error;
 pub mod orchestrator;
+pub mod org;
 pub mod platform_paths;
 pub mod resilience;
 pub mod security;

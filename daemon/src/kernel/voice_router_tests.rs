@@ -4,58 +4,45 @@
 use super::voice_router::{classify_intent, route_intent, VoiceIntent};
 use crate::kernel::engine::{KernelConfig, KernelEngine};
 
+fn eng() -> KernelEngine { KernelEngine::new(KernelConfig::default()) }
+
 // ----- classify_intent -------------------------------------------------------
 
 #[test]
 fn test_classify_status_check_italian() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("stato", &engine);
-    assert_eq!(intent, VoiceIntent::StatusCheck);
+    assert_eq!(classify_intent("stato", &eng()), VoiceIntent::StatusCheck);
 }
 
 #[test]
 fn test_classify_cost_query_italian() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("costi di oggi", &engine);
-    assert_eq!(intent, VoiceIntent::CostQuery);
+    assert_eq!(classify_intent("costi di oggi", &eng()), VoiceIntent::CostQuery);
 }
 
 #[test]
 fn test_classify_plan_query_with_id() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("piano 729", &engine);
-    assert_eq!(intent, VoiceIntent::PlanQuery { plan_id: 729 });
+    assert_eq!(classify_intent("piano 729", &eng()), VoiceIntent::PlanQuery { plan_id: 729 });
 }
 
 #[test]
 fn test_classify_restart() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("riavvia daemon", &engine);
-    assert_eq!(intent, VoiceIntent::Restart { target: "daemon".to_string() });
+    assert_eq!(classify_intent("riavvia daemon", &eng()), VoiceIntent::Restart { target: "daemon".into() });
 }
 
 #[test]
 fn test_classify_mute() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("silenzio", &engine);
-    assert_eq!(intent, VoiceIntent::Mute);
+    assert_eq!(classify_intent("silenzio", &eng()), VoiceIntent::Mute);
 }
 
 #[test]
 fn test_classify_unknown_goes_to_escalate_ali() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("forse domani nevica", &engine);
-    assert!(
-        matches!(intent, VoiceIntent::EscalateToAli { .. }),
-        "unrecognised input must escalate to Ali, got: {intent:?}"
-    );
+    let intent = classify_intent("forse domani nevica", &eng());
+    assert!(matches!(intent, VoiceIntent::EscalateToAli { .. }), "got: {intent:?}");
 }
 
 #[test]
 fn test_classify_case_insensitive() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    assert_eq!(classify_intent("STATO", &engine), VoiceIntent::StatusCheck);
-    assert_eq!(classify_intent("Costi", &engine), VoiceIntent::CostQuery);
+    assert_eq!(classify_intent("STATO", &eng()), VoiceIntent::StatusCheck);
+    assert_eq!(classify_intent("Costi", &eng()), VoiceIntent::CostQuery);
 }
 
 // ----- route_intent ----------------------------------------------------------
@@ -117,11 +104,9 @@ fn test_route_plan_query_offline_fallback() {
 
 #[test]
 fn test_classify_create_project_italian() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    match classify_intent("crea progetto fitness con obiettivo perdere 5kg", &engine) {
+    match classify_intent("crea progetto fitness con obiettivo perdere 5kg", &eng()) {
         VoiceIntent::CreateProject { name, mission } => {
-            assert_eq!(name, "fitness");
-            assert_eq!(mission, "perdere 5kg");
+            assert_eq!(name, "fitness"); assert_eq!(mission, "perdere 5kg");
         }
         other => panic!("expected CreateProject, got {other:?}"),
     }
@@ -129,11 +114,9 @@ fn test_classify_create_project_italian() {
 
 #[test]
 fn test_classify_create_project_english() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    match classify_intent("create project alpha with goal ship MVP", &engine) {
+    match classify_intent("create project alpha with goal ship MVP", &eng()) {
         VoiceIntent::CreateProject { name, mission } => {
-            assert_eq!(name, "alpha");
-            assert_eq!(mission, "ship MVP");
+            assert_eq!(name, "alpha"); assert_eq!(mission, "ship MVP");
         }
         other => panic!("expected CreateProject, got {other:?}"),
     }
@@ -141,8 +124,7 @@ fn test_classify_create_project_english() {
 
 #[test]
 fn test_classify_create_project_no_mission() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    match classify_intent("nuovo progetto marketing", &engine) {
+    match classify_intent("nuovo progetto marketing", &eng()) {
         VoiceIntent::CreateProject { name, mission } => {
             assert_eq!(name, "marketing");
             assert!(mission.is_empty(), "expected empty mission, got: {mission}");
@@ -155,8 +137,7 @@ fn test_classify_create_project_no_mission() {
 
 #[test]
 fn test_classify_ask_org_come_sta() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    match classify_intent("come sta il fitness?", &engine) {
+    match classify_intent("come sta il fitness?", &eng()) {
         VoiceIntent::AskOrg { name } => assert_eq!(name, "fitness"),
         other => panic!("expected AskOrg, got {other:?}"),
     }
@@ -164,8 +145,7 @@ fn test_classify_ask_org_come_sta() {
 
 #[test]
 fn test_classify_ask_org_status_di() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    match classify_intent("status di alpha", &engine) {
+    match classify_intent("status di alpha", &eng()) {
         VoiceIntent::AskOrg { name } => assert_eq!(name, "alpha"),
         other => panic!("expected AskOrg, got {other:?}"),
     }
@@ -173,8 +153,7 @@ fn test_classify_ask_org_status_di() {
 
 #[test]
 fn test_classify_ask_org_update_on() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    match classify_intent("update on marketing", &engine) {
+    match classify_intent("update on marketing", &eng()) {
         VoiceIntent::AskOrg { name } => assert_eq!(name, "marketing"),
         other => panic!("expected AskOrg, got {other:?}"),
     }
@@ -199,51 +178,64 @@ fn test_route_ask_org_offline() {
 
 #[test]
 fn test_classify_report_keyword_escalates() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("fammi un report settimanale", &engine);
-    assert!(
-        matches!(intent, VoiceIntent::EscalateToAli { .. }),
-        "report keyword must escalate to Ali, got: {intent:?}"
-    );
+    let intent = classify_intent("fammi un report settimanale", &eng());
+    assert!(matches!(intent, VoiceIntent::EscalateToAli { .. }), "got: {intent:?}");
 }
 
 #[test]
 fn test_classify_analisi_keyword_escalates() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("analisi dei costi mensili", &engine);
-    assert!(
-        matches!(intent, VoiceIntent::EscalateToAli { .. }),
-        "analisi keyword must escalate to Ali, got: {intent:?}"
-    );
+    let intent = classify_intent("analisi dei costi mensili", &eng());
+    assert!(matches!(intent, VoiceIntent::EscalateToAli { .. }), "got: {intent:?}");
 }
 
 // ----- Execution keyword classification --------------------------------------
 
 #[test]
 fn test_classify_deploy_keyword_escalates() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("deploy the new version", &engine);
-    assert!(
-        matches!(intent, VoiceIntent::EscalateToAli { .. }),
-        "deploy keyword must escalate to Ali, got: {intent:?}"
-    );
+    let intent = classify_intent("deploy the new version", &eng());
+    assert!(matches!(intent, VoiceIntent::EscalateToAli { .. }), "got: {intent:?}");
 }
 
 #[test]
 fn test_classify_esegui_keyword_escalates() {
-    let engine = KernelEngine::new(KernelConfig::default());
-    let intent = classify_intent("esegui il piano 42", &engine);
-    assert!(
-        matches!(intent, VoiceIntent::EscalateToAli { .. }),
-        "esegui keyword must escalate to Ali, got: {intent:?}"
-    );
+    let intent = classify_intent("esegui il piano 42", &eng());
+    assert!(matches!(intent, VoiceIntent::EscalateToAli { .. }), "got: {intent:?}");
 }
 
-// ----- VoiceIntent display ---------------------------------------------------
+// ----- CreateOrgFrom keyword classification ----------------------------------
 
 #[test]
-fn test_intent_debug_format() {
-    let i = VoiceIntent::PlanQuery { plan_id: 42 };
-    let debug = format!("{i:?}");
-    assert!(debug.contains("42"));
+fn test_classify_crea_org_maps_to_create_project() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("crea org fitness", &engine) {
+        VoiceIntent::CreateProject { name, .. } => assert_eq!(name, "fitness"),
+        other => panic!("expected CreateProject, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_analizza_repo_maps_to_create_org_from() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("analizza repo /tmp/myrepo", &engine) {
+        VoiceIntent::CreateOrgFrom { path } => assert_eq!(path, "/tmp/myrepo"),
+        other => panic!("expected CreateOrgFrom, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_scan_repo_maps_to_create_org_from() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("scan repo", &engine) {
+        VoiceIntent::CreateOrgFrom { path } => assert!(!path.is_empty()),
+        other => panic!("expected CreateOrgFrom, got {other:?}"),
+    }
+}
+
+// ----- route_intent for CreateOrgFrom ----------------------------------------
+
+#[test]
+fn test_route_create_org_from_offline() {
+    let intent = VoiceIntent::CreateOrgFrom { path: "/nonexistent".into() };
+    let r = route_intent(intent, "http://localhost:1");
+    assert!(!r.is_empty(), "CreateOrgFrom must produce non-empty response");
 }

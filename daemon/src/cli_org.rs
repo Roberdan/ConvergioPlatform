@@ -35,6 +35,30 @@ pub enum OrgCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Create a virtual organization from a mission/goal
+    CreateOrg {
+        name: String,
+        #[arg(long)]
+        mission: String,
+        #[arg(long, default_value = "50")]
+        budget: f64,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
+    /// Create a virtual organization from an existing repo
+    CreateOrgFrom {
+        path: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long, default_value = "50")]
+        budget: f64,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: OrgCommands) -> Result<(), CliError> {
@@ -49,6 +73,12 @@ pub async fn handle(cmd: OrgCommands) -> Result<(), CliError> {
         } => create_org_and_spawn_ceo(&name, &mission, &objectives, budget, &ceo_agent, &api_url).await,
         OrgCommands::List { api_url } => crate::cli_org_show::list_orgs(&api_url).await,
         OrgCommands::Show { id, api_url } => crate::cli_org_show::show_org(&id, &api_url).await,
+        OrgCommands::CreateOrg { name, mission, budget, yes, api_url } => {
+            crate::cli_create_org::handle_create_org(&name, &mission, budget, yes, &api_url).await
+        }
+        OrgCommands::CreateOrgFrom { path, name, budget, yes, api_url } => {
+            crate::cli_create_org::handle_create_org_from(&path, name.as_deref(), budget, yes, &api_url).await
+        }
     }
 }
 

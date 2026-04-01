@@ -25,6 +25,9 @@ pub fn route_intent(intent: VoiceIntent, daemon_url: &str) -> String {
         VoiceIntent::AskOrg { ref name } => {
             crate::kernel::voice_route_project::route_ask_org(name, daemon_url)
         }
+        VoiceIntent::CreateOrgFrom { ref path } => {
+            crate::kernel::voice_route_project::route_create_org_from(path, daemon_url)
+        }
         VoiceIntent::Unknown => "Non ho capito. Riprova.".to_string(),
     }
 }

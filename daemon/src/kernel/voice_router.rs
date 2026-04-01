@@ -23,6 +23,8 @@ pub enum VoiceIntent {
     CreateProject { name: String, mission: String },
     /// Query an existing org's status by name
     AskOrg { name: String },
+    /// Scan a repo and create an org from its profile
+    CreateOrgFrom { path: String },
     /// Unrecognised intent
     Unknown,
 }
@@ -56,8 +58,9 @@ fn classify_via_llm(text: &str, engine: &KernelEngine) -> Option<VoiceIntent> {
     let prompt = format!(
         "Classify this voice command into one of: \
          status_check, cost_query, plan_query, restart, mute, \
-         create_project, ask_org, ask_ali. \
-         Use create_project when user wants to create/launch a new project. \
+         create_project, create_org_from, ask_org, ask_ali. \
+         Use create_project when user wants to create/launch a new project or org. \
+         Use create_org_from when user wants to scan/analyze a repo to create an org. \
          Use ask_org when user asks about an existing project/org status. \
          Use ask_ali for anything complex that needs reasoning. \
          Command: '{text}'. Return JSON: \
@@ -102,6 +105,10 @@ fn parse_llm_json(raw: &str, original_text: &str) -> Option<VoiceIntent> {
             let n = extract_org_name_from_text(original_text);
             Some(VoiceIntent::AskOrg { name: n })
         }
+        "create_org_from" => {
+            let p = extract_path_from_text(original_text);
+            Some(VoiceIntent::CreateOrgFrom { path: p })
+        }
         _ => None,
     }
 }
@@ -116,10 +123,20 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
     {
         return VoiceIntent::EscalateToAli { question: text.to_string() };
     }
+    // CreateOrgFrom — repo scanning, checked before CreateProject
+    if s.contains("analizza repo") || s.contains("scan repo")
+        || s.contains("crea org da") || s.contains("analyze repo")
+        || s.contains("scan project")
+    {
+        let path = extract_path_from_text(text);
+        return VoiceIntent::CreateOrgFrom { path };
+    }
     // CreateProject — checked before generic status/plan keywords
     if s.contains("crea progetto") || s.contains("create project")
         || s.contains("lancia progetto") || s.contains("nuovo progetto")
         || s.contains("avvia progetto") || s.contains("start project")
+        || s.contains("crea org") || s.contains("crea organizzazione")
+        || s.contains("create org")
     {
         let (name, mission) = extract_project_name_mission(text);
         return VoiceIntent::CreateProject { name, mission };
@@ -131,14 +148,9 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
         let name = extract_org_name_from_text(text);
         return VoiceIntent::AskOrg { name };
     }
-    // Report/analysis keywords → escalate to Ali (before generic cost/plan)
-    if ["report", "analisi", "analizza", "riassumi", "summary", "briefing"]
-        .iter().any(|kw| s.contains(kw))
-    {
-        return VoiceIntent::EscalateToAli { question: text.to_string() };
-    }
-    // Execution keywords → escalate to Ali (before generic plan)
-    if ["lancia", "esegui", "fai", "run", "execute", "deploy"]
+    // Report/analysis/execution keywords → escalate to Ali
+    if ["report", "analisi", "analizza", "riassumi", "summary", "briefing",
+        "lancia", "esegui", "fai", "run", "execute", "deploy"]
         .iter().any(|kw| s.contains(kw))
     {
         return VoiceIntent::EscalateToAli { question: text.to_string() };
@@ -180,6 +192,7 @@ pub(crate) fn extract_project_name_mission(text: &str) -> (String, String) {
     let triggers = [
         "crea progetto", "create project", "lancia progetto",
         "nuovo progetto", "avvia progetto", "start project",
+        "crea organizzazione", "crea org", "create org",
     ];
     let after = triggers.iter()
         .filter_map(|t| s.find(t).map(|pos| &text[pos + t.len()..]))
@@ -200,6 +213,26 @@ pub(crate) fn extract_project_name_mission(text: &str) -> (String, String) {
     let name = parts.next().unwrap_or("project").trim().to_string();
     let mission = parts.next().unwrap_or("").trim().to_string();
     (if name.is_empty() { "project".to_string() } else { name }, mission)
+}
+
+/// Extract a filesystem path from repo-scanning commands.
+/// Pattern: "analizza repo /path/to/repo" -> "/path/to/repo"
+pub(crate) fn extract_path_from_text(text: &str) -> String {
+    // First try: find a token that looks like a filesystem path
+    if let Some(p) = text.split_whitespace().find(|w| w.starts_with('/') || w.starts_with("~/")) {
+        return p.to_string();
+    }
+    // Fallback: take everything after the trigger keyword
+    let s = text.to_lowercase();
+    let triggers = [
+        "analizza repo", "scan repo", "crea org da",
+        "analyze repo", "scan project",
+    ];
+    triggers.iter()
+        .filter_map(|t| s.find(t).map(|pos| text[pos + t.len()..].trim()))
+        .find(|after| !after.is_empty())
+        .unwrap_or(".")
+        .to_string()
 }
 
 /// Extract org/project name from a status query like "come sta il fitness?"
