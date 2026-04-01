@@ -160,7 +160,7 @@ Working dir: `/Users/Roberdan/GitHub/convergio-daemon`
 - Max 250 lines/file
 - `cargo check && cargo test` after every task
 - Conventional commits: `feat(T1-01):`, `fix(T1-01):`
-- Use worktrees: `worktree-create.sh plan-725-W1-T1-01`
+- Use worktrees: `cvg workspace create-feature plan-725-W1-T1-01`
 - After task: `cvg task update <id> done "summary"`
 - After wave: Thor validates, then `cvg checkpoint save <plan_id>`
 

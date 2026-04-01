@@ -47,14 +47,14 @@ guard_bash() {
     block "Use planner-create.sh instead of plan-db.sh create/import (enforces review gate)"
   fi
 
-  # git checkout/switch/branch on main — use worktree-create.sh
+  # git checkout/switch/branch on main — use cvg workspace create-feature
   if echo "$CMD" | grep -qE 'git\s+(checkout|switch)' \
      || { echo "$CMD" | grep -qE 'git\s+branch' \
           && ! echo "$CMD" | grep -qE 'git\s+branch\s+(-d|-D|--delete|--list|-a|-r)'; }; then
     local BRANCH
     BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
     if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
-      block "Never create branches on main -- use worktree-create.sh"
+      block "Never create branches on main -- use cvg workspace create-feature"
     fi
   fi
 
@@ -68,9 +68,9 @@ guard_bash() {
     block "Use ci-digest.sh instead of gh run view --log"
   fi
 
-  # gh pr view/checks — use pr-ops.sh or ci-digest.sh
+  # gh pr view/checks — use cvg workspace release or ci-digest.sh
   if echo "$CMD" | grep -qE 'gh\s+pr\s+(view|checks)'; then
-    block "Use pr-ops.sh or ci-digest.sh checks"
+    block "Use cvg workspace release or ci-digest.sh checks"
   fi
 
   # UPDATE waves SET status='done' — requires Thor

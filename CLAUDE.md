@@ -138,7 +138,7 @@ Max 250 lines/file | English only | Comments: WHY not WHAT, <5% | Mesh: Tailscal
 
 Priority: LSP → Glob/Grep/Read/Edit → Subagents → Bash (git/npm only)
 NEVER pipe Bash to `tail`/`head`/`grep`/`cat` — hook blocks. Use Read/Grep/Glob.
-CI: `ci-summary.sh`/`ci-digest.sh`/`pr-ops.sh` over raw `npm`/`gh` commands.
+CI: `ci-summary.sh`/`ci-digest.sh` over raw `npm`/`gh` commands. PR ops: `cvg workspace release`.
 Plans: `Skill(skill="planner")` not EnterPlanMode. Execute: `Skill(skill="execute")`.
 CodeGraph: `.codegraph/` exists → use codegraph_search. Absent → `codegraph init -i`.
 

@@ -102,7 +102,7 @@ If research reveals the problem is different or larger than stated: stop and pro
 
 Save session summary to DB:
 ```bash
-convergio-db-migrate-solve.sh save '{
+cvg solve save '{
   "request": "...",
   "scale": "standard",
   "f_xx": [...],

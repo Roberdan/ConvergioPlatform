@@ -5,14 +5,11 @@
 1. Read plan from DB: `cvg plan tree {plan_id}`
 2. Verify plan status = `doing` (if `todo`, run `cvg plan start {plan_id}`)
 3. Read worktree path from plan or W1 wave: `SELECT worktree_path FROM plans WHERE id = {plan_id}`
-4. If no worktree: `bash claude-config/scripts/wave-worktree.sh create {plan_id} {wave_id}` or BLOCK
+4. If no worktree: `cvg worktree create {plan_id} {wave_id}` or BLOCK
 
 ## Script Paths (CRITICAL)
 
-Use `cvg` CLI for plan/task/wave operations (plan-db.sh is DEPRECATED). Other scripts in `claude-config/scripts/`:
-```bash
-bash claude-config/scripts/wave-worktree.sh <command>
-```
+Use `cvg` CLI for all plan/task/wave/worktree operations (plan-db.sh and wave-worktree.sh are REMOVED).
 _Why: Plan 677 — executor failed with `command not found: plan-db.sh` in new session. Now use `cvg` which is in PATH after bootstrap._
 
 ## Readiness Check
@@ -56,7 +53,7 @@ treated it as error and aborted. Branch was already rebased._
 ## Auto-Heal
 
 If worktree missing but plan is `doing`:
-1. Try `bash claude-config/scripts/worktree-create.sh plan-{id}-w1`
+1. Try `cvg workspace create-feature plan-{id}-w1`
 2. Update `waves.worktree_path` and `plans.worktree_path` in DB
 3. Re-run readiness
 

@@ -38,8 +38,10 @@ Session N+2 ...
 
 | Node | Claude | Copilot | Hook |
 |------|--------|---------|------|
-| M5Max | ~/.claude/settings.json PreCompact | ~/.copilot/config.json preCompact | track-precompact.sh |
-| M1 Pro | ~/.claude/settings.json PreCompact | ~/.copilot/config.json preCompact | track-precompact.sh |
+| M5Max | ~/.claude/settings.json PreCompact | ~/.copilot/config.json preCompact | precompact-db-audit.sh + preserve-context.sh |
+| M1 Pro | ~/.claude/settings.json PreCompact | ~/.copilot/config.json preCompact | precompact-db-audit.sh + preserve-context.sh |
+
+Note: `track-precompact.sh` was removed — telemetry is now handled by the daemon. PreCompact hooks are `precompact-db-audit.sh` and `preserve-context.sh`.
 
 Both CLIs supported. Runner auto-detects available CLI.
 

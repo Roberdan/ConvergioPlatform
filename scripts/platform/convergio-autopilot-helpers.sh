@@ -176,7 +176,7 @@ trigger_merge() {
   local pid="$1" wave_db_id="$2" wave_id="$3"
   log "MERGE: Wave $wave_id (plan $pid)"
   "$BUS" send "autopilot" "general" "Merging wave $wave_id" 2>/dev/null || true
-  bash "$SCRIPTS/wave-worktree.sh" merge "$pid" "$wave_db_id" 2>/dev/null && {
+  cvg worktree merge "$pid" "$wave_db_id" 2>/dev/null && {
     log "  Merge complete"
   } || {
     warn "Merge failed — manual intervention needed"

@@ -127,7 +127,7 @@ The sync script handles conversion automatically.
 Before syncing a v2.1.x release, verify these features are present and consistent across `~/.claude/` and MyConvergio:
 
 - **LSP tool refs**: `codegraph_search`, `codegraph_callers`, `codegraph_callees`, `codegraph_impact`, `codegraph_node` documented in CLAUDE.md CodeGraph section
-- **WorktreeCreate hooks**: `worktree-create.sh` referenced in worktree-discipline.md and hooks; verify `symlink .env*` and `npm install` steps
+- **WorktreeCreate hooks**: PostWorktreeAdd hook (`hooks/worktree-setup.sh`) referenced in worktree-discipline.md; verify `symlink .env*` and `npm install` steps
 - **Wildcard permissions**: Check `settings.json` for wildcard tool grants and confirm they match MyConvergio's `settings.json`
 - **Agent Teams patterns**: `TeamCreate` usage patterns documented in agent files that use parallel Task spawning
 

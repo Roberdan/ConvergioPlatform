@@ -1,12 +1,12 @@
 #!/bin/bash
 # PR lifecycle routing via orchestrator
-# Sources: pr-threads.sh, pr-comment-resolver, pr-ops.sh, agent-protocol.sh, delegate.sh
+# Sources: pr-threads.sh, pr-comment-resolver, agent-protocol.sh, delegate.sh
+# pr-ops.sh removed — use cvg workspace release for PR merge/status operations
 set -euo pipefail
 
 # Source dependencies
 source "$(dirname "$0")/../pr-threads.sh"
 source "$(dirname "$0")/../pr-comment-resolver"
-source "$(dirname "$0")/../pr-ops.sh"
 source "$(dirname "$0")/../agent-protocol.sh"
 source "$(dirname "$0")/../delegate.sh"
 

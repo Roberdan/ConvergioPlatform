@@ -9,7 +9,7 @@ NEVER `git branch`, `git checkout -b`, `git switch -c`. Hooks: `worktree-guard.s
 | Need | Use | NEVER |
 |------|-----|-------|
 | Plan work | `cvg wave create <plan> <wave>` | `git checkout -b plan/xxx` |
-| Feature branch | `worktree-create.sh <branch> [path]` | `git branch feature/xxx` |
+| Feature branch | `cvg workspace create-feature <branch> [path]` | `git branch feature/xxx` |
 | Task isolation | `Task(..., isolation="worktree")` | `git checkout -b task-xxx` |
 | Quick fix on main | Direct edit (no branch) | `git checkout -b fix/xxx` |
 

@@ -80,7 +80,7 @@ if [[ -z "$WORKTREE_PATH" || "$WORKTREE_PATH" == "null" ]]; then
   FIRST_WAVE_ID=$(sqlite3 ~/.claude/data/dashboard.db \
     "SELECT id FROM waves WHERE plan_id=$PLAN_ID ORDER BY position LIMIT 1;")
   if [[ -n "$FIRST_WAVE_ID" ]]; then
-    wave-worktree.sh create $PLAN_ID $FIRST_WAVE_ID 2>/dev/null || true
+    cvg worktree create $PLAN_ID $FIRST_WAVE_ID 2>/dev/null || true
     CTX=$(cvg plan show $PLAN_ID)
     WORKTREE_PATH=$(echo "$CTX" | jq -r '.worktree_path')
   fi
@@ -186,10 +186,10 @@ WAVE_DB_ID=$(sqlite3 ~/.claude/data/dashboard.db \
 ### Phase 4.5: Overlapping Wave Protocol
 
 ```bash
-wave-worktree.sh merge-async $PLAN_ID $WAVE_DB_ID
-wave-worktree.sh create $PLAN_ID $NEXT_WAVE_DB_ID
+cvg worktree merge --async $PLAN_ID $WAVE_DB_ID
+cvg worktree create $PLAN_ID $NEXT_WAVE_DB_ID
 # Before closing next wave:
-wave-worktree.sh pr-sync $PLAN_ID $NEXT_WAVE_DB_ID
+cvg worktree pr-sync $PLAN_ID $NEXT_WAVE_DB_ID
 ```
 
 Fallback: `merge` (sync) for single-wave or final wave.

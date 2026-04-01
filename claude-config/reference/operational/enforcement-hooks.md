@@ -15,17 +15,15 @@
 | enforce-line-limit     | PostToolUse   | File > 250 lines     | Warn                       | Yes                | Yes                   |
 | auto-format            | PostToolUse   | File write           | Format                     | Yes                | No                    |
 | secret-scanner         | PreCommit     | Commit with secrets  | Block                      | Yes                | No                    |
-| env-vault-guard        | PreCommit     | .env commit          | Block                      | Yes                | No                    |
 | session-end-tokens     | SessionEnd    | Session close        | Record tokens              | Yes                | No                    |
 | inject-agent-context   | SubagentStart | Subagent spawn       | Inject context             | Yes                | No                    |
 | preserve-context       | PreCompact    | Context compaction   | Preserve critical content  | Yes                | No                    |
 | model-registry-refresh | Setup         | Session start        | Refresh model list         | Yes                | No                    |
-| version-check          | Setup         | Session start        | Check component versions   | Yes                | No                    |
 
 ## Non-portable (Claude Code only, no Copilot event)
 
-- **PreCommit**: secret-scanner, env-vault-guard
-- **Setup**: model-registry-refresh, version-check
+- **PreCommit**: secret-scanner
+- **Setup**: model-registry-refresh
 - **SubagentStart**: inject-agent-context
 - **PreCompact**: preserve-context
 - **PostToolUse**: auto-format (partial — Copilot has enforce-line-limit only)

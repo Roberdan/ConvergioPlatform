@@ -41,7 +41,7 @@ NEVER `git branch` | `git checkout -b` | `git switch -c`
 | Need | Command |
 |---|---|
 | Plan work | `cvg wave create <plan> <wave>` |
-| Feature branch | `worktree-create.sh <branch> [path]` |
+| Feature branch | `cvg workspace create-feature <branch> [path]` |
 | Task isolation | `Task(..., isolation="worktree")` |
 | Quick fix | Direct edit (no branch) |
 

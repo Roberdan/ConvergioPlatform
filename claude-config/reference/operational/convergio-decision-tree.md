@@ -40,7 +40,7 @@
 | Situation | Action |
 |-----------|--------|
 | Wave work | `cvg wave create <plan> <wave>` |
-| Feature branch | `worktree-create.sh <branch>` |
+| Feature branch | `cvg workspace create-feature <branch>` |
 | Task isolation | `Task(..., isolation="worktree")` |
 | NEVER | `git branch` / `git checkout -b` / `git switch -c` |
 | Rebase to main | `git rebase origin/main` (NEVER `git merge main`) |

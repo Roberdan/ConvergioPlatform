@@ -27,7 +27,7 @@ Single-quote URLs with `?`/`&` | NEVER `!=` in SQL (use `<>`/`NOT IN`, hook bloc
 | `npm run lint/typecheck/build/test` | `ci-summary.sh --lint/--types/--build/--unit` |
 | `gh run view --log` | `ci-digest.sh <id>` |
 | `gh pr checks` | `ci-digest.sh checks <pr>` |
-| `gh pr view/merge` | `pr-ops.sh status/merge <pr>` |
+| `gh pr view/merge` | `cvg workspace release` / `ci-digest.sh checks <pr>` |
 | `git log` verbose | `git log --oneline -N` |
 
 Hook `prefer-ci-summary.sh` enforces. GitHub auth: 404 → `gh auth switch` | 401 → `gh auth refresh`

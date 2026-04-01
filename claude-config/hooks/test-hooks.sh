@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Roberto D'Angelo
-# Master smoke test — verifies all 21 hooks in claude-config/hooks/.
+# Master smoke test — verifies active hooks in claude-config/hooks/.
 # Runs structural checks then delegates to existing sub-test scripts.
 set -euo pipefail
 
@@ -21,30 +21,17 @@ check() {
 
 # All hooks (excluding test scripts and the master itself)
 ENFORCEMENT_HOOKS=(
-  enforce-planner-workflow.sh
-  workflow-enforcer.sh
-  env-vault-guard.sh
   worktree-guard.sh
-  version-check.sh
 )
 
 TRACKING_HOOKS=(
-  track-tokens.sh
-  track-agent-activity.sh
-  track-precompact.sh
-  track-session-stop.sh
   session-end-tokens.sh
 )
 
 LIFECYCLE_HOOKS=(
-  post-task-enforce.sh
   preserve-context.sh
   inject-agent-context.sh
   notify-app.sh
-  worktree-setup.sh
-  worktree-teardown.sh
-  session-reaper.sh
-  session-file-unlock.sh
   model-registry-refresh.sh
 )
 
@@ -63,26 +50,6 @@ done
 
 echo ""
 echo "=== Enforcement Hook Behavior Checks ==="
-
-# enforce-planner-workflow: blocks EnterPlanMode
-RESULT=$(echo '{"tool_name":"EnterPlanMode"}' | bash "$HOOKS_DIR/enforce-planner-workflow.sh" 2>/dev/null)
-echo "$RESULT" | grep -q '"block"' && check "enforce-planner-workflow blocks EnterPlanMode" "ok" || check "enforce-planner-workflow blocks EnterPlanMode" "NOT BLOCKED"
-
-# enforce-planner-workflow: blocks plan-db.sh create
-RESULT=$(printf '{"tool_name":"Bash","tool_input":{"command":"plan-db.sh create myproject Test"}}' | bash "$HOOKS_DIR/enforce-planner-workflow.sh" 2>/dev/null)
-echo "$RESULT" | grep -q '"block"' && check "enforce-planner-workflow blocks plan-db.sh create" "ok" || check "enforce-planner-workflow blocks plan-db.sh create" "NOT BLOCKED"
-
-# enforce-planner-workflow: blocks plan-db.sh update-task done
-RESULT=$(printf '{"tool_name":"Bash","tool_input":{"command":"plan-db.sh update-task 123 done summary"}}' | bash "$HOOKS_DIR/enforce-planner-workflow.sh" 2>/dev/null)
-echo "$RESULT" | grep -q '"block"' && check "enforce-planner-workflow blocks update-task done" "ok" || check "enforce-planner-workflow blocks update-task done" "NOT BLOCKED"
-
-# enforce-planner-workflow: allows plan-db-safe.sh
-RESULT=$(printf '{"tool_name":"Bash","tool_input":{"command":"plan-db-safe.sh update-task 123 done summary"}}' | bash "$HOOKS_DIR/enforce-planner-workflow.sh" 2>/dev/null)
-[[ -z "$RESULT" ]] && check "enforce-planner-workflow allows plan-db-safe.sh" "ok" || check "enforce-planner-workflow allows plan-db-safe.sh" "SHOULD NOT BLOCK: $RESULT"
-
-# workflow-enforcer: blocks EnterPlanMode
-RESULT=$(echo '{"tool_name":"EnterPlanMode"}' | bash "$HOOKS_DIR/workflow-enforcer.sh" 2>/dev/null)
-echo "$RESULT" | grep -q '"block"' && check "workflow-enforcer blocks EnterPlanMode" "ok" || check "workflow-enforcer blocks EnterPlanMode" "NOT BLOCKED"
 
 # worktree-guard: exits 1 with no args (set +e to allow non-zero exit)
 set +e

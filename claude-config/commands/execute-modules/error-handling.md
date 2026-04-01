@@ -8,7 +8,7 @@
 | cargo check fails | Fix compilation, do NOT skip |
 | Thor rejects | Read rejection reason, fix, resubmit |
 | Script not found | Use full path: `bash claude-config/scripts/<script>` |
-| Worktree missing | Run `bash claude-config/scripts/worktree-create.sh <branch>` |
+| Worktree missing | Run `cvg workspace create-feature <branch>` |
 | DB error | Check column names against `reference/operational/plan-db-schema.md` |
 
 ## Retry Policy

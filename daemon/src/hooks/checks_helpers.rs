@@ -16,8 +16,7 @@ fn normalize_path(base: &Path, candidate: &str) -> PathBuf {
 }
 
 // Preferred: workspace operations should use /api/workspace/* endpoints (Rust workspace layer).
-// worktree-create.sh, wave-worktree.sh, and related bash scripts are DEPRECATED thin wrappers
-// kept during transition. New code should call cvg workspace create-feature / cvg workspace release.
+// worktree-create.sh, wave-worktree.sh, and pr-ops.sh are REMOVED. Use cvg workspace / cvg worktree.
 pub fn check_worktree_guard(
     command: &HookCommand,
     context: &CheckContext,
@@ -58,7 +57,7 @@ pub fn check_worktree_guard(
                 ],
             ))
     {
-        return Ok(CheckOutcome::Deny("BLOCKED: Never create bare branches. Use worktree-create.sh or wave-worktree.sh create instead. See worktree-discipline.md § No Bare Branches.".to_string()));
+        return Ok(CheckOutcome::Deny("BLOCKED: Never create bare branches. Use cvg workspace create-feature instead. See worktree-discipline.md § No Bare Branches.".to_string()));
     }
     if contains_any(
         &command.command,
