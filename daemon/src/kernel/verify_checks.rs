@@ -94,12 +94,12 @@ fn run_command_with_timeout(
 }
 
 pub(crate) fn run_cargo_test(worktree: Option<&str>) -> EvidenceCheck {
-    // --lib only, 60s timeout. Full test suite runs 100s+ and blocks the daemon.
+    // --lib only, 180s timeout. Suite is ~2400 tests, takes ~110s on M5Max.
     // Uses isolated CARGO_TARGET_DIR to avoid locking the running daemon's target/.
     run_command_with_timeout(
         "cargo_test", "cargo",
         &["test", "--features", "kernel", "--lib", "--", "--test-threads=1"],
-        worktree, 60,
+        worktree, 180,
     )
 }
 
