@@ -27,6 +27,7 @@ pub struct PeerConfig {
     pub role: String,
     pub status: String,
     pub thunderbolt_ip: Option<String>,
+    pub lan_ip: Option<String>,
     pub mac_address: Option<String>,
     pub gh_account: Option<String>,
     pub runners: Option<u32>,
