@@ -1,0 +1,207 @@
+# Plan — MCP Completeness: Full Platform API Exposure
+#
+# Goal: Wire ALL daemon HTTP APIs as MCP tools so agents can operate
+# the platform entirely through MCP without curl/REST knowledge.
+# Also adds missing CLI: `cvg task create`.
+#
+# Dependency: Plan 10032 Wave 3 (org endpoints) must be done before W2.
+# W1 has no dependencies — can run in parallel with 10032.
+#
+# Constraints:
+#   - 250 lines/file max (FileSizeGuard)
+#   - handlers.rs at 250 lines — ALL new handler logic in separate files
+#   - tool_catalog.rs at 242 lines — new tools via separate *_tools() functions
+#   - Thor validates all code (non-negotiable)
+
+project: ConvergioPlatform
+name: "MCP Completeness: Full Platform API Exposure"
+parallel_mode: sequential
+constraints:
+  max_lines_per_file: 250
+  language: rust
+  test_framework: cargo test
+  no_stubs: true
+
+waves:
+  # ═══════════════════════════════════════════════════════════════
+  # W1: Platform Tools — Pre-existing APIs → MCP
+  # No dependency on plan 10032. Can run immediately.
+  # ═══════════════════════════════════════════════════════════════
+  - id: "1"
+    code: W1
+    name: "Platform Tools — Pre-existing APIs as MCP"
+    tasks:
+      - id: T1-01
+        do: |
+          Add `cvg task create` CLI command and backing API endpoint.
+          Currently there is no way to add tasks to an in-progress plan
+          without the import API (which requires draft/todo status).
+          CLI: `cvg task create <plan_id> <wave_db_id> <task_id> <title>
+               [--priority P1] [--type feature] [--model sonnet]
+               [--description "..."]`
+          API: POST /api/plan-db/task/create
+          Body: {plan_id, wave_id_fk, task_id, title, priority?, type?, model?, description?}
+          Insert into tasks table. Update plan.tasks_total and wave.tasks_total.
+          No lifecycle guard: tasks can be added to plans in any status.
+          File: daemon/src/server/api_plan_db_task_create.rs (new, <120 lines)
+          Wire: add route in api_plan_db.rs router().
+          Add Create variant to TaskCommands in cli_task.rs (or cli_domain.rs).
+          Test: 2 tests (create task returns id, plan counter incremented)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib api_plan_db_task_create -- --test-threads=1"
+          - "cvg task create --help 2>&1 | grep -q 'plan_id'"
+
+      - id: T1-02
+        do: |
+          Add MCP tools for pre-existing daemon APIs not yet exposed.
+          Create platform_tools() function returning Vec<Tool>:
+            1. cvg_create_plan(name, project_id) — POST /api/plan-db/create
+            2. cvg_start_plan(plan_id) — POST /api/plan-db/start/:id
+            3. cvg_create_task(plan_id, wave_id_fk, task_id, title) — POST /api/plan-db/task/create (from T1-01)
+            4. cvg_record_validation(task_id, verdict, validator) — POST /api/validation/record
+            5. cvg_health_deep() — GET /api/health/deep
+            6. cvg_list_workspaces() — GET /api/workspace/list
+            7. cvg_remember(key, value, agent) — POST /api/memory/remember
+            8. cvg_recall(key, agent) — GET /api/memory/recall
+            9. cvg_budget() — GET /api/budget/status
+            10. cvg_agent_catalog() — GET /api/agents/catalog
+            11. cvg_quality_gate(workspace) — POST /api/workspace/quality-gate
+            12. cvg_list_messages(agent, limit) — GET /api/ipc/messages
+          Ring assignments:
+            Trusted: create_plan, start_plan, create_task, record_validation, quality_gate
+            Community: health_deep, list_workspaces, remember, recall, budget, agent_catalog, list_messages
+          File: daemon/src/mcp_server/platform_tools.rs (new, <250 lines)
+          Wire: import platform_tools() in tool_catalog.rs all_tools().
+          Handler dispatch: all in platform_tools.rs (NOT handlers.rs, at 250 limit).
+          Wire ring_for_tool() in mod.rs for each new tool name.
+          Test: 2 tests (tool schemas validate, ring assignments correct)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib platform_tools -- --test-threads=1"
+          - "grep -q 'cvg_create_plan' daemon/src/mcp_server/platform_tools.rs"
+          - "grep -q 'cvg_health_deep' daemon/src/mcp_server/platform_tools.rs"
+          - "grep -q 'cvg_create_task' daemon/src/mcp_server/platform_tools.rs"
+          - "wc -l < daemon/src/mcp_server/platform_tools.rs | awk '{if($1>250) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W2: Org Tools — Org endpoints → MCP
+  # Depends on plan 10032 W3 (org registry endpoints must exist)
+  # ═══════════════════════════════════════════════════════════════
+  - id: "2"
+    code: W2
+    name: "Org Tools — Org Endpoints as MCP"
+    depends_on: "plan-10032-W3"
+    tasks:
+      - id: T2-01
+        do: |
+          Add MCP tools for org management (wires 10032-W3 endpoints):
+            1. cvg_org_create(name, mission, objectives, ceo_agent, budget) — POST /api/orgs
+            2. cvg_org_list() — GET /api/orgs
+            3. cvg_org_show(org_id) — GET /api/orgs/:id
+            4. cvg_org_members(org_id, agent, role, dept) — POST /api/orgs/:id/members
+            5. cvg_org_services(org_id, name, endpoint, desc) — POST /api/orgs/:id/services
+            6. cvg_org_decide(org_id, decision, rationale, made_by) — POST /api/orgs/:id/decisions
+            7. cvg_org_telemetry(org_id) — GET /api/orgs/:id/telemetry
+          Create org_tools() function returning Vec<Tool>.
+          Ring: create/members/services/decide = Trusted, list/show/telemetry = Community.
+          File: daemon/src/mcp_server/org_tools.rs (new, <200 lines)
+          Wire: import org_tools() in tool_catalog.rs, handler dispatch in org_tools.rs.
+          Wire ring_for_tool() in mod.rs for each new tool.
+          Test: 2 tests (tool schemas validate, ring assignments correct)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib org_tools -- --test-threads=1"
+          - "grep -q 'cvg_org_create' daemon/src/mcp_server/org_tools.rs"
+          - "grep -q 'cvg_org_list' daemon/src/mcp_server/org_tools.rs"
+          - "wc -l < daemon/src/mcp_server/org_tools.rs | awk '{if($1>200) exit 1}'"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W3: Digest + Brief Tools — Digest endpoints → MCP
+  # Depends on plan 10032 W5 (digest endpoints must exist)
+  # ═══════════════════════════════════════════════════════════════
+  - id: "3"
+    code: W3
+    name: "Digest Tools — Digest Endpoints as MCP"
+    depends_on: "plan-10032-W5"
+    tasks:
+      - id: T3-01
+        do: |
+          Add MCP tools for digest and morning brief:
+            1. cvg_org_digest(org_id) — GET /api/orgs/:id/digest
+            2. cvg_org_digest_generate(org_id) — POST /api/orgs/:id/digest/generate
+            3. cvg_morning_brief() — GET /api/digest/morning
+          Add to org_tools.rs (from W2). Keep <250 lines.
+          If exceeds limit, create digest_tools.rs and wire separately.
+          Ring: all Community (read-only).
+          Test: 1 test (tool schemas validate)
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "grep -q 'cvg_org_digest' daemon/src/mcp_server/org_tools.rs"
+          - "grep -q 'cvg_morning_brief' daemon/src/mcp_server/org_tools.rs"
+
+  # ═══════════════════════════════════════════════════════════════
+  # W4: Closure — Tests + Deploy
+  # ═══════════════════════════════════════════════════════════════
+  - id: "4"
+    code: W4
+    name: "Closure: Tests + Deploy + Verify"
+    tasks:
+      - id: TF-tests
+        do: |
+          Run full test suite:
+          - cargo test --features kernel --lib -- --test-threads=1
+          - cargo check --features kernel (0 warnings)
+          Fix any failures. Verify no file >250 lines in changed files.
+          Verify all new MCP tools appear in `cvg mcp tools/list` or equivalent.
+          Count total MCP tools before and after — document the increase.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo test --features kernel --lib -- --test-threads=1"
+          - "cd daemon && cargo check --features kernel"
+
+      - id: TF-deploy
+        do: |
+          Build release binary. Deploy to M5 Max + M1 Pro (rsync).
+          Verify: all new MCP tools are visible in Claude Code /context.
+          Verify: cvg task create works on plan 10032.
+          Restart daemons on both nodes.
+          Update CHANGELOG.md with MCP completeness features.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo build --release --features kernel"
+          - "curl -sf http://localhost:8420/api/health | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"ok\"]'"

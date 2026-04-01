@@ -1,0 +1,335 @@
+# Plan 10030 — Agent-to-Agent Live Chat + Org Chart
+# Goal: Enable real-time cross-terminal agent communication and org visualization
+#
+# User story: "Ho due terminali, cvg claude priya e cvg copilot roberto.
+# Dico a Priya 'chiedi a Roberto come sta' e voglio vedere la comunicazione
+# su entrambi i terminali. Voglio anche un org chart dei ruoli."
+#
+# Architecture:
+#   - SSE stream per agent (push, no polling)
+#   - MCP tools: cvg_agent_send + cvg_agent_ask (send-and-wait)
+#   - CLI: cvg bus watch (live stream) + cvg bus ask (sync round-trip)
+#   - Hook: inject incoming messages into agent session context
+#   - Org chart: API + TUI view + web dashboard page
+#
+# Key constraint: 250 lines/file max, all code wired, no stubs.
+
+project: ConvergioPlatform
+name: "Agent-to-Agent Live Chat + Org Chart"
+parallel_mode: sequential
+constraints:
+  max_lines_per_file: 250
+  language: rust
+  test_framework: cargo test
+  no_stubs: true
+
+waves:
+  - code: W1
+    name: "SSE Message Stream + CLI Watch"
+    tasks:
+      - id: T1-01
+        do: |
+          Create SSE endpoint /api/ipc/stream?agent=<name> that pushes new IPC messages
+          in real-time. Use tokio broadcast channel (state.ws_tx pattern).
+          When a message is sent via send_message/broadcast, fire SSE event to
+          all connected agents matching to_agent or broadcast.
+          File: daemon/src/server/api_ipc/sse_stream.rs (new, <200 lines)
+          Wire in: daemon/src/server/api_ipc/mod.rs (add route)
+          Test: 2 unit tests (connect+receive, timeout returns empty)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib sse_stream -- --test-threads=1"
+          - "grep -q 'api/ipc/stream' daemon/src/server/api_ipc/mod.rs"
+
+      - id: T1-02
+        do: |
+          Add `cvg bus watch <name>` subcommand to cli_bus.rs.
+          Connects to GET /api/ipc/stream?agent=<name> via SSE (reqwest-eventsource
+          or raw reqwest streaming). Prints messages as they arrive:
+            [10:32:15] roberto → priya: Come stai?
+          Colored output: sender=cyan, content=white, timestamp=dim.
+          File: daemon/src/cli_bus.rs (add Watch variant + handler, keep <250 lines)
+          If cli_bus.rs would exceed 250 lines, extract watch logic to cli_bus_watch.rs.
+          Test: 1 unit test (parse SSE event line)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_bus -- --test-threads=1"
+          - "wc -l < daemon/src/cli_bus.rs | awk '{if($1>250) exit 1}'"
+
+      - id: T1-03
+        do: |
+          Add `cvg bus ask <from> <to> <message>` subcommand.
+          Sends direct message, then waits for reply (SSE stream filtered by
+          from_filter=<to>) with 120s timeout. Prints reply and exits.
+          This enables synchronous round-trip: "ask Roberto and wait for answer".
+          File: daemon/src/cli_bus_ask.rs (new, <150 lines) or inline in cli_bus.rs.
+          Wire: add Ask variant to BusCommands enum.
+          Test: 1 unit test (timeout returns error message)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_bus -- --test-threads=1"
+
+  - code: W2
+    name: "MCP Tools + Agent Hook"
+    tasks:
+      - id: T2-01
+        do: |
+          Add 2 MCP tools to tool_catalog.rs and handlers.rs:
+          1. cvg_agent_send(to, message) — sends direct message from current agent
+             via POST /api/ipc/send-direct. Ring: Trusted.
+          2. cvg_agent_ask(to, message, timeout_secs?) — sends message and waits
+             for reply via receive_wait(). Returns reply content. Ring: Trusted.
+          These tools let agents natively say "I'll ask Roberto" and get a response.
+          File: daemon/src/mcp_server/agent_chat.rs (new, <150 lines)
+          Wire: add to tool_catalog.rs TOOLS array + handlers.rs match arms.
+          Keep both files <250 lines (split if needed).
+          Test: 2 unit tests (tool schema valid, handler returns expected shape)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib mcp_server -- --test-threads=1"
+          - "grep -q 'cvg_agent_send' daemon/src/mcp_server/tool_catalog.rs"
+          - "grep -q 'cvg_agent_ask' daemon/src/mcp_server/tool_catalog.rs"
+
+      - id: T2-02
+        do: |
+          Create a Claude Code hook that injects pending IPC messages into agent
+          context on each tool use. This makes Roberto's terminal show incoming
+          messages from Priya without manual polling.
+          Hook type: PreToolUse (fires before every tool call).
+          Logic: GET /api/ipc/messages?to_agent=$CONVERGIO_AGENT_NAME&limit=5
+          If messages found, print them to stderr as:
+            📨 [priya → you]: Come stai?
+          File: claude-config/hooks/ipc-message-inject.sh (new, <50 lines)
+          Wire: add hook entry to .claude/settings.json PreToolUse array.
+          The agent name comes from CONVERGIO_AGENT_NAME env var (set by cvg claude/copilot).
+          Test: smoke test with mock curl response
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "bash -n claude-config/hooks/ipc-message-inject.sh"
+          - "grep -q 'ipc-message-inject' .claude/settings.json"
+          - "grep -q 'CONVERGIO_AGENT_NAME' claude-config/hooks/ipc-message-inject.sh"
+
+      - id: T2-03
+        do: |
+          Update cli_launch.rs to export CONVERGIO_AGENT_NAME=<name> as env var
+          before launching claude/copilot. This is needed by the message inject hook
+          (T2-02) and by agent identity tracking.
+          Also export CONVERGIO_API_URL=<api_url> for hooks to use.
+          File: daemon/src/cli_launch.rs (modify launch_tool function)
+          Keep <250 lines.
+          Test: 1 unit test (env vars set correctly in command builder)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_launch -- --test-threads=1"
+          - "grep -q 'CONVERGIO_AGENT_NAME' daemon/src/cli_launch.rs"
+
+  - code: W3
+    name: "Org Chart API + TUI View"
+    tasks:
+      - id: T3-01
+        do: |
+          Extend /api/ipc/agents/tree to include role metadata. Add optional
+          `role` and `capabilities` fields to ipc_agents table (ALTER TABLE).
+          Add PUT /api/ipc/agents/role endpoint to assign role/capabilities to
+          an agent (e.g., "coordinator", "code-reviewer", "planner").
+          Update the tree endpoint to return role+capabilities in each node.
+          File: daemon/src/server/api_ipc/handlers_org.rs (new, <200 lines)
+          Wire: add routes in api_ipc/mod.rs, add migration in mod.rs schema.
+          Test: 2 tests (assign role, tree includes roles)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib handlers_org -- --test-threads=1"
+          - "grep -q 'api/ipc/agents/role' daemon/src/server/api_ipc/mod.rs"
+
+      - id: T3-02
+        do: |
+          Add `cvg bus org` CLI subcommand that renders the agent org chart as
+          a tree in the terminal. Uses GET /api/ipc/agents/tree.
+          Output format (indented tree with roles):
+            🏢 roberto [coordinator] (copilot, active)
+              ├── priya [code-reviewer] (claude, active)
+              ├── dario [debugger] (claude, inactive)
+              └── marco [devops] (copilot, active)
+          File: daemon/src/cli_bus_org.rs (new, <120 lines)
+          Wire: add Org variant to BusCommands in cli_bus.rs.
+          Test: 1 test (tree rendering with mock data)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib cli_bus_org -- --test-threads=1"
+          - "wc -l < daemon/src/cli_bus_org.rs | awk '{if($1>250) exit 1}'"
+
+      - id: T3-03
+        do: |
+          Add TUI view for org chart. New view accessible via 'o' key from main
+          dashboard. Renders agent tree with roles, status (colored), parent
+          relationships as indented tree using ratatui widgets.
+          Shows: agent name, type (claude/copilot), role, status, last_seen, current_task.
+          File: daemon/src/tui/views/org_chart.rs (new, <250 lines)
+          Wire: add OrgChart variant to ViewMode enum, key handler in app.rs.
+          Test: 1 test (render with mock agent data)
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib org_chart -- --test-threads=1"
+
+  - code: W4
+    name: "Web Dashboard Org Chart + Integration Tests"
+    tasks:
+      - id: T4-01
+        do: |
+          Create web dashboard page for org chart visualization.
+          Single HTML file with embedded JS, served at /org-chart.html.
+          Fetches GET /api/ipc/agents/tree, renders as interactive tree using
+          vanilla JS + CSS (no frameworks). Tree layout: top-down hierarchy,
+          nodes show name+role+status with color coding.
+          Connects to /ws/brain for real-time agent updates.
+          Uses Maranello Design System tokens for colors/typography.
+          File: scripts/dashboard_web/org-chart.html (new, <250 lines)
+          Create scripts/dashboard_web/ directory if missing.
+          Test: verify file exists and is valid HTML
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        advisor_agent: nasra-app-builder
+        validator_agent: thor-quality-assurance-guardian
+        effort: 3
+        verify:
+          - "test -f scripts/dashboard_web/org-chart.html"
+          - "grep -q '/api/ipc/agents/tree' scripts/dashboard_web/org-chart.html"
+          - "wc -l < scripts/dashboard_web/org-chart.html | awk '{if($1>250) exit 1}'"
+
+      - id: T4-02
+        do: |
+          Write integration tests for the full agent chat flow:
+          1. Register agent A and agent B
+          2. A sends direct message to B
+          3. B receives via /api/ipc/messages
+          4. B replies to A
+          5. A receives reply
+          6. Verify /api/ipc/agents/tree shows both agents
+          7. Verify SSE stream delivers messages in real-time
+          File: daemon/src/server/api_ipc/integration_tests.rs (new, <250 lines)
+          Wire: add #[cfg(test)] mod in api_ipc/mod.rs
+          Test: all tests pass
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 2
+        verify:
+          - "cd daemon && cargo test --features kernel --lib integration_tests -- --test-threads=1"
+
+  - code: W5
+    name: "Closure: Tests + Docs + PR"
+    tasks:
+      - id: TF-tests
+        do: |
+          Run full test suite: cargo test --features kernel --lib -- --test-threads=1
+          Run evolution tests: cd evolution && npx vitest run
+          Fix any failures. Verify 0 warnings with cargo check.
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo test --features kernel --lib -- --test-threads=1"
+          - "cd evolution && npx vitest run"
+          - "cd daemon && cargo check --features kernel 2>&1 | grep -v Compiling | grep -c warning | grep -q '^0$'"
+
+      - id: TF-doc
+        do: |
+          Update CHANGELOG.md with new features (Agent Chat, Org Chart, SSE stream).
+          Update TROUBLESHOOTING.md if relevant.
+          Add ADR in docs/adr/ for agent communication architecture decision.
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: doc-validator
+        effort: 1
+        verify:
+          - "grep -q 'Agent Chat' CHANGELOG.md"
+          - "test -f docs/adr/adr-agent-chat.md"
+
+      - id: TF-pr
+        do: |
+          Create PR with summary of all changes. Title: "feat(ipc): agent-to-agent
+          live chat + org chart visualization". Include test evidence.
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "git log --oneline -1 | grep -qE '^[a-f0-9]+ feat'"
+
+      - id: TF-deploy-verify
+        do: |
+          Build release binary, deploy to M5 Max, verify /api/health returns
+          new version. Test org chart endpoint and SSE stream manually.
+        type: code
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: task-executor
+        validator_agent: thor-quality-assurance-guardian
+        effort: 1
+        verify:
+          - "cd daemon && cargo build --release --features kernel"
+          - "curl -sf http://localhost:8420/api/ipc/agents/tree | python3 -c 'import json,sys; json.load(sys.stdin)'"

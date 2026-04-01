@@ -1,0 +1,297 @@
+plan:
+  title: "Jarvis Fallback Fix + Mesh Auto-Update"
+  description: |
+    Two workstreams: (1) Fix Jarvis fallback from AskAli→EscalateToAli + keyword enrichment,
+    (2) Mesh auto-update so nodes self-upgrade when a peer has a newer version.
+    Deploy model: coordinator builds, rsync binary to workers (never recompile on target).
+  project: convergio
+  priority: high
+
+waves:
+  - id: W1
+    name: "Jarvis Fallback + Keywords"
+    parallel: true
+    tasks:
+      - id: W1-T1
+        do: |
+          Fix keyword_classify fallback in voice_router.rs.
+          1. Change fallback (line ~161) from VoiceIntent::AskAli to VoiceIntent::EscalateToAli.
+          2. Remove the AskAli variant from VoiceIntent enum entirely (dead code after this change).
+             Update all match arms that reference AskAli: voice_routes.rs route_intent must remove the arm.
+             Update voice_router_tests.rs: change any test expecting AskAli to expect EscalateToAli.
+             Update classify_via_llm: map "ask_ali" to EscalateToAli.
+          3. Add keyword blocks BEFORE the fallback for:
+             - "report","analisi","analizza","riassumi","summary","briefing" → EscalateToAli
+             - "lancia","esegui","fai","run","execute","deploy" → EscalateToAli
+          4. Add at least 4 new tests in voice_router_tests.rs for the new keywords.
+          5. Run: cargo test --features kernel --lib voice_router -- --test-threads=1
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        files:
+          - daemon/src/kernel/voice_router.rs
+          - daemon/src/kernel/voice_router_tests.rs
+          - daemon/src/kernel/voice_routes.rs
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib voice_router -- --test-threads=1"
+          - "grep -q 'EscalateToAli' daemon/src/kernel/voice_router.rs"
+          - "! grep -q 'VoiceIntent::AskAli' daemon/src/kernel/voice_router.rs"
+
+  - id: W2
+    name: "Mesh Auto-Update Infrastructure"
+    parallel: false
+    tasks:
+      - id: W2-T1
+        do: |
+          Add version fields to peer heartbeat and create update-status endpoint.
+          1. In state_init_migrations.rs, add TWO separate ALTER TABLE statements:
+             ALTER TABLE peer_heartbeats ADD COLUMN version TEXT;
+             ALTER TABLE peer_heartbeats ADD COLUMN rustc_version TEXT;
+             (Each as a separate conn.execute with ignore-if-duplicate pattern.)
+          2. In daemon/src/mesh/daemon/service.rs, modify the heartbeat INSERT to include
+             version (env!("CARGO_PKG_VERSION")) and rustc_version (cached from rustc --version at startup).
+             Extract the spawn_auto_update call point as a comment placeholder only — W2-T2 will wire it.
+             Keep service.rs under 250 lines by extracting the heartbeat insert into a helper fn in a new
+             daemon/src/mesh/daemon/heartbeat_writer.rs file. Wire it in daemon/src/mesh/daemon/mod.rs.
+          3. Create GET /api/mesh/update-status endpoint in a new file daemon/src/server/api_mesh_update.rs:
+             - Query peer_heartbeats for max version across all peers
+             - Compare with local env!("CARGO_PKG_VERSION") using semver crate
+             - Return {update_available, latest_version, current_version, peer_with_latest, rustc_mismatch}
+          4. Wire in server/mod.rs and routes/mod.rs. Add to GET_ROUTES registry.
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        files:
+          - daemon/src/mesh/daemon/service.rs
+          - daemon/src/mesh/daemon/heartbeat_writer.rs
+          - daemon/src/mesh/daemon/mod.rs
+          - daemon/src/server/state_init_migrations.rs
+          - daemon/src/server/api_mesh_update.rs
+          - daemon/src/server/mod.rs
+          - daemon/src/server/routes/mod.rs
+          - daemon/src/server/routes/api_routes.rs
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib -- --test-threads=1 heartbeat_writer"
+          - "grep -q 'CARGO_PKG_VERSION' daemon/src/mesh/daemon/heartbeat_writer.rs"
+          - "grep -q 'update.status\\|update_status' daemon/src/server/api_mesh_update.rs"
+          - "wc -l daemon/src/mesh/daemon/service.rs | awk '{if($1>250) exit 1}'"
+
+      - id: W2-T2
+        do: |
+          Create auto-update background task. Split into two files for 250-line compliance:
+          - daemon/src/mesh/auto_update.rs (logic, max 200 lines)
+          - daemon/src/mesh/auto_update_tests.rs (tests, max 100 lines)
+
+          The task is spawned as a tokio::spawn in service.rs (one-liner addition).
+          Logic (auto_update.rs):
+          - pub async fn run_auto_update_loop(repo_root: String) — runs every 5 minutes
+          - Calls GET http://localhost:8420/api/mesh/update-status
+          - If update_available=false: skip
+          - If in quiet hours (23:00-07:00 Europe/Rome via chrono-tz): skip unless version contains "security"
+          - If last update < 30 min ago (track with AtomicU64 timestamp): skip
+          - Update steps (all via std::process::Command, fail-loud):
+            1. git -C {repo_root} pull origin main
+            2. If rustc_mismatch: rustup update stable
+            3. Coordinator node: cargo build --release --features kernel (CARGO_TARGET_DIR=/tmp/convergio-update-build)
+               Worker nodes: rsync binary from coordinator (not compile locally). Use CONVERGIO_COORDINATOR env or peers.conf.
+            4. cp ~/.convergio/bin/convergio-platform-daemon ~/.convergio/bin/convergio-platform-daemon.bak
+            5. If coordinator: run scripts/platform/daemon-install.sh
+               If worker: the rsync already placed the binary
+            6. Write ~/.convergio/restart-requested
+            7. POST /api/tracking/agent-activity with agent_id="mesh-auto-update"
+          - On ANY failure: log error, POST /api/notify with message, do NOT write restart-requested
+
+          Wire: pub mod auto_update in mesh/mod.rs.
+          Spawn: tokio::spawn(auto_update::run_auto_update_loop(repo_root)) in service.rs.
+
+          Tests (auto_update_tests.rs):
+          - test_quiet_hours_blocks_update (22:00-06:59 → skip)
+          - test_rate_limit_blocks_within_30min
+          - test_version_comparison_semver
+        type: feature
+        output_type: pr
+        model: claude-opus-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 3
+        files:
+          - daemon/src/mesh/auto_update.rs
+          - daemon/src/mesh/auto_update_tests.rs
+          - daemon/src/mesh/mod.rs
+          - daemon/src/mesh/daemon/service.rs
+        verify:
+          - "cd daemon && cargo check --features kernel"
+          - "cd daemon && cargo test --features kernel --lib auto_update -- --test-threads=1"
+          - "wc -l daemon/src/mesh/auto_update.rs | awk '{if($1>250) exit 1}'"
+          - "wc -l daemon/src/mesh/auto_update_tests.rs | awk '{if($1>250) exit 1}'"
+          - "grep -q 'pub mod auto_update' daemon/src/mesh/mod.rs"
+
+      - id: W2-T3
+        do: |
+          Modify daemon/start.sh to add a restart loop for graceful auto-update restarts.
+          Wrap the binary execution in a while loop:
+            while true; do
+              $BINARY serve "$@"
+              EXIT_CODE=$?
+              if [ -f ~/.convergio/restart-requested ]; then
+                rm ~/.convergio/restart-requested
+                echo "[auto-update] Restarting daemon with new binary..."
+                sleep 2
+                # Rollback check: if health fails within 30s and .bak exists, restore
+                continue
+              fi
+              exit $EXIT_CODE
+            done
+          Add rollback: after restart, sleep 30, check health. If fails and .bak exists:
+            cp ~/.convergio/bin/convergio-platform-daemon.bak ~/.convergio/bin/convergio-platform-daemon
+            echo "[auto-update] Rollback: restored previous binary"
+            continue (one more restart with old binary)
+          Keep under 250 lines. Note in comments: PID changes on restart.
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        files:
+          - daemon/start.sh
+        verify:
+          - "wc -l daemon/start.sh | awk '{if($1>250) exit 1}'"
+          - "grep -q 'restart-requested' daemon/start.sh"
+          - "grep -q 'Rollback\\|rollback\\|bak' daemon/start.sh"
+          - "bash -n daemon/start.sh"
+
+  - id: W3
+    name: "Build, Test, Deploy"
+    parallel: false
+    tasks:
+      - id: W3-T1
+        do: |
+          Run full test suite on M5Max. All must pass (0 failures).
+          Record test output as evidence via scripts/platform/record-evidence.sh.
+        type: feature
+        output_type: other
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        files: []
+        verify:
+          - "cd daemon && cargo test --features kernel --lib -- --test-threads=1 2>&1 | grep 'test result:' | grep -q '0 failed'"
+
+      - id: W3-T2
+        do: |
+          Build release, install, deploy to both nodes via rsync (NOT recompile on M1Pro):
+          1. cd daemon && cargo build --release --features kernel
+          2. bash scripts/platform/daemon-install.sh
+          3. Restart daemon on M5Max
+          4. curl -sf http://localhost:8420/api/health (must return ok:true)
+          5. ssh macProM1: git pull origin main
+          6. rsync ~/.convergio/bin/convergio-platform-daemon macProM1:~/.convergio/bin/
+          7. ssh macProM1: restart daemon
+          8. ssh macProM1: curl -sf http://localhost:8420/api/health (must return ok:true)
+          9. Verify mesh peers see each other
+        type: feature
+        output_type: other
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 2
+        files: []
+        verify:
+          - "curl -sf http://localhost:8420/api/health | grep -q '\"ok\":true'"
+          - "ssh macProM1 'curl -sf http://localhost:8420/api/health' | grep -q '\"ok\":true'"
+
+  - id: WF
+    name: "Closure"
+    parallel: false
+    tasks:
+      - id: TF-tests
+        do: "Run full test suite on M1Pro via SSH. Must pass with 0 failures."
+        type: feature
+        output_type: other
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        files: []
+        verify:
+          - "ssh macProM1 'cd ~/GitHub/ConvergioPlatform/daemon && cargo test --features kernel --lib -- --test-threads=1 2>&1 | grep test.result:' | grep -q '0 failed'"
+
+      - id: TF-doc
+        do: |
+          Update ALL documentation for v20.4.0:
+          1. CHANGELOG.md: add [20.4.0] section with:
+             - Jarvis fallback fix (AskAli removed, EscalateToAli default)
+             - Keyword enrichment (report/analysis, action intents)
+             - Mesh auto-update (version in heartbeat, auto-update loop, graceful restart, rollback)
+             - GET /api/mesh/update-status endpoint
+             - start.sh restart loop with rollback
+          2. VERSION.md → 20.4.0
+          3. daemon/Cargo.toml version → "20.4.0"
+          4. README.md: update features section to mention mesh auto-update and Jarvis intelligence.
+             Add auto-update to the architecture diagram if present.
+          5. TROUBLESHOOTING.md: add entries for:
+             - "Daemon doesn't auto-update" → check CONVERGIO_REPO_ROOT, quiet hours, rate limit
+             - "Rollback after failed update" → check ~/.convergio/bin/*.bak
+             - "cvg status shows Cannot reach daemon" → check CONVERGIO_AUTH_TOKEN in ~/.convergio/env
+          6. claude-config/reference/operational/convergio-capabilities.md: add mesh auto-update
+             and Jarvis EscalateToAli fallback to the capabilities list (if file exists).
+          7. Verify version consistency: VERSION.md = Cargo.toml = CHANGELOG.md latest entry.
+        type: doc
+        output_type: document
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: doc-validator
+        effort: 2
+        files:
+          - CHANGELOG.md
+          - VERSION.md
+          - daemon/Cargo.toml
+          - README.md
+          - TROUBLESHOOTING.md
+        verify:
+          - "grep -q '20.4.0' VERSION.md"
+          - "grep -q '20.4.0' daemon/Cargo.toml"
+          - "grep -q '20.4.0' CHANGELOG.md"
+          - "grep -q 'auto.update\\|auto_update' README.md"
+          - "grep -q 'auto.update\\|rollback' TROUBLESHOOTING.md"
+
+      - id: TF-pr
+        do: "Create PR from worktree branch, wait for CI green (all 4 checks), merge to main with --admin."
+        type: feature
+        output_type: pr
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        files: []
+        verify:
+          - "gh pr list --state merged --limit 5 --json title | grep -q 'jarvis\\|auto-update'"
+
+      - id: TF-deploy-verify
+        do: |
+          Final deploy to both nodes with the merged version. Verify:
+          - Both daemons report version 20.4.0
+          - cvg status works without errors on M5Max
+          - GET /api/mesh/update-status returns update_available=false
+          - Mesh peers healthy (heartbeat/status shows both nodes)
+        type: feature
+        output_type: other
+        model: claude-sonnet-4-6
+        executor_agent: copilot
+        validator_agent: thor
+        effort: 1
+        files: []
+        verify:
+          - "curl -sf http://localhost:8420/api/health | grep -q '\"ok\":true'"
+          - "ssh macProM1 'curl -sf http://localhost:8420/api/health' | grep -q '\"ok\":true'"
+          - "curl -sf -H 'Authorization: Bearer dev-local' http://localhost:8420/api/mesh/update-status | grep -q 'update_available'"
