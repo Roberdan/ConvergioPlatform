@@ -20,6 +20,7 @@ fn test_registry() -> PeersRegistry {
             gh_account: None,
             runners: None,
             runner_paths: None,
+            lan_ip: None,
         },
     );
     peers.insert(
@@ -38,6 +39,7 @@ fn test_registry() -> PeersRegistry {
             gh_account: None,
             runners: None,
             runner_paths: None,
+            lan_ip: None,
         },
     );
     PeersRegistry {
@@ -108,8 +110,10 @@ fn ssh_destination_prefers_alias() {
         ssh_alias: "RoberdanM5Max.local".to_string(),
         tailscale_ip: "100.89.245.79".to_string(),
         thunderbolt_ip: None,
+        lan_ip: None,
+        transport: "tailscale".to_string(),
     };
-    assert_eq!(ssh_destination(&resolved), "RoberdanM5Max.local");
+    assert_eq!(ssh_destination(&resolved), "roberdan@RoberdanM5Max.local");
 }
 
 #[test]
@@ -122,6 +126,8 @@ fn ssh_destination_falls_back_to_user_at_host() {
         ssh_alias: String::new(),
         tailscale_ip: "100.64.0.2".to_string(),
         thunderbolt_ip: None,
+        lan_ip: None,
+        transport: "tailscale".to_string(),
     };
     assert_eq!(ssh_destination(&resolved), "roberdan@100.64.0.2");
 }
@@ -135,7 +141,7 @@ fn fallback_chain_ssh_alias_first() {
 }
 
 #[test]
-fn fallback_chain_tailscale_ip_when_no_ssh_alias() {
+fn fallback_chain_tailscale_when_no_ssh_alias() {
     let mut reg = test_registry();
     reg.peers.get_mut("m1pro").unwrap().ssh_alias = String::new();
     let resolved = resolve_from_registry("m1pro", &reg).unwrap();
@@ -148,6 +154,8 @@ fn fallback_chain_dns_name_when_no_ip() {
     let peer = reg.peers.get_mut("m1pro").unwrap();
     peer.ssh_alias = String::new();
     peer.tailscale_ip = String::new();
+    peer.thunderbolt_ip = None;
+    peer.lan_ip = None;
     let resolved = resolve_from_registry("m1pro", &reg).unwrap();
     assert_eq!(resolved.host, "m1-pro-worker.tail01f12c.ts.net");
 }

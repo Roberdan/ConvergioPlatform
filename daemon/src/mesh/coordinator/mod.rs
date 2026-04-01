@@ -38,6 +38,7 @@ mod tests {
             gh_account: None,
             runners: None,
             runner_paths: None,
+            lan_ip: None,
         }
     }
 
