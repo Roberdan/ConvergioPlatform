@@ -434,3 +434,31 @@ Commands: `cvg repo add <name> --path <p> [--github-url <u>]` | `cvg repo list` 
 - `daemon/start.sh` loads from macOS Keychain (`convergio-telegram-token`) and exports the var.
 - Verify: `grep CONVERGIO_TELEGRAM_TOKEN daemon/start.sh` — must show `export`.
 - Store token: `security add-generic-password -s convergio-telegram-token -a convergio -w "<token>"`
+
+## Mesh Auto-Update (v20.4.0)
+
+**Daemon doesn't auto-update**
+- Cause: auto-update requires `CONVERGIO_REPO_ROOT` env var, respects quiet hours (23:00-07:00 CET), and has a 30-minute rate limit between attempts.
+- Fix:
+  - Verify env: `echo $CONVERGIO_REPO_ROOT` — must point to the repo root.
+  - Check quiet hours: auto-update is disabled between 23:00 and 07:00 CET.
+  - Check rate limit: last update attempt must be >30 min ago.
+  - Check mesh status: `curl -s http://localhost:8420/api/mesh/update-status | jq .`
+  - Verify the coordinator has the newer version built in `~/.convergio/bin/`.
+
+**Rollback after failed update**
+- Symptom: daemon fails health check after binary update, or `cvg status` unreachable.
+- Cause: new binary crashes or fails `/api/health` within startup timeout.
+- Fix:
+  - Check backup: `ls -la ~/.convergio/bin/*.bak` — previous binary is preserved.
+  - Check daemon logs for crash reason: `tail -50 data/logs/daemon.log`
+  - Remove the `restart-requested` marker if present: `rm /tmp/convergio-restart-requested`
+  - Manual rollback: `cp ~/.convergio/bin/convergio-platform-daemon.bak ~/.convergio/bin/convergio-platform-daemon && ./daemon/start.sh`
+
+**`cvg status` shows "Cannot reach daemon"**
+- Cause: `CONVERGIO_AUTH_TOKEN` not set, or daemon not running.
+- Fix:
+  - Check token: `grep CONVERGIO_AUTH_TOKEN ~/.convergio/env` — must be present.
+  - If missing: `echo "CONVERGIO_AUTH_TOKEN=dev-local-$(hostname -s)" >> ~/.convergio/env`
+  - Verify daemon: `curl -sf http://localhost:8420/api/health | jq .version`
+  - Restart if needed: `./daemon/start.sh`

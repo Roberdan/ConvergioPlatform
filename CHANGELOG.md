@@ -1,5 +1,23 @@
 # Changelog
 
+## [20.4.0] - 01 Aprile 2026
+
+### Added
+- Jarvis fallback to Claude: `AskAli` removed, unrecognized messages escalate to Claude with full platform context
+- Keyword enrichment: report/analysis/action intents routed to Claude
+- Mesh version tracking: `version` + `rustc_version` in peer heartbeats
+- `GET /api/mesh/update-status` endpoint for version comparison across mesh
+- Mesh auto-update: background task (5min interval, quiet hours, rate limit, coordinator builds, workers rsync)
+- `start.sh` restart loop with automatic rollback on health failure
+- `cvg setup` onboarding wizard (planned — config.toml hot-reload architecture)
+
+### Changed
+- `keyword_classify` fallback: AskAli → EscalateToAli (Claude with context)
+- start.sh: single-run → restart loop with rollback support
+
+### Fixed
+- Tool count test assertion (7→10 tools after health/history/mesh additions)
+
 ## [20.3.0] - 01 Aprile 2026
 
 ### Added

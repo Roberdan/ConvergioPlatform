@@ -32,6 +32,7 @@ mod cli_org;
 mod cli_org_show;
 mod cli_plan;
 mod cli_plan_handlers;
+mod cli_plan_show;
 mod cli_plan_template;
 mod cli_plan_tree_fmt;
 mod cli_project;

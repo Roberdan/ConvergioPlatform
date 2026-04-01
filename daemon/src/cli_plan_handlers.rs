@@ -38,9 +38,14 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
             human,
             api_url,
         } => {
-            if let Err(e) = crate::cli_http::fetch_and_print(
+            if human {
+                let url = format!("{api_url}/api/plan-db/json/{plan_id}");
+                if let Ok(val) = crate::cli_http::get_and_return(&url).await {
+                    crate::cli_plan_show::print_plan_human(&val);
+                }
+            } else if let Err(e) = crate::cli_http::fetch_and_print(
                 &format!("{api_url}/api/plan-db/json/{plan_id}"),
-                human,
+                false,
             )
             .await
             {
