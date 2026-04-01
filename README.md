@@ -1,5 +1,5 @@
 <!-- Copyright (c) 2026 Roberto D'Angelo. Convergio Community License. -->
-# Convergio Platform · v20.1.0
+# Convergio Platform · v20.4.0
 
 Give it a problem. It builds the business. — 69 AI agents across 12 domains (code, strategy, legal, finance, marketing, design, HR, data, security, ops, product, research) orchestrated by a Rust daemon on your own hardware. No cloud lock-in.
 
@@ -488,6 +488,11 @@ The kernel runs Qwen 2.5 7B locally on Apple Silicon, providing:
 - **Voice pipeline** — cpal audio → VAD (webrtc) → wake word "convergio" → Whisper STT → intent → response
 - **Telegram bot** — bidirectional text + voice, long polling, quiet hours (23:00-07:00 CET)
 - **Ali escalation** — "ali dimmi..." triggers Claude CLI (Opus) subprocess with full context
+- **Jarvis intelligence** — always-on context (plans, agents, costs, health, mesh, history), multi-round tool calling, conversation memory, EscalateToAli (Claude with full platform context for unrecognized or complex messages)
+
+### Mesh Auto-Update
+
+Nodes self-upgrade when peers report newer daemon versions. The coordinator builds once; workers rsync the binary. Runs every 5 minutes with quiet hours (23:00-07:00 CET) and a 30-minute rate limit. Failed updates trigger automatic rollback from `~/.convergio/bin/*.bak`. Check status: `GET /api/mesh/update-status`.
 
 ```bash
 cvg kernel status          # health report

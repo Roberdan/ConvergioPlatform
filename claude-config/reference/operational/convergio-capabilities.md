@@ -1,7 +1,7 @@
 # Convergio Platform — Complete Capability Reference
 
 > Single source of truth for what Convergio can do. Load this in every agent session.
-> Updated: 2 Aprile 2026 | v20.0.0
+> Updated: 1 Aprile 2026 | v20.4.0
 
 ## Core Architecture
 
@@ -72,11 +72,12 @@
 - Models required: `~/.cache/whisper/ggml-small.bin` (Whisper), Voxtral 4B via mlx-audio
 - `mlx-audio` installed from git main (PyPI 0.4.1 lacks voxtral_tts)
 
-### Ali Escalation
+### Ali Escalation / EscalateToAli
 - "ali dimmi..." via Telegram/API → Claude CLI (Sonnet/Opus) subprocess
 - Full system context injected automatically
 - Fallback to Qwen local if Claude CLI unavailable
 - Unknown problems: creates micro-plans and launches copilot-plan-runner automatically
+- EscalateToAli (v20.4.0): unrecognized messages and keyword intents (report/analysis/action) escalate to Claude with full platform context — replaces AskAli
 
 ### Telegram Bot (@ConvergioBot)
 - Inbound text: any message → classify intent → respond
@@ -84,6 +85,14 @@
 - Outbound: alerts, daily/weekly reports, plan completions
 - Long polling (zero wasted requests)
 - Quiet hours (23:00-07:00 CET)
+
+### Mesh Auto-Update (v20.4.0)
+- `GET /api/mesh/update-status` — version comparison across all mesh peers
+- `version` + `rustc_version` fields in peer heartbeats
+- Background auto-update task: 5min interval, quiet hours (23:00-07:00 CET), 30min rate limit
+- Coordinator builds once, workers rsync binary from coordinator
+- `start.sh` restart loop with automatic rollback on health failure
+- Backup stored in `~/.convergio/bin/*.bak`
 
 ### Node Management
 - `GET /api/node/readiness` — 10-check health report per node
