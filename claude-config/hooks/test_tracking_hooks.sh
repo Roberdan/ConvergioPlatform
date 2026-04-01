@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Roberto D'Angelo
-# Tests for 5 tracking hooks — verify structure, no sqlite3, correct shebangs/pipefail
+# Tests for tracking hooks — verify structure, no sqlite3, correct shebangs/pipefail
 set -euo pipefail
 
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +18,7 @@ check() {
   fi
 }
 
-HOOKS=(track-tokens.sh track-agent-activity.sh track-precompact.sh track-session-stop.sh session-end-tokens.sh)
+HOOKS=(session-end-tokens.sh)
 
 for hook in "${HOOKS[@]}"; do
   path="$HOOKS_DIR/$hook"

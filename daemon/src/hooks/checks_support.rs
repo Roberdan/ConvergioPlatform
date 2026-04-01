@@ -19,11 +19,13 @@ pub fn check_prefer_ci_summary(
         ));
     }
     if base.starts_with("gh pr merge") {
-        return Ok(CheckOutcome::Block("Use: pr-ops.sh merge <pr>".to_string()));
+        return Ok(CheckOutcome::Block(
+            "Use: cvg workspace release (pr-ops.sh is removed)".to_string(),
+        ));
     }
     if base.starts_with("gh pr view") && !command.command.contains("--json") {
         return Ok(CheckOutcome::Block(
-            "Use: pr-ops.sh status <pr>".to_string(),
+            "Use: ci-digest.sh checks <pr> (pr-ops.sh is removed)".to_string(),
         ));
     }
     if base.starts_with("git diff") && !base.starts_with("git diff --stat") {
@@ -120,8 +122,8 @@ pub fn check_enforce_execution_preflight(
             "plan-db.sh start",
             "plan-db.sh validate-task",
             "plan-db.sh validate-wave",
-            "wave-worktree.sh merge",
-            "wave-worktree.sh batch",
+            "cvg worktree merge",
+            "cvg worktree batch",
         ],
     ) || command.command.contains("execution-preflight.sh")
     {

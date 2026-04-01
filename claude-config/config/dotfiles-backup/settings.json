@@ -36,16 +36,6 @@
     ],
     "PostToolUse": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/track-agent-activity.sh",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      },
-      {
         "matcher": "Skill",
         "hooks": [
           {
@@ -206,27 +196,7 @@
         ]
       }
     ],
-    "TeammateIdle": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/track-tokens.sh teammate-idle",
-            "async": true
-          }
-        ]
-      }
-    ],
     "TaskCompleted": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/track-tokens.sh task-completed",
-            "async": true
-          }
-        ]
-      },
       {
         "hooks": [
           {

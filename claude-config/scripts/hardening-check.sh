@@ -48,8 +48,8 @@ HAS_DB=false
 # === Git Hooks ===
 check "pre-commit-exists" "test -f .husky/pre-commit || test -f .githooks/pre-commit || test -f hooks/enforce-standards.sh" "critical"
 check "pre-commit-multi-check" "( [ -f .husky/pre-commit ] && [ \$(wc -l < .husky/pre-commit) -gt 5 ] ) || ( [ -f .githooks/pre-commit ] && [ \$(wc -l < .githooks/pre-commit) -gt 5 ] ) || [ -f hooks/enforce-standards.sh ]" "warning"
-check "pre-push-exists" "test -f .husky/pre-push || test -f .githooks/pre-push || test -f hooks/version-check.sh" "warning"
-check "commit-msg-hook" "test -f .husky/commit-msg || test -f .githooks/commit-msg || test -f hooks/version-check.sh" "info"
+check "pre-push-exists" "test -f .husky/pre-push || test -f .githooks/pre-push" "warning"
+check "commit-msg-hook" "test -f .husky/commit-msg || test -f .githooks/commit-msg" "info"
 
 # === Linting ===
 if $HAS_NODE; then
@@ -72,7 +72,7 @@ check "secrets-scan-script" \
 # === Environment Variables ===
 check "env-example" "test -f .env.example || test -f webapp/.env.example" "warning"
 check "env-var-audit" \
-	"test -f scripts/quality/env-var-audit.sh || test -f scripts/env-var-audit.sh || test -f hooks/env-vault-guard.sh" \
+	"test -f scripts/quality/env-var-audit.sh || test -f scripts/env-var-audit.sh" \
 	"info"
 
 # === Debt Enforcement ===

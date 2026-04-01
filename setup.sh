@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup.sh — ConvergioPlatform installer
 # Sets up env vars, enables Convergio overlay, installs CLI aliases.
-# Everything reversible: `convergio off` disables, `revert-claude-symlinks.sh` restores.
+# Everything reversible: `convergio off` disables overlay.
 # Usage: git clone <repo> && cd ConvergioPlatform && ./setup.sh
 set -euo pipefail
 
@@ -143,7 +143,6 @@ main() {
   echo ""
   echo "To disable completely:"
   echo "  convergio off                         — remove ~/.claude/ symlinks"
-  echo "  revert-claude-symlinks.sh --env       — also remove env vars"
   echo ""
   echo "Restart shell: source $rc"
 }

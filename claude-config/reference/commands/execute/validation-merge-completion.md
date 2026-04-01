@@ -20,7 +20,7 @@ After ALL tasks in a wave are `submitted` (MANDATORY — coordinator MUST call t
 ## Wave Merge
 
 After Thor passes:
-1. `bash claude-config/scripts/wave-worktree.sh merge {plan_id} {wave_db_id}`
+1. `cvg worktree merge {plan_id} {wave_db_id}`
 2. Squash merge wave branch into main
 3. Cleanup: remove worktree, delete branch
 
@@ -32,7 +32,7 @@ For parallel waves (W2a, W2b, W2c):
 ## Next Wave
 
 After merge:
-1. Create worktree for next wave: `bash claude-config/scripts/wave-worktree.sh create {plan_id} {next_wave_id}`
+1. Create worktree for next wave: `cvg worktree create {plan_id} {next_wave_id}`
 2. Continue with pending tasks in next wave
 
 ## Plan Completion

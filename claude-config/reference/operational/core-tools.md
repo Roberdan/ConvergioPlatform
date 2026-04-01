@@ -26,7 +26,7 @@
 | `npm run lint/typecheck/build/test` | `ci-summary.sh --lint/--types/--build/--unit` |
 | `gh run view --log` | `ci-digest.sh <id>` |
 | `gh pr checks` | `ci-digest.sh checks <pr>` |
-| `gh pr view/merge` | `pr-ops.sh status/merge <pr>` |
+| `gh pr view/merge` | `cvg workspace release` / `ci-digest.sh checks <pr>` |
 
 ## Routing (NON-NEGOTIABLE)
 

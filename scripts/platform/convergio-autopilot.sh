@@ -193,8 +193,7 @@ cmd_watch() {
     check_agent_health
     # Run main loop
     run_once || true
-    # Collect metrics every cycle
-    bash "$PLATFORM_DIR/scripts/platform/convergio-metrics.sh" collect > /dev/null 2>&1
+    # Metrics collection now handled by daemon background_sync (convergio-metrics.sh removed)
     sleep "$INTERVAL"
   done
 }

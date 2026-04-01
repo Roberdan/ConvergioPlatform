@@ -55,7 +55,7 @@ Set `CLAUDE_FILE_LOCK=0` in env to disable session locking entirely.
 
 ## WorktreeCreate/WorktreeRemove Hooks (v2.1.50+)
 
-Hooks run automatically on worktree lifecycle events (native git or `wave-worktree.sh`). Eliminates ~500 tokens/worktree of manual setup commands.
+Hooks run automatically on worktree lifecycle events (native git or `cvg worktree`). Eliminates ~500 tokens/worktree of manual setup commands.
 
 ### WorktreeCreate Hook
 
@@ -76,7 +76,7 @@ Runs before worktree removal:
 
 | File                       | Purpose                                      |
 | -------------------------- | -------------------------------------------- |
-| `hooks/worktree-create.sh` | PostWorktreeAdd: .env symlinks + npm install |
+| `hooks/worktree-setup.sh` | PostWorktreeAdd: .env symlinks + npm install |
 | `hooks/worktree-remove.sh` | PreWorktreeRemove: release locks + cleanup   |
 
 Both hooks are configured in `settings.json` under the `hooks` key.

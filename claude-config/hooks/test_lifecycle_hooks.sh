@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Roberto D'Angelo
-# Tests for 10 lifecycle + utility hooks — structure, no sqlite3, shebangs, <=15 lines
+# Tests for active lifecycle + utility hooks — structure, no sqlite3, shebangs, <=15 lines
 set -euo pipefail
 
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,14 +19,9 @@ check() {
 }
 
 HOOKS=(
-  post-task-enforce.sh
   preserve-context.sh
   inject-agent-context.sh
   notify-app.sh
-  worktree-setup.sh
-  worktree-teardown.sh
-  session-reaper.sh
-  session-file-unlock.sh
   model-registry-refresh.sh
 )
 
