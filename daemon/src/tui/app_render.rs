@@ -27,7 +27,8 @@ impl TuiApp {
         let hierarchy_context = self.istate.hierarchy_context.clone();
         let show_project_switcher = self.istate.show_project_switcher;
         let project_switcher_selected = self.istate.project_switcher_selected;
-        self.terminal.draw(|frame| {
+        let terminal = self.terminal.as_mut().expect("terminal not initialized");
+        terminal.draw(|frame| {
             views::render_view(
                 frame, frame.area(), view, data, selected, &api_url,
                 show_help, auto_refresh, refresh_interval_secs,

@@ -21,6 +21,10 @@ pub enum VoiceIntent {
     AskAli { question: String },
     /// Explicit escalation to Ali via chat API (async polling, up to 60s)
     EscalateToAli { question: String },
+    /// Create a new project (org + plan + tasks) from natural language
+    CreateProject { name: String, mission: String },
+    /// Query an existing org's status by name
+    AskOrg { name: String },
     /// Unrecognised intent
     Unknown,
 }
@@ -53,10 +57,14 @@ pub fn voice_command(text: &str, engine: &KernelEngine, daemon_url: &str) -> Str
 fn classify_via_llm(text: &str, engine: &KernelEngine) -> Option<VoiceIntent> {
     let prompt = format!(
         "Classify this voice command into one of: \
-         status_check, cost_query, plan_query, restart, mute, ask_ali. \
+         status_check, cost_query, plan_query, restart, mute, \
+         create_project, ask_org, ask_ali. \
+         Use create_project when user wants to create/launch a new project. \
+         Use ask_org when user asks about an existing project/org status. \
          Use ask_ali for anything complex that needs reasoning. \
          Command: '{text}'. Return JSON: \
-         {{\"intent\": \"<name>\", \"params\": {{\"plan_id\": null, \"target\": null}}}}"
+         {{\"intent\": \"<name>\", \"params\": {{\"plan_id\": null, \"target\": null, \
+         \"name\": null, \"mission\": null}}}}"
     );
     parse_llm_json(&engine.classify(&prompt).reason, text)
 }
@@ -88,6 +96,14 @@ fn parse_llm_json(raw: &str, original_text: &str) -> Option<VoiceIntent> {
                 .unwrap_or("daemon")
                 .to_string(),
         }),
+        "create_project" => {
+            let (n, m) = extract_project_name_mission(original_text);
+            Some(VoiceIntent::CreateProject { name: n, mission: m })
+        }
+        "ask_org" => {
+            let n = extract_org_name_from_text(original_text);
+            Some(VoiceIntent::AskOrg { name: n })
+        }
         _ => None,
     }
 }
@@ -101,6 +117,21 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
         || s.contains(" ali ") || s.contains("opus") || s.contains("cloud")
     {
         return VoiceIntent::EscalateToAli { question: text.to_string() };
+    }
+    // CreateProject — checked before generic status/plan keywords
+    if s.contains("crea progetto") || s.contains("create project")
+        || s.contains("lancia progetto") || s.contains("nuovo progetto")
+        || s.contains("avvia progetto") || s.contains("start project")
+    {
+        let (name, mission) = extract_project_name_mission(text);
+        return VoiceIntent::CreateProject { name, mission };
+    }
+    // AskOrg — "come sta il X?", "status di X", "aggiorna su X", "update on X"
+    if s.contains("come sta") || s.contains("status di")
+        || s.contains("aggiorna su") || s.contains("update on")
+    {
+        let name = extract_org_name_from_text(text);
+        return VoiceIntent::AskOrg { name };
     }
     if s.contains("stato") || s.contains("status") || s.contains("salute") {
         return VoiceIntent::StatusCheck;
@@ -130,62 +161,47 @@ pub(crate) fn keyword_classify(text: &str) -> VoiceIntent {
     VoiceIntent::AskAli { question: text.to_string() }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// --- Project/Org text extraction helpers -------------------------------------
 
-    // --- keyword_classify sanity ---
-
-    #[test]
-    fn keyword_status_check_triggers_on_stato() {
-        assert_eq!(keyword_classify("qual è lo stato"), VoiceIntent::StatusCheck);
-    }
-
-    #[test]
-    fn keyword_cost_query_triggers_on_costo() {
-        assert_eq!(keyword_classify("mostrami la spesa"), VoiceIntent::CostQuery);
-    }
-
-    // --- EscalateToAli keyword classification ---
-
-    #[test]
-    fn keyword_escalate_to_ali_triggers_on_chiedi_ad_ali() {
-        assert!(matches!(
-            keyword_classify("chiedi ad ali cos'è successo"),
-            VoiceIntent::EscalateToAli { .. }
-        ));
-    }
-
-    #[test]
-    fn keyword_escalate_to_ali_triggers_on_ali() {
-        assert!(matches!(
-            keyword_classify("ali dimmi lo stato"),
-            VoiceIntent::EscalateToAli { .. }
-        ));
-    }
-
-    #[test]
-    fn keyword_escalate_to_ali_triggers_on_opus() {
-        assert!(matches!(
-            keyword_classify("chiedi a opus"),
-            VoiceIntent::EscalateToAli { .. }
-        ));
-    }
-
-    #[test]
-    fn keyword_escalate_to_ali_triggers_on_cloud() {
-        assert!(matches!(
-            keyword_classify("usa il cloud per analizzare"),
-            VoiceIntent::EscalateToAli { .. }
-        ));
-    }
-
-    #[test]
-    fn keyword_escalate_preserves_original_question() {
-        let text = "chiedi ad ali il costo totale";
-        match keyword_classify(text) {
-            VoiceIntent::EscalateToAli { question } => assert_eq!(question, text),
-            other => panic!("expected EscalateToAli, got {other:?}"),
+/// Extract project name and mission from natural language.
+/// Pattern: "crea progetto FITNESS con obiettivo PERDERE 5KG" -> ("FITNESS", "PERDERE 5KG")
+pub(crate) fn extract_project_name_mission(text: &str) -> (String, String) {
+    let s = text.to_lowercase();
+    let triggers = [
+        "crea progetto", "create project", "lancia progetto",
+        "nuovo progetto", "avvia progetto", "start project",
+    ];
+    let after = triggers.iter()
+        .filter_map(|t| s.find(t).map(|pos| &text[pos + t.len()..]))
+        .next()
+        .unwrap_or(text)
+        .trim();
+    let mission_seps = ["con obiettivo", "with goal", "obiettivo:"];
+    for sep in &mission_seps {
+        if let Some(idx) = after.to_lowercase().find(sep) {
+            let name = after[..idx].trim().to_string();
+            let mission = after[idx + sep.len()..].trim().to_string();
+            if !name.is_empty() {
+                return (name, mission);
+            }
         }
     }
+    let mut parts = after.splitn(2, char::is_whitespace);
+    let name = parts.next().unwrap_or("project").trim().to_string();
+    let mission = parts.next().unwrap_or("").trim().to_string();
+    (if name.is_empty() { "project".to_string() } else { name }, mission)
+}
+
+/// Extract org/project name from a status query like "come sta il fitness?"
+pub(crate) fn extract_org_name_from_text(text: &str) -> String {
+    let s = text.to_lowercase();
+    let prefixes = [
+        "come sta il ", "come sta ", "status di ",
+        "aggiorna su ", "update on ",
+    ];
+    let after = prefixes.iter()
+        .filter_map(|p| s.find(p).map(|pos| &text[pos + p.len()..]))
+        .next()
+        .unwrap_or(text);
+    after.trim().trim_matches(|c: char| c == '?' || c == '!' || c == '.').trim().to_string()
 }

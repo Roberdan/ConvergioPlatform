@@ -132,6 +132,102 @@ fn test_route_plan_query_offline_fallback() {
     assert!(!response.is_empty());
 }
 
+// ----- CreateProject keyword classification ----------------------------------
+
+#[test]
+fn test_classify_create_project_italian() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("crea progetto fitness con obiettivo perdere 5kg", &engine) {
+        VoiceIntent::CreateProject { name, mission } => {
+            assert_eq!(name, "fitness");
+            assert_eq!(mission, "perdere 5kg");
+        }
+        other => panic!("expected CreateProject, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_create_project_english() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("create project alpha with goal ship MVP", &engine) {
+        VoiceIntent::CreateProject { name, mission } => {
+            assert_eq!(name, "alpha");
+            assert_eq!(mission, "ship MVP");
+        }
+        other => panic!("expected CreateProject, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_create_project_no_mission() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("nuovo progetto marketing", &engine) {
+        VoiceIntent::CreateProject { name, mission } => {
+            assert_eq!(name, "marketing");
+            assert!(mission.is_empty(), "expected empty mission, got: {mission}");
+        }
+        other => panic!("expected CreateProject, got {other:?}"),
+    }
+}
+
+// ----- AskOrg keyword classification -----------------------------------------
+
+#[test]
+fn test_classify_ask_org_come_sta() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("come sta il fitness?", &engine) {
+        VoiceIntent::AskOrg { name } => assert_eq!(name, "fitness"),
+        other => panic!("expected AskOrg, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_ask_org_status_di() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("status di alpha", &engine) {
+        VoiceIntent::AskOrg { name } => assert_eq!(name, "alpha"),
+        other => panic!("expected AskOrg, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_classify_ask_org_update_on() {
+    let engine = KernelEngine::new(KernelConfig::default());
+    match classify_intent("update on marketing", &engine) {
+        VoiceIntent::AskOrg { name } => assert_eq!(name, "marketing"),
+        other => panic!("expected AskOrg, got {other:?}"),
+    }
+}
+
+// ----- route_intent for new intents ------------------------------------------
+
+#[test]
+fn test_route_create_project_offline_returns_error() {
+    let response = route_intent(
+        VoiceIntent::CreateProject {
+            name: "fitness".to_string(),
+            mission: "perdere 5kg".to_string(),
+        },
+        "http://localhost:1",
+    );
+    assert!(!response.is_empty(), "CreateProject must produce non-empty response");
+    // Offline daemon should produce error message
+    assert!(
+        response.contains("Errore") || response.contains("errore")
+            || response.contains("fallito") || response.contains("failed"),
+        "expected error message, got: {response}"
+    );
+}
+
+#[test]
+fn test_route_ask_org_offline_returns_error() {
+    let response = route_intent(
+        VoiceIntent::AskOrg { name: "fitness".to_string() },
+        "http://localhost:1",
+    );
+    assert!(!response.is_empty(), "AskOrg must produce non-empty response");
+}
+
 // ----- VoiceIntent display ---------------------------------------------------
 
 #[test]

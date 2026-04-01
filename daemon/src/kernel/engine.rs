@@ -3,7 +3,8 @@
 // Extend AppleFmBridge; do not spawn a parallel subprocess.
 
 use crate::ipc::models::apple_fm::{AppleFmBridge, InferenceRequest};
-use crate::kernel::engine_context::{smart_context_gather, strip_mlx_debug};
+use crate::kernel::engine_context::smart_context_gather;
+use crate::kernel::engine_tool_loop;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -105,53 +106,28 @@ impl KernelEngine {
         heuristic_classify(situation)
     }
 
-    /// Ask the local model a question with context stuffing.
-    ///
-    /// The KERNEL (Rust) decides which APIs to call based on keywords,
-    /// gathers real data, and injects it into the prompt.
-    /// Qwen 7B then summarizes and reasons on real data — no hallucination.
+    /// Ask the local model a question (no conversation history).
     pub fn ask(&self, question: &str) -> String {
+        self.ask_with_history(question, "")
+    }
+
+    /// Ask with optional conversation history + multi-round tool calling.
+    ///
+    /// Flow: (1) Kernel gathers context via keywords, (2) builds prompt with tool
+    /// descriptions + history, (3) runs inference, (4) if model emits <tool_call>,
+    /// dispatches via tools::call_tool, appends result, re-invokes — up to 3 rounds.
+    pub fn ask_with_history(&self, question: &str, history_chatml: &str) -> String {
         if !self.bridge.is_available() || self.loaded_model.is_none() {
             return "Il modello locale non e' disponibile. Riprova piu' tardi.".to_string();
         }
         let model = self.loaded_model.as_ref().unwrap();
         let daemon_url = "http://localhost:8420";
-
-        // Step 1: Kernel gathers relevant data based on question keywords
         let context = smart_context_gather(question, daemon_url);
-
-        // Step 2: Build prompt with real data — Qwen just needs to reason and summarize
-        let prompt = format!(
-            "<|im_start|>system\n\
-             Sei l'assistente Convergio, una piattaforma di orchestrazione AI con:\n\
-             - 89 agenti specializzati (Ali=chief of staff, Thor=validatore)\n\
-             - Mesh P2P multi-nodo (M5 Max + M1 Pro) via Tailscale\n\
-             - Kernel locale (tu, Qwen 7B) per monitoring, verify, TTS, Telegram\n\
-             - 250+ API endpoints per piani, task, agenti, mesh, metriche\n\
-             - MCP server per integrare qualsiasi LLM\n\
-             - Telegram bot bidirezionale, Siri integration\n\
-             Rispondi SEMPRE in italiano, in modo conciso.\n\
-             Analizza e ragiona — non elencare dati grezzi. Dai insight.\n\
-             Il piano R ha 6 task ma nessuno completato — potrebbe servire attenzione.'\n\
-             Usa SOLO i dati forniti. Non inventare nulla.\n\
-             <|im_end|>\n\
-             <|im_start|>user\n\
-             Ecco i dati attuali del sistema:\n\n\
-             {context}\n\n\
-             Domanda: {question}\n\
-             <|im_end|>\n\
-             <|im_start|>assistant\n"
+        let tools_block = engine_tool_loop::tool_descriptions_block();
+        let prompt = engine_tool_loop::build_ask_prompt(
+            &context, question, &tools_block, history_chatml,
         );
-
-        let req = InferenceRequest {
-            prompt,
-            model: Some(model.to_string()),
-            timeout_secs: 60,
-        };
-        match self.bridge.infer(&req) {
-            Ok(resp) => strip_mlx_debug(&resp.text),
-            Err(e) => format!("Errore dal modello locale: {e}"),
-        }
+        engine_tool_loop::run_tool_loop(&self.bridge, model, prompt, daemon_url)
     }
 
     /// Snapshot the current engine state.

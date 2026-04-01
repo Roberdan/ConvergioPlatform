@@ -71,8 +71,5 @@ fn fmt_up(secs: i64) -> String {
 }
 
 async fn fetch_json(url: &str) -> serde_json::Value {
-    match reqwest::get(url).await {
-        Ok(resp) => resp.json().await.unwrap_or(serde_json::json!({})),
-        Err(_) => serde_json::json!({}),
-    }
+    crate::cli_http::get_and_return(url).await.unwrap_or(serde_json::json!({}))
 }

@@ -29,7 +29,7 @@ pub struct TuiApp {
     pub refresh_interval_secs: u64,
     /// Chat view mutable state.
     pub chat: ChatState,
-    pub(crate) terminal: Terminal<CrosstermBackend<io::Stdout>>,
+    pub(crate) terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
     client: Client,
 }
 
@@ -65,7 +65,7 @@ impl TuiApp {
             auto_refresh: Self::default_auto_refresh(),
             refresh_interval_secs: Self::default_refresh_interval_secs(),
             chat: ChatState::default(),
-            terminal,
+            terminal: Some(terminal),
             client: Client::new(),
         })
     }
@@ -84,7 +84,7 @@ impl TuiApp {
             auto_refresh: false,
             refresh_interval_secs: Self::default_refresh_interval_secs(),
             chat: ChatState::default(),
-            terminal: Terminal::new(CrosstermBackend::new(io::stdout()))?,
+            terminal: None,
             client: Client::new(),
             api_url,
         })

@@ -12,40 +12,37 @@ pub fn smart_context_gather_pub(question: &str, daemon_url: &str) -> String {
 
 pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
     let q = question.to_lowercase();
+    let empty = serde_json::json!({});
     let mut ctx = String::new();
 
-    // Always include plan summary (fast, small)
-    if let Some(plans) = tools::call_tool("get_plans", daemon_url, &serde_json::json!({})) {
+    // Always fetch full platform context — Jarvis needs complete awareness.
+    if let Some(plans) = tools::call_tool("get_plans", daemon_url, &empty) {
         ctx += &format!("Piani:\n{plans}\n\n");
     }
-
-    // Cost data if money-related
-    if q.contains("cost") || q.contains("spes") || q.contains("soldi") || q.contains("dollari") || q.contains("budget") {
-        if let Some(costs) = tools::call_tool("get_costs", daemon_url, &serde_json::json!({})) {
-            ctx += &format!("Costi:\n{costs}\n\n");
-        }
+    if let Some(agents) = tools::call_tool("get_agents", daemon_url, &empty) {
+        ctx += &format!("Agenti:\n{agents}\n\n");
     }
-
-    // Node/kernel if infra-related
-    if q.contains("nod") || q.contains("kernel") || q.contains("m1") || q.contains("m5") || q.contains("mesh") || q.contains("macchina") {
-        if let Some(node) = tools::call_tool("get_node_status", daemon_url, &serde_json::json!({})) {
-            ctx += &format!("Nodo:\n{node}\n\n");
-        }
-        if let Some(kernel) = tools::call_tool("get_kernel_status", daemon_url, &serde_json::json!({})) {
-            ctx += &format!("Kernel:\n{kernel}\n\n");
-        }
+    if let Some(costs) = tools::call_tool("get_costs", daemon_url, &empty) {
+        ctx += &format!("Costi:\n{costs}\n\n");
     }
-
-    // Agents if team-related
-    if q.contains("agent") || q.contains("chi") || q.contains("team") || q.contains("ali") {
-        if let Some(agents) = tools::call_tool("get_agents", daemon_url, &serde_json::json!({})) {
-            ctx += &format!("Agenti:\n{agents}\n\n");
-        }
+    if let Some(node) = tools::call_tool("get_node_status", daemon_url, &empty) {
+        ctx += &format!("Nodo:\n{node}\n\n");
+    }
+    if let Some(kernel) = tools::call_tool("get_kernel_status", daemon_url, &empty) {
+        ctx += &format!("Kernel:\n{kernel}\n\n");
+    }
+    if let Some(health) = tools::call_tool("get_health", daemon_url, &empty) {
+        ctx += &format!("Platform Health:\n{health}\n\n");
+    }
+    if let Some(history) = tools::call_tool("get_agent_history", daemon_url, &empty) {
+        ctx += &format!("Recent Agent Activity:\n{history}\n\n");
+    }
+    if let Some(peers) = tools::call_tool("get_mesh_status", daemon_url, &empty) {
+        ctx += &format!("Mesh Peers:\n{peers}\n\n");
     }
 
     // Plan detail if specific plan mentioned
     if q.contains("piano") || q.contains("plan") {
-        // Try to extract a plan ID
         let id: Option<u32> = q.split_whitespace().filter_map(|w| match w.parse() {
             Ok(v) => Some(v),
             Err(_) => None,
@@ -58,16 +55,6 @@ pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
         }
     }
 
-    // For generic questions, add costs + kernel status too
-    if ctx.len() < 200 {
-        if let Some(costs) = tools::call_tool("get_costs", daemon_url, &serde_json::json!({})) {
-            ctx += &format!("Costi:\n{costs}\n\n");
-        }
-        if let Some(kernel) = tools::call_tool("get_kernel_status", daemon_url, &serde_json::json!({})) {
-            ctx += &format!("Kernel:\n{kernel}\n\n");
-        }
-    }
-
     if ctx.is_empty() {
         "Nessun dato disponibile dal daemon.".to_string()
     } else {
@@ -77,7 +64,6 @@ pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
 
 /// Parse the first <tool_call>...</tool_call> block from model output.
 /// Returns (tool_name, arguments_json_string) or None if no call found.
-#[allow(dead_code)] // Used in tests; will be wired when multi-round tool calling lands.
 pub(crate) fn extract_tool_call(text: &str) -> Option<(String, String)> {
     let start_tag = "<tool_call>";
     let end_tag = "</tool_call>";

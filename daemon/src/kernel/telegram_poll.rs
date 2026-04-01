@@ -4,7 +4,8 @@
 // Security: only processes messages from CONVERGIO_TELEGRAM_CHAT_ID.
 
 use crate::kernel::engine::KernelEngine;
-use crate::kernel::voice_router::{classify_intent, route_intent};
+use crate::kernel::telegram_conv;
+use crate::kernel::voice_router::{classify_intent, route_intent, VoiceIntent};
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -123,10 +124,16 @@ async fn run_poll_loop(
                         if elapsed < Duration::from_secs(1) {
                             sleep(Duration::from_secs(1) - elapsed).await;
                         }
-                        let reply = process_text(text, daemon_url, engine).await;
+                        let reply = process_text(text, chat_id, daemon_url, engine).await;
                         if let Err(e) = send_message(&client, &base, chat_id, &reply).await {
                             warn!("jarvis.telegram: send_message failed: {e}");
                         } else {
+                            // Record the exchange for conversation memory
+                            telegram_conv::record_exchange(
+                                chat_id,
+                                text.to_string(),
+                                reply.clone(),
+                            );
                             debug!("jarvis.telegram: replied to update_id={}", api_upd.update_id);
                         }
                         last_reply = Instant::now();
@@ -144,9 +151,23 @@ async fn run_poll_loop(
     }
 }
 
-async fn process_text(text: &str, daemon_url: &str, engine: &KernelEngine) -> String {
+async fn process_text(
+    text: &str,
+    chat_id: i64,
+    daemon_url: &str,
+    engine: &KernelEngine,
+) -> String {
     let intent = classify_intent(text, engine);
     debug!(?intent, text, "jarvis.telegram: classified intent");
+
+    // For AskAli: inject conversation history so the model has context
+    // from recent exchanges. Other intents are stateless commands.
+    if matches!(intent, VoiceIntent::AskAli { .. }) {
+        let history = telegram_conv::format_history_chatml(chat_id);
+        let question = text.to_string();
+        return engine.ask_with_history(&question, &history);
+    }
+
     // route_intent uses reqwest::blocking which deadlocks inside tokio runtime.
     // Wrap in spawn_blocking to run on a dedicated thread pool.
     let daemon = daemon_url.to_string();
