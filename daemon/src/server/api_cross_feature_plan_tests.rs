@@ -27,6 +27,7 @@ fn plan_app(state: ServerState) -> Router {
 #[tokio::test]
 async fn non_code_plan_document_tasks_complete() {
     let (state, _tmp) = setup_state("doc-proj", "Doc Project");
+    let state_ref = state.clone();
     let app = plan_app(state);
 
     // 1. Create plan
@@ -119,7 +120,17 @@ async fn non_code_plan_document_tasks_complete() {
         assert_eq!(status, StatusCode::OK, "update task {task_id}");
     }
 
-    // 6. Complete plan — all tasks done
+    // 6. Link a PR to the wave (required by check_pr_exists gate)
+    {
+        let conn = state_ref.get_conn().unwrap();
+        conn.execute(
+            "UPDATE waves SET pr_url = 'https://github.com/test/pr/1' WHERE plan_id = ?1",
+            rusqlite::params![plan_id],
+        )
+        .expect("link PR to wave");
+    }
+
+    // 7. Complete plan — all tasks done + PR linked
     let (status, resp) =
         post_json(&app, &format!("/api/plan-db/complete/{plan_id}"), json!({})).await;
     assert_eq!(status, StatusCode::OK, "complete: {resp}");
