@@ -112,25 +112,27 @@ pub fn check_evidence(
         }
     }
 
-    // 2–3. Build + test checks — project-type aware.
-    let wt_root = worktree.unwrap_or(".");
-    let has_cargo = Path::new(wt_root).join("Cargo.toml").exists();
-    let has_package_json = Path::new(wt_root).join("package.json").exists();
-
-    if has_cargo {
-        checks.push(run_cargo_check(worktree));
-        checks.push(run_cargo_test(worktree));
-    } else if has_package_json {
-        checks.push(run_npm_check(worktree));
-        checks.push(run_npm_test(worktree));
+    // 2–3. Build + test checks — only when task has explicit worktree.
+    // Without worktree, cargo test runs on daemon CWD and blocks for 100s+.
+    if let Some(wt) = worktree {
+        let wt_path = Path::new(wt);
+        let has_cargo = wt_path.join("Cargo.toml").exists()
+            || wt_path.join("daemon/Cargo.toml").exists();
+        let has_pkg = wt_path.join("package.json").exists();
+        if has_cargo {
+            checks.push(run_cargo_check(Some(wt)));
+            checks.push(run_cargo_test(Some(wt)));
+        } else if has_pkg {
+            checks.push(run_npm_check(Some(wt)));
+            checks.push(run_npm_test(Some(wt)));
+        } else {
+            checks.push(EvidenceCheck::pass("build_check", "no build system"));
+        }
     } else {
-        checks.push(EvidenceCheck::pass(
-            "build_check",
-            "skipped: no Cargo.toml or package.json found",
-        ));
+        checks.push(EvidenceCheck::pass("build_check", "no worktree — use recorded evidence"));
     }
 
-    // 4. Working tree clean (git status --porcelain).
+    // 4. Working tree clean.
     checks.push(run_git_clean(worktree));
 
     // Aggregate pass/fail.
