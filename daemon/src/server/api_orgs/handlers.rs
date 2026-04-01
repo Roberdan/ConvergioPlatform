@@ -21,6 +21,7 @@ pub struct CreateOrgRequest {
 pub struct UpdateOrgRequest {
     pub status: Option<String>,
     pub budget: Option<f64>,
+    pub ceo_agent: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -131,9 +132,10 @@ pub async fn update_org(
             "UPDATE ipc_orgs
              SET status = COALESCE(?2, status),
                  budget = COALESCE(?3, budget),
+                 ceo_agent = COALESCE(?4, ceo_agent),
                  updated_at = (strftime('%Y-%m-%dT%H:%M:%f','now'))
              WHERE id = ?1",
-            rusqlite::params![id, body.status, body.budget],
+            rusqlite::params![id, body.status, body.budget, body.ceo_agent],
         )
         .map_err(|e| ApiError::internal(format!("update org failed: {e}")))?;
     if changed == 0 {
