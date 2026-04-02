@@ -10,13 +10,13 @@ use tracing::{info, warn};
 use crate::db::libsql_adapter::SyncChange;
 use crate::mesh::auth::load_shared_secret;
 
-/// Build mesh HMAC auth header: HMAC-SHA256(secret, timestamp+method+path).
+/// Build mesh HMAC auth header: HMAC-SHA256(secret, timestamp+method+path_and_query).
 /// Returns (timestamp, hex-encoded signature) or None if no shared secret.
-fn mesh_hmac_header(method: &str, path: &str) -> Option<(String, String)> {
+fn mesh_hmac_header(method: &str, path_and_query: &str) -> Option<(String, String)> {
     let conf_path = std::path::PathBuf::from(peers_conf_path_from_env());
     let secret = load_shared_secret(&conf_path)?;
     let timestamp = chrono::Utc::now().timestamp().to_string();
-    let message = format!("{timestamp}:{method}:{path}");
+    let message = format!("{timestamp}:{method}:{path_and_query}");
     let sig = crate::mesh::auth::compute_hmac(&secret, message.as_bytes()).ok()?;
     Some((timestamp, hex::encode(sig)))
 }
@@ -25,9 +25,9 @@ fn mesh_hmac_header(method: &str, path: &str) -> Option<(String, String)> {
 fn apply_mesh_auth(
     mut req: reqwest::blocking::RequestBuilder,
     method: &str,
-    path: &str,
+    path_and_query: &str,
 ) -> reqwest::blocking::RequestBuilder {
-    if let Some((ts, sig)) = mesh_hmac_header(method, path) {
+    if let Some((ts, sig)) = mesh_hmac_header(method, path_and_query) {
         req = req
             .header("X-Mesh-Timestamp", ts)
             .header("X-Mesh-Signature", sig);
@@ -51,7 +51,6 @@ pub fn send_changes_to_peer(
     let req = apply_mesh_auth(client.post(&url).json(&payload), "POST", path);
     let resp = req.send().map_err(|e| format!("HTTP POST failed: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!("peer returned {}", resp.status()));
     }
     Ok(())
 }
@@ -62,17 +61,19 @@ pub fn fetch_changes_from_peer(
     table: &str,
     since: Option<&str>,
 ) -> Result<Vec<SyncChange>, String> {
-    let path = "/api/sync/export";
-    let mut url = format!("http://{peer_addr}{path}?table={table}");
+    let mut path_query = format!("/api/sync/export?table={table}");
+    let mut url = format!("http://{peer_addr}{path_query}");
     if let Some(ts) = since {
-        url.push_str(&format!("&since={ts}"));
+        let suffix = format!("&since={ts}");
+        url.push_str(&suffix);
+        path_query.push_str(&suffix);
     }
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
-    let req = apply_mesh_auth(client.get(&url), "GET", path);
+    let req = apply_mesh_auth(client.get(&url), "GET", &path_query);
     let resp = req.send().map_err(|e| format!("HTTP GET failed: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("peer returned {}", resp.status()));

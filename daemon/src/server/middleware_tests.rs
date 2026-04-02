@@ -125,20 +125,20 @@ fn no_protected_get_list_exists() {
 
 #[test]
 fn authenticate_no_header_no_token_no_devmode_denies() {
-    let result = authenticate(None, None, "/api/test");
+    let result = authenticate(None, None, "/api/test", "GET");
     assert!(result.is_err() || result.unwrap().is_none());
 }
 
 #[test]
 fn authenticate_jwt_format_detected_by_dots() {
     let fake_jwt = "Bearer aaa.bbb.ccc";
-    let result = authenticate(Some(fake_jwt), None, "/api/test");
+    let result = authenticate(Some(fake_jwt), None, "/api/test", "GET");
     assert!(result.is_err());
 }
 
 #[test]
 fn authenticate_legacy_bearer_without_dots() {
     let legacy = "Bearer simple-token-no-dots";
-    let result = authenticate(Some(legacy), None, "/api/test");
+    let result = authenticate(Some(legacy), None, "/api/test", "GET");
     assert!(result.is_err() || result.unwrap().is_none());
 }

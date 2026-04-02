@@ -90,11 +90,16 @@ pub(crate) fn compare_tokens(a: &str, b: &str) -> bool {
 
 /// Authenticate a request. Returns Ok(Some(claims)) for JWT,
 /// Ok(None) for legacy bearer, mesh HMAC, or dev-mode, Err for denied.
-fn authenticate(header_value: Option<&str>, mesh_headers: Option<(&str, &str)>, path: &str) -> Result<Option<AgentClaims>, ()> {
+fn authenticate(
+    header_value: Option<&str>,
+    mesh_headers: Option<(&str, &str)>,
+    path_and_query: &str,
+    method: &str,
+) -> Result<Option<AgentClaims>, ()> {
     // 0. Mesh HMAC auth for sync endpoints — peers use shared_secret
     if let Some((timestamp, signature)) = mesh_headers {
-        if path.starts_with("/api/sync/") {
-            return verify_mesh_hmac(timestamp, signature, path);
+        if path_and_query.starts_with("/api/sync/") {
+            return verify_mesh_hmac(timestamp, signature, path_and_query, method);
         }
     }
 
@@ -140,6 +145,12 @@ fn needs_auth(_method: &Method, path: &str) -> bool {
 /// /api/health is exempt. Dev-mode (--dev-mode flag) bypasses auth.
 pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
     let path = req.uri().path().to_string();
+    let path_and_query = req
+        .uri()
+        .path_and_query()
+        .map(|pq| pq.as_str().to_string())
+        .unwrap_or_else(|| path.clone());
+    let method_str = req.method().to_string();
 
     if !needs_auth(req.method(), &path) {
         return next.run(req).await;
@@ -154,7 +165,7 @@ pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
     let mesh_sig = req.headers().get("x-mesh-signature").and_then(|v| v.to_str().ok());
     let mesh_headers = mesh_ts.zip(mesh_sig);
 
-    match authenticate(auth_header, mesh_headers, &path) {
+    match authenticate(auth_header, mesh_headers, &path_and_query, &method_str) {
         Ok(Some(claims)) => {
             // JWT authenticated — enforce RBAC
             if !rbac::role_can_access(&claims.role, &path) {
