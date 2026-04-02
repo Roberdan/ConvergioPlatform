@@ -33,6 +33,11 @@ pub enum MeshCommands {
         #[arg(long, default_value = "http://localhost:8420")]
         api_url: String,
     },
+    /// Join a mesh by registering with a coordinator node
+    Join {
+        /// Coordinator daemon URL (e.g. http://100.89.245.79:8420)
+        coordinator_url: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -124,6 +129,11 @@ pub async fn handle_mesh(cmd: MeshCommands) {
             if let Err(e) = crate::cli_http::fetch_and_print(&format!("{api_url}/api/heartbeat/status"), human)
                 .await
             {
+                eprintln!("error: {e}");
+            }
+        }
+        MeshCommands::Join { coordinator_url } => {
+            if let Err(e) = crate::cli_mesh_join::handle_mesh_join(&coordinator_url).await {
                 eprintln!("error: {e}");
             }
         }

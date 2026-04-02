@@ -12,7 +12,7 @@ use super::{
     api_coordinator, api_crdt, api_dashboard, api_decisions, api_delegation, api_deliverables,
     api_digest, api_domain, api_evolution, api_github, api_goal, api_health_deep,
     api_health_post_merge, api_heartbeat, api_ideas, api_inference_status, api_ingest, api_ipc,
-    api_kernel_audio, api_memory, api_memory_mgmt, api_mesh, api_mesh_update, api_metrics,
+    api_kernel_audio, api_memory, api_memory_mgmt, api_mesh, api_mesh_register, api_mesh_update, api_metrics,
     api_nightly, api_notify,
     api_marketplace, api_marketplace_ops, api_night,
     api_node_readiness, api_node_roles, api_openclaw, api_org_chart, api_org_chart_global,
@@ -82,6 +82,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .merge(api_agents::router())
         .merge(api_agent_profiles::router())
         .merge(api_mesh::router())
+        .merge(api_mesh_register::router())
         .route("/api/mesh/update-status", get(api_mesh_update::handle_update_status))
         .merge(api_peers::router())
         .merge(api_peers_ext::router())

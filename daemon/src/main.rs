@@ -30,6 +30,7 @@ mod cli_http;
 mod cli_kb;
 mod cli_launch;
 mod cli_lock;
+mod cli_mesh_join;
 mod cli_memory;
 mod cli_ops;
 mod cli_org;

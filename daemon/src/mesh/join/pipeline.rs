@@ -185,21 +185,36 @@ fn network_setup() -> Result<(), MeshError> {
     Ok(())
 }
 
-fn import_auth(_bundle_dir: &std::path::Path) -> Result<(), MeshError> {
+fn import_auth(_bundle_dir: &std::path::Path) -> Result<(), MeshError> { Ok(()) }
+
+fn import_env(_bundle_dir: &std::path::Path, _sel: &JoinSelections) -> Result<(), MeshError> {
     Ok(())
 }
 
-fn import_env(_bundle_dir: &std::path::Path, selections: &JoinSelections) -> Result<(), MeshError> {
-    let _ = (
-        selections.brew,
-        selections.repos,
-        selections.shell,
-        selections.macos_tweaks,
-    );
-    Ok(())
-}
-
-async fn register_self_in_peers(_coordinator_ip: &str) -> Result<(), MeshError> {
+async fn register_self_in_peers(coordinator_ip: &str) -> Result<(), MeshError> {
+    let node_name = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+    let url = format!("http://{coordinator_ip}:8420/api/mesh/register");
+    let body = serde_json::json!({
+        "name": node_name, "ssh_alias": format!("{node_name}-ts"),
+        "user": std::env::var("USER").unwrap_or_default(),
+        "os": std::env::consts::OS, "tailscale_ip": "", "dns_name": "",
+        "capabilities": ["worker"], "role": "worker",
+    });
+    let resp = reqwest::Client::new().post(&url).json(&body).send().await
+        .map_err(|e| MeshError::Network(format!("register failed: {e}")))?;
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(MeshError::Network(format!("register rejected: {text}")));
+    }
+    let result: serde_json::Value = resp.json().await
+        .map_err(|e| MeshError::Internal(format!("bad response: {e}")))?;
+    if let Some(config) = result["peers_config"].as_str() {
+        let path = dirs::home_dir().unwrap_or_default().join(".claude/config/peers.conf");
+        if let Some(p) = path.parent() { std::fs::create_dir_all(p)?; }
+        std::fs::write(&path, config)?;
+    }
     Ok(())
 }
 
