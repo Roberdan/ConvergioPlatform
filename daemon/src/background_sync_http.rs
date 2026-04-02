@@ -51,6 +51,7 @@ pub fn send_changes_to_peer(
     let req = apply_mesh_auth(client.post(&url).json(&payload), "POST", path);
     let resp = req.send().map_err(|e| format!("HTTP POST failed: {e}"))?;
     if !resp.status().is_success() {
+        return Err(format!("peer {} returned {}", peer_addr, resp.status()));
     }
     Ok(())
 }
