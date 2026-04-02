@@ -20,7 +20,7 @@ fn api_post(url: &str, body: &Value) -> Result<Value, String> {
         .build()
         .map_err(|e| format!("http client build: {e}"))?;
 
-    let token = std::env::var("CONVERGIO_API_TOKEN").ok();
+    let token = std::env::var("CONVERGIO_AUTH_TOKEN").ok();
     let mut req = client.post(url).json(body);
     if let Some(t) = &token {
         req = req.bearer_auth(t);
