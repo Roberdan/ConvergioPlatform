@@ -77,13 +77,13 @@ fn compact_chart_is_shorter() {
 #[test]
 fn provision_result_fields() {
     let r = ProvisionResult {
-        org_id: 42,
+        org_id: "test-org-42".into(),
         plan_id: 100,
         agents_created: 3,
         night_agents_scheduled: 2,
         tasks_created: 5,
     };
-    assert_eq!(r.org_id, 42);
+    assert_eq!(r.org_id, "test-org-42");
     assert_eq!(r.plan_id, 100);
     assert_eq!(r.agents_created, 3);
     assert_eq!(r.night_agents_scheduled, 2);

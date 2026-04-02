@@ -6,7 +6,7 @@ use super::factory::OrgBlueprint;
 
 /// Outcome of provisioning an org from a blueprint.
 pub struct ProvisionResult {
-    pub org_id: i64,
+    pub org_id: String,
     pub plan_id: i64,
     pub agents_created: usize,
     pub night_agents_scheduled: usize,
@@ -58,7 +58,7 @@ pub fn provision_org(
     let org_id = org_resp
         .get("org_id")
         .or_else(|| org_resp.get("id"))
-        .and_then(|v| v.as_i64())
+        .and_then(|v| v.as_str().map(String::from).or_else(|| v.as_i64().map(|n| n.to_string())))
         .ok_or("missing org_id in response")?;
 
     // 2. Register agents from all departments
