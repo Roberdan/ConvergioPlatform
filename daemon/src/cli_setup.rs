@@ -82,6 +82,13 @@ pub(crate) async fn handle_setup(defaults: bool) -> Result<(), CliError> {
     println!("Configuration saved to {}", config_path.display());
     println!();
     print_summary(&node_name, role, use_tailscale);
+
+    // Offer mesh join for worker/coordinator roles with Tailscale
+    if role != "standalone" && use_tailscale {
+        println!();
+        offer_mesh_join().await?;
+    }
+
     println!();
     println!("Next steps:");
     println!("  cvg serve    — start the daemon");
@@ -205,4 +212,21 @@ fn print_summary(name: &str, role: &str, tailscale: bool) {
     println!("  Role:      {role}");
     println!("  Network:   {net}");
     println!("  Model:     claude-sonnet-4-6");
+}
+
+async fn offer_mesh_join() -> Result<(), CliError> {
+    let join = Confirm::new()
+        .with_prompt("Join an existing mesh now?")
+        .default(true)
+        .interact()
+        .unwrap_or(false);
+    if !join {
+        println!("  Skipped. Run `cvg mesh join <coordinator_url>` later.");
+        return Ok(());
+    }
+    let url: String = Input::new()
+        .with_prompt("Coordinator URL (e.g. http://100.89.245.79:8420)")
+        .interact_text()
+        .map_err(|e| CliError::InvalidInput(e.to_string()))?;
+    crate::cli_mesh_join::handle_mesh_join(&url).await
 }

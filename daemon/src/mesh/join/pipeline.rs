@@ -162,45 +162,75 @@ pub(super) fn emit_if_interactive(config: &JoinConfig, progress: &JoinProgress) 
 
 fn run_sudo_keepalive() -> std::io::Result<()> {
     let status = std::process::Command::new("sudo").arg("-v").status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "sudo -v failed — admin credentials required",
-        ))
-    }
+    if status.success() { Ok(()) }
+    else { Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "sudo -v failed")) }
 }
 
 fn network_setup() -> Result<(), MeshError> {
-    let out = std::process::Command::new("tailscale")
-        .args(["status", "--json"])
-        .output()?;
-    if !out.status.success() {
-        return Err(MeshError::Network(format!(
-            "tailscale not reachable: {}",
-            String::from_utf8_lossy(&out.stderr)
-        )));
+    let out = std::process::Command::new("tailscale").args(["status", "--json"]).output()?;
+    if out.status.success() { Ok(()) }
+    else { Err(MeshError::Network(format!("tailscale: {}", String::from_utf8_lossy(&out.stderr)))) }
+}
+
+fn import_auth(_bundle_dir: &std::path::Path) -> Result<(), MeshError> { Ok(()) }
+
+fn import_env(_bundle_dir: &std::path::Path, _sel: &JoinSelections) -> Result<(), MeshError> {
+    Ok(())
+}
+
+async fn register_self_in_peers(coordinator_ip: &str) -> Result<(), MeshError> {
+    let node_name = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+    // Detect Tailscale self info for a usable peers.conf entry
+    let (ts_ip, ts_dns) = detect_tailscale_info()?;
+    let url = format!("http://{coordinator_ip}:8420/api/mesh/register");
+    let body = serde_json::json!({
+        "name": node_name, "ssh_alias": format!("{node_name}-ts"),
+        "user": std::env::var("USER").unwrap_or_default(),
+        "os": std::env::consts::OS, "tailscale_ip": ts_ip, "dns_name": ts_dns,
+        "capabilities": ["worker"], "role": "worker",
+    });
+    let mut request = reqwest::Client::new().post(&url).json(&body);
+    if let Ok(token) = std::env::var("CONVERGIO_AUTH_TOKEN") {
+        if !token.is_empty() { request = request.bearer_auth(token); }
+    }
+    let resp = request.send().await
+        .map_err(|e| MeshError::Network(format!("register failed: {e}")))?;
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(MeshError::Network(format!("register rejected: {text}")));
+    }
+    let result: serde_json::Value = resp.json().await
+        .map_err(|e| MeshError::Internal(format!("bad response: {e}")))?;
+    if let Some(config) = result["peers_config"].as_str() {
+        let home = dirs::home_dir()
+            .ok_or_else(|| MeshError::Internal("home directory not found".into()))?;
+        let path = home.join(".claude/config/peers.conf");
+        if let Some(p) = path.parent() { std::fs::create_dir_all(p)?; }
+        std::fs::write(&path, config)?;
     }
     Ok(())
 }
 
-fn import_auth(_bundle_dir: &std::path::Path) -> Result<(), MeshError> {
-    Ok(())
-}
-
-fn import_env(_bundle_dir: &std::path::Path, selections: &JoinSelections) -> Result<(), MeshError> {
-    let _ = (
-        selections.brew,
-        selections.repos,
-        selections.shell,
-        selections.macos_tweaks,
-    );
-    Ok(())
-}
-
-async fn register_self_in_peers(_coordinator_ip: &str) -> Result<(), MeshError> {
-    Ok(())
+fn detect_tailscale_info() -> Result<(String, String), MeshError> {
+    let out = std::process::Command::new("tailscale")
+        .args(["status", "--json"])
+        .output()
+        .map_err(|e| MeshError::Network(format!("tailscale status failed: {e}")))?;
+    if !out.status.success() {
+        return Err(MeshError::Network("tailscale not reachable".into()));
+    }
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .map_err(|e| MeshError::Internal(format!("invalid tailscale json: {e}")))?;
+    let ip = json.pointer("/Self/TailscaleIPs/0")
+        .and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let dns = json.pointer("/Self/DNSName")
+        .and_then(|v| v.as_str()).unwrap_or("").trim_end_matches('.').to_string();
+    if ip.is_empty() {
+        return Err(MeshError::Network("tailscale IP unavailable".into()));
+    }
+    Ok((ip, dns))
 }
 
 fn run_preflight() -> Result<(), MeshError> {
