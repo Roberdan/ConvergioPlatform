@@ -71,9 +71,17 @@ use std::process::ExitCode;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "claude-core",
+    name = "cvg",
     version,
-    about = "Core runtime for Claude utilities"
+    about = "Convergio Platform CLI -- orchestrate agents, plans, and infrastructure",
+    long_about = "Convergio Platform CLI -- orchestrate agents, plans, and infrastructure\n\n\
+        Unified command-line interface for the Convergio agentic platform.\n\
+        Manages plans, tasks, agents, organizations, mesh networking, and more.\n\n\
+        Quick start:\n  cvg status              # Platform overview\n  \
+        cvg plan list             # List execution plans\n  \
+        cvg who agents            # See active agents\n  \
+        cvg org list              # List organizations\n  \
+        cvg cheatsheet            # Full command reference",
 )]
 struct Cli {
     #[arg(long, default_value_t = false)]
