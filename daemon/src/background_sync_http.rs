@@ -8,15 +8,31 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 use crate::db::libsql_adapter::SyncChange;
+use crate::mesh::auth::load_shared_secret;
 
-/// Read auth token from CONVERGIO_AUTH_TOKEN env var.
-/// Returns None in dev mode (CONVERGIO_DEV=1) or when the var is unset.
-fn auth_token() -> Option<String> {
-    // Skip auth in development mode — avoids forcing token setup on fresh installs.
-    if std::env::var("CONVERGIO_DEV").as_deref() == Ok("1") {
-        return None;
+/// Build mesh HMAC auth header: HMAC-SHA256(secret, timestamp+method+path).
+/// Returns (timestamp, hex-encoded signature) or None if no shared secret.
+fn mesh_hmac_header(method: &str, path: &str) -> Option<(String, String)> {
+    let conf_path = std::path::PathBuf::from(peers_conf_path_from_env());
+    let secret = load_shared_secret(&conf_path)?;
+    let timestamp = chrono::Utc::now().timestamp().to_string();
+    let message = format!("{timestamp}:{method}:{path}");
+    let sig = crate::mesh::auth::compute_hmac(&secret, message.as_bytes()).ok()?;
+    Some((timestamp, hex::encode(sig)))
+}
+
+/// Apply mesh HMAC auth headers to a request builder.
+fn apply_mesh_auth(
+    mut req: reqwest::blocking::RequestBuilder,
+    method: &str,
+    path: &str,
+) -> reqwest::blocking::RequestBuilder {
+    if let Some((ts, sig)) = mesh_hmac_header(method, path) {
+        req = req
+            .header("X-Mesh-Timestamp", ts)
+            .header("X-Mesh-Signature", sig);
     }
-    std::env::var("CONVERGIO_AUTH_TOKEN").ok().filter(|t| !t.is_empty())
+    req
 }
 
 /// POST local changes to the peer's /api/sync/import endpoint.
@@ -24,17 +40,15 @@ pub fn send_changes_to_peer(
     peer_addr: &str,
     changes: &[SyncChange],
 ) -> Result<(), String> {
-    let url = format!("http://{peer_addr}/api/sync/import");
+    let path = "/api/sync/import";
+    let url = format!("http://{peer_addr}{path}");
     let payload = serde_json::json!({ "changes": changes });
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
-    let mut req = client.post(&url).json(&payload);
-    if let Some(token) = auth_token() {
-        req = req.header("Authorization", format!("Bearer {token}"));
-    }
+    let req = apply_mesh_auth(client.post(&url).json(&payload), "POST", path);
     let resp = req.send().map_err(|e| format!("HTTP POST failed: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("peer returned {}", resp.status()));
@@ -48,9 +62,8 @@ pub fn fetch_changes_from_peer(
     table: &str,
     since: Option<&str>,
 ) -> Result<Vec<SyncChange>, String> {
-    let mut url = format!(
-        "http://{peer_addr}/api/sync/export?table={table}"
-    );
+    let path = "/api/sync/export";
+    let mut url = format!("http://{peer_addr}{path}?table={table}");
     if let Some(ts) = since {
         url.push_str(&format!("&since={ts}"));
     }
@@ -59,10 +72,7 @@ pub fn fetch_changes_from_peer(
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
-    let mut req = client.get(&url);
-    if let Some(token) = auth_token() {
-        req = req.header("Authorization", format!("Bearer {token}"));
-    }
+    let req = apply_mesh_auth(client.get(&url), "GET", path);
     let resp = req.send().map_err(|e| format!("HTTP GET failed: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("peer returned {}", resp.status()));

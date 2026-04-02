@@ -93,6 +93,7 @@ pub mod llm_client;
 pub mod mesh_provision;
 pub mod middleware;
 pub mod middleware_audit;
+pub mod middleware_mesh;
 pub mod sync_runtime_status;
 pub mod plan_lifecycle_guards;
 #[cfg(test)]

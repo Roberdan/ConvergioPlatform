@@ -81,6 +81,7 @@ whisper-rs = { version = "0.13", optional = true }
 hound = { version = "3.5", optional = true }
 ringbuf = { version = "0.4", optional = true }
 mdns-sd = "0.11"
+hex = "0.4.3"
 
 [dev-dependencies]
 tower = "0.5"
