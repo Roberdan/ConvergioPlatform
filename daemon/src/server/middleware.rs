@@ -142,7 +142,28 @@ fn needs_auth(_method: &Method, path: &str) -> bool {
     !EXEMPT_ROUTES.contains(&path)
 }
 
+/// Returns true if the request originates from localhost (127.0.0.1, ::1, or unix socket).
+fn is_localhost(req: &Request<Body>) -> bool {
+    use axum::extract::ConnectInfo;
+    // Check x-forwarded-for (if behind reverse proxy, don't trust)
+    if req.headers().contains_key("x-forwarded-for") {
+        return false;
+    }
+    // Check peer address from connection info extension
+    if let Some(addr) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
+        return addr.0.ip().is_loopback();
+    }
+    // Fallback: check Host header (less reliable but covers curl localhost)
+    req.headers()
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .map(|h| h.starts_with("localhost:") || h.starts_with("127.0.0.1:"))
+        .unwrap_or(false)
+}
+
 /// Axum middleware: authenticates via JWT (with RBAC), legacy bearer, or mesh HMAC.
+/// /api/health is exempt. Localhost requests skip auth (scripts/CLI on same machine).
+/// Dev-mode (--dev-mode flag) also bypasses auth.
 pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
     let path = req.uri().path().to_string();
     let path_and_query = req.uri().path_and_query()
@@ -151,6 +172,12 @@ pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
     let method_str = req.method().to_string();
 
     if !needs_auth(req.method(), &path) {
+        return next.run(req).await;
+    }
+
+    // Localhost bypass: trust requests from 127.0.0.1 / ::1 / unix socket.
+    if is_localhost(&req) {
+        tracing::debug!(path = %path, "localhost auth bypass");
         return next.run(req).await;
     }
 
