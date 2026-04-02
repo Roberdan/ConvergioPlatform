@@ -9,11 +9,14 @@ use crate::background_sync_convergence::check_convergence;
 use crate::background_sync_http::{
     fetch_changes_from_peer, send_changes_to_peer, update_mesh_sync_stats,
 };
-use crate::background_sync_peers::query_active_peers;
+use crate::background_sync_peers::{probe_known_peers, query_active_peers};
 use crate::db::libsql_adapter::{self, SyncMeta};
 
 /// Default sync interval in seconds when CONVERGIO_SYNC_INTERVAL_SECS is unset.
 const DEFAULT_INTERVAL_SECS: u64 = 30;
+
+/// How many sync ticks between peer probes (10 * 30s = 300s = 5 min).
+const PROBE_EVERY_N_TICKS: u64 = 10;
 
 /// Tables eligible for timestamp-based sync. Must have `id INTEGER PRIMARY KEY` + `updated_at`.
 /// Note: `projects` has TEXT PK and is NOT sync-eligible; FK constraints are
@@ -136,14 +139,22 @@ pub fn spawn_sync_loop(
         let mut ticker = tokio::time::interval(Duration::from_secs(effective_secs));
         // Skip the immediate first tick — let the server finish binding.
         ticker.tick().await;
+        let mut tick_count: u64 = 0;
 
         loop {
             ticker.tick().await;
+            tick_count += 1;
 
             // Run ALL sync work on a blocking thread to avoid deadlocking
             // the tokio runtime. reqwest::blocking + rusqlite are both sync.
+            let should_probe = tick_count % PROBE_EVERY_N_TICKS == 1;
             let db_clone = db.clone();
             let _ = tokio::task::spawn_blocking(move || {
+                // Periodically probe all known peers from peers.conf so
+                // peers that come online are discovered without restart.
+                if should_probe {
+                    probe_known_peers(&db_clone);
+                }
                 let peers = match query_active_peers(&db_clone) {
                     Ok(p) => p,
                     Err(e) => { warn!("background_sync: query peers: {e}"); return; }

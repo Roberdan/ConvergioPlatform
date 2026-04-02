@@ -1,11 +1,67 @@
 // Peer discovery for background sync — extracted from background_sync.rs.
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
-use tracing::{error, info};
+use std::time::Duration;
+use tracing::{error, info, warn};
 
 use crate::background_sync_http::{
     detect_local_tailscale_ip, peers_conf_path_from_env, resolve_best_addr,
 };
+use crate::server::api_mesh::peer_conf::{
+    detect_local_identity, is_local_peer_conf, parse_peers_conf,
+};
+
+/// Probe all known peers from peers.conf via HTTP health check and update
+/// peer_heartbeats for any that respond. Ensures peers that come online
+/// after daemon startup are discovered without a restart.
+pub fn probe_known_peers(db: &Arc<Mutex<Connection>>) {
+    let peers_conf_path = peers_conf_path_from_env();
+    let conf_content = match std::fs::read_to_string(&peers_conf_path) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("probe_peers: cannot read peers.conf: {e}");
+            return;
+        }
+    };
+    let conf = parse_peers_conf(&conf_content);
+    let (hostname, ts_ip) = detect_local_identity();
+
+    let client = match reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(3))
+        .timeout(Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => { warn!("probe_peers: HTTP client: {e}"); return; }
+    };
+
+    for (name, fields) in &conf {
+        if is_local_peer_conf(&hostname, &ts_ip, fields) {
+            continue;
+        }
+        let Some(addr) = resolve_best_addr(name, fields) else {
+            continue; // unreachable — skip silently during probe
+        };
+        let url = format!("http://{addr}/api/health");
+        match client.get(&url).send() {
+            Ok(resp) if resp.status().is_success() => {
+                info!("probe_peers: {name} ({addr}) alive — updating heartbeat");
+                let conn = match db.lock() {
+                    Ok(c) => c,
+                    Err(_) => { error!("probe_peers: DB mutex poisoned"); return; }
+                };
+                let _ = conn.execute(
+                    "INSERT INTO peer_heartbeats (peer_name, last_seen) \
+                     VALUES (?1, unixepoch()) \
+                     ON CONFLICT(peer_name) DO UPDATE SET \
+                     last_seen = unixepoch()",
+                    rusqlite::params![name],
+                );
+            }
+            _ => {} // peer offline — normal, no log spam
+        }
+    }
+}
 
 /// Query online peers and resolve best reachable address (Thunderbolt -> Tailscale).
 /// Returns "host:port" WITHOUT scheme. Fails loud — errors at ERROR level.
@@ -25,7 +81,7 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
             return Ok(Vec::new());
         }
     };
-    let conf = crate::server::api_mesh::peer_conf::parse_peers_conf(&conf_content);
+    let conf = parse_peers_conf(&conf_content);
 
     let mut stmt = conn.prepare_cached(
         "SELECT DISTINCT peer_name FROM peer_heartbeats \
@@ -35,7 +91,7 @@ pub fn query_active_peers(db: &Arc<Mutex<Connection>>) -> Result<Vec<String>, ru
         .query_map([], |row| row.get(0))?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
-            Err(e) => { tracing::warn!("background_sync peer row: {e}"); None }
+            Err(e) => { warn!("background_sync peer row: {e}"); None }
         })
         .collect();
 
