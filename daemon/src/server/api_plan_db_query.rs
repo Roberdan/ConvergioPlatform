@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 pub fn router() -> Router<ServerState> {
     Router::new()
         .route("/api/plan-db/list", get(handle_list))
+        .route("/api/plan-db/recent", get(handle_recent))
         .route(
             "/api/plan-db/execution-tree/:plan_id",
             get(handle_execution_tree),
@@ -43,6 +44,23 @@ async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, Ap
         [],
     )?;
 
+    Ok(Json(json!({ "ok": true, "plans": plans })))
+}
+
+/// GET /api/plan-db/recent — last 10 completed/cancelled plans
+#[tracing::instrument(skip_all)]
+async fn handle_recent(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
+    let conn = state.get_conn()?;
+    let plans = query_rows(
+        &conn,
+        "SELECT p.id, p.name, p.status, p.tasks_total, p.tasks_done, \
+         p.completed_at \
+         FROM plans p \
+         WHERE p.status IN ('completed', 'cancelled', 'done') \
+         ORDER BY COALESCE(p.completed_at, p.created_at) DESC \
+         LIMIT 10",
+        [],
+    )?;
     Ok(Json(json!({ "ok": true, "plans": plans })))
 }
 
