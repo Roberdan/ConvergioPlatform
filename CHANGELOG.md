@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [20.8.1] - 01 Aprile 2026
+
+### Fixed
+- Wave update API now supports `pr_url` and `pr_number` fields for PR linking
+- Thor validator sets `validated_by='thor'` instead of `'forced-admin'`
+- Re-validates tasks previously validated by forced-admin when Thor runs
+
 ## [20.8.0] - 01 Aprile 2026
 
 ### Added
