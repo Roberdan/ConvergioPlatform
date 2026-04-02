@@ -215,6 +215,8 @@ pub enum Commands {
     },
     #[command(about = "Open API documentation in browser")]
     Api,
+    #[command(about = "Clean up stale worktree branches and orphan worktrees")]
+    Cleanup,
     #[command(name = "claude", about = "Register a Claude Code session")]
     Claude {
         name: String,

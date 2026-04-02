@@ -135,6 +135,15 @@ pub enum PlanCommands {
     },
     /// Print example spec YAML template with all supported fields
     Template,
+    /// Close a plan — triggers completion + mesh broadcast
+    Close {
+        /// Plan ID
+        plan_id: i64,
+        #[arg(long)]
+        human: bool,
+        #[arg(long, default_value = "http://localhost:8420")]
+        api_url: String,
+    },
 }
 
 pub async fn handle(cmd: PlanCommands) -> Result<(), crate::cli_error::CliError> {

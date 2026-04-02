@@ -20,6 +20,7 @@ mod cli_bus_org;
 mod cli_bus_ask;
 mod cli_bus_watch;
 mod cli_checkpoint;
+mod cli_cleanup;
 mod cli_commands;
 mod cli_delegation;
 mod cli_setup;

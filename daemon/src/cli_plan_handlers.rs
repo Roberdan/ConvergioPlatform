@@ -224,6 +224,22 @@ pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
         PlanCommands::Template => {
             crate::cli_plan_template::print_template();
         }
+        PlanCommands::Close {
+            plan_id,
+            human,
+            api_url,
+        } => {
+            let body = serde_json::json!({});
+            if let Err(e) = crate::cli_http::post_and_print(
+                &format!("{api_url}/api/plan-db/complete/{plan_id}"),
+                &body,
+                human,
+            )
+            .await
+            {
+                eprintln!("error: {e}");
+            }
+        }
     }
     Ok(())
 }
