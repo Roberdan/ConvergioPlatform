@@ -208,7 +208,6 @@ pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
         req
     };
 
-    let mesh_headers = mesh_ts.as_deref().zip(mesh_sig.as_deref());
     match authenticate(auth_header.as_deref(), mesh_headers, &path_and_query, &method_str, mesh_body_hash.as_deref()) {
         Ok(Some(claims)) => {
             if !rbac::role_can_access(&claims.role, &path) {
