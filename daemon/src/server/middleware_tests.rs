@@ -125,29 +125,20 @@ fn no_protected_get_list_exists() {
 
 #[test]
 fn authenticate_no_header_no_token_no_devmode_denies() {
-    // Without dev-mode and no token configured, no header => deny
-    // (This tests the logic path; OnceLock state may vary in CI)
-    let result = authenticate(None);
-    // In CI with no env vars and dev-mode off, this should be Err
-    // If AUTH_TOKEN was set by another test, still Err (no header)
+    let result = authenticate(None, None, "/api/test", "GET");
     assert!(result.is_err() || result.unwrap().is_none());
 }
 
 #[test]
 fn authenticate_jwt_format_detected_by_dots() {
-    // A token with 2 dots is treated as JWT, not legacy bearer
     let fake_jwt = "Bearer aaa.bbb.ccc";
-    let result = authenticate(Some(fake_jwt));
-    // This will fail JWT validation (invalid signature), so Err
+    let result = authenticate(Some(fake_jwt), None, "/api/test", "GET");
     assert!(result.is_err());
 }
 
 #[test]
 fn authenticate_legacy_bearer_without_dots() {
-    // A token without dots is treated as legacy bearer
     let legacy = "Bearer simple-token-no-dots";
-    let result = authenticate(Some(legacy));
-    // Will fail unless CONVERGIO_AUTH_TOKEN matches
-    // The point: it does NOT try JWT decode on dotless tokens
+    let result = authenticate(Some(legacy), None, "/api/test", "GET");
     assert!(result.is_err() || result.unwrap().is_none());
 }
