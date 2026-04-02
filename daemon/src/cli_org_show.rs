@@ -73,8 +73,42 @@ pub async fn org_chart(slug: Option<&str>, api_url: &str) -> Result<(), CliError
     let payload = get_and_return(&url)
         .await
         .map_err(|_| CliError::ApiCallFailed("get orgchart failed".into()))?;
-    println!("{}", payload["chart"].as_str().unwrap_or("(no chart data)"));
+    // Global chart returns "chart" (ASCII); per-slug returns structured JSON
+    if let Some(chart) = payload["chart"].as_str() {
+        println!("{chart}");
+    } else {
+        render_single_orgchart(&payload);
+    }
     Ok(())
+}
+
+/// Render a single org's chart from the per-slug JSON response.
+fn render_single_orgchart(data: &Value) {
+    let org = &data["org"];
+    let name = org["id"].as_str().unwrap_or("unknown");
+    let status = org["status"].as_str().unwrap_or("-");
+    let ceo = org["ceo_agent"].as_str().unwrap_or("-");
+    println!("{CYAN}{name}{RESET} ({status})");
+    println!("  CEO: {GREEN}{ceo}{RESET}");
+    for dept in data["departments"].as_array().into_iter().flatten() {
+        let dname = dept["name"].as_str().unwrap_or("General");
+        println!("  \u{251c}\u{2500}\u{2500} {CYAN}{dname}{RESET}");
+        for agent in dept["agents"].as_array().into_iter().flatten() {
+            let aname = agent["agent"].as_str().unwrap_or("-");
+            let role = agent["role"].as_str().unwrap_or("-");
+            println!("  \u{2502}   \u{2514}\u{2500}\u{2500} {aname} ({YELLOW}{role}{RESET})");
+        }
+    }
+    if let Some(plans) = data["plans"].as_array() {
+        if !plans.is_empty() {
+            println!("  Plans:");
+            for p in plans {
+                let pname = p["title"].as_str().or(p["name"].as_str()).unwrap_or("-");
+                let pstatus = p["status"].as_str().unwrap_or("-");
+                println!("    - {pname} [{YELLOW}{pstatus}{RESET}]");
+            }
+        }
+    }
 }
 
 pub fn format_org_row(org_detail: &Value) -> String {

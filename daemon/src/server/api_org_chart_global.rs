@@ -1,6 +1,6 @@
 //! GET /api/orgs/chart — global orgchart showing all orgs in one view.
 
-use crate::org::orgchart_global::{render_global_orgchart, OrgSummary};
+use crate::org::orgchart_global::{render_global_orgchart, OrgMember, OrgPlanInfo, OrgSummary};
 use crate::server::api_ipc::ensure_ipc_schema;
 use crate::server::state::{query_rows, ApiError, ServerState};
 
@@ -46,34 +46,40 @@ async fn get_global_orgchart(
         let slug = org["id"].as_str().unwrap_or("unknown").to_string();
         let name = slug.clone();
         let status = org["status"].as_str().unwrap_or("unknown").to_string();
+        let ceo_agent = org["ceo_agent"].as_str().unwrap_or("").to_string();
         let org_type = classify_org(org);
 
-        // Count members for this org
-        let members = query_rows(
+        // Fetch full member details
+        let member_rows = query_rows(
             &conn,
-            "SELECT agent FROM ipc_org_members WHERE org_id = ?1",
+            "SELECT agent, role, department FROM ipc_org_members WHERE org_id = ?1",
             rusqlite::params![slug],
         )?;
+        let members: Vec<OrgMember> = member_rows.iter().map(|r| OrgMember {
+            agent: r["agent"].as_str().unwrap_or("-").to_string(),
+            role: r["role"].as_str().unwrap_or("-").to_string(),
+            department: r["department"].as_str().unwrap_or("").to_string(),
+        }).collect();
         let agent_count = members.len();
 
-        // Count plans for this org
-        let plans = query_rows(
+        // Fetch plan names and statuses
+        let plan_rows = query_rows(
             &conn,
-            "SELECT id FROM plans WHERE org_id = ?1",
+            "SELECT name, status FROM plans WHERE org_id = ?1 ORDER BY id",
             rusqlite::params![slug],
         )?;
+        let plans: Vec<OrgPlanInfo> = plan_rows.iter().map(|r| OrgPlanInfo {
+            name: r["name"].as_str().unwrap_or("-").to_string(),
+            status: r["status"].as_str().unwrap_or("-").to_string(),
+        }).collect();
         let plan_count = plans.len();
 
         total_agents += agent_count;
         total_plans += plan_count;
 
         summaries.push(OrgSummary {
-            slug,
-            name,
-            org_type,
-            agent_count,
-            plan_count,
-            status,
+            slug, name, org_type, agent_count, plan_count,
+            status, ceo_agent, members, plans,
         });
     }
 
