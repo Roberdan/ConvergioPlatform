@@ -73,39 +73,38 @@ echo "$CTX" | jq '{name,status,tasks_done,tasks_total,framework,worktree_path}'
 WORKTREE_PATH=$(echo "$CTX" | jq -r '.worktree_path')
 
 # Auto-heal: register reviews + approval if missing (autonomous plans)
-cvg plan auto-approve $PLAN_ID "Auto-approved for autonomous Copilot execution" 2>/dev/null || true
+cvg plan approve $PLAN_ID --message "Auto-approved for autonomous execution" 2>/dev/null || true
 
-# Auto-heal: create worktree if missing
+# Auto-heal: create workspace if missing
 if [[ -z "$WORKTREE_PATH" || "$WORKTREE_PATH" == "null" ]]; then
-  FIRST_WAVE_ID=$(sqlite3 ~/.claude/data/dashboard.db \
-    "SELECT id FROM waves WHERE plan_id=$PLAN_ID ORDER BY position LIMIT 1;")
+  # Get first wave ID from wave context (NEVER use sqlite3 directly)
+  FIRST_WAVE_ID=$(cvg wave context $PLAN_ID | jq -r '.waves[0].id // empty')
   if [[ -n "$FIRST_WAVE_ID" ]]; then
-    cvg worktree create $PLAN_ID $FIRST_WAVE_ID 2>/dev/null || true
+    cvg workspace create $PLAN_ID $FIRST_WAVE_ID 2>/dev/null || true
     CTX=$(cvg plan show $PLAN_ID)
     WORKTREE_PATH=$(echo "$CTX" | jq -r '.worktree_path')
   fi
   # Fallback: use current directory as worktree
   [[ -z "$WORKTREE_PATH" || "$WORKTREE_PATH" == "null" ]] && {
     WORKTREE_PATH="$(pwd)"
-    cvg plan set-worktree $PLAN_ID "$WORKTREE_PATH"
   }
 fi
 
 cd "$WORKTREE_PATH" && pwd
 [[ "$(echo "$CTX" | jq -r '.status')" != "doing" ]] && cvg plan start $PLAN_ID
-cvg plan check-readiness $PLAN_ID
+cvg plan readiness $PLAN_ID
 ```
 
 ### Phase 1.5: Drift Check (MANDATORY)
 
 ```bash
-DRIFT_JSON=$(cvg plan drift-check $PLAN_ID) || true
+DRIFT_JSON=$(cvg plan drift $PLAN_ID) || true
 DRIFT_LEVEL=$(echo "$DRIFT_JSON" | jq -r '.drift')
 if [[ "$DRIFT_LEVEL" == "major" ]]; then
   echo "$DRIFT_JSON" | jq '{drift,days_stale,branch_behind,overlapping_files}'
-  # ASK USER: Proceed / Rebase / Replan
+  # ASK USER: Proceed / Replan
 elif [[ "$DRIFT_LEVEL" == "minor" ]]; then
-  cvg plan rebase $PLAN_ID
+  echo "Minor drift detected — consider rebasing worktree"
 fi
 ```
 
@@ -173,8 +172,8 @@ cvg task update {db_task_id} submitted "Summary" \
 ### Phase 4: Wave Completion (Thor Wave Validation — MANDATORY)
 
 ```bash
-WAVE_DB_ID=$(sqlite3 ~/.claude/data/dashboard.db \
-  "SELECT w.id FROM waves w WHERE w.plan_id = $PLAN_ID AND w.wave_id = '{wave_id}';")
+# Get wave DB ID from wave context (NEVER use sqlite3 directly)
+WAVE_DB_ID=$(cvg wave context $PLAN_ID | jq -r ".waves[] | select(.wave_id==\"{wave_id}\") | .id")
 
 # @validate handoff — Thor validates entire wave, batch-promotes submitted→done
 @validate Validate wave {wave_id} (db:$WAVE_DB_ID) in plan $PLAN_ID.
@@ -186,13 +185,11 @@ WAVE_DB_ID=$(sqlite3 ~/.claude/data/dashboard.db \
 ### Phase 4.5: Overlapping Wave Protocol
 
 ```bash
-cvg worktree merge --async $PLAN_ID $WAVE_DB_ID
-cvg worktree create $PLAN_ID $NEXT_WAVE_DB_ID
-# Before closing next wave:
-cvg worktree pr-sync $PLAN_ID $NEXT_WAVE_DB_ID
+cvg wave merge $PLAN_ID $WAVE_DB_ID
+cvg workspace create $PLAN_ID $NEXT_WAVE_DB_ID
 ```
 
-Fallback: `merge` (sync) for single-wave or final wave.
+Use `cvg wave merge` for each completed wave. `cvg workspace create` for next wave.
 
 ## CI Batch Fix (NON-NEGOTIABLE)
 

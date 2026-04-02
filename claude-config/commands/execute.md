@@ -29,9 +29,9 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 - Always pass worktree path, constraints, readiness bundle, and CI knowledge.
 
 ## Required Flow
-1. Initialize: `cvg plan get-context {plan_id}` — returns full JSON with tasks, worktree, constraints.
-   - To view tree: `cvg plan show {plan_id}` (alias for `execution-tree`)
-   - To view single task: `cvg plan task-detail {plan_id} {task_id}`
+1. Initialize: `cvg wave context {plan_id}` — returns full JSON with plan, waves, tasks, worktree.
+   - To view tree: `cvg plan tree {plan_id}`
+   - To view plan JSON: `cvg plan show {plan_id}`
    - Auto-heal plan/worktree metadata if needed.
 2. Run readiness checks and stop on critical warnings.
 3. Run drift check (MANDATORY before first task).
@@ -45,7 +45,7 @@ Executors CANNOT set status=done. SQLite trigger `enforce_thor_done` blocks it. 
 
 ## CRITICAL: CLI
 
-Use `cvg` CLI for all plan/wave/task operations. Examples: `cvg plan get-context {id}`, `cvg wave merge`, `cvg task update`.
+Use `cvg` CLI for all plan/wave/task operations. Examples: `cvg wave context {id}`, `cvg wave merge`, `cvg task update`.
 _Why: Plan 677 — `command not found` in new session. cvg is in PATH after bootstrap._
 
 ## Module References
