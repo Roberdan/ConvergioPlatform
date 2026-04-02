@@ -80,7 +80,10 @@ impl ToolCatalog {
 
     pub fn call_tool(&self, name: &str, daemon_url: &str, args: &Value) -> Option<String> {
         let tool = self.find(name)?;
-        let endpoint = resolve_endpoint(tool.endpoint, args);
+        let endpoint = match resolve_endpoint(tool.endpoint, args) {
+            Ok(ep) => ep,
+            Err(e) => return Some(format!("{{\"error\":\"{e}\"}}")),
+        };
         let base = if daemon_url.is_empty() { self::daemon_url() } else { daemon_url.to_string() };
         let url = format!("{base}{endpoint}");
         match tool.method {
@@ -97,7 +100,7 @@ impl ToolCatalog {
     }
 }
 
-fn resolve_endpoint(endpoint: &str, args: &Value) -> String {
+fn resolve_endpoint(endpoint: &str, args: &Value) -> Result<String, String> {
     let mut resolved = endpoint.to_string();
     if let Some(obj) = args.as_object() {
         for (key, val) in obj {
@@ -111,19 +114,26 @@ fn resolve_endpoint(endpoint: &str, args: &Value) -> String {
             }
         }
     }
-    // Strip unresolved optional query params (e.g. &limit={limit})
-    while let Some(start) = resolved.find('{') {
-        if let Some(end) = resolved[start..].find('}') {
-            let before = &resolved[..start];
-            // Remove &key={val} or ?key={val} patterns
-            let trim_from = before.rfind('&').or_else(|| before.rfind('?')).unwrap_or(start);
-            let after = &resolved[start + end + 1..];
-            resolved = format!("{}{}", &resolved[..trim_from], after);
-        } else {
-            break;
+    // Split path from query string
+    let (path, query) = match resolved.split_once('?') {
+        Some((p, q)) => (p.to_string(), Some(q.to_string())),
+        None => (resolved, None),
+    };
+    // Unresolved path params are an error
+    if let Some(start) = path.find('{') {
+        if let Some(end) = path[start..].find('}') {
+            let param = &path[start + 1..start + end];
+            return Err(format!("missing required path param: {param}"));
         }
     }
-    resolved
+    // Strip unresolved query params
+    match query {
+        Some(q) => {
+            let clean: Vec<&str> = q.split('&').filter(|p| !p.contains('{')).collect();
+            if clean.is_empty() { Ok(path) } else { Ok(format!("{path}?{}", clean.join("&"))) }
+        }
+        None => Ok(path),
+    }
 }
 
 fn daemon_url() -> String {
@@ -197,8 +207,26 @@ mod tests {
     #[test]
     fn test_resolve_endpoint_substitution() {
         let args = serde_json::json!({"plan_id": 42});
-        let result = resolve_endpoint("/api/plan/{plan_id}", &args);
+        let result = resolve_endpoint("/api/plan/{plan_id}", &args).unwrap();
         assert_eq!(result, "/api/plan/42");
+    }
+
+    #[test]
+    fn test_resolve_endpoint_missing_optional_query() {
+        let args = serde_json::json!({"to_agent": "kernel"});
+        let result = resolve_endpoint(
+            "/api/ipc/messages?to_agent={to_agent}&channel={channel}&limit={limit}",
+            &args,
+        ).unwrap();
+        assert_eq!(result, "/api/ipc/messages?to_agent=kernel");
+        assert!(!result.contains('{'));
+    }
+
+    #[test]
+    fn test_resolve_endpoint_missing_path_param_errors() {
+        let args = serde_json::json!({});
+        let result = resolve_endpoint("/api/plan/{plan_id}/tasks", &args);
+        assert!(result.is_err());
     }
 
     #[test]
