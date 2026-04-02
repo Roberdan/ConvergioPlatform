@@ -46,9 +46,13 @@ pub fn provision_org(
 ) -> Result<ProvisionResult, String> {
     // 1. Create org
     let org_body = json!({
-        "name": blueprint.slug,
+        "id": blueprint.slug,
+        "name": blueprint.name,
         "mission": blueprint.mission,
+        "objectives": blueprint.mission,
         "ceo_agent": blueprint.ceo_agent,
+        "budget": blueprint.budget_usd,
+        "status": "active",
     });
     let org_resp = api_post(&format!("{daemon_url}/api/orgs"), &org_body)?;
     let org_id = org_resp

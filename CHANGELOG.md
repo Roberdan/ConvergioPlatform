@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [20.8.2] - 01 Aprile 2026
+
+### Fixed
+- Org provisioner sends `objectives`, `budget`, `id`, `status` fields (was 422)
+- Members API accepts both `agent` and `agent_id` field names via serde alias
+- `daemon-install.sh` adds ad-hoc codesign for macOS Gatekeeper
+- CLI provisioner reads `CONVERGIO_AUTH_TOKEN` from env for API auth
+
 ## [20.8.1] - 01 Aprile 2026
 
 ### Fixed
