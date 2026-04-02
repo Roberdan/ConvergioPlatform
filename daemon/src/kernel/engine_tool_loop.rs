@@ -13,7 +13,7 @@ const MAX_TOOL_ROUNDS: u32 = 3;
 /// Build the tool description block for the system prompt.
 /// Format matches what `extract_tool_call` expects: <tool_call>JSON</tool_call>.
 pub(crate) fn tool_descriptions_block() -> String {
-    ToolCatalog::all().descriptions_block()
+    ToolCatalog::read_only().descriptions_block()
 }
 
 /// Build the ChatML prompt for ask() with context, tools, history, and question.

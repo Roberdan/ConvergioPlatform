@@ -11,7 +11,7 @@ const P_PLAN_ID: &[ToolParam] = &[ToolParam {
 const P_UPDATE_TASK: &[ToolParam] = &[
     ToolParam { name: "task_id", param_type: "integer", required: true },
     ToolParam { name: "status", param_type: "string", required: true },
-    ToolParam { name: "summary", param_type: "string", required: false },
+    ToolParam { name: "notes", param_type: "string", required: false },
 ];
 
 pub fn tools() -> Vec<ToolDef> {
@@ -34,7 +34,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "update_task",
-            description: "Update task status. Args: task_id, status, optional summary.",
+            description: "Update task status. Args: task_id, status, optional notes.",
             endpoint: "/api/plan-db/task/update",
             method: ToolMethod::Post,
             params: P_UPDATE_TASK,

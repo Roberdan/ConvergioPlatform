@@ -27,24 +27,24 @@ const P_VALIDATION: &[ToolParam] = &[
 ];
 
 const P_WORKSPACE: &[ToolParam] = &[ToolParam {
-    name: "workspace",
+    name: "workspace_id",
     param_type: "string",
     required: true,
 }];
 
 const P_REMEMBER: &[ToolParam] = &[
-    ToolParam { name: "key", param_type: "string", required: true },
-    ToolParam { name: "value", param_type: "string", required: true },
-    ToolParam { name: "agent", param_type: "string", required: true },
+    ToolParam { name: "agent_id", param_type: "string", required: true },
+    ToolParam { name: "memory_type", param_type: "string", required: true },
+    ToolParam { name: "content", param_type: "string", required: true },
 ];
 
 const P_RECALL: &[ToolParam] = &[
-    ToolParam { name: "key", param_type: "string", required: true },
-    ToolParam { name: "agent", param_type: "string", required: true },
+    ToolParam { name: "query", param_type: "string", required: true },
+    ToolParam { name: "agent_id", param_type: "string", required: false },
 ];
 
 const P_MESSAGES: &[ToolParam] = &[
-    ToolParam { name: "agent", param_type: "string", required: true },
+    ToolParam { name: "to_agent", param_type: "string", required: true },
     ToolParam { name: "limit", param_type: "integer", required: false },
 ];
 
@@ -84,7 +84,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "quality_gate",
-            description: "Run quality gate on workspace. Args: workspace.",
+            description: "Run quality gate on workspace. Args: workspace_id.",
             endpoint: "/api/workspace/quality-gate",
             method: ToolMethod::Post,
             params: P_WORKSPACE,
@@ -108,7 +108,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "remember",
-            description: "Store a key-value pair in agent memory. Args: key, value, agent.",
+            description: "Store a memory entry. Args: agent_id, memory_type, content.",
             endpoint: "/api/memory/remember",
             method: ToolMethod::Post,
             params: P_REMEMBER,
@@ -116,8 +116,8 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "recall",
-            description: "Recall a value from agent memory. Args: key, agent.",
-            endpoint: "/api/memory/recall?key={key}&agent={agent}",
+            description: "Recall from agent memory. Args: query, optional agent_id.",
+            endpoint: "/api/memory/recall?query={query}",
             method: ToolMethod::Get,
             params: P_RECALL,
             tier: ToolTier::Read,
@@ -140,8 +140,8 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "list_messages",
-            description: "List IPC messages for an agent. Args: agent, optional limit.",
-            endpoint: "/api/ipc/messages?agent={agent}&limit={limit}",
+            description: "List IPC messages for an agent. Args: to_agent, optional limit.",
+            endpoint: "/api/ipc/messages?to_agent={to_agent}&limit={limit}",
             method: ToolMethod::Get,
             params: P_MESSAGES,
             tier: ToolTier::Read,

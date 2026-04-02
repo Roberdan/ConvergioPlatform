@@ -1,12 +1,6 @@
 [package]
 name = "convergio-platform-daemon"
-<<<<<<< HEAD
 version = "20.9.0"
-||||||| parent of d8d1f8e2 (feat(kernel): declarative tool catalog + cloud escalation engine)
-version = "20.8.0"
-=======
-version = "20.9.0"
->>>>>>> d8d1f8e2 (feat(kernel): declarative tool catalog + cloud escalation engine)
 edition = "2021"
 
 [lib]

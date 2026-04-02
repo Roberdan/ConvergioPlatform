@@ -13,11 +13,15 @@ use tracing::{info, warn};
 pub const CLOUD_MODEL: &str = "claude-opus-4-20250514";
 const MAX_CLOUD_ROUNDS: usize = 5;
 
+fn daemon_url() -> String {
+    std::env::var("DAEMON_URL").unwrap_or_else(|_| "http://localhost:8420".to_string())
+}
+
 /// Ask via cloud provider — no tool loop.
 pub async fn cloud_ask(question: &str, history_chatml: &str) -> String {
     let q = question.to_string();
     let context = match tokio::task::spawn_blocking(move || {
-        smart_context_gather_pub(&q, "http://localhost:8420")
+        smart_context_gather_pub(&q, &daemon_url())
     })
     .await
     {
@@ -35,7 +39,7 @@ pub async fn cloud_ask(question: &str, history_chatml: &str) -> String {
 pub async fn cloud_ask_with_tools(question: &str, history: &str) -> String {
     let q = question.to_string();
     let context = match tokio::task::spawn_blocking(move || {
-        smart_context_gather_pub(&q, "http://localhost:8420")
+        smart_context_gather_pub(&q, &daemon_url())
     })
     .await
     {
@@ -47,7 +51,7 @@ pub async fn cloud_ask_with_tools(question: &str, history: &str) -> String {
     };
 
     let mut messages = build_messages(&context, question, history, true);
-    let daemon_url = "http://localhost:8420".to_string();
+    let du = daemon_url();
 
     for round in 0..MAX_CLOUD_ROUNDS {
         let response = collect_stream(messages.clone()).await;
@@ -59,7 +63,7 @@ pub async fn cloud_ask_with_tools(question: &str, history: &str) -> String {
         info!(round, tool = %tool_name, "kernel.cloud: tool call");
         let args: serde_json::Value =
             serde_json::from_str(&args_str).unwrap_or(serde_json::json!({}));
-        let url = daemon_url.clone();
+        let url = du.clone();
         let tn = tool_name.clone();
         let tool_result = tokio::task::spawn_blocking(move || {
             ToolCatalog::all()

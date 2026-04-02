@@ -34,7 +34,7 @@ pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
     if let Some(health) = ToolCatalog::all().call_tool("health_deep", daemon_url, &empty) {
         ctx += &format!("Platform Health:\n{health}\n\n");
     }
-    if let Some(history) = ToolCatalog::all().call_tool("list_messages", daemon_url, &empty) {
+    if let Some(history) = ToolCatalog::all().call_tool("agent_history", daemon_url, &empty) {
         ctx += &format!("Recent Agent Activity:\n{history}\n\n");
     }
     if let Some(peers) = ToolCatalog::all().call_tool("mesh_status", daemon_url, &empty) {

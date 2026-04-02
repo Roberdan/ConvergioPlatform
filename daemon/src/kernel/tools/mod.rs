@@ -81,11 +81,19 @@ impl ToolCatalog {
     pub fn call_tool(&self, name: &str, daemon_url: &str, args: &Value) -> Option<String> {
         let tool = self.find(name)?;
         let endpoint = resolve_endpoint(tool.endpoint, args);
-        let url = format!("{daemon_url}{endpoint}");
+        let base = if daemon_url.is_empty() { self::daemon_url() } else { daemon_url.to_string() };
+        let url = format!("{base}{endpoint}");
         match tool.method {
             ToolMethod::Get => http_get(&url),
             ToolMethod::Post => http_post(&url, args),
         }
+    }
+
+    /// Catalog with only Read-tier tools (for local inference safety).
+    pub fn read_only() -> Self {
+        let mut cat = Self::all();
+        cat.tools.retain(|t| t.tier == ToolTier::Read);
+        cat
     }
 }
 
@@ -103,7 +111,23 @@ fn resolve_endpoint(endpoint: &str, args: &Value) -> String {
             }
         }
     }
+    // Strip unresolved optional query params (e.g. &limit={limit})
+    while let Some(start) = resolved.find('{') {
+        if let Some(end) = resolved[start..].find('}') {
+            let before = &resolved[..start];
+            // Remove &key={val} or ?key={val} patterns
+            let trim_from = before.rfind('&').or_else(|| before.rfind('?')).unwrap_or(start);
+            let after = &resolved[start + end + 1..];
+            resolved = format!("{}{}", &resolved[..trim_from], after);
+        } else {
+            break;
+        }
+    }
     resolved
+}
+
+fn daemon_url() -> String {
+    std::env::var("DAEMON_URL").unwrap_or_else(|_| "http://localhost:8420".to_string())
 }
 
 fn make_client() -> reqwest::blocking::Client {
@@ -113,8 +137,16 @@ fn make_client() -> reqwest::blocking::Client {
         .unwrap_or_else(|_| reqwest::blocking::Client::new())
 }
 
+fn auth_header() -> Option<String> {
+    std::env::var("CONVERGIO_AUTH_TOKEN").ok()
+}
+
 fn http_get(url: &str) -> Option<String> {
-    match make_client().get(url).send() {
+    let mut req = make_client().get(url);
+    if let Some(token) = auth_header() {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+    match req.send() {
         Ok(resp) => Some(resp.text().unwrap_or_default()),
         Err(e) => {
             warn!("kernel.tools GET {url}: {e}");
@@ -124,7 +156,11 @@ fn http_get(url: &str) -> Option<String> {
 }
 
 fn http_post(url: &str, body: &Value) -> Option<String> {
-    match make_client().post(url).json(body).send() {
+    let mut req = make_client().post(url).json(body);
+    if let Some(token) = auth_header() {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+    match req.send() {
         Ok(resp) => Some(resp.text().unwrap_or_default()),
         Err(e) => {
             warn!("kernel.tools POST {url}: {e}");

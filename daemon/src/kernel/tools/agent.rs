@@ -3,11 +3,13 @@
 use super::{ToolDef, ToolMethod, ToolParam, ToolTier};
 
 const P_AGENT_SEND: &[ToolParam] = &[
+    ToolParam { name: "from", param_type: "string", required: true },
     ToolParam { name: "to", param_type: "string", required: true },
-    ToolParam { name: "message", param_type: "string", required: true },
+    ToolParam { name: "content", param_type: "string", required: true },
 ];
 
 const P_AGENT_ASK: &[ToolParam] = &[
+    ToolParam { name: "from", param_type: "string", required: true },
     ToolParam { name: "to", param_type: "string", required: true },
     ToolParam { name: "message", param_type: "string", required: true },
     ToolParam { name: "timeout_secs", param_type: "integer", required: false },
@@ -25,16 +27,16 @@ const P_AGENT_COMPLETE: &[ToolParam] = &[ToolParam {
 }];
 
 const P_INVOKE: &[ToolParam] = &[
+    ToolParam { name: "from", param_type: "string", required: true },
     ToolParam { name: "to", param_type: "string", required: true },
     ToolParam { name: "message", param_type: "string", required: true },
 ];
 
 const P_CREATE_AGENT: &[ToolParam] = &[
     ToolParam { name: "name", param_type: "string", required: true },
-    ToolParam { name: "role", param_type: "string", required: true },
-    ToolParam { name: "expertise", param_type: "string", required: true },
-    ToolParam { name: "department", param_type: "string", required: true },
-    ToolParam { name: "org_id", param_type: "string", required: true },
+    ToolParam { name: "category", param_type: "string", required: false },
+    ToolParam { name: "description", param_type: "string", required: false },
+    ToolParam { name: "model", param_type: "string", required: false },
 ];
 
 pub fn tools() -> Vec<ToolDef> {
@@ -49,7 +51,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "agent_send",
-            description: "Send direct message to an agent. Args: to, message.",
+            description: "Send direct message to an agent. Args: from, to, content.",
             endpoint: "/api/ipc/send-direct",
             method: ToolMethod::Post,
             params: P_AGENT_SEND,
@@ -57,7 +59,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "agent_ask",
-            description: "Ask an agent and wait for reply. Args: to, message, optional timeout_secs.",
+            description: "Ask an agent and wait for reply. Args: from, to, message, optional timeout_secs.",
             endpoint: "/api/ipc/ask",
             method: ToolMethod::Post,
             params: P_AGENT_ASK,
@@ -81,7 +83,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "invoke_agent",
-            description: "Invoke a named agent with a task. Args: to (agent name), message (task).",
+            description: "Invoke a named agent with a task. Args: from (kernel identity), to (agent name), message (task).",
             endpoint: "/api/ipc/ask",
             method: ToolMethod::Post,
             params: P_INVOKE,
@@ -89,7 +91,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "create_agent",
-            description: "Create a new agent. Args: name, role, expertise, department, org_id.",
+            description: "Create a new agent. Args: name, optional category/description/model.",
             endpoint: "/api/agents/create",
             method: ToolMethod::Post,
             params: P_CREATE_AGENT,

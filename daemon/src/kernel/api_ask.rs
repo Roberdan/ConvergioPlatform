@@ -52,7 +52,11 @@ mod inner {
                 let intent = classify_intent(&q, &eng);
                 match &intent {
                     VoiceIntent::EscalateToAli { .. } => eng.ask(&q),
-                    _ => route_intent(intent, "http://localhost:8420"),
+                    _ => {
+                        let du = std::env::var("DAEMON_URL")
+                            .unwrap_or_else(|_| "http://localhost:8420".into());
+                        route_intent(intent, &du)
+                    }
                 }
             })
             .await

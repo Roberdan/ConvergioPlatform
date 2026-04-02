@@ -3,7 +3,7 @@
 use super::{ToolDef, ToolMethod, ToolParam, ToolTier};
 
 const P_PROMPT: &[ToolParam] = &[ToolParam {
-    name: "prompt",
+    name: "question",
     param_type: "string",
     required: true,
 }];
@@ -32,6 +32,7 @@ const P_INTERRUPT: &[ToolParam] = &[
 
 const P_RESCHEDULE: &[ToolParam] = &[
     ToolParam { name: "task_id", param_type: "integer", required: true },
+    ToolParam { name: "from_node", param_type: "string", required: true },
     ToolParam { name: "to_node", param_type: "string", required: true },
     ToolParam { name: "reason", param_type: "string", required: true },
 ];
@@ -42,6 +43,14 @@ pub fn tools() -> Vec<ToolDef> {
             name: "mesh_status",
             description: "Get mesh peer status and connectivity.",
             endpoint: "/api/mesh",
+            method: ToolMethod::Get,
+            params: &[],
+            tier: ToolTier::Read,
+        },
+        ToolDef {
+            name: "agent_history",
+            description: "Get recent agent activity.",
+            endpoint: "/api/agents/history?limit=10",
             method: ToolMethod::Get,
             params: &[],
             tier: ToolTier::Read,
@@ -72,7 +81,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "kernel_ask",
-            description: "Ask the kernel a question (routes to local or cloud). Args: prompt.",
+            description: "Ask the kernel a question (routes to local or cloud). Args: question.",
             endpoint: "/api/kernel/ask",
             method: ToolMethod::Post,
             params: P_PROMPT,
@@ -112,7 +121,7 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "reschedule_task",
-            description: "Reschedule task to another node. Args: task_id, to_node, reason.",
+            description: "Reschedule task to another node. Args: task_id, from_node, to_node, reason.",
             endpoint: "/api/task/reschedule",
             method: ToolMethod::Post,
             params: P_RESCHEDULE,
