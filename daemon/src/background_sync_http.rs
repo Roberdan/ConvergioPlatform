@@ -7,30 +7,46 @@ use std::net::TcpStream;
 use std::time::Duration;
 use tracing::{info, warn};
 
+use sha2::{Sha256, Digest};
+
 use crate::db::libsql_adapter::SyncChange;
 use crate::mesh::auth::load_shared_secret;
+use crate::mesh::peers::peers_conf_path_from_env;
 
-/// Build mesh HMAC auth header: HMAC-SHA256(secret, timestamp+method+path_and_query).
+/// Build mesh HMAC auth header covering timestamp, method, path, and optional body hash.
 /// Returns (timestamp, hex-encoded signature) or None if no shared secret.
-fn mesh_hmac_header(method: &str, path_and_query: &str) -> Option<(String, String)> {
+fn mesh_hmac_header(
+    method: &str,
+    path_and_query: &str,
+    body_hash: Option<&str>,
+) -> Option<(String, String)> {
     let conf_path = std::path::PathBuf::from(peers_conf_path_from_env());
     let secret = load_shared_secret(&conf_path)?;
     let timestamp = chrono::Utc::now().timestamp().to_string();
-    let message = format!("{timestamp}:{method}:{path_and_query}");
+    let message = match body_hash {
+        Some(bh) => format!("{timestamp}:{method}:{path_and_query}:{bh}"),
+        None => format!("{timestamp}:{method}:{path_and_query}"),
+    };
     let sig = crate::mesh::auth::compute_hmac(&secret, message.as_bytes()).ok()?;
     Some((timestamp, hex::encode(sig)))
 }
 
 /// Apply mesh HMAC auth headers to a request builder.
+/// For POST requests, pass `body` bytes to include the body SHA-256 in the signature.
 fn apply_mesh_auth(
     mut req: reqwest::blocking::RequestBuilder,
     method: &str,
     path_and_query: &str,
+    body: Option<&[u8]>,
 ) -> reqwest::blocking::RequestBuilder {
-    if let Some((ts, sig)) = mesh_hmac_header(method, path_and_query) {
+    let body_hash = body.map(|b| hex::encode(Sha256::digest(b)));
+    if let Some((ts, sig)) = mesh_hmac_header(method, path_and_query, body_hash.as_deref()) {
         req = req
             .header("X-Mesh-Timestamp", ts)
             .header("X-Mesh-Signature", sig);
+        if let Some(bh) = &body_hash {
+            req = req.header("X-Mesh-Body-Hash", bh.as_str());
+        }
     }
     req
 }
@@ -43,12 +59,16 @@ pub fn send_changes_to_peer(
     let path = "/api/sync/import";
     let url = format!("http://{peer_addr}{path}");
     let payload = serde_json::json!({ "changes": changes });
+    let body_bytes = serde_json::to_vec(&payload)
+        .map_err(|e| format!("JSON serialize failed: {e}"))?;
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
-    let req = apply_mesh_auth(client.post(&url).json(&payload), "POST", path);
+    let req = client.post(&url).header("content-type", "application/json");
+    let req = apply_mesh_auth(req, "POST", path, Some(&body_bytes));
+    let req = req.body(body_bytes);
     let resp = req.send().map_err(|e| format!("HTTP POST failed: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("peer {} returned {}", peer_addr, resp.status()));
@@ -74,7 +94,7 @@ pub fn fetch_changes_from_peer(
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
-    let req = apply_mesh_auth(client.get(&url), "GET", &path_query);
+    let req = apply_mesh_auth(client.get(&url), "GET", &path_query, None);
     let resp = req.send().map_err(|e| format!("HTTP GET failed: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("peer returned {}", resp.status()));
@@ -152,13 +172,7 @@ pub fn detect_local_tailscale_ip() -> Option<String> {
     None
 }
 
-/// Path to peers.conf: CONVERGIO_PEERS_CONF env var → ~/.claude/config/peers.conf.
-pub fn peers_conf_path_from_env() -> String {
-    std::env::var("CONVERGIO_PEERS_CONF").unwrap_or_else(|_| {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        format!("{home}/.claude/config/peers.conf")
-    })
-}
+// peers_conf_path_from_env moved to crate::mesh::peers for shared access
 
 /// Update mesh_sync_stats so the dashboard reflects background sync activity.
 /// Bridges the gap between HTTP-based background sync and the mesh stats table.
