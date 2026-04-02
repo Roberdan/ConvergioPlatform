@@ -13,7 +13,7 @@ use tracing::{info, warn};
 pub const CLOUD_MODEL: &str = "claude-opus-4-20250514";
 const MAX_CLOUD_ROUNDS: usize = 5;
 
-fn daemon_url() -> String {
+pub(crate) fn daemon_url() -> String {
     std::env::var("DAEMON_URL").unwrap_or_else(|_| "http://localhost:8420".to_string())
 }
 
