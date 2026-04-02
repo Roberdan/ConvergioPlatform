@@ -42,7 +42,7 @@ pub mod handlers {
             let chat_id = crate::telegram_config::telegram_chat_id();
             match (token, chat_id) {
                 (Some(token), Ok(Some(chat_id))) => {
-                    let engine_clone = Arc::new(KernelEngine::new(config.clone()));
+                    let engine_clone = state.engine.clone();
                     let daemon_url = std::env::var("DAEMON_URL")
                         .unwrap_or_else(|_| "http://localhost:8420".to_string());
                     tracing::info!("jarvis: spawning Telegram poll loop for chat_id={chat_id}");

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// MCP tool catalogue: all 18 tool definitions with JSON Schema and ring requirements.
+// MCP tool catalogue: all 43 tool definitions with JSON Schema and ring requirements.
 
 use serde_json::json;
 
@@ -10,7 +10,7 @@ use crate::mcp_server::tools::McpTool;
 
 /// Returns the full catalogue of MCP tools (unfiltered).
 pub fn all_tools() -> Vec<McpTool> {
-    let mut tools = Vec::with_capacity(35);
+    let mut tools = Vec::with_capacity(45);
     tools.extend(plan_tools());
     tools.extend(chat_tools());
     tools.extend(agent_tools());

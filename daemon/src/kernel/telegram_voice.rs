@@ -85,7 +85,14 @@ pub async fn handle_voice_message(
     let transcript = transcribe_audio(daemon_url, &wav_bytes).await?;
     info!("telegram_voice: transcribed: {:?}", transcript.text);
     let intent = classify_intent(&transcript.text, engine);
-    let reply_text = route_intent(intent, daemon_url);
+    let daemon = daemon_url.to_string();
+    let intent_clone = intent.clone();
+    let reply_text = match tokio::task::spawn_blocking(move || {
+        route_intent(intent_clone, &daemon)
+    }).await {
+        Ok(r) => r,
+        Err(e) => format!("Errore: {e}"),
+    };
     if let Err(e) = send_text(token, voice.chat_id, &reply_text, base_url).await {
         warn!("telegram_voice: send_text failed: {e}");
     }

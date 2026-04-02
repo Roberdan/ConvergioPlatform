@@ -5,10 +5,18 @@
 use crate::ipc::models::apple_fm::{AppleFmBridge, InferenceRequest};
 use crate::kernel::engine_context::smart_context_gather;
 use crate::kernel::engine_tool_loop;
+use crate::kernel::voice_router_helpers;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 pub use crate::kernel::engine_context::smart_context_gather_pub;
+
+/// Inference routing: local Qwen or cloud Opus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InferenceLevel {
+    Local,
+    Cloud,
+}
 
 /// Classification severity from kernel inference.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +96,22 @@ impl KernelEngine {
     /// Returns true when a model has been loaded via `load_model`.
     pub fn is_loaded(&self) -> bool {
         self.loaded_model.is_some()
+    }
+
+    /// True when local inference is available (bridge + model).
+    pub fn is_local_available(&self) -> bool {
+        self.bridge.is_available() && self.loaded_model.is_some()
+    }
+
+    /// Decide local vs cloud based on question content and model availability.
+    pub fn inference_level_for(&self, question: &str) -> InferenceLevel {
+        if !self.is_local_available() {
+            return InferenceLevel::Cloud;
+        }
+        if voice_router_helpers::is_write_intent(question) {
+            return InferenceLevel::Cloud;
+        }
+        InferenceLevel::Local
     }
 
     /// Classify a situation string via MLX inference.
