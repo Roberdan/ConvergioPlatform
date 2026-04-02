@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [20.9.0] - 02 Aprile 2026
+
+### Added
+- Declarative kernel tool catalog with 43 MCP tools (plan, org, agent, platform, infra)
+- Cloud escalation engine: Opus via `stream_with_fallback` with 5-round tool loop
+- Automatic local/cloud inference routing (`InferenceLevel::Local` vs `Cloud`)
+- Write-intent classifier (`is_write_intent`) for Italian/English keyword detection
+- Cloud tool loop with `<tool_call>` dispatch (same format as local Qwen)
+
+### Fixed
+- Telegram poll now shares engine with HTTP API via `Arc<Mutex<KernelEngine>>`
+- `api_ask.rs` escalates to cloud on write intents (was always local-only)
+- `telegram_voice.rs` wraps `route_intent` in `spawn_blocking` (no async deadlock)
+- MCP `tool_catalog.rs` header updated from 18 to 43 tools
+
+### Changed
+- Kernel tools refactored from single `tools.rs` to `tools/` module (5 domain files)
+- `engine_tool_loop.rs` uses `ToolCatalog::all()` instead of hardcoded definitions
+- `engine_context.rs` uses new catalog for context gathering
+
 ## [20.8.2] - 01 Aprile 2026
 
 ### Fixed

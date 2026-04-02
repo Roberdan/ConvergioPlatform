@@ -1,13 +1,12 @@
 // Copyright (c) 2026 Roberto D'Angelo. All rights reserved.
-// Telegram inbound text — long polling loop via getUpdates.
-// Runs as a background tokio task; no webhook (M1 Pro behind NAT).
+// Telegram inbound text — long polling via getUpdates (no webhook, M1 Pro behind NAT).
 // Security: only processes messages from CONVERGIO_TELEGRAM_CHAT_ID.
 
 use crate::kernel::engine::KernelEngine;
 use crate::kernel::telegram_conv;
 use crate::kernel::voice_router::{classify_intent, route_intent, VoiceIntent};
 use serde::Deserialize;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Instant};
@@ -83,7 +82,7 @@ pub fn spawn_telegram_poll(
     token: String,
     chat_id: i64,
     daemon_url: String,
-    engine: Arc<KernelEngine>,
+    engine: Arc<Mutex<KernelEngine>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         info!("jarvis.telegram: starting for chat_id={chat_id}");
@@ -95,7 +94,7 @@ async fn run_poll_loop(
     token: &str,
     chat_id: i64,
     daemon_url: &str,
-    engine: &KernelEngine,
+    engine: &Arc<Mutex<KernelEngine>>,
 ) {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(45)) // must exceed Telegram long poll timeout (30s)
@@ -155,17 +154,40 @@ async fn process_text(
     text: &str,
     chat_id: i64,
     daemon_url: &str,
-    engine: &KernelEngine,
+    engine: &Arc<Mutex<KernelEngine>>,
 ) -> String {
-    let intent = classify_intent(text, engine);
+    let intent = {
+        let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
+        classify_intent(text, &eng)
+    };
     debug!(?intent, text, "jarvis.telegram: classified intent");
 
-    // For EscalateToAli: inject conversation history so the model has context
-    // from recent exchanges. Other intents are stateless commands.
     if matches!(intent, VoiceIntent::EscalateToAli { .. }) {
         let history = telegram_conv::format_history_chatml(chat_id);
         let question = text.to_string();
-        return engine.ask_with_history(&question, &history);
+
+        let level = {
+            let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
+            eng.inference_level_for(&question)
+        };
+
+        if level == crate::kernel::engine::InferenceLevel::Local {
+            let engine_clone = Arc::clone(engine);
+            let q = question.clone();
+            let h = history.clone();
+            return match tokio::task::spawn_blocking(move || {
+                let eng = engine_clone.lock().unwrap_or_else(|p| p.into_inner());
+                eng.ask_with_history(&q, &h)
+            })
+            .await
+            {
+                Ok(r) => r,
+                Err(e) => format!("Errore locale: {e}"),
+            };
+        }
+
+        info!("jarvis.telegram: escalating to cloud");
+        return crate::kernel::cloud_escalation::cloud_ask_with_tools(&question, &history).await;
     }
 
     // route_intent uses reqwest::blocking which deadlocks inside tokio runtime.

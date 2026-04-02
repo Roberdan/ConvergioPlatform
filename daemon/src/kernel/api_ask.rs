@@ -27,36 +27,42 @@ mod inner {
     ///
     /// Routes through voice_router: classifies intent first.
     /// - Simple queries (stato, costi) → handled by voice_router directly
-    /// - EscalateToAli → forwards to Ali (Opus) via chat API
-    /// - EscalateToAli (unrecognized) → forwarded to Ali (Opus)
+    /// - EscalateToAli / write intents → cloud escalation (Opus)
     pub async fn handle_ask(
         State(state): State<KernelState>,
         Json(body): Json<AskRequest>,
     ) -> Json<AskResponse> {
         let question = body.question.clone();
         let engine = state.engine.clone();
-        let answer = tokio::task::spawn_blocking(move || {
-            let q = question.to_lowercase();
-            // Check for Ali escalation FIRST (before any LLM classification)
-            if q.starts_with("ali ") || q.starts_with("ali,") || q == "ali"
-                || q.contains(" ali ") || q.contains("chiedi ad ali")
-                || q.contains("opus") || q.contains("cloud")
-            {
-                return route_intent(
-                    VoiceIntent::EscalateToAli { question: question.clone() },
-                    "http://localhost:8420",
-                );
-            }
-            // For everything else: classify intent then route
+
+        // Check inference level — cloud for write intents or Ali escalation
+        let level = {
             let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
-            let intent = classify_intent(&question, &eng);
-            match &intent {
-                VoiceIntent::EscalateToAli { .. } => eng.ask(&question),
-                _ => route_intent(intent, "http://localhost:8420"),
+            eng.inference_level_for(&question)
+        };
+
+        let answer = if level == crate::kernel::engine::InferenceLevel::Cloud {
+            crate::kernel::cloud_escalation::cloud_ask_with_tools(&question, "").await
+        } else {
+            let q = question.clone();
+            let q2 = question.clone();
+            // Classify locally; if EscalateToAli, escalate to cloud
+            let intent = {
+                let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
+                classify_intent(&q, &eng)
+            };
+            if matches!(intent, VoiceIntent::EscalateToAli { .. }) {
+                crate::kernel::cloud_escalation::cloud_ask_with_tools(&q2, "").await
+            } else {
+                tokio::task::spawn_blocking(move || {
+                    let du = std::env::var("DAEMON_URL")
+                        .unwrap_or_else(|_| "http://localhost:8420".into());
+                    route_intent(intent, &du)
+                })
+                .await
+                .unwrap_or_else(|e| format!("Errore interno: {e}"))
             }
-        })
-        .await
-        .unwrap_or_else(|e| format!("Errore interno: {e}"));
+        };
 
         Json(AskResponse { answer })
     }

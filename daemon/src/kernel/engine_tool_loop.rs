@@ -5,7 +5,7 @@
 
 use crate::ipc::models::apple_fm::{AppleFmBridge, InferenceRequest};
 use crate::kernel::engine_context::{extract_tool_call, strip_mlx_debug};
-use crate::kernel::tools;
+use crate::kernel::tools::ToolCatalog;
 
 /// Maximum tool-call rounds before returning (prevents infinite loops).
 const MAX_TOOL_ROUNDS: u32 = 3;
@@ -13,16 +13,7 @@ const MAX_TOOL_ROUNDS: u32 = 3;
 /// Build the tool description block for the system prompt.
 /// Format matches what `extract_tool_call` expects: <tool_call>JSON</tool_call>.
 pub(crate) fn tool_descriptions_block() -> String {
-    let defs = tools::tool_definitions();
-    let mut block = String::from(
-        "Strumenti disponibili. Per usarli rispondi con:\n\
-         <tool_call>{\"name\":\"tool_name\",\"arguments\":{...}}</tool_call>\n\n",
-    );
-    for def in &defs {
-        block += &format!("- {}: {}\n", def.name, def.description);
-    }
-    block += "\nUsa gli strumenti SOLO quando servono dati che non hai nel contesto.\n";
-    block
+    ToolCatalog::read_only().descriptions_block()
 }
 
 /// Build the ChatML prompt for ask() with context, tools, history, and question.
@@ -88,7 +79,7 @@ pub(crate) fn run_tool_loop(
         // Parse args and dispatch
         let args: serde_json::Value =
             serde_json::from_str(&args_str).unwrap_or(serde_json::json!({}));
-        let tool_result = tools::call_tool(&tool_name, daemon_url, &args)
+        let tool_result = ToolCatalog::read_only().call_tool(&tool_name, daemon_url, &args)
             .unwrap_or_else(|| format!("Tool '{tool_name}' not found or failed."));
 
         // Append tool result to conversation and re-invoke

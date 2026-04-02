@@ -151,3 +151,33 @@ mod tests {
         assert_eq!(count, 0);
     }
 }
+
+// ── Write-intent classification ──────────────────────────────────────────────
+
+const WRITE_KW_IT: &[&str] = &[
+    "crea", "avvia", "aggiorna", "elimina", "modifica", "aggiungi", "rimuovi",
+    "invia", "notifica", "riavvia", "interrompi", "assegna", "genera",
+    "pianifica", "organizza",
+];
+
+const WRITE_KW_EN: &[&str] = &[
+    "create", "start", "update", "delete", "modify", "add", "remove",
+    "send", "notify", "restart", "interrupt", "assign", "generate",
+    "plan", "organize",
+];
+
+const CLOUD_TRIGGERS: &[&str] = &["ali", "opus", "cloud", "claude"];
+
+/// Check if text contains write-intent keywords (Italian/English) or cloud triggers.
+pub fn is_write_intent(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.split_whitespace().any(|raw| {
+        let token = raw.trim_matches(|c: char| !c.is_alphanumeric());
+        if token.is_empty() {
+            return false;
+        }
+        WRITE_KW_IT.contains(&token)
+            || WRITE_KW_EN.contains(&token)
+            || CLOUD_TRIGGERS.contains(&token)
+    })
+}
