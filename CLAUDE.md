@@ -90,7 +90,8 @@ Cherry-picks: delegate to agent. Auth failures: `/login` then re-launch.
 | `cvg bus org --human` | Render terminal org hierarchy tree |
 | `cvg bus watch <agent>` | Watch direct messages for an agent via SSE |
 | `cvg project create\|list\|show <id>` | Project ops |
-| `scripts/mesh/mesh-heartbeat.sh` | Mesh health |
+| `cvg plan close <id>` | Close plan with mesh broadcast |
+| `cvg cleanup` | Remove stale worktrees/branches |
 | `cvg delegation start <id> --peer <peer>` | Delegate plan |
 | `scripts/platform/record-evidence.sh <task_id> test_pass "<cmd>" 0` | Record test evidence |
 

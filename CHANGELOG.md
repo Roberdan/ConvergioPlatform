@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [20.10.0] — 2026-04-02
+
+### Security
+- **HMAC body hash**: Mesh sync signatures now cover POST body content via X-Mesh-Body-Hash header, preventing payload tampering (PR #58 follow-up)
+
+### Fixed  
+- **Kernel tool params**: list_messages uses to_agent/channel, remember/recall aligned with /api/memory API signatures
+- **URL placeholders**: resolve_endpoint() errors on unresolved path params, strips unresolved query params
+- **Authorization header**: Kernel tool HTTP calls include CONVERGIO_AUTH_TOKEN
+- **ToolCatalog reuse**: Built once per call, read_only() for local inference loop
+- **daemon_url() consistency**: Removed hardcoded localhost:8420 in kernel engine
+- **Middleware decoupled**: middleware_mesh no longer imports from background_sync_http
+- **Localhost auth bypass**: Cherry-picked from plan 10054 — localhost requests skip Bearer auth
+- **Worker fixes**: Cherry-picked .next_task parsing and CWD fallback for empty worktree_path
+
+### Added
+- **Plan closure mesh sync**: POST /api/mesh/plan-closed broadcasts cleanup to all peers on plan completion
+- **cvg plan close**: CLI command triggers plan completion with mesh broadcast
+- **cvg cleanup**: Finds and removes stale worktree branches and directories
+- **Peer aliases**: PeerConfig supports aliases field, peer_resolver matches by alias
+- **Delegation progress**: Pipeline writes stages to delegation_progress table, CLI polls and displays
+- **Dispatch validation**: Returns 400 for unresolved peers instead of silent fallback
+- **ADR**: Delegation pipeline architecture decision record
+
+### Removed
+- **25 redundant scripts** deleted (-5,912 lines): skill-transpile-*, mcp-ipc, pianits, convergio-bus/org/sync/metrics/import-agents/learnings/ingest/autopilot, mesh-sync/delegate/heartbeat/auth-sync, kernel calibrate/sync-db
+- **Plans 10053/10054** cancelled (incorporated into this release)
+- **6 stale worktree branches** cleaned up
+
 ## [20.9.0] - 02 Aprile 2026
 
 ### Added
