@@ -66,16 +66,29 @@ fn setup_db() -> PlanDb {
 // --- handle_list query logic ---
 
 #[test]
-fn list_excludes_completed_and_cancelled() {
+fn list_shows_all_plans_by_default() {
+    let db = setup_db();
+    let plans = query_rows(
+        db.connection(),
+        "SELECT id, name, status FROM plans ORDER BY id DESC LIMIT 20",
+        [],
+    )
+    .expect("query");
+    assert_eq!(plans.len(), 3, "all plans shown by default");
+    assert_eq!(plans[0]["name"].as_str().unwrap(), "Cancelled Plan");
+}
+
+#[test]
+fn list_filters_by_active_status() {
     let db = setup_db();
     let plans = query_rows(
         db.connection(),
         "SELECT id, name, status FROM plans \
-         WHERE status NOT IN ('completed', 'cancelled') ORDER BY id DESC",
+         WHERE status NOT IN ('completed', 'cancelled', 'done') ORDER BY id DESC",
         [],
     )
     .expect("query");
-    assert_eq!(plans.len(), 1, "only active plan should appear");
+    assert_eq!(plans.len(), 1, "only active plan with ?status=active");
     assert_eq!(plans[0]["name"].as_str().unwrap(), "Active Plan");
 }
 

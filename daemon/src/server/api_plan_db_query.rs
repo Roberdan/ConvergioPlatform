@@ -1,9 +1,10 @@
 use super::api_plan_db_query_fmt::handle_execution_tree;
 use super::state::{query_one, query_rows, ApiError, ServerState};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 pub fn router() -> Router<ServerState> {
     Router::new()
@@ -20,12 +21,34 @@ pub fn router() -> Router<ServerState> {
         )
 }
 
-/// GET /api/plan-db/list — active plans with task counts
+/// GET /api/plan-db/list — plans with task counts.
+/// Query params: ?status=done|doing|todo|cancelled (optional filter),
+///               ?limit=N (default 20, 0 = unlimited).
 #[tracing::instrument(skip_all)]
-async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, ApiError> {
+async fn handle_list(
+    State(state): State<ServerState>,
+    Query(qs): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, ApiError> {
     let conn = state.get_conn()?;
-    let plans = query_rows(
-        &conn,
+    let status_filter = qs.get("status").map(|s| s.as_str());
+    let limit: i64 = qs
+        .get("limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20);
+    let where_clause = match status_filter {
+        Some("done") => "WHERE p.status IN ('completed', 'done')",
+        Some("doing") => "WHERE p.status = 'doing'",
+        Some("todo") => "WHERE p.status = 'todo'",
+        Some("cancelled") => "WHERE p.status = 'cancelled'",
+        Some("active") => "WHERE p.status NOT IN ('completed','cancelled','done')",
+        _ => "", // no filter — show all
+    };
+    let limit_clause = if limit > 0 {
+        format!("LIMIT {limit}")
+    } else {
+        String::new()
+    };
+    let sql = format!(
         "SELECT p.id, p.name, p.status, p.project_id, p.execution_host, \
          p.worktree_path, p.description, p.human_summary, p.parallel_mode, \
          p.tasks_total, p.tasks_done, p.created_at, p.started_at, \
@@ -37,13 +60,11 @@ async fn handle_list(State(state): State<ServerState>) -> Result<Json<Value>, Ap
          (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
            WHERE t.plan_id = p.id AND d.status = 'approved') AS deliverables_approved, \
          (SELECT COUNT(*) FROM deliverables d JOIN tasks t ON d.task_id = t.id \
-           WHERE t.plan_id = p.id AND COALESCE(d.output_type, '') != 'pr') AS deliverables_total \
-         FROM plans p \
-         WHERE p.status NOT IN ('completed', 'cancelled') \
-         ORDER BY p.id DESC",
-        [],
-    )?;
-
+           WHERE t.plan_id = p.id AND COALESCE(d.output_type, '') != 'pr') \
+           AS deliverables_total \
+         FROM plans p {where_clause} ORDER BY p.id DESC {limit_clause}"
+    );
+    let plans = query_rows(&conn, &sql, [])?;
     Ok(Json(json!({ "ok": true, "plans": plans })))
 }
 

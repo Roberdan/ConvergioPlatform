@@ -5,7 +5,7 @@ pub fn api_list_text() -> &'static str {
     r#"Convergio Daemon API — all endpoints (port 8420)
 
 PLANS
-  GET  /api/plan-db/list                    List active plans
+  GET  /api/plan-db/list[?status=&limit=]    List plans (all by default)
   GET  /api/plan-db/json/:plan_id           Compact plan JSON
   GET  /api/plan-db/execution-tree/:plan_id Execution tree (waves + tasks)
   GET  /api/plan-db/context/:plan_id        Full plan context for execution

@@ -6,7 +6,20 @@ use super::*;
 #[test]
 fn plan_commands_list_variant_exists() {
     let cmd = PlanCommands::List {
+        status: None,
+        limit: None,
         human: false,
+        api_url: "http://localhost:8420".to_string(),
+    };
+    assert!(matches!(cmd, PlanCommands::List { .. }));
+}
+
+#[test]
+fn plan_commands_list_with_status_filter() {
+    let cmd = PlanCommands::List {
+        status: Some("done".to_string()),
+        limit: Some(10),
+        human: true,
         api_url: "http://localhost:8420".to_string(),
     };
     assert!(matches!(cmd, PlanCommands::List { .. }));

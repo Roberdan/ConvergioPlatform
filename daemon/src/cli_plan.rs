@@ -6,8 +6,14 @@ use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
 pub enum PlanCommands {
-    /// List active plans
+    /// List plans (all by default, newest first)
     List {
+        /// Filter by status: done, doing, todo, cancelled, active
+        #[arg(long)]
+        status: Option<String>,
+        /// Max plans to show (default 20, 0 = unlimited)
+        #[arg(long)]
+        limit: Option<i64>,
         /// Human-readable output instead of JSON
         #[arg(long)]
         human: bool,

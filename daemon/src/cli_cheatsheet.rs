@@ -13,7 +13,7 @@ ORGANIZATIONS
   cvg org create-org-from <path>       Create org from repo scan
 
 PLANS
-  cvg plan list [--human]              List active plans
+  cvg plan list [--status S] [--limit N] [--human]  List plans (all, newest first)
   cvg plan show <id> [--human]         Show plan details
   cvg plan tree <id> [--human]         Execution tree (waves + tasks)
   cvg plan create <proj> "name"        Create a new plan

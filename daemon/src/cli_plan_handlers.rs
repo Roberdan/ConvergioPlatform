@@ -7,8 +7,21 @@ use crate::cli_plan::PlanCommands;
 pub async fn dispatch(cmd: PlanCommands) -> Result<(), CliError> {
     match cmd {
         // --- GET-based subcommands ---
-        PlanCommands::List { human, api_url } => {
-            if let Err(e) = crate::cli_http::fetch_and_print(&format!("{api_url}/api/plan-db/list"), human).await {
+        PlanCommands::List { status, limit, human, api_url } => {
+            let mut params = Vec::new();
+            if let Some(s) = &status {
+                params.push(format!("status={s}"));
+            }
+            if let Some(l) = limit {
+                params.push(format!("limit={l}"));
+            }
+            let qs = if params.is_empty() {
+                String::new()
+            } else {
+                format!("?{}", params.join("&"))
+            };
+            let url = format!("{api_url}/api/plan-db/list{qs}");
+            if let Err(e) = crate::cli_http::fetch_and_print(&url, human).await {
                 eprintln!("error: {e}");
             }
         }
