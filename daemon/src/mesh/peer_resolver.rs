@@ -116,6 +116,12 @@ fn find_peer(name: &str, registry: &PeersRegistry) -> Result<(String, PeerConfig
             return Ok((key.clone(), config.clone()));
         }
     }
+    // 4. Match against aliases
+    for (key, config) in &registry.peers {
+        if config.aliases.iter().any(|a| a.eq_ignore_ascii_case(name)) {
+            return Ok((key.clone(), config.clone()));
+        }
+    }
     Err(PeersError::NotFound(name.to_string()))
 }
 

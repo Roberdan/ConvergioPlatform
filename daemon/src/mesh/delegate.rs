@@ -21,11 +21,17 @@ const HEALTH_CHECK_RETRIES: u32 = 3;
 
 pub struct DelegateEngine {
     peers_conf_path: PathBuf,
+    db_path: Option<PathBuf>,
 }
 
 impl DelegateEngine {
     pub fn new(peers_conf_path: PathBuf) -> Self {
-        Self { peers_conf_path }
+        Self { peers_conf_path, db_path: None }
+    }
+
+    pub fn with_db(mut self, db_path: PathBuf) -> Self {
+        self.db_path = Some(db_path);
+        self
     }
 
     fn resolve_peer(&self, peer_name: &str) -> Result<(peer_resolver::ResolvedPeer, String), DelegateError> {
@@ -157,39 +163,53 @@ impl DelegateEngine {
             task_id.to_owned(),
             agent_type.to_owned(),
         );
+        let db_path = self.db_path.clone();
+        let del_id = format!("del-{plan_id}-{}-{}", peer_name, task_id);
         info!(
             peer = peer_name,
-            plan_id,
-            task_id,
-            agent_type,
+            plan_id, task_id, agent_type,
             timeout_secs = timeout.as_secs(),
             "delegating task"
         );
 
         tokio::task::spawn_blocking(move || {
+            use super::delegate_progress::record_step;
+            let step = |s: &str, st: &str, msg: Option<&str>| {
+                if let Some(ref p) = db_path {
+                    record_step(p, &del_id, s, st, msg);
+                }
+            };
+
+            step("resolving", "running", None);
             let started = Instant::now();
+
+            step("connecting", "running", None);
             let ssh = SshClient::connect(&dest, Duration::from_secs(SSH_CONNECT_TIMEOUT_SECS))
                 .map_err(|e: crate::mesh::error::MeshError| {
+                    step("connecting", "blocked", Some(&e.to_string()));
                     DelegateError::SshConnect(e.to_string())
                 })?;
             Self::check_remote_health(&ssh, &peer_owned)?;
+
+            step("transferring", "running", None);
             let worktree_dir = Self::create_remote_worktree(&ssh, plan_id, &task_owned)?;
+
+            step("executing", "running", None);
             let (output, tokens, status) = match Self::spawn_and_monitor(
-                &ssh,
-                &worktree_dir,
-                plan_id,
-                &task_owned,
-                &agent_owned,
-                timeout,
+                &ssh, &worktree_dir, plan_id, &task_owned, &agent_owned, timeout,
             ) {
                 Ok(r) => r,
                 Err(e) => {
+                    step("failed", "blocked", Some(&e.to_string()));
                     Self::cleanup_remote_worktree(&ssh, plan_id, &task_owned);
                     return Err(e);
                 }
             };
             if status != DelegateStatus::Success {
+                step("failed", "blocked", Some(&output));
                 Self::cleanup_remote_worktree(&ssh, plan_id, &task_owned);
+            } else {
+                step("completed", "done", None);
             }
             Ok(DelegateResult {
                 status,

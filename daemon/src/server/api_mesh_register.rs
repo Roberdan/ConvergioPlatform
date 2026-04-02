@@ -103,6 +103,7 @@ async fn handle_register(
         status: "active".to_string(), thunderbolt_ip: None,
         lan_ip: req.lan_ip, mac_address: req.mac_address,
         gh_account: req.gh_account, runners: None, runner_paths: None,
+        aliases: vec![],
     };
 
     let is_new = !registry.peers.contains_key(&req.name);

@@ -22,9 +22,23 @@ fn parse_delegation(args: &[&str]) -> DelegationCommands {
 fn parse_start_command() {
     let cmd = parse_delegation(&["start", "742", "--peer", "macProM1"]);
     match cmd {
-        DelegationCommands::Start { plan_id, peer } => {
+        DelegationCommands::Start { plan_id, peer, no_wait } => {
             assert_eq!(plan_id, 742);
             assert_eq!(peer, "macProM1");
+            assert!(!no_wait, "no_wait should default to false");
+        }
+        _ => panic!("expected Start variant"),
+    }
+}
+
+#[test]
+fn parse_start_no_wait_flag() {
+    let cmd = parse_delegation(&["start", "99", "--peer", "worker", "--no-wait"]);
+    match cmd {
+        DelegationCommands::Start { plan_id, peer, no_wait } => {
+            assert_eq!(plan_id, 99);
+            assert_eq!(peer, "worker");
+            assert!(no_wait, "no_wait should be true when --no-wait is passed");
         }
         _ => panic!("expected Start variant"),
     }

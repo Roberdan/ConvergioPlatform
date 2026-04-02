@@ -20,6 +20,7 @@ mod tests {
             runners: None,
             runner_paths: None,
             lan_ip: None,
+            aliases: vec![],
         }
     }
 

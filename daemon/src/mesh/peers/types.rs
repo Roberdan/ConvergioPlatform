@@ -32,6 +32,8 @@ pub struct PeerConfig {
     pub gh_account: Option<String>,
     pub runners: Option<u32>,
     pub runner_paths: Option<String>,
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

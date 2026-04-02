@@ -21,6 +21,7 @@ fn test_registry() -> PeersRegistry {
             runners: None,
             runner_paths: None,
             lan_ip: None,
+            aliases: vec![],
         },
     );
     peers.insert(
@@ -40,6 +41,7 @@ fn test_registry() -> PeersRegistry {
             runners: None,
             runner_paths: None,
             lan_ip: None,
+            aliases: vec!["worker1".into(), "macmini".into()],
         },
     );
     PeersRegistry {
@@ -158,4 +160,21 @@ fn fallback_chain_dns_name_when_no_ip() {
     peer.lan_ip = None;
     let resolved = resolve_from_registry("m1pro", &reg).unwrap();
     assert_eq!(resolved.host, "m1-pro-worker.tail01f12c.ts.net");
+}
+
+#[test]
+fn resolve_by_alias() {
+    let reg = test_registry();
+    let resolved = resolve_from_registry("worker1", &reg).unwrap();
+    assert_eq!(resolved.canonical_name, "m1pro");
+    // Case-insensitive alias match
+    let resolved2 = resolve_from_registry("MacMini", &reg).unwrap();
+    assert_eq!(resolved2.canonical_name, "m1pro");
+}
+
+#[test]
+fn resolve_unknown_alias_fails() {
+    let reg = test_registry();
+    let err = resolve_from_registry("nonexistent-alias", &reg);
+    assert!(err.is_err());
 }

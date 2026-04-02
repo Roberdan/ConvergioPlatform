@@ -159,6 +159,7 @@ gh_account=Roberdan
             gh_account: None,
             runners: None,
             runner_paths: None,
+            aliases: vec![],
         };
         reg.add_peer("testnode", new_peer);
         assert_eq!(reg.peers.len(), 4);
