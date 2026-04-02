@@ -176,7 +176,9 @@ if [[ -n "$WT" && -d "$WT" && -x "${SCRIPT_DIR}/execution-preflight.sh" ]]; then
 	fi
 fi
 
-# Execute with retry logic for timeout (exit 124)
+# Fallback: if WT is empty, use current directory
+[[ -z "$WT" ]] && WT="$(pwd)"
+
 execute_copilot() {
 	local attempt="${1:-1}"
 	local exit_code=0
@@ -186,8 +188,6 @@ execute_copilot() {
 	copilot_stdout_file="$(mktemp)"
 	_WORKER_TMPFILES+=("$copilot_stdout_file")
 
-	# Pipe copilot output to tee: file + stderr (visible to user)
-	# Track child PID for cleanup on parent exit
 	timeout "$TIMEOUT" $CLI $CLI_ARGS --add-dir "$WT" \
 		--model "$MODEL" "$PROMPT" 2>&1 | tee "$copilot_stdout_file" >&2 &
 	local copilot_bg_pid=$!
