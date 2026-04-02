@@ -244,6 +244,6 @@ After implementation:
 1. `cargo check` passes
 2. `cargo test orchestrator` — all tests green
 3. Start daemon: the log shows "ali-orchestrator: starting"
-4. Send test event: `convergio-bus.sh send ali-orchestrator '{"type":"plan_started","plan_id":719}' event`
+4. Send test event: `cvg bus send ali-orchestrator '{"type":"plan_started","plan_id":719}' event`
 5. Ali should check dependencies, find a peer, and attempt delegation (will fail gracefully if no peer — that's ok)
-6. Check #orchestration channel: `convergio-bus.sh read ali-orchestrator --channel '#orchestration'`
+6. Check #orchestration channel: `cvg bus read ali-orchestrator --channel '#orchestration'`

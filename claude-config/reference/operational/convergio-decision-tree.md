@@ -54,7 +54,7 @@
 | Active agents | `cvg who agents` |
 | Mesh health | `cvg mesh status` |
 | Node readiness | `curl localhost:8420/api/node/readiness` |
-| DB repair | `dashboard-db-repair.sh` |
+| DB repair | `cvg ops db-repair` or restart daemon |
 | Stale worktrees | `cvg reap worktrees --dry-run` |
 
 ### Access Data
@@ -74,7 +74,7 @@
 | Start kernel | `cvg kernel start` |
 | Set audio node | `cvg kernel here` |
 | TTS | `cvg kernel say "<text>"` |
-| Sync DB across nodes | `scripts/kernel/sync-db.sh <src> <dst>` |
+| Sync DB across nodes | `cvg mesh sync` or daemon auto-sync |
 | Mesh peer status | `cvg mesh status` |
 | Send heartbeat | `cvg mesh heartbeat` |
 

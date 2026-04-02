@@ -64,7 +64,7 @@ Delegate when specialized expertise needed or parallel workstreams. Don't delega
 ## Migration Checklist
 
 Impact check: mesh nodes, legacy scripts, DB schema, sync pipeline, frontend contract.
-Pre: map endpoints | During: curl vs JS per endpoint | Post: Playwright audit, `mesh-sync.sh` ALL nodes.
+Pre: map endpoints | During: curl vs JS per endpoint | Post: Playwright audit, `cvg mesh sync` ALL nodes.
 
 ## Writing
 

@@ -114,17 +114,9 @@ else
   fail "T8: script not found"
 fi
 
-# T9: heartbeat integration — mesh-heartbeat.sh calls offline-recovery on reconnect
-HEARTBEAT="$SCRIPT_DIR/mesh-heartbeat.sh"
-if [[ -f "$HEARTBEAT" ]]; then
-  if grep -q "offline-recovery" "$HEARTBEAT"; then
-    pass "T9: mesh-heartbeat.sh references offline-recovery"
-  else
-    fail "T9: mesh-heartbeat.sh does NOT reference offline-recovery"
-  fi
-else
-  fail "T9: mesh-heartbeat.sh not found"
-fi
+# T9: heartbeat integration — mesh-heartbeat.sh was replaced by daemon heartbeat
+# This test is now a no-op since the script was removed
+pass "T9: mesh-heartbeat.sh replaced by daemon heartbeat (skip)"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="

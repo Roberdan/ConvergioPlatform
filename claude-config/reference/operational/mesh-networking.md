@@ -20,7 +20,7 @@ Note: `[mesh]` section is global config (shared_secret), not a peer. `lib/peers.
 # 1. peers.conf block (required: ssh_alias, user, os, role)
 # 2. mesh-load-query.sh --peer NAME --json
 # 3. mesh-env-setup.sh --full (persistent tmux "convergio")
-# 4. mesh-auth-sync.sh push --peer NAME
+# 4. cvg mesh auth-sync --peer NAME
 # 5. mesh-claude-login.sh NAME --token sk-ant-oat01-TOKEN
 ```
 
@@ -33,7 +33,7 @@ tmux aliases: `tlm` (<mac-worker-1>), `tlx` (<linux-worker>), `tl` (local). Auto
 | workflow-enforcer.sh | 60-280ms | 10-33ms | Single jq + case/esac, zero grep |
 | mesh-health.sh (3 nodes) | ~15s seq | 0.5s parallel | Background SSH + wait |
 | mesh-sync-config.sh | ~30s seq | ~10s parallel | Parallel peers + tar pipe batch |
-| mesh-sync-all.sh verify | ~15s seq | 0.5s parallel | Parallel SSH verification |
+| mesh-sync-all.sh verify | ~15s seq | 0.5s parallel | Parallel SSH verification (now via daemon auto-sync) |
 | git-digest.sh | 416ms | 252ms | Single awk, 5s TTL cache |
 | peers.sh load | 18ms always | 8ms cached | mtime-based /tmp cache |
 | SQLite queries | no indexes | indexed + mmap=256MB | 7 new indexes on plans/kb |
@@ -66,13 +66,13 @@ mtime-based cache in `/tmp/peers-cache-mtime-{mtime}`. Invalidated when `peers.c
 
 | Command | Purpose |
 |---|---|
-| `mesh-sync-all.sh [--dry-run] [--peer] [--phase] [--force]` | Unified 3-phase sync |
+| `mesh-sync-all.sh [--dry-run] [--peer] [--phase] [--force]` | Unified 3-phase sync (replaced by daemon auto-sync) |
 | `mesh-sync-config.sh [--dry-run] [--peer]` | Parallel tar-pipe config sync |
 | `mesh-health.sh [--peer NAME]` | Parallel health check all nodes |
 | `mesh-dispatcher.sh --plan ID [--dry-run] [--force-provider]` | Score+dispatch tasks |
 | `mesh-load-query.sh [--json] [--peer]` | CPU load + task state |
 | `mesh-heartbeat.sh start\|stop\|status\|daemon` | Liveness daemon (30s) |
-| `mesh-auth-sync.sh push\|status [--peer\|--all]` | Credential sync |
+| `cvg mesh auth-sync [--peer\|--all]` | Credential sync (was mesh-auth-sync.sh) |
 | `mesh-claude-login.sh <peer\|--all> --token T \| --status` | Deploy OAuth token |
 | `mesh-migrate.sh <plan> <peer> [--dry-run] [--no-launch]` | Live plan migration |
 | `mesh-discover.sh [--deep]` | Tailscale peer discovery |
@@ -123,7 +123,7 @@ Credential sync: Claude=status-check-only | Copilot=`gh auth token` via SSH | Op
 | `claude auth login` hangs SSH | Use `setup-token` + `mesh-claude-login.sh` |
 | Bundle `unresolved deltas` | `rsync -az --delete ~/.claude/.git/` |
 | Git pull fails on peer | `gh auth switch --user <GH_MICROSOFT_ACCOUNT>` |
-| Heartbeat PID stale | `rm ~/.claude/data/mesh-heartbeat.pid && mesh-heartbeat.sh start` |
+| Heartbeat PID stale | `rm ~/.claude/data/mesh-heartbeat.pid && cvg mesh heartbeat start` |
 | `ANTHROPIC_API_KEY` on peer | `mesh-claude-login.sh` auto-removes; check `.zshenv` |
 | `lib/lib/peers.sh` error | Fixed v3.0.0: `common.sh` overrides SCRIPT_DIR. Use `_SYNC_SCRIPT_DIR` in callers. |
 

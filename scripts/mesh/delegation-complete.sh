@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # delegation-complete.sh — Completion callback for delegated claude tasks on peer
-# Called when claude exits on peer (post-exit hook or explicit call from mesh-delegate-task.sh)
+# Called when claude exits on peer (post-exit hook or explicit call from cvg delegation)
 #
 # Responsibilities:
 #   1. Signal coordinator daemon that delegation is done (POST /api/delegation/:id/progress)
@@ -95,7 +95,7 @@ run_final_sync() {
   fi
 }
 
-# Remove the prompt markdown file written by mesh-delegate-task.sh
+# Remove the prompt markdown file written by cvg delegation
 remove_prompt_file() {
   if [[ -f "$PROMPT_FILE" ]]; then
     rm -f "$PROMPT_FILE"

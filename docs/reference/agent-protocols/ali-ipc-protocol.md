@@ -35,7 +35,7 @@ curl -X POST $DAEMON_URL/api/ipc/context -d '{
 }'
 
 # Ali tells agent B where to find it
-convergio-bus.sh send ali matteo "Input ready: read docs/market-analysis.md (context key: fiona_market_analysis)"
+cvg bus send ali matteo "Input ready: read docs/market-analysis.md (context key: fiona_market_analysis)"
 ```
 
 ## Standard IPC Message Schema (E3)

@@ -24,11 +24,11 @@ Digest scripts produce compact JSON (~10x less tokens), cached, enforced by `pre
 | audit/hardening/linters | `project-audit.sh --project-root $(pwd)` |
 | `gh pr checks` | `ci-digest.sh checks <pr>` |
 | CI polling | `ci-watch.sh <branch> --repo owner/repo` |
-| SSH sync | `mesh-sync.sh [--peer NAME]` |
+| SSH sync | `cvg mesh sync` or daemon auto-sync |
 | Remote tasks | `mesh-exec.sh <peer> <prompt> [--model]` |
 | Peer health | `mesh-health.sh [--peer NAME]` |
 | Mesh preflight | `mesh-preflight.sh [--json] [--peer N]` |
-| Auth sync | `mesh-auth-sync.sh [--check-only]` |
+| Auth sync | `cvg mesh auth-sync` or daemon auto-sync |
 | DB migrations | `apply-migrations.sh` |
 
 Options: `--no-cache` (fresh) | `--compact` (~30-40% fewer tokens)

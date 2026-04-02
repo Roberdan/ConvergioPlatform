@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-coordinator-remote.sh — Configure 'coordinator' git remote on a mesh peer
 #
-# Usage (SSH mode, used by mesh-delegate-task.sh):
+# Usage (SSH mode, used by cvg delegation start):
 #   setup-coordinator-remote.sh --peer <ssh_host> --peer-repo-path <path> \
 #                                --coordinator-url <ssh://user@host/path>
 #

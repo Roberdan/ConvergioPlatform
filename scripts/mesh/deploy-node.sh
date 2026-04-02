@@ -99,7 +99,7 @@ info "[3/11] Stopping daemon on node..."
 _ssh "pkill -f '${DAEMON_PROCESS}' 2>/dev/null && echo 'daemon stopped' || echo 'daemon was not running'"
 sleep 3
 
-# Step 4: Sync DB from this Mac to node (direct rsync, no sync-db.sh dependency)
+# Step 4: Sync DB from this Mac to node (direct rsync, daemon auto-sync preferred)
 info "[4/11] Syncing DB to node..."
 LOCAL_DB="$(readlink -f "${HOME}/${DB_REL_PATH}" 2>/dev/null || echo "${HOME}/${DB_REL_PATH}")"
 if [[ -f "$LOCAL_DB" ]]; then

@@ -217,7 +217,7 @@ This flag was silently accepted in v19 and is now a hard error in v20.
   Verify: `jq '.hooks.PreToolUse | length' .claude/settings.json` >= 8
 
 **Skill sync shows 0 skills**
-- Fix: `scripts/platform/agent-skills-sync.sh --platform-dir "$(pwd)"`
+- Fix: `cvg agent import` or restart daemon (auto-syncs on startup)
 
 **Agent heartbeat stale**
 - Fix: `scripts/platform/agent-heartbeat.sh --name <name> --task idle`
@@ -284,10 +284,10 @@ Commands: `cvg repo add <name> --path <p> [--github-url <u>]` | `cvg repo list` 
 
 ## Nightly Calibration (Plan 734)
 
-**calibrate-models.sh not found on M1 Pro**
-- Symptom: `bash: scripts/kernel/calibrate-models.sh: No such file or directory`
-- Cause: M1 Pro repo is behind main (script added in Plan T commit `3bba32f`).
-- Fix: `ssh m1Pro "cd ~/GitHub/ConvergioPlatform && git pull --rebase origin main"`
+**Nightly calibration not running on M1 Pro**
+- Symptom: calibration metrics not updating overnight.
+- Cause: daemon nightly job not enabled or daemon not running on M1 Pro.
+- Fix: ensure daemon is running on M1 Pro (`./daemon/start.sh`); calibration runs as a daemon nightly job.
 
 **Telegram notification skipped**
 - Symptom: `[calibrate-models] Telegram not configured — skipping notification`

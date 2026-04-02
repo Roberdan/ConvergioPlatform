@@ -107,9 +107,9 @@ Each transpiler reads `skill.yaml` + `SKILL.md` and emits provider-specific outp
 
 | Script | Target | Output Format |
 |---|---|---|
-| `skill-transpile-claude.sh` | Claude Code | `commands/*.md` with frontmatter |
-| `skill-transpile-copilot.sh` | Copilot CLI | `.github/copilot-instructions.md` agent block |
-| `skill-transpile-generic.sh` | Any LLM | System prompt string |
+| `cvg skill transpile claude` | Claude Code | `commands/*.md` with frontmatter |
+| `cvg skill transpile copilot` | Copilot CLI | `.github/copilot-instructions.md` agent block |
+| `cvg skill transpile generic` | Any LLM | System prompt string |
 
 Transpilers MUST:
 - Inject all `tools` as provider capability declarations

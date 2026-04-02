@@ -15,8 +15,8 @@ Complete end-to-end flow: rsync → tmux → claude → Thor → completion.
 ## Phase 1: Prepare
 
 ```bash
-# Sync DB to peer (rsync-based, NOT git)
-scripts/kernel/sync-db.sh $(hostname) <peer>
+# Sync DB to peer (daemon-managed)
+cvg mesh sync
 
 # Build delegation prompt (auto-includes task context)
 copilot-task-prompt.sh <task_db_id> [role]
@@ -76,7 +76,7 @@ git push origin <branch>
 cvg agent complete "claude-$(hostname -s)"
 
 # On coordinator
-scripts/kernel/sync-db.sh <peer> $(hostname)   # sync DB back
+cvg mesh sync                                          # sync DB back
 cvg plan tree <plan_id> --human                 # verify
 cvg delegation status <plan_id>                 # final status
 ```

@@ -88,7 +88,7 @@ ProposalGenerator                    Guardrails
 
 | System | Interface | Data Direction |
 |---|---|---|
-| **ConvergioMesh** | `mesh-peers` SQLite table, `mesh-sync-all.sh` | Reads peer health metrics; writes config proposals via PR |
+| **ConvergioMesh** | `mesh-peers` SQLite table, daemon auto-sync | Reads peer health metrics; writes config proposals via PR |
 | **dashboard_web** | JSON data files in `data/`, evolution widgets in `dashboard_web/evolution/` | Engine writes snapshot JSON; widgets read and render |
 | **GitHub** | `gh pr create` via PlatformAdapter | Proposals with blast radius ≥ SingleRepo require PR approval |
 | **NaSra** | `NaSraCanaryAdapter` | Canary traffic routing for web experiments |
@@ -101,7 +101,7 @@ M1 (primary)                         M5 (peer)
 ┌────────────────────────────┐        ┌─────────────────────────┐
 │ EvolutionEngine (active)   │        │ MetricStore (replica)   │
 │ CadenceScheduler (running) │        │ MeshEvaluator (passive) │
-│ DailyRunner @ 06:00 UTC    │ ──────► │ mesh-sync-all.sh target │
+│ DailyRunner @ 06:00 UTC    │ ──────► │ daemon auto-sync target │
 │ WeeklyRunner @ 02:00 Sun   │  sync  │                         │
 │ SQLite: telemetry.db       │        │ SQLite: telemetry.db    │
 │ SQLite: evolution.db       │        └─────────────────────────┘
@@ -114,6 +114,6 @@ M1 (primary)                         M5 (peer)
     roi-summary.json)
 ```
 
-**Sync mechanism**: `mesh-sync-all.sh` replicates telemetry and config files to M5.
+**Sync mechanism**: Daemon auto-sync replicates telemetry and config files to M5.
 The engine runs exclusively on M1; M5 provides read-only metric redundancy and
 serves as a canary target for mesh-topology experiments.

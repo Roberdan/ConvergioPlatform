@@ -90,23 +90,21 @@ sync_provider() {
     fi
   fi
 
-  # Always run transpiler if available (idempotent, file-based)
-  local transpiler_map
+  # Skill transpilation now handled by daemon: cvg skill transpile
   case "$provider" in
-    claude-code)  transpiler_map="skill-transpile-claude.sh" ;;
-    copilot-cli)  transpiler_map="skill-transpile-copilot.sh" ;;
-    generic-llm)  transpiler_map="skill-transpile-generic.sh" ;;
+    claude-code)  transpiler_map="cvg skill transpile claude" ;;
+    copilot-cli)  transpiler_map="cvg skill transpile copilot" ;;
+    generic-llm)  transpiler_map="cvg skill transpile generic" ;;
     *)            return 0 ;;
   esac
 
-  local transpiler="$CONFIG_SCRIPTS/$transpiler_map"
-  if [[ -x "$transpiler" ]]; then
+  if command -v cvg &>/dev/null; then
     echo "  [transpile] $transpiler_map"
     if [[ $DRY_RUN -eq 0 ]]; then
-      bash "$transpiler"
+      $transpiler_map
     fi
   else
-    echo "  [SKIP] transpiler not found: $transpiler_map"
+    echo "  [SKIP] cvg CLI not found for: $transpiler_map"
   fi
 }
 

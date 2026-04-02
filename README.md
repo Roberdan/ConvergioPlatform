@@ -571,7 +571,7 @@ cd evolution && npx vitest run       # evolution tests
 
 ```bash
 scripts/mesh/deploy-node.sh <node-hostname> --kernel   # full provision
-scripts/kernel/sync-db.sh <node-hostname>              # sync database
+cvg mesh sync                                          # sync database via daemon
 ```
 
 ### Node readiness

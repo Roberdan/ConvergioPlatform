@@ -7,7 +7,7 @@
 | Requirement | Command |
 |---|---|
 | Daemon running | `./daemon/start.sh` (port 8420) |
-| Mesh peer online | `scripts/mesh/mesh-heartbeat.sh` |
+| Mesh peer online | `cvg mesh status` |
 | Plan 719 in DB | `cvg plan show 719` (status: todo) |
 | Plan 712 depends on 719 | `cvg plan show 712` (depends_on: 719) |
 
@@ -25,7 +25,7 @@
 7. Ali launches claude in tmux on peer
 
 **Verify:**
-- `convergio-bus.sh read ali-orchestrator --channel '#orchestration'` shows `plan_delegated`
+- `cvg bus read ali-orchestrator --channel '#orchestration'` shows `plan_delegated`
 - Peer has repo files (NOT via git): `ssh peer 'ls ~/GitHub/ConvergioPlatform/CLAUDE.md'`
 - Tmux session exists: `ssh peer 'tmux has-session -t plan-719'`
 - Done script uses rsync, NOT git: `ssh peer 'grep -c mesh-rsync /tmp/convergio-plan-719-done.sh'`
@@ -35,7 +35,7 @@
 **Steps:**
 1. Simulate task completion:
    ```bash
-   convergio-bus.sh send executor-peer '#orchestration' \
+   cvg bus send executor-peer '#orchestration' \
      '{"type":"task_done","task_id":"T1-01","plan_id":719}' event
    ```
 2. Repeat for all tasks in wave 1
@@ -50,7 +50,7 @@
 **Steps:**
 1. Simulate plan completion:
    ```bash
-   convergio-bus.sh send executor-peer '#orchestration' \
+   cvg bus send executor-peer '#orchestration' \
      '{"type":"plan_done","plan_id":719}' event
    ```
 
@@ -65,7 +65,7 @@
 **Steps:**
 1. Send delegation failure:
    ```bash
-   convergio-bus.sh send mesh-agent '#orchestration' \
+   cvg bus send mesh-agent '#orchestration' \
      '{"type":"delegation_failed","plan_id":720,"peer":"offline-peer","reason":"connection refused"}' event
    ```
 
@@ -144,7 +144,7 @@
 
 **Scenario:** Event with missing `plan_id` or invalid JSON.
 **Expected:** `require_i64` returns error → reactor logs error → emits error event → continues processing.
-**Verify:** `convergio-bus.sh send test '#orchestration' 'not-json' event` — Ali logs error, does not crash.
+**Verify:** `cvg bus send test '#orchestration' 'not-json' event` — Ali logs error, does not crash.
 
 ### E5 — Rsync Fails (Network Issue)
 
