@@ -26,6 +26,7 @@ pub struct UpdateOrgRequest {
 
 #[derive(Deserialize)]
 pub struct AddMemberRequest {
+    #[serde(alias = "agent_id")]
     pub agent: String,
     pub role: String,
     pub department: Option<String>,

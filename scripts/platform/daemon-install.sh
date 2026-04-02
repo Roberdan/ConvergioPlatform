@@ -20,6 +20,7 @@ fi
 mkdir -p "$DEST_DIR"
 cp -f "$SRC" "$DEST"
 chmod +x "$DEST"
+codesign -s - "$DEST"
 
 SIZE=$(du -h "$DEST" | cut -f1)
 VERSION=$("$DEST" --version 2>/dev/null || echo "unknown")
