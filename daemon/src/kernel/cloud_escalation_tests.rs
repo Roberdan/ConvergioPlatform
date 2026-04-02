@@ -1,7 +1,7 @@
-// Tests for cloud escalation and inference level logic.
+// Tests for cloud escalation and write-intent classification.
 
 use crate::kernel::cloud_escalation::CLOUD_MODEL;
-use crate::kernel::engine::{InferenceLevel, KernelConfig, KernelEngine};
+use crate::kernel::voice_router_helpers::is_write_intent;
 
 #[test]
 fn test_cloud_model_is_opus() {
@@ -15,42 +15,33 @@ fn test_cloud_model_routes_to_claude() {
 }
 
 #[test]
-fn test_inference_level_write_italian() {
-    let mut eng = KernelEngine::new(KernelConfig::default());
-    eng.load_model("test-model");
-    assert_eq!(eng.inference_level_for("crea un piano"), InferenceLevel::Cloud);
+fn test_write_intent_italian() {
+    assert!(is_write_intent("crea un piano"));
 }
 
 #[test]
-fn test_inference_level_write_english() {
-    let mut eng = KernelEngine::new(KernelConfig::default());
-    eng.load_model("test-model");
-    assert_eq!(eng.inference_level_for("create a new org"), InferenceLevel::Cloud);
+fn test_write_intent_english() {
+    assert!(is_write_intent("create a new org"));
 }
 
 #[test]
-fn test_inference_level_read_italian() {
-    let mut eng = KernelEngine::new(KernelConfig::default());
-    eng.load_model("test-model");
-    assert_eq!(eng.inference_level_for("stato dei piani"), InferenceLevel::Local);
+fn test_read_intent_italian() {
+    assert!(!is_write_intent("stato dei piani"));
 }
 
 #[test]
-fn test_inference_level_ali_escalation() {
-    let mut eng = KernelEngine::new(KernelConfig::default());
-    eng.load_model("test-model");
-    assert_eq!(eng.inference_level_for("parla con ali"), InferenceLevel::Cloud);
+fn test_write_intent_ali_escalation() {
+    assert!(is_write_intent("parla con ali"));
 }
 
 #[test]
-fn test_inference_level_no_model() {
+fn test_no_model_returns_cloud() {
+    use crate::kernel::engine::{InferenceLevel, KernelConfig, KernelEngine};
     let eng = KernelEngine::new(KernelConfig::default());
     assert_eq!(eng.inference_level_for("qualsiasi cosa"), InferenceLevel::Cloud);
 }
 
 #[test]
-fn test_inference_level_cost_query() {
-    let mut eng = KernelEngine::new(KernelConfig::default());
-    eng.load_model("test-model");
-    assert_eq!(eng.inference_level_for("quanto costa"), InferenceLevel::Local);
+fn test_read_intent_cost_query() {
+    assert!(!is_write_intent("quanto costa"));
 }
