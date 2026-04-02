@@ -10,9 +10,9 @@ const P_ORG_ID: &[ToolParam] = &[ToolParam {
 
 const P_ORG_CREATE: &[ToolParam] = &[
     ToolParam { name: "name", param_type: "string", required: true },
-    ToolParam { name: "mission", param_type: "string", required: false },
-    ToolParam { name: "objectives", param_type: "string", required: false },
-    ToolParam { name: "ceo_agent", param_type: "string", required: false },
+    ToolParam { name: "mission", param_type: "string", required: true },
+    ToolParam { name: "objectives", param_type: "string", required: true },
+    ToolParam { name: "ceo_agent", param_type: "string", required: true },
     ToolParam { name: "budget", param_type: "number", required: false },
 ];
 
@@ -41,7 +41,7 @@ pub fn tools() -> Vec<ToolDef> {
     vec![
         ToolDef {
             name: "org_create",
-            description: "Create a new organization. Args: name, optional mission/objectives/ceo_agent/budget.",
+            description: "Create a new organization. Args: name, mission, objectives, ceo_agent, optional budget.",
             endpoint: "/api/orgs",
             method: ToolMethod::Post,
             params: P_ORG_CREATE,
@@ -64,7 +64,7 @@ pub fn tools() -> Vec<ToolDef> {
             tier: ToolTier::Read,
         },
         ToolDef {
-            name: "org_members",
+            name: "org_add_member",
             description: "Add member to organization. Args: org_id, agent, role.",
             endpoint: "/api/orgs/{org_id}/members",
             method: ToolMethod::Post,
@@ -72,7 +72,7 @@ pub fn tools() -> Vec<ToolDef> {
             tier: ToolTier::Write,
         },
         ToolDef {
-            name: "org_services",
+            name: "org_add_service",
             description: "Register a service for organization. Args: org_id, name, endpoint.",
             endpoint: "/api/orgs/{org_id}/services",
             method: ToolMethod::Post,

@@ -39,9 +39,6 @@
 
 ## [20.8.0] - 01 Aprile 2026
 
-
-## [20.8.0] - 01 Aprile 2026
-
 ### Added
 - `cvg ask` CLI command with agent alias resolution (~/.convergio/aliases.toml)
 - `/interview` deep interview command for iterative requirements extraction (max 7 questions)
