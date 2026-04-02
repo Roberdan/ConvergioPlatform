@@ -13,31 +13,31 @@ pub fn smart_context_gather_pub(question: &str, daemon_url: &str) -> String {
 pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
     let q = question.to_lowercase();
     let empty = serde_json::json!({});
+    let cat = ToolCatalog::all();
     let mut ctx = String::new();
 
-    // Always fetch full platform context — Jarvis needs complete awareness.
-    if let Some(plans) = ToolCatalog::all().call_tool("get_plans", daemon_url, &empty) {
+    if let Some(plans) = cat.call_tool("get_plans", daemon_url, &empty) {
         ctx += &format!("Piani:\n{plans}\n\n");
     }
-    if let Some(agents) = ToolCatalog::all().call_tool("list_agents", daemon_url, &empty) {
+    if let Some(agents) = cat.call_tool("list_agents", daemon_url, &empty) {
         ctx += &format!("Agenti:\n{agents}\n\n");
     }
-    if let Some(costs) = ToolCatalog::all().call_tool("cost_summary", daemon_url, &empty) {
+    if let Some(costs) = cat.call_tool("cost_summary", daemon_url, &empty) {
         ctx += &format!("Costi:\n{costs}\n\n");
     }
-    if let Some(node) = ToolCatalog::all().call_tool("node_readiness", daemon_url, &empty) {
+    if let Some(node) = cat.call_tool("node_readiness", daemon_url, &empty) {
         ctx += &format!("Nodo:\n{node}\n\n");
     }
-    if let Some(kernel) = ToolCatalog::all().call_tool("kernel_status", daemon_url, &empty) {
+    if let Some(kernel) = cat.call_tool("kernel_status", daemon_url, &empty) {
         ctx += &format!("Kernel:\n{kernel}\n\n");
     }
-    if let Some(health) = ToolCatalog::all().call_tool("health_deep", daemon_url, &empty) {
+    if let Some(health) = cat.call_tool("health_deep", daemon_url, &empty) {
         ctx += &format!("Platform Health:\n{health}\n\n");
     }
-    if let Some(history) = ToolCatalog::all().call_tool("agent_history", daemon_url, &empty) {
+    if let Some(history) = cat.call_tool("agent_history", daemon_url, &empty) {
         ctx += &format!("Recent Agent Activity:\n{history}\n\n");
     }
-    if let Some(peers) = ToolCatalog::all().call_tool("mesh_status", daemon_url, &empty) {
+    if let Some(peers) = cat.call_tool("mesh_status", daemon_url, &empty) {
         ctx += &format!("Mesh Peers:\n{peers}\n\n");
     }
 
@@ -49,7 +49,7 @@ pub(crate) fn smart_context_gather(question: &str, daemon_url: &str) -> String {
         }).next();
         if let Some(plan_id) = id {
             let args = serde_json::json!({"plan_id": plan_id});
-            if let Some(detail) = ToolCatalog::all().call_tool("get_plan_detail", daemon_url, &args) {
+            if let Some(detail) = cat.call_tool("get_plan_detail", daemon_url, &args) {
                 ctx += &format!("Dettaglio piano {plan_id}:\n{detail}\n\n");
             }
         }

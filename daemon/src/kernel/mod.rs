@@ -8,7 +8,6 @@ pub mod engine;
 pub mod engine_context;
 pub mod engine_tool_loop;
 pub mod tools;
-pub mod tools_legacy;
 pub mod cloud_escalation;
 pub mod monitor;
 pub mod monitor_checks;

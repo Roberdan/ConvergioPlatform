@@ -14,12 +14,6 @@ const P_MESSAGE: &[ToolParam] = &[
     ToolParam { name: "severity", param_type: "string", required: false },
 ];
 
-const P_TARGET: &[ToolParam] = &[ToolParam {
-    name: "target",
-    param_type: "string",
-    required: true,
-}];
-
 const P_ASSIGN_ROLE: &[ToolParam] = &[
     ToolParam { name: "node", param_type: "string", required: true },
     ToolParam { name: "role", param_type: "string", required: true },
@@ -96,12 +90,12 @@ pub fn tools() -> Vec<ToolDef> {
             tier: ToolTier::Write,
         },
         ToolDef {
-            name: "restart_node",
-            description: "Trigger node recovery/restart. Args: target.",
-            endpoint: "/api/node/recover",
-            method: ToolMethod::Post,
-            params: P_TARGET,
-            tier: ToolTier::Write,
+            name: "night_status",
+            description: "Get nightly run status for the node.",
+            endpoint: "/api/node/night-status",
+            method: ToolMethod::Get,
+            params: &[],
+            tier: ToolTier::Read,
         },
         ToolDef {
             name: "assign_role",

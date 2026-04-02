@@ -42,25 +42,26 @@ mod inner {
         };
 
         let answer = if level == crate::kernel::engine::InferenceLevel::Cloud {
-            // Cloud path: use Opus via stream_with_fallback
             crate::kernel::cloud_escalation::cloud_ask_with_tools(&question, "").await
         } else {
-            // Local path: classify + route
             let q = question.clone();
-            tokio::task::spawn_blocking(move || {
+            let q2 = question.clone();
+            // Classify locally; if EscalateToAli, escalate to cloud
+            let intent = {
                 let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
-                let intent = classify_intent(&q, &eng);
-                match &intent {
-                    VoiceIntent::EscalateToAli { .. } => eng.ask(&q),
-                    _ => {
-                        let du = std::env::var("DAEMON_URL")
-                            .unwrap_or_else(|_| "http://localhost:8420".into());
-                        route_intent(intent, &du)
-                    }
-                }
-            })
-            .await
-            .unwrap_or_else(|e| format!("Errore interno: {e}"))
+                classify_intent(&q, &eng)
+            };
+            if matches!(intent, VoiceIntent::EscalateToAli { .. }) {
+                crate::kernel::cloud_escalation::cloud_ask_with_tools(&q2, "").await
+            } else {
+                tokio::task::spawn_blocking(move || {
+                    let du = std::env::var("DAEMON_URL")
+                        .unwrap_or_else(|_| "http://localhost:8420".into());
+                    route_intent(intent, &du)
+                })
+                .await
+                .unwrap_or_else(|e| format!("Errore interno: {e}"))
+            }
         };
 
         Json(AskResponse { answer })
