@@ -10,7 +10,7 @@ fn test_registry() -> PeersRegistry {
             ssh_alias: "RoberdanM5Max.local".to_string(),
             user: "roberdan".to_string(),
             os: "macos".to_string(),
-            tailscale_ip: "100.89.245.79".to_string(),
+            tailscale_ip: "198.51.100.1".to_string(),
             dns_name: "macbook-pro-di-roberdan.tail01f12c.ts.net".to_string(),
             capabilities: vec!["claude".into(), "copilot".into()],
             role: "coordinator".to_string(),
@@ -30,7 +30,7 @@ fn test_registry() -> PeersRegistry {
             ssh_alias: "robertos-mbp-m1.tail01f12c.ts.net".to_string(),
             user: "roberdan".to_string(),
             os: "macos".to_string(),
-            tailscale_ip: "100.64.0.2".to_string(),
+            tailscale_ip: "198.51.100.2".to_string(),
             dns_name: "m1-pro-worker.tail01f12c.ts.net".to_string(),
             capabilities: vec!["claude".into()],
             role: "worker".to_string(),
@@ -70,7 +70,7 @@ fn resolve_case_insensitive_section_name() {
 #[test]
 fn resolve_by_tailscale_ip() {
     let reg = test_registry();
-    let resolved = resolve_from_registry("100.64.0.2", &reg).unwrap();
+    let resolved = resolve_from_registry("198.51.100.2", &reg).unwrap();
     assert_eq!(resolved.canonical_name, "m1pro");
 }
 
@@ -110,7 +110,7 @@ fn ssh_destination_prefers_alias() {
         port: DEFAULT_SSH_PORT,
         user: "roberdan".to_string(),
         ssh_alias: "RoberdanM5Max.local".to_string(),
-        tailscale_ip: "100.89.245.79".to_string(),
+        tailscale_ip: "198.51.100.1".to_string(),
         thunderbolt_ip: None,
         lan_ip: None,
         transport: "tailscale".to_string(),
@@ -122,16 +122,16 @@ fn ssh_destination_prefers_alias() {
 fn ssh_destination_falls_back_to_user_at_host() {
     let resolved = ResolvedPeer {
         canonical_name: "worker".to_string(),
-        host: "100.64.0.2".to_string(),
+        host: "198.51.100.2".to_string(),
         port: DEFAULT_SSH_PORT,
         user: "roberdan".to_string(),
         ssh_alias: String::new(),
-        tailscale_ip: "100.64.0.2".to_string(),
+        tailscale_ip: "198.51.100.2".to_string(),
         thunderbolt_ip: None,
         lan_ip: None,
         transport: "tailscale".to_string(),
     };
-    assert_eq!(ssh_destination(&resolved), "roberdan@100.64.0.2");
+    assert_eq!(ssh_destination(&resolved), "roberdan@198.51.100.2");
 }
 
 #[test]
@@ -147,7 +147,7 @@ fn fallback_chain_tailscale_when_no_ssh_alias() {
     let mut reg = test_registry();
     reg.peers.get_mut("m1pro").unwrap().ssh_alias = String::new();
     let resolved = resolve_from_registry("m1pro", &reg).unwrap();
-    assert_eq!(resolved.host, "100.64.0.2");
+    assert_eq!(resolved.host, "198.51.100.2");
 }
 
 #[test]
