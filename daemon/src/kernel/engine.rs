@@ -69,9 +69,9 @@ impl Default for KernelConfig {
 
 /// Core kernel engine: holds an AppleFmBridge reference, config, and loaded model state.
 pub struct KernelEngine {
-    bridge: AppleFmBridge,
+    pub(crate) bridge: AppleFmBridge,
     config: KernelConfig,
-    loaded_model: Option<String>,
+    pub(crate) loaded_model: Option<String>,
     started_at: Instant,
     last_check_ts: Option<String>,
 }
@@ -183,7 +183,7 @@ impl KernelEngine {
 }
 
 /// Parse the raw text from the model into a KernelAction.
-fn parse_inference_response(text: &str) -> KernelAction {
+pub(crate) fn parse_inference_response(text: &str) -> KernelAction {
     let upper = text.to_uppercase();
     let severity = if upper.contains("CRITICAL") {
         KernelSeverity::Critical
@@ -209,7 +209,7 @@ fn parse_inference_response(text: &str) -> KernelAction {
 }
 
 /// Fast keyword heuristic used when MLX is unavailable or no model is loaded.
-fn heuristic_classify(situation: &str) -> KernelAction {
+pub(crate) fn heuristic_classify(situation: &str) -> KernelAction {
     let lower = situation.to_lowercase();
     if lower.contains("95%")
         || lower.contains("critical")

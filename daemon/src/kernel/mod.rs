@@ -5,6 +5,7 @@
 pub mod audio;
 pub mod audio_routing;
 pub mod engine;
+pub mod engine_async;
 pub mod engine_context;
 pub mod engine_tool_loop;
 pub mod tools;

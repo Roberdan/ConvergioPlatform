@@ -120,10 +120,10 @@ pub mod handlers {
         State(state): State<KernelState>,
         Json(body): Json<ClassifyRequest>,
     ) -> Json<ClassifyResponse> {
-        let action = {
-            let engine = state.engine.lock().unwrap_or_else(|p| p.into_inner());
-            engine.classify(&body.situation)
-        };
+        // classify_async offloads blocking MLX subprocess to spawn_blocking thread pool.
+        let action = crate::kernel::engine_async::classify_async(
+            &state.engine, &body.situation,
+        ).await;
         Json(ClassifyResponse {
             severity: format!("{:?}", action.severity).to_lowercase(),
             action: action.action,
