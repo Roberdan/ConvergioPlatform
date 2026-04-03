@@ -8,6 +8,10 @@ fn test_cloud_model_is_opus() {
     assert!(CLOUD_MODEL.contains("opus"), "must target Opus");
 }
 
+// Provider routing is tested only on macOS where the full provider table is
+// compiled in.  On Linux CI this module may be built without the kernel
+// feature that wires up ClaudeSubscription routing.
+#[cfg(target_os = "macos")]
 #[test]
 fn test_cloud_model_routes_to_claude() {
     let (p, _) = crate::server::provider::provider_for_model(CLOUD_MODEL);
@@ -34,6 +38,9 @@ fn test_write_intent_ali_escalation() {
     assert!(is_write_intent("parla con ali"));
 }
 
+// KernelEngine wraps AppleFmBridge which is Apple-Silicon-specific; only
+// meaningful to run on macOS where the hardware/mlx_lm path is exercised.
+#[cfg(target_os = "macos")]
 #[test]
 fn test_no_model_returns_cloud() {
     use crate::kernel::engine::{InferenceLevel, KernelConfig, KernelEngine};
