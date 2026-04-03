@@ -48,7 +48,6 @@ pub trait ChannelAdapter: Send + Sync {
     fn name(&self) -> &str;
 }
 
-pub mod email;
 pub mod router;
 pub mod slack;
 pub mod telegram;
