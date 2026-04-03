@@ -217,8 +217,15 @@ async fn basic_rate_limit(
     } else {
         300
     };
+    // Extract client IP from X-Forwarded-For or fall back to "unknown".
+    let client_ip = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
     let allowed = rate_limiter
-        .allow(category, limit, Duration::from_secs(60))
+        .allow(category, client_ip, limit, Duration::from_secs(60))
         .await;
     if !allowed {
         return (StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded").into_response();

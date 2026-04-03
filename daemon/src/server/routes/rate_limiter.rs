@@ -6,9 +6,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
+/// Key: (category, client_ip) to enforce per-client, per-category limits.
+type BucketKey = (String, String);
+
 #[derive(Clone)]
 pub struct RateLimiter {
-    pub(super) buckets: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
+    pub(super) buckets: Arc<Mutex<HashMap<BucketKey, Vec<Instant>>>>,
 }
 
 impl Default for RateLimiter {
@@ -20,15 +23,26 @@ impl Default for RateLimiter {
 }
 
 impl RateLimiter {
-    pub(super) async fn allow(&self, category: String, limit: usize, window: Duration) -> bool {
+    pub(super) async fn allow(
+        &self,
+        category: String,
+        client_ip: String,
+        limit: usize,
+        window: Duration,
+    ) -> bool {
         let now = Instant::now();
         let mut buckets = self.buckets.lock().await;
-        let entries = buckets.entry(category).or_default();
+        let key: BucketKey = (category, client_ip);
+        let entries = buckets.entry(key).or_default();
         entries.retain(|seen| now.duration_since(*seen) <= window);
         if entries.len() >= limit {
             return false;
         }
         entries.push(now);
+        // Periodic cleanup: drop empty buckets to prevent unbounded growth.
+        if buckets.len() > 10_000 {
+            buckets.retain(|_, v| !v.is_empty());
+        }
         true
     }
 }
