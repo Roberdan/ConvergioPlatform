@@ -162,32 +162,11 @@ async fn process_text(
     };
     debug!(?intent, text, "jarvis.telegram: classified intent");
 
+    // EscalateToAli always goes to cloud — local model is not Ali.
     if matches!(intent, VoiceIntent::EscalateToAli { .. }) {
         let history = telegram_conv::format_history_chatml(chat_id);
-        let question = text.to_string();
-
-        let level = {
-            let eng = engine.lock().unwrap_or_else(|p| p.into_inner());
-            eng.inference_level_for(&question)
-        };
-
-        if level == crate::kernel::engine::InferenceLevel::Local {
-            let engine_clone = Arc::clone(engine);
-            let q = question.clone();
-            let h = history.clone();
-            return match tokio::task::spawn_blocking(move || {
-                let eng = engine_clone.lock().unwrap_or_else(|p| p.into_inner());
-                eng.ask_with_history(&q, &h)
-            })
-            .await
-            {
-                Ok(r) => r,
-                Err(e) => format!("Errore locale: {e}"),
-            };
-        }
-
-        info!("jarvis.telegram: escalating to cloud");
-        return crate::kernel::cloud_escalation::cloud_ask_with_tools(&question, &history).await;
+        info!("jarvis.telegram: escalating EscalateToAli to cloud");
+        return crate::kernel::cloud_escalation::cloud_ask_with_tools(text, &history).await;
     }
 
     // route_intent uses reqwest::blocking which deadlocks inside tokio runtime.
