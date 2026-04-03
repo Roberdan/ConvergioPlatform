@@ -120,8 +120,12 @@ async fn handle_register(
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let _guard = LOCK.lock().await;
 
+    // F-31: log full error internally; expose only a generic message to callers
     let mut registry = crate::mesh::peers::PeersRegistry::load(&path)
-        .map_err(|e| ApiError::internal(format!("peers.conf parse error: {e}")))?;
+        .map_err(|e| {
+            tracing::error!("peers.conf parse error: {e}");
+            ApiError::internal("configuration file error".to_string())
+        })?;
 
     let peer = crate::mesh::peers::PeerConfig {
         ssh_alias: req.ssh_alias, user: req.user, os: req.os,
@@ -136,7 +140,8 @@ async fn handle_register(
     let is_new = !registry.peers.contains_key(&req.name);
     registry.add_peer(&req.name, peer);
     registry.save(&path).map_err(|e| {
-        ApiError::internal(format!("failed to save peers.conf: {e}"))
+        tracing::error!("failed to save peers.conf: {e}");
+        ApiError::internal("configuration file error".to_string())
     })?;
 
     let peers_config = std::fs::read_to_string(&path).unwrap_or_default();
@@ -158,7 +163,10 @@ async fn handle_peers_config(
     State(_state): State<ServerState>,
 ) -> Result<Json<Value>, ApiError> {
     let content = std::fs::read_to_string(peers_conf_path()?)
-        .map_err(|e| ApiError::internal(format!("peers.conf read error: {e}")))?;
+        .map_err(|e| {
+            tracing::error!("peers.conf read error: {e}");
+            ApiError::internal("configuration file error".to_string())
+        })?;
     Ok(Json(json!({ "ok": true, "peers_config": content })))
 }
 
