@@ -8,15 +8,11 @@ use std::path::PathBuf;
 // --- T8046: Encryption core ---
 
 pub fn derive_key(shared_secret: &str) -> [u8; 32] {
-    tracing::info!("deriving key from shared secret");
-    let hostname = hostname::get()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let username = std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_default();
-    let salt = format!("{hostname}:{username}");
-    let hk = Hkdf::<Sha256>::new(Some(salt.as_bytes()), shared_secret.as_bytes());
+    // F-33: use a constant shared salt so tokens encrypted on any mesh node
+    // (with the same shared_secret) can be decrypted locally after sync.
+    // A host-specific salt (hostname:user) would make peer-synced blobs
+    // undecryptable on the receiving node.
+    let hk = Hkdf::<Sha256>::new(Some(b"convergio-ipc-auth-v1"), shared_secret.as_bytes());
     let mut okm = [0u8; 32];
     hk.expand(b"ipc-auth-v1", &mut okm)
         .expect("HKDF expand failed");
