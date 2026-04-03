@@ -13,29 +13,16 @@ use crate::security::rbac;
 use crate::server::middleware_mesh::{verify_body_hash, verify_mesh_hmac};
 
 pub fn cors_layer() -> CorsLayer {
-    let origins = match env::var("CONVERGIO_CORS_ORIGINS") {
-        Ok(value) => {
-            let parsed: Vec<_> = value
-                .split(',')
-                .map(str::trim)
-                .filter(|origin| !origin.is_empty())
-                .filter_map(|origin| match axum::http::HeaderValue::from_str(origin) {
-                    Ok(hv) => Some(hv),
-                    Err(e) => { tracing::warn!("invalid CORS origin '{origin}': {e}"); None }
-                })
-                .collect();
-            if parsed.is_empty() { None } else { Some(parsed) }
-        }
-        Err(_) => None,
-    }
-        .unwrap_or_else(|| {
-            vec![
-                axum::http::HeaderValue::from_static("http://localhost:8420"),
-                axum::http::HeaderValue::from_static("http://127.0.0.1:8420"),
-                axum::http::HeaderValue::from_static("http://localhost:3000"),
-                axum::http::HeaderValue::from_static("tauri://localhost"),
-            ]
-        });
+    let origins = env::var("CONVERGIO_CORS_ORIGINS").ok().and_then(|value| {
+        let parsed: Vec<_> = value.split(',').map(str::trim).filter(|o| !o.is_empty())
+            .filter_map(|o| axum::http::HeaderValue::from_str(o).ok()).collect();
+        if parsed.is_empty() { None } else { Some(parsed) }
+    }).unwrap_or_else(|| vec![
+        axum::http::HeaderValue::from_static("http://localhost:8420"),
+        axum::http::HeaderValue::from_static("http://127.0.0.1:8420"),
+        axum::http::HeaderValue::from_static("http://localhost:3000"),
+        axum::http::HeaderValue::from_static("tauri://localhost"),
+    ]);
 
     CorsLayer::new()
         .allow_origin(origins)
@@ -99,7 +86,7 @@ fn authenticate(
 ) -> Result<Option<AgentClaims>, ()> {
     // 0. Mesh HMAC auth for sync endpoints — peers use shared_secret
     if let Some((timestamp, signature)) = mesh_headers {
-        if path_and_query.starts_with("/api/sync/") {
+        if path_and_query.starts_with("/api/sync/") || path_and_query.starts_with("/api/mesh/") {
             return verify_mesh_hmac(timestamp, signature, path_and_query, method, body_hash);
         }
     }
@@ -118,10 +105,20 @@ fn authenticate(
                 }
             };
         }
-        // Legacy shared bearer token
+        // Legacy shared bearer token — assign system role for RBAC
         if let Some(expected) = get_auth_token() {
             if compare_tokens(token, expected.as_str()) {
-                return Ok(None);
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                return Ok(Some(AgentClaims {
+                    sub: "system-bearer".to_string(),
+                    role: jwt::AgentRole::Coordinator,
+                    cap: vec!["*".to_string()],
+                    iat: now,
+                    exp: u64::MAX,
+                }));
             }
         }
         return Err(());
@@ -153,12 +150,8 @@ fn is_localhost(req: &Request<Body>) -> bool {
     if let Some(addr) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
         return addr.0.ip().is_loopback();
     }
-    // Fallback: check Host header (less reliable but covers curl localhost)
-    req.headers()
-        .get("host")
-        .and_then(|v| v.to_str().ok())
-        .map(|h| h.starts_with("localhost:") || h.starts_with("127.0.0.1:"))
-        .unwrap_or(false)
+    // No ConnectInfo available — cannot determine origin. Refuse to trust.
+    false
 }
 
 /// Axum middleware: authenticates via JWT (with RBAC), legacy bearer, or mesh HMAC.
@@ -221,7 +214,7 @@ pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
             next.run(req).await
         }
         Ok(None) => {
-            tracing::debug!(path = %path, "Legacy/dev-mode auth");
+            tracing::debug!(path = %path, "Mesh HMAC or dev-mode auth");
             next.run(req).await
         }
         Err(()) => (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
@@ -232,14 +225,11 @@ pub async fn require_auth(req: Request<Body>, next: Next) -> Response {
 
 /// Middleware that ensures responses include a Cache-Control header.
 pub async fn set_cache_headers(req: Request<Body>, next: Next) -> Response {
-    use axum::http::header::CACHE_CONTROL;
-    use axum::http::HeaderValue;
-
     let mut res = next.run(req).await;
-    if !res.headers().contains_key(CACHE_CONTROL) {
+    if !res.headers().contains_key(axum::http::header::CACHE_CONTROL) {
         res.headers_mut().insert(
-            CACHE_CONTROL,
-            HeaderValue::from_static("private, max-age=10"),
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("private, max-age=10"),
         );
     }
     res

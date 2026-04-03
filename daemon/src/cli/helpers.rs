@@ -13,10 +13,10 @@ pub fn load_or_create_secret() -> MessageResult<Vec<u8>> {
         let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         return Ok(s.trim().as_bytes().to_vec());
     }
-    // Generate a random secret and persist it
+    use rand::rngs::OsRng;
     use rand::RngCore;
     let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    OsRng.fill_bytes(&mut bytes);
     let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     std::fs::write(&path, &hex).map_err(|e| e.to_string())?;

@@ -46,29 +46,56 @@ fn env_file_path() -> Result<std::path::PathBuf, ApiError> {
     Ok(home_dir()?.join(".convergio/env"))
 }
 
-/// Reject fields containing INI-breaking characters.
+/// Reject fields containing INI-breaking or injection characters.
 fn validate_field(name: &str, value: &str) -> Result<(), ApiError> {
-    if value.contains('\n') || value.contains('\r') || value.contains('[') || value.contains(']') {
+    if value.is_empty() {
+        return Err(ApiError::bad_request(format!("field '{name}' must not be empty")));
+    }
+    for ch in value.chars() {
+        if ch == '\n' || ch == '\r' || ch == '[' || ch == ']' || ch == '=' || ch.is_control() {
+            return Err(ApiError::bad_request(format!(
+                "field '{name}' contains invalid character"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Stricter validation for IP addresses / DNS names.
+fn validate_network_field(name: &str, value: &str) -> Result<(), ApiError> {
+    validate_field(name, value)?;
+    if !value.chars().all(|c| c.is_ascii_alphanumeric() || ".-:_".contains(c)) {
         return Err(ApiError::bad_request(format!(
-            "field '{name}' contains invalid characters"
+            "field '{name}' must contain only alphanumeric, '.', '-', ':', '_'"
+        )));
+    }
+    Ok(())
+}
+
+/// Stricter validation for names (no dots, colons).
+fn validate_name_field(name: &str, value: &str) -> Result<(), ApiError> {
+    validate_field(name, value)?;
+    if !value.chars().all(|c| c.is_ascii_alphanumeric() || "-_".contains(c)) {
+        return Err(ApiError::bad_request(format!(
+            "field '{name}' must contain only alphanumeric, '-', '_'"
         )));
     }
     Ok(())
 }
 
 fn validate_request(req: &RegisterRequest) -> Result<(), ApiError> {
-    validate_field("name", &req.name)?;
-    validate_field("ssh_alias", &req.ssh_alias)?;
-    validate_field("user", &req.user)?;
+    validate_name_field("name", &req.name)?;
+    validate_name_field("ssh_alias", &req.ssh_alias)?;
+    validate_name_field("user", &req.user)?;
     validate_field("os", &req.os)?;
-    validate_field("tailscale_ip", &req.tailscale_ip)?;
-    validate_field("dns_name", &req.dns_name)?;
-    validate_field("role", &req.role)?;
+    validate_network_field("tailscale_ip", &req.tailscale_ip)?;
+    validate_network_field("dns_name", &req.dns_name)?;
+    validate_name_field("role", &req.role)?;
     for cap in &req.capabilities {
-        validate_field("capabilities", cap)?;
+        validate_name_field("capabilities", cap)?;
     }
-    if req.tailscale_ip.is_empty() {
-        return Err(ApiError::bad_request("tailscale_ip is required".to_string()));
+    if let Some(ref lip) = req.lan_ip {
+        validate_network_field("lan_ip", lip)?;
     }
     Ok(())
 }
