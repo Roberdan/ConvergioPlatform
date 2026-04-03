@@ -41,6 +41,17 @@ pub async fn api_ipc_agents_register(
 ) -> Result<Json<Value>, ApiError> {
     ensure_ipc_schema(&state)?;
     let conn = state.get_conn()?;
+
+    // Check if agent already exists before insert — acquire() only for new agents (F-09)
+    let already_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ipc_agents WHERE name = ?1 AND host = ?2",
+            rusqlite::params![body.agent_id, body.host],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
     conn.execute(
         "INSERT OR REPLACE INTO ipc_agents
          (name, host, agent_type, pid, metadata, parent_agent, registered_at, last_seen)
@@ -66,7 +77,10 @@ pub async fn api_ipc_agents_register(
         tracing::debug!("ws agent_registered broadcast (no subscribers): {e}");
     }
 
-    crate::power_guard::PowerGuard::acquire();
+    // Only acquire power guard for genuinely new agents, not re-registrations
+    if !already_exists {
+        crate::power_guard::PowerGuard::acquire();
+    }
 
     // Push live agent list + session state to brain viz
     broadcast_brain_agent_update(&state);
@@ -87,7 +101,10 @@ pub async fn api_ipc_agents_unregister(
     )
     .map_err(|e| ApiError::internal(format!("agent unregister failed: {e}")))?;
 
-    crate::power_guard::PowerGuard::release();
+    // Only release power guard if a row was actually deleted (F-10)
+    if conn.changes() > 0 {
+        crate::power_guard::PowerGuard::release();
+    }
 
     if let Err(e) = state.ws_tx.send(json!({
         "type": "agent_unregistered",
@@ -145,7 +162,10 @@ pub async fn api_ipc_agents_deregister(
         )
         .map_err(|e| ApiError::internal(format!("agent deregister failed: {e}")))?;
 
-    crate::power_guard::PowerGuard::release();
+    // Release power guard once per deleted row — batch DELETE may remove N agents (F-11)
+    for _ in 0..deleted {
+        crate::power_guard::PowerGuard::release();
+    }
 
     if let Err(e) = state.ws_tx.send(json!({
         "type": "agent_deregistered",
