@@ -87,7 +87,8 @@ async fn remove_worktree(path: &str) -> Result<bool, String> {
     }
     warn!("git worktree remove {path}: {}", String::from_utf8_lossy(&out.stderr));
     if p.exists() { tokio::fs::remove_dir_all(p).await.ok(); }
-    Ok(p.exists())
+    // Success means the path no longer exists after removal
+    Ok(!p.exists())
 }
 
 /// List worktrees whose path contains the plan ID pattern.
