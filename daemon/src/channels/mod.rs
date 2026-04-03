@@ -49,7 +49,6 @@ pub trait ChannelAdapter: Send + Sync {
 }
 
 pub mod router;
-pub mod slack;
 pub mod telegram;
 mod telegram_types;
 
