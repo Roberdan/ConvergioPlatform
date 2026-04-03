@@ -70,14 +70,14 @@ elif [[ "$FINAL_STATUS" != "done" && "$FINAL_STATUS" != "submitted" ]]; then
 		ARTIFACTS_JSON="$(git -C "$WT" status --porcelain | awk '{print $2}' | jq -Rsc 'split("\n") | map(select(length>0)) | unique')"
 		OUTPUT_DATA="$(jq -cn --arg summary 'Auto-completed from detected worktree changes' --argjson artifacts "$ARTIFACTS_JSON" '{summary:$summary,artifacts:$artifacts}')"
 		NOTE="Auto-completed: worker changed files but task status was not updated"
-		safe_update_task "$TASK_ID" done "$NOTE" --tokens "$TOKENS_USED" --output-data "$OUTPUT_DATA" || true
+		safe_update_task "$TASK_ID" submitted "$NOTE" --tokens "$TOKENS_USED" --output-data "$OUTPUT_DATA" || true
 		FINAL_STATUS="submitted"
 		THOR_RESULT="PENDING"
 		echo '{"status":"submitted","task_id":'$TASK_ID',"copilot_exit":'$EXIT_CODE'}'
 	elif [[ "$IS_VERIFY_TASK" == true && "$EXIT_CODE" -eq 0 ]]; then
 		NOTE="Auto-completed: verification/closure task with clean exit (no file changes expected)"
 		OUTPUT_DATA='{"summary":"Verification task completed without file changes","artifacts":[]}'
-		safe_update_task "$TASK_ID" done "$NOTE" --tokens "$TOKENS_USED" --output-data "$OUTPUT_DATA" || true
+		safe_update_task "$TASK_ID" submitted "$NOTE" --tokens "$TOKENS_USED" --output-data "$OUTPUT_DATA" || true
 		FINAL_STATUS="submitted"
 		THOR_RESULT="PENDING"
 		echo '{"status":"submitted","task_id":'$TASK_ID',"copilot_exit":'$EXIT_CODE'}'
