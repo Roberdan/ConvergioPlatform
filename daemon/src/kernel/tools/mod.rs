@@ -157,7 +157,17 @@ fn http_get(url: &str) -> Option<String> {
         req = req.header("Authorization", format!("Bearer {token}"));
     }
     match req.send() {
-        Ok(resp) => Some(resp.text().unwrap_or_default()),
+        Ok(resp) => {
+            // Return error JSON for non-2xx so callers aren't silently fed error bodies (F-14)
+            if resp.status().is_success() {
+                Some(resp.text().unwrap_or_default())
+            } else {
+                let status = resp.status().as_u16();
+                let body = resp.text().unwrap_or_default();
+                warn!("kernel.tools GET {url}: HTTP {status}");
+                Some(format!("{{\"error\":\"HTTP {status}\",\"body\":{body:?}}}"))
+            }
+        }
         Err(e) => {
             warn!("kernel.tools GET {url}: {e}");
             Some(format!("{{\"error\":\"{e}\"}}"))
@@ -171,7 +181,17 @@ fn http_post(url: &str, body: &Value) -> Option<String> {
         req = req.header("Authorization", format!("Bearer {token}"));
     }
     match req.send() {
-        Ok(resp) => Some(resp.text().unwrap_or_default()),
+        Ok(resp) => {
+            // Return error JSON for non-2xx so callers aren't silently fed error bodies (F-14)
+            if resp.status().is_success() {
+                Some(resp.text().unwrap_or_default())
+            } else {
+                let status = resp.status().as_u16();
+                let body = resp.text().unwrap_or_default();
+                warn!("kernel.tools POST {url}: HTTP {status}");
+                Some(format!("{{\"error\":\"HTTP {status}\",\"body\":{body:?}}}"))
+            }
+        }
         Err(e) => {
             warn!("kernel.tools POST {url}: {e}");
             Some(format!("{{\"error\":\"{e}\"}}"))
