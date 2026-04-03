@@ -5,7 +5,6 @@ import {
   MLDAdapter,
   ClaudeConfigAdapter,
   DashboardAdapter,
-  TemplateAdapter,
 } from '../../adapters/index.js';
 
 describe('Evolution Engine Types', () => {
@@ -96,10 +95,5 @@ describe('PlatformAdapter implementations', () => {
   it('DashboardAdapter satisfies PlatformAdapter', () => {
     const adapter: PlatformAdapter = new DashboardAdapter('http://localhost:3000');
     expect(adapter.name).toBe('dashboard');
-  });
-
-  it('TemplateAdapter satisfies PlatformAdapter', () => {
-    const adapter: PlatformAdapter = new TemplateAdapter('test-target');
-    expect(adapter.name).toBe('template');
   });
 });
