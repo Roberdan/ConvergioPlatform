@@ -34,6 +34,8 @@ pub mod validation;
 #[cfg(feature = "voice")]
 pub mod voice;
 pub mod workspace;
+pub mod power_guard;
+pub mod network_watchdog;
 
 /// Resolve the dashboard DB path from the DASHBOARD_DB env var, falling back
 /// to ~/.claude/data/dashboard.db. Used wherever the daemon needs to open the

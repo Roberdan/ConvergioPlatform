@@ -66,6 +66,8 @@ pub async fn api_ipc_agents_register(
         tracing::debug!("ws agent_registered broadcast (no subscribers): {e}");
     }
 
+    crate::power_guard::PowerGuard::acquire();
+
     // Push live agent list + session state to brain viz
     broadcast_brain_agent_update(&state);
     broadcast_brain_session_update(&state);
@@ -84,6 +86,8 @@ pub async fn api_ipc_agents_unregister(
         rusqlite::params![body.agent_id, body.host],
     )
     .map_err(|e| ApiError::internal(format!("agent unregister failed: {e}")))?;
+
+    crate::power_guard::PowerGuard::release();
 
     if let Err(e) = state.ws_tx.send(json!({
         "type": "agent_unregistered",
@@ -140,6 +144,8 @@ pub async fn api_ipc_agents_deregister(
             rusqlite::params![body.name],
         )
         .map_err(|e| ApiError::internal(format!("agent deregister failed: {e}")))?;
+
+    crate::power_guard::PowerGuard::release();
 
     if let Err(e) = state.ws_tx.send(json!({
         "type": "agent_deregistered",
