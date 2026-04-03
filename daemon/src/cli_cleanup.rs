@@ -38,14 +38,33 @@ fn list_active_worktree_paths() -> HashSet<String> {
         .collect()
 }
 
-/// Find branches matching worktree patterns that have no active worktree directory.
-fn find_stale_branches(active_paths: &HashSet<String>) -> Vec<String> {
+/// Pure filtering logic extracted from find_stale_branches for unit-testability.
+/// Takes `branch_lines` as the raw output of `git branch --list`.
+fn classify_stale_branches(active_paths: &HashSet<String>, branch_lines: &str) -> Vec<String> {
     let prefixes = [
         "worktree-agent-",
         "worktree-plan-",
         "wt-plan-",
         "workspace/ws-",
     ];
+    let mut stale = Vec::new();
+    for line in branch_lines.lines() {
+        let branch = line.trim().trim_start_matches("* ");
+        if !prefixes.iter().any(|p| branch.starts_with(p) || branch.contains(p)) {
+            continue;
+        }
+        let has_active = active_paths.iter().any(|p| {
+            p.contains(&branch.replace('/', "-")) || p.contains(branch)
+        });
+        if !has_active {
+            stale.push(branch.to_string());
+        }
+    }
+    stale
+}
+
+/// Find branches matching worktree patterns that have no active worktree directory.
+fn find_stale_branches(active_paths: &HashSet<String>) -> Vec<String> {
     let out = match std::process::Command::new("git")
         .args(["branch", "--list"])
         .output()
@@ -53,23 +72,7 @@ fn find_stale_branches(active_paths: &HashSet<String>) -> Vec<String> {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
         _ => return Vec::new(),
     };
-
-    let mut stale = Vec::new();
-    for line in out.lines() {
-        let branch = line.trim().trim_start_matches("* ");
-        if !prefixes.iter().any(|p| branch.starts_with(p) || branch.contains(p)) {
-            continue;
-        }
-        // A branch is stale if no active worktree path contains this branch name
-        let has_active = active_paths.iter().any(|p| {
-            p.contains(&branch.replace('/', "-"))
-                || p.contains(branch)
-        });
-        if !has_active {
-            stale.push(branch.to_string());
-        }
-    }
-    stale
+    classify_stale_branches(active_paths, &out)
 }
 
 fn delete_branches(branches: &[String]) {
@@ -115,10 +118,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stale_branch_detection_empty() {
-        let active = HashSet::new();
-        let branches = find_stale_branches(&active);
-        // No branches in test env, just verify it doesn't panic
-        assert!(branches.is_empty() || !branches.is_empty());
+    fn stale_branch_no_active_paths_marks_all_matching_as_stale() {
+        let active: HashSet<String> = HashSet::new();
+        let lines = "  worktree-plan-42\n  worktree-agent-x\n  main\n";
+        let stale = classify_stale_branches(&active, lines);
+        assert!(stale.contains(&"worktree-plan-42".to_string()), "plan-42 should be stale");
+        assert!(stale.contains(&"worktree-agent-x".to_string()), "agent-x should be stale");
+        // "main" does not match any worktree prefix — must not appear
+        assert!(!stale.contains(&"main".to_string()), "main is not a worktree branch");
+    }
+
+    #[test]
+    fn stale_branch_active_path_protects_matching_branch() {
+        let mut active: HashSet<String> = HashSet::new();
+        active.insert("/work/worktree-plan-42".to_string());
+        let lines = "  worktree-plan-42\n  worktree-plan-99\n";
+        let stale = classify_stale_branches(&active, lines);
+        // plan-42 has an active worktree directory — NOT stale
+        assert!(!stale.contains(&"worktree-plan-42".to_string()), "plan-42 has active worktree");
+        // plan-99 has no active directory — stale
+        assert!(stale.contains(&"worktree-plan-99".to_string()), "plan-99 should be stale");
+    }
+
+    #[test]
+    fn stale_branch_empty_input_returns_empty() {
+        let active: HashSet<String> = HashSet::new();
+        let stale = classify_stale_branches(&active, "");
+        assert!(stale.is_empty(), "no branches → no stale branches");
+    }
+
+    #[test]
+    fn stale_branch_current_branch_marker_stripped() {
+        // `git branch --list` prefixes the active branch with "* "
+        let active: HashSet<String> = HashSet::new();
+        let lines = "* worktree-plan-1\n  wt-plan-2\n";
+        let stale = classify_stale_branches(&active, lines);
+        assert!(stale.contains(&"worktree-plan-1".to_string()), "current branch marker stripped");
+        assert!(stale.contains(&"wt-plan-2".to_string()));
     }
 }
