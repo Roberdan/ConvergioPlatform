@@ -14,7 +14,7 @@ struct BudgetUsage {
     tokens: u64,
     _compute_seconds: u64,
     _storage_bytes: u64,
-    _window_start: Instant,
+    window_start: Instant,
 }
 
 impl BudgetEnforcer {
@@ -86,12 +86,28 @@ impl BudgetEnforcer {
         if let Ok(mut usage) = self.usage.lock() {
             usage.entry(agent_id.to_string()).or_insert(BudgetUsage {
                 api_calls: 0, tokens: 0, _compute_seconds: 0, _storage_bytes: 0,
-                _window_start: Instant::now(),
+                window_start: Instant::now(),
             });
         }
     }
 
+    /// Reset usage counters if the time window (1 hour) has expired.
+    fn reset_window_if_expired(&self, agent_id: &str) {
+        const WINDOW_SECS: u64 = 3600;
+        if let Ok(mut usage) = self.usage.lock() {
+            if let Some(u) = usage.get_mut(agent_id) {
+                if u.window_start.elapsed().as_secs() >= WINDOW_SECS {
+                    u.api_calls = 0;
+                    u.tokens = 0;
+                    u.window_start = Instant::now();
+                    tracing::debug!("budget: reset window for {agent_id}");
+                }
+            }
+        }
+    }
+
     fn check_budget(&self, agent_id: &str) -> Result<BudgetStatus, SecurityError> {
+        self.reset_window_if_expired(agent_id);
         let s = self.status(agent_id);
         if s.hard_limit_hit {
             Err(SecurityError::BudgetExceeded(format!(
