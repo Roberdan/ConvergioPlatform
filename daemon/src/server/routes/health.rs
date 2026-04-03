@@ -64,6 +64,22 @@ pub async fn api_health(State(state): State<ServerState>) -> Json<serde_json::Va
     Json(result)
 }
 
+/// GET /api/diagnostics/guards — power guard + network watchdog status.
+pub async fn api_diagnostics_guards() -> Json<serde_json::Value> {
+    let power = crate::power_guard::PowerGuard::status();
+    let network_up = crate::network_watchdog::is_network_up();
+    Json(serde_json::json!({
+        "power_guard": {
+            "active": power.active,
+            "agent_count": power.agent_count,
+            "platform": power.platform,
+        },
+        "network": {
+            "up": network_up,
+        },
+    }))
+}
+
 /// GET /api/telemetry — live request metrics (counters, histograms, error rates).
 pub async fn api_telemetry(State(state): State<ServerState>) -> Json<serde_json::Value> {
     let mut snapshot = telemetry::snapshot();

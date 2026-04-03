@@ -68,6 +68,9 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
     api_orgs::spawn_background_jobs(state.clone());
     api_plan_org::migrate(&state).ok();
 
+    // Network watchdog — monitors connectivity and logs agent impact
+    tokio::spawn(crate::network_watchdog::run_watchdog(state.pool()));
+
     Router::new()
         .merge(api_validation::router())
         .merge(api_dashboard::router())
@@ -173,6 +176,7 @@ pub fn build_router_with_state(static_dir: PathBuf, state: ServerState) -> Route
         .route("/api/mesh/provision", get(mesh_provision::provision_all))
         .route("/api/health", get(health::api_health))
         .route("/api/telemetry", get(health::api_telemetry))
+        .route("/api/diagnostics/guards", get(health::api_diagnostics_guards))
         .layer(axum::Extension(health_state))
         .layer(from_fn_with_state(state.clone(), middleware_audit::audit_mutations))
         .layer(from_fn_with_state(rate_limiter, basic_rate_limit))
