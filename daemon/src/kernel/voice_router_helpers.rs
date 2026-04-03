@@ -150,6 +150,42 @@ mod tests {
         assert_eq!(cost, 0.0);
         assert_eq!(count, 0);
     }
+
+    // ── is_write_intent word-boundary tests ──────────────────────────────────
+
+    #[test]
+    fn write_intent_matches_whole_word_crea() {
+        assert!(super::is_write_intent("crea un piano"), "'crea' is a write keyword");
+    }
+
+    #[test]
+    fn write_intent_no_substring_match_creazione() {
+        // "creazione" contains "crea" as a prefix but must NOT match: different word.
+        assert!(!super::is_write_intent("creazione del progetto"));
+    }
+
+    #[test]
+    fn write_intent_no_substring_match_organizzazione() {
+        // "organizzazione" contains "organizza" — must not fire.
+        assert!(!super::is_write_intent("organizzazione aziendale"));
+    }
+
+    #[test]
+    fn write_intent_cloud_trigger_ali_whole_word() {
+        assert!(super::is_write_intent("parla con ali"), "'ali' whole word → cloud trigger");
+    }
+
+    #[test]
+    fn write_intent_no_substring_match_alieno() {
+        // "alieno" is not "ali" — must not trigger cloud escalation.
+        assert!(!super::is_write_intent("un alieno spaziale"));
+    }
+
+    #[test]
+    fn write_intent_strips_surrounding_punctuation() {
+        // Surrounding punctuation must be stripped; keyword still matches.
+        assert!(super::is_write_intent("(crea)"));
+    }
 }
 
 // ── Write-intent classification ──────────────────────────────────────────────
@@ -169,9 +205,14 @@ const WRITE_KW_EN: &[&str] = &[
 const CLOUD_TRIGGERS: &[&str] = &["ali", "opus", "cloud", "claude"];
 
 /// Check if text contains write-intent keywords (Italian/English) or cloud triggers.
+///
+/// Word-boundary guarantee: input is split on whitespace and each token has leading/trailing
+/// punctuation stripped before an exact-equality check against the keyword lists.
+/// "creazione" will NOT match "crea"; "alieno" will NOT match "ali".
 pub fn is_write_intent(text: &str) -> bool {
     let lower = text.to_lowercase();
     lower.split_whitespace().any(|raw| {
+        // Strip surrounding punctuation so "crea!" → "crea", then compare whole token.
         let token = raw.trim_matches(|c: char| !c.is_alphanumeric());
         if token.is_empty() {
             return false;
