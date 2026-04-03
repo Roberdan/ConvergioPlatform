@@ -7,12 +7,18 @@ use super::protocol::{
     decode_request, encode_response, read_ipc_frame, write_ipc_frame, IpcResponse,
 };
 
+/// Maximum number of concurrent IPC connections. Prevents resource exhaustion
+/// from rapid connection storms while keeping latency low for normal workloads.
+const MAX_CONCURRENT_CONNECTIONS: usize = 64;
+
 #[cfg(unix)]
 pub async fn start_ipc_server(
     engine: Arc<IpcEngine>,
     socket_path: PathBuf,
 ) -> Result<(), IpcError> {
     use tokio::net::UnixListener;
+    use tokio::sync::Semaphore;
+
     // Remove stale socket
     if socket_path.exists() {
         if let Err(e) = std::fs::remove_file(&socket_path) {
@@ -37,11 +43,21 @@ pub async fn start_ipc_server(
 
     tracing::info!("IPC server listening on {}", socket_path.display());
 
+    let sem = Arc::new(Semaphore::new(MAX_CONCURRENT_CONNECTIONS));
+
     loop { // UNBOUNDED: event loop
         match listener.accept().await {
             Ok((stream, _)) => {
+                let permit = match Arc::clone(&sem).acquire_owned().await {
+                    Ok(p) => p,
+                    Err(_) => {
+                        tracing::warn!("IPC semaphore closed; stopping accept loop");
+                        break;
+                    }
+                };
                 let eng = engine.clone();
                 tokio::spawn(async move {
+                    let _permit = permit; // released when this task completes
                     if let Err(e) = handle_client(stream, eng).await {
                         tracing::warn!("IPC client error: {e}");
                     }
@@ -52,6 +68,7 @@ pub async fn start_ipc_server(
             }
         }
     }
+    Ok(())
 }
 
 #[cfg(unix)]
