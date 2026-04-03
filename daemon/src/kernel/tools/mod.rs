@@ -3,6 +3,7 @@
 // Each tool: name, description, HTTP endpoint, method, params, tier.
 
 use serde_json::Value;
+use std::cell::Cell;
 use std::time::Duration;
 use tracing::warn;
 
@@ -11,6 +12,11 @@ pub mod infra;
 pub mod org;
 pub mod plan;
 pub mod platform;
+
+// Thread-local depth counter: prevents kernel_ask → /api/kernel/ask → kernel_ask loops (F-15).
+thread_local! {
+    static KERNEL_ASK_DEPTH: Cell<u32> = const { Cell::new(0) };
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolTier {
@@ -79,6 +85,18 @@ impl ToolCatalog {
     }
 
     pub fn call_tool(&self, name: &str, daemon_url: &str, args: &Value) -> Option<String> {
+        // Depth guard: kernel_ask routes to /api/kernel/ask which may call tools again.
+        // If we're already inside a kernel_ask dispatch, refuse to recurse (F-15).
+        if name == "kernel_ask" {
+            let depth = KERNEL_ASK_DEPTH.with(|d| d.get());
+            if depth > 0 {
+                warn!("kernel_ask recursion blocked at depth {depth}");
+                return Some("{\"error\":\"kernel_ask recursion blocked\"}".to_string());
+            }
+            KERNEL_ASK_DEPTH.with(|d| d.set(depth + 1));
+        }
+
+        let result = (|| {
         let tool = self.find(name)?;
         let endpoint = match resolve_endpoint(tool.endpoint, args) {
             Ok(ep) => ep,
@@ -90,6 +108,12 @@ impl ToolCatalog {
             ToolMethod::Get => http_get(&url),
             ToolMethod::Post => http_post(&url, args),
         }
+        })();
+
+        if name == "kernel_ask" {
+            KERNEL_ASK_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+        }
+        result
     }
 
     /// Catalog with only Read-tier tools (for local inference safety).
