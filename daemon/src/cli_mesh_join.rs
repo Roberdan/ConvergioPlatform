@@ -150,8 +150,13 @@ fn merge_env_file(new_content: &str) -> Result<(), CliError> {
         if let Some((k, _)) = line.split_once('=') {
             let k = k.trim();
             if k.is_empty() { continue; }
-            let prefix = format!("{k}=");
-            if !lines.iter().any(|l| l.trim_start().starts_with(&prefix)) {
+            // F-30: exact key match — split existing lines on '=' and compare full key name
+            if !lines.iter().any(|l| {
+                l.trim_start()
+                    .split_once('=')
+                    .map(|(ek, _)| ek.trim() == k)
+                    .unwrap_or(false)
+            }) {
                 lines.push(line.to_string());
             }
         }
