@@ -148,7 +148,7 @@ fn get_active_agents(pool: &Pool<SqliteConnectionManager>) -> Vec<String> {
     };
     let mut stmt = match conn.prepare(
         "SELECT name FROM ipc_agents \
-         WHERE last_seen >= datetime('now', '-10 minutes')",
+         WHERE last_seen >= strftime('%Y-%m-%dT%H:%M:%f','now','-10 minutes')",
     ) {
         Ok(s) => s,
         Err(e) => {
