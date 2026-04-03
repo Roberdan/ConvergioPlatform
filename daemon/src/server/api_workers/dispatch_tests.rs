@@ -40,3 +40,12 @@ fn remote_exec_delegate_updates_host() {
         .unwrap();
     assert_eq!(host, "linux-worker");
 }
+
+#[test]
+fn unknown_peer_resolution_is_error() {
+    // Verify that peer_resolver::resolve returns Err for unknown peers,
+    // which dispatch now propagates as 400 instead of falling back.
+    use crate::mesh::peer_resolver;
+    let result = peer_resolver::resolve("totally-fake-peer-that-does-not-exist");
+    assert!(result.is_err(), "unknown peer should return Err for 400 dispatch");
+}

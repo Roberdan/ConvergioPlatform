@@ -40,11 +40,8 @@ const P_REMEMBER: &[ToolParam] = &[
 
 const P_RECALL: &[ToolParam] = &[
     ToolParam { name: "query", param_type: "string", required: true },
-    ToolParam { name: "agent_id", param_type: "string", required: false },
-];
-
-const P_MESSAGES: &[ToolParam] = &[
-    ToolParam { name: "to_agent", param_type: "string", required: true },
+    ToolParam { name: "type", param_type: "string", required: false },
+    ToolParam { name: "agent", param_type: "string", required: false },
     ToolParam { name: "limit", param_type: "integer", required: false },
 ];
 
@@ -116,8 +113,8 @@ pub fn tools() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "recall",
-            description: "Recall from agent memory. Args: query, optional agent_id.",
-            endpoint: "/api/memory/recall?query={query}",
+            description: "Recall from agent memory. Args: query, optional type, agent, limit.",
+            endpoint: "/api/memory/recall?query={query}&type={type}&agent={agent}&limit={limit}",
             method: ToolMethod::Get,
             params: P_RECALL,
             tier: ToolTier::Read,
@@ -138,13 +135,6 @@ pub fn tools() -> Vec<ToolDef> {
             params: &[],
             tier: ToolTier::Read,
         },
-        ToolDef {
-            name: "list_messages",
-            description: "List IPC messages for an agent. Args: to_agent, optional limit.",
-            endpoint: "/api/ipc/messages?to_agent={to_agent}&limit={limit}",
-            method: ToolMethod::Get,
-            params: P_MESSAGES,
-            tier: ToolTier::Read,
-        },
+
     ]
 }

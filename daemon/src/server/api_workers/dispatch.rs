@@ -150,10 +150,10 @@ async fn handle_delegate(
         .and_then(Value::as_str)
         .ok_or_else(|| ApiError::bad_request("missing peer"))?;
 
-    // B9 fix: canonicalize peer name before storing in DB
+    // B9 fix: canonicalize peer name before storing in DB — return 400 if unknown
     let canonical = peer_resolver::resolve(peer)
         .map(|r| r.canonical_name)
-        .unwrap_or_else(|_| peer.to_string());
+        .map_err(|e| ApiError::bad_request(format!("peer not found: {e}")))?;
 
     let conn = state.get_conn()?;
     let conn = &conn;

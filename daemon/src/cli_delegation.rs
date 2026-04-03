@@ -14,6 +14,9 @@ pub enum DelegationCommands {
         /// Target peer name (from peers.conf or mesh status)
         #[arg(long)]
         peer: String,
+        /// Fire-and-forget mode (skip progress polling)
+        #[arg(long)]
+        no_wait: bool,
     },
     /// Cancel an active delegation
     Cancel {
@@ -86,13 +89,52 @@ async fn fetch_progress(api_url: &str, plan_id: i64) -> Result<serde_json::Value
     cli_http::get_and_return(&url).await.map_err(api_err)
 }
 
+/// Poll delegation progress every 2s, printing each stage transition.
+/// Exits on "done", "blocked", or after 120s timeout.
+async fn poll_progress(api_url: &str, plan_id: i64) -> Result<(), CliError> {
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(120);
+    let mut last_step = String::new();
+
+    loop {
+        if start.elapsed() > timeout {
+            println!("[timeout] delegation progress polling timed out after 120s");
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        let body = match fetch_progress(api_url, plan_id).await {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let dels = body["delegations"].as_array();
+        let entry = dels.and_then(|a| a.first());
+        let Some(d) = entry else { continue };
+        let step = d["current_task"].as_str().unwrap_or("-");
+        let status = d["status"].as_str().unwrap_or("running");
+        if step != last_step {
+            let ts = chrono::Local::now().format("%H:%M:%S");
+            println!("[{ts}] step: {step}");
+            last_step = step.to_string();
+        }
+        if matches!(status, "done" | "blocked") {
+            let summary = d["output_summary"].as_str().unwrap_or("");
+            println!("[{status}] {summary}");
+            break;
+        }
+    }
+    Ok(())
+}
+
 pub async fn handle(cmd: DelegationCommands, api_url: &str) -> Result<(), CliError> {
     match cmd {
-        DelegationCommands::Start { plan_id, peer } => {
+        DelegationCommands::Start { plan_id, peer, no_wait } => {
             let url = format!("{api_url}/api/mesh/delegate");
             let body = serde_json::json!({"plan_id": plan_id, "peer": peer});
             cli_http::post_and_print(&url, &body, true).await?;
             println!("Delegation started: plan {plan_id} → {peer}");
+            if !no_wait {
+                poll_progress(api_url, plan_id).await?;
+            }
             Ok(())
         }
         DelegationCommands::Cancel { plan_id } => {

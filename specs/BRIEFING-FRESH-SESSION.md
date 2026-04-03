@@ -45,7 +45,7 @@ Questo è il problema più grave. Senza sync:
 - `daemon/src/background_sync_http.rs` — fetch/send HTTP
 - `daemon/src/server/api_sync.rs` — endpoint API
 - `daemon/src/db/libsql_adapter.rs` — adapter timestamp-based
-- `scripts/kernel/sync-db.sh` — fallback rsync
+- `cvg mesh sync` — daemon auto-sync (replaces sync-db.sh)
 - `~/.claude/config/peers.conf` — registro peer
 
 ### Come Testare

@@ -4,9 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
-use crate::background_sync_http::{
-    detect_local_tailscale_ip, peers_conf_path_from_env, resolve_best_addr,
-};
+use crate::background_sync_http::{detect_local_tailscale_ip, resolve_best_addr};
+use crate::mesh::peers::peers_conf_path_from_env;
 use crate::server::api_mesh::peer_conf::{
     detect_local_identity, is_local_peer_conf, parse_peers_conf,
 };

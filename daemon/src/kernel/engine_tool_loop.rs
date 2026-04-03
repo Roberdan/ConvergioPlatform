@@ -54,6 +54,7 @@ pub(crate) fn run_tool_loop(
 ) -> String {
     let mut prompt = initial_prompt;
     let mut last_text = String::new();
+    let catalog = ToolCatalog::read_only();
 
     for round in 0..MAX_TOOL_ROUNDS {
         let req = InferenceRequest {
@@ -79,7 +80,7 @@ pub(crate) fn run_tool_loop(
         // Parse args and dispatch
         let args: serde_json::Value =
             serde_json::from_str(&args_str).unwrap_or(serde_json::json!({}));
-        let tool_result = ToolCatalog::read_only().call_tool(&tool_name, daemon_url, &args)
+        let tool_result = catalog.call_tool(&tool_name, daemon_url, &args)
             .unwrap_or_else(|| format!("Tool '{tool_name}' not found or failed."));
 
         // Append tool result to conversation and re-invoke

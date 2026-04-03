@@ -133,7 +133,7 @@ Working dir: `/Users/Roberdan/GitHub/convergio-daemon`
 
 ### T1-01 — `cvg mesh delegate` CLI
 
-1. New CLI command wrapping `mesh-delegate-task.sh` logic
+1. New CLI command wrapping `cvg delegation start` logic
 2. `cvg mesh delegate --peer X --prompt "..." --plan-id N`
 3. Creates tmux, writes prompt, syncs repo, launches claude
 

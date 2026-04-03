@@ -89,13 +89,10 @@ unload_existing() {
   fi
 }
 
-# Make sync script executable
+# Sync script removed — daemon handles DB sync via cvg mesh sync
 ensure_executable() {
-  local sync_script="${REPO_ROOT}/scripts/kernel/sync-db.sh"
-  if [[ ! -x "${sync_script}" ]]; then
-    chmod +x "${sync_script}"
-    log "Made executable: ${sync_script}"
-  fi
+  # No-op: sync-db.sh replaced by daemon auto-sync
+  true
 }
 
 print_summary() {

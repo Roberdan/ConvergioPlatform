@@ -43,8 +43,8 @@ accepted at runtime, but all new setup should use the `CONVERGIO_*` names.
 ### Sync to Peer
 
 ```bash
-# Via mesh auth sync
-mesh-auth-sync.sh push --peer <name>
+# Via mesh auth sync (now: cvg mesh auth-sync)
+cvg mesh auth-sync --peer <name>
 
 # Manual SCP
 scp ~/.convergio/env <peer>:~/.convergio/env
@@ -72,4 +72,4 @@ ssh <peer> chmod 600 ~/.convergio/env
 - NEVER hardcode in source code
 - NEVER ask users for tokens — they are in `~/.convergio/env`
 - Always chmod 600 on `~/.convergio/env`
-- Replicate via `mesh-auth-sync.sh`, not manual copy
+- Replicate via `cvg mesh auth-sync`, not manual copy

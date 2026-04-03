@@ -125,7 +125,7 @@ post-install)
   echo "  1. Tailscale: sudo tailscale up  (on this machine)"
   echo "  2. SSH key:   ssh-copy-id roberdan@<new-ip>"
   echo "  3. Provision: mesh-provision-node.sh <hostname>"
-  echo "  4. Auth:      mesh-auth-sync.sh --peer <hostname>"
+  echo "  4. Auth:      cvg mesh auth-sync --peer <hostname>"
   echo "  5. gh login:  ssh <hostname> 'gh auth login'"
   echo "  6. Verify:    mesh-preflight.sh --peer <hostname>"
   echo ""

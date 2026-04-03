@@ -147,9 +147,9 @@ curl -s localhost:8420/api/ipc/context | jq '.context'
 | "daemon not reachable" | Daemon not running | `./daemon/start.sh` |
 | Agent not in /agents | Used /send instead of /register | `POST /api/ipc/agents/register` |
 | Stale heartbeat | Heartbeat script not running | `agent-heartbeat.sh --name $NAME` |
-| Skills empty | Skills not synced | `scripts/platform/agent-skills-sync.sh` |
+| Skills empty | Skills not synced | `cvg agent import` or restart daemon |
 | Permission denied | Scripts not executable | `chmod +x scripts/platform/*.sh` |
-| DB locked | Concurrent writes | `dashboard-db-repair.sh` |
+| DB locked | Concurrent writes | `cvg ops db-repair` or restart daemon |
 
 **Quick health check:**
 

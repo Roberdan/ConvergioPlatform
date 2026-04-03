@@ -44,7 +44,7 @@
 - Multi-transport: Tailscale, SSH, LAN mDNS, HTTP
 - HMAC-SHA256 auth, CRDT sync
 - `scripts/mesh/deploy-node.sh <node> --kernel` — one-command deploy
-- `scripts/kernel/sync-db.sh <source> <target>` — safe DB rsync
+- `cvg mesh sync` — daemon-managed DB replication
 
 ### Jarvis — Kernel (Local LLM on M1 Pro)
 - `cvg kernel status/start/stop/logs/test/here/say`
@@ -132,7 +132,7 @@
 
 ### Document Ingestion
 - PDF → MD, DOCX → MD, XLSX → CSV, URL, images, folders
-- `convergio-ingest.sh` with graceful fallback
+- `cvg ingest` or daemon API with graceful fallback
 
 ### Evolution Engine
 - Observe → Measure → Propose → Experiment → Validate → Learn

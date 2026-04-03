@@ -148,9 +148,14 @@ pub(super) async fn handle_complete(
 
     // Auto-cleanup worktrees and temp files after plan completion
     let wt_paths = worktree_cleanup_paths(conn, plan_id);
-    tokio::spawn(async move {
-        run_post_complete_cleanup(plan_id, &wt_paths);
-    });
+    let wt_paths_clone = wt_paths.clone();
+    tokio::spawn(async move { run_post_complete_cleanup(plan_id, &wt_paths); });
+
+    // Broadcast plan-closed to mesh peers so they clean up remote worktrees
+    let plan_name: Option<String> = conn
+        .query_row("SELECT name FROM plans WHERE id = ?1", rusqlite::params![plan_id], |r| r.get(0))
+        .ok();
+    crate::server::api_mesh_plan_closed::broadcast_plan_closed(plan_id, plan_name, wt_paths_clone);
 
     Ok(Json(json!({
         "ok": true,

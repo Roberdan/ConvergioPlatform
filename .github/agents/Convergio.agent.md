@@ -53,7 +53,7 @@ Tailscale P2P, HMAC-SHA256. Scripts: provision|sync|heartbeat|auth-sync|prefligh
 
 ## Troubleshooting
 
-Dashboard won't start → check `data/dashboard.db`, port 8788, DASHBOARD_DB | Daemon won't compile → `cargo check` | Node unreachable → `tailscale ping`, SSH, heartbeat | DB locked → `dashboard-db-repair.sh` | cvg no DB → check `$DASHBOARD_DB` symlink | OpenClaw fails → daemon running? curl /api/health
+Dashboard won't start → check `data/dashboard.db`, port 8788, DASHBOARD_DB | Daemon won't compile → `cargo check` | Node unreachable → `tailscale ping`, SSH, heartbeat | DB locked → restart daemon or `cvg ops db-repair` | cvg no DB → check `$DASHBOARD_DB` symlink | OpenClaw fails → daemon running? curl /api/health
 
 ## Ecosystem
 

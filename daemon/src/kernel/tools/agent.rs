@@ -39,6 +39,12 @@ const P_CREATE_AGENT: &[ToolParam] = &[
     ToolParam { name: "model", param_type: "string", required: false },
 ];
 
+const P_MESSAGES: &[ToolParam] = &[
+    ToolParam { name: "to_agent", param_type: "string", required: true },
+    ToolParam { name: "channel", param_type: "string", required: false },
+    ToolParam { name: "limit", param_type: "integer", required: false },
+];
+
 pub fn tools() -> Vec<ToolDef> {
     vec![
         ToolDef {
@@ -96,6 +102,14 @@ pub fn tools() -> Vec<ToolDef> {
             method: ToolMethod::Post,
             params: P_CREATE_AGENT,
             tier: ToolTier::Write,
+        },
+        ToolDef {
+            name: "list_messages",
+            description: "List IPC messages for an agent. Args: to_agent, optional channel (filter by channel name), optional limit.",
+            endpoint: "/api/ipc/messages?to_agent={to_agent}&channel={channel}&limit={limit}",
+            method: ToolMethod::Get,
+            params: P_MESSAGES,
+            tier: ToolTier::Read,
         },
     ]
 }

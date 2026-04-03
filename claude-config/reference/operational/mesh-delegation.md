@@ -21,15 +21,15 @@ Coordinator (M5Max) ──rsync──> Worker (M1 Pro)
 | SSH connectivity | `ssh <peer> true` |
 | Daemon running on peer | `ssh <peer> curl -sf localhost:8420/api/health` |
 | Claude CLI authenticated | `ssh <peer> claude --version` |
-| DB synced | `scripts/kernel/sync-db.sh` |
+| DB synced | `cvg mesh sync` |
 
 ## Step-by-Step Delegation
 
 ### 1. Sync DB to Peer
 
 ```bash
-# rsync-based sync (filesystem, NOT git)
-scripts/kernel/sync-db.sh $(hostname) <peer>
+# Daemon-managed sync (replaces rsync-based sync-db.sh)
+cvg mesh sync
 ```
 
 ### 2. Start Delegation
@@ -76,7 +76,7 @@ cvg who agents                     # active agents
 
 ```bash
 # Sync DB back
-scripts/kernel/sync-db.sh <peer> $(hostname)
+cvg mesh sync
 
 # Verify completion
 cvg plan tree <plan_id> --human
@@ -113,6 +113,6 @@ NEVER delegate via GitHub Issues — use Convergio scripts only.
 |---------|-----|
 | Worker can't reach daemon | Check `DASHBOARD_DB` env var on peer |
 | Task stuck in_progress | `cvg task update <id> pending` to reset |
-| DB out of sync | `scripts/kernel/sync-db.sh` both directions |
+| DB out of sync | `cvg mesh sync` both directions |
 | Auth expired on peer | `mesh-claude-login.sh <peer> --token <TOKEN>` |
 | tmux session lost | `ssh <peer> tmux ls` then reattach |

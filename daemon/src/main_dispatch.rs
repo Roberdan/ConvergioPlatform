@@ -229,14 +229,13 @@ pub(crate) async fn dispatch(command: Commands) -> ExitCode {
         }
         Commands::Repo { command } => exit_on_err(cli_repo::handle(command).await),
         Commands::Kernel { command } => cli_kernel::dispatch(command).await,
-        Commands::Cheatsheet => { crate::cli_cheatsheet::print_cheatsheet(); ExitCode::SUCCESS },
-        Commands::Api => { crate::cli_api_list::print_api_list(); ExitCode::SUCCESS },
-        Commands::Claude { name, parent, api_url } => {
-            exit_on_err(cli_launch::handle(cli_launch::LaunchCommands::Claude { name, parent, api_url }).await)
-        }
-        Commands::Copilot { name, parent, api_url } => {
-            exit_on_err(cli_launch::handle(cli_launch::LaunchCommands::Copilot { name, parent, api_url }).await)
-        }
+        Commands::Cheatsheet => { crate::cli_cheatsheet::print_cheatsheet(); ExitCode::SUCCESS }
+        Commands::Api => { crate::cli_api_list::print_api_list(); ExitCode::SUCCESS }
+        Commands::Cleanup => exit_on_err(crate::cli_cleanup::handle().await),
+        Commands::Claude { name, parent, api_url } =>
+            exit_on_err(cli_launch::handle(cli_launch::LaunchCommands::Claude { name, parent, api_url }).await),
+        Commands::Copilot { name, parent, api_url } =>
+            exit_on_err(cli_launch::handle(cli_launch::LaunchCommands::Copilot { name, parent, api_url }).await),
         Commands::Ask { alias, message, list, set, agent, api_url } => {
             exit_on_err(cli_ask::handle(alias, message, list, set, agent, &api_url).await)
         }

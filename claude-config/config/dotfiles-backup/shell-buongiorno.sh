@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# buongiorno.sh — Morning routine: update all tools across the mesh
-# Part of ConvergioPlatform. Runs on the master node, updates all peers.
-set -euo pipefail
-
-# --- Colors ---
-G='\033[0;32m' Y='\033[1;33m' R='\033[0;31m' C='\033[0;36m' B='\033[1m' N='\033[0m'
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# --- Config ---
-_buongiorno_master_peer() {
-	echo "${BUONGIORNO_MASTER_PEER:-m5max}"
-}
+# Buongiorno functions for shell aliases
+# Sourced from shell-aliases.sh — extracted to meet 250-line limit
 
 _buongiorno_mesh_sync() {
 	# mesh-sync.sh replaced by daemon auto-sync
@@ -19,12 +8,13 @@ _buongiorno_mesh_sync() {
 		cvg mesh sync 2>/dev/null || echo "    ⚠ daemon not running, mesh sync skip"
 	else
 		echo "    ⚠ cvg CLI not found, mesh sync skip"
+		return 1
 	fi
 }
 
-# Source peer update logic from separate file
-# shellcheck source=buongiorno-peers.sh
-source "${SCRIPT_DIR}/buongiorno-peers.sh"
+_buongiorno_master_peer() {
+	echo "${BUONGIORNO_MASTER_PEER:-m5max}"
+}
 
 _buongiorno_redirect_to_master() {
 	local master_peer local_peer
@@ -49,10 +39,8 @@ _buongiorno_redirect_to_master() {
 	return $?
 }
 
-# _buongiorno_update_peers is defined in buongiorno-peers.sh (sourced above)
-
-# --- Main ---
-main() {
+claude_buongiorno() {
+	local G='\033[0;32m' Y='\033[1;33m' R='\033[0;31m' C='\033[0;36m' B='\033[1m' N='\033[0m'
 	local no_master_redirect=0
 	if [[ "${1:-}" == "--no-master-redirect" ]]; then
 		no_master_redirect=1
@@ -60,12 +48,12 @@ main() {
 	fi
 
 	if [[ "$no_master_redirect" -eq 0 ]] && _buongiorno_redirect_to_master; then
-		exit 0
+		return 0
 	fi
 
 	local start master_peer local_peer execution_mode
 	start=$(date +%s)
-	declare -a news=()
+	local -a news=()
 	master_peer="$(_buongiorno_master_peer)"
 	if [[ -f "$HOME/.claude/scripts/lib/peers.sh" ]]; then
 		# shellcheck source=/dev/null
@@ -81,7 +69,7 @@ main() {
 	echo -e "   Nodo: ${C}${local_peer:-unknown}${N} | Master: ${C}${master_peer}${N} | Mode: ${B}${execution_mode}${N}"
 	echo ""
 
-	echo -e "${C}[1/6]${N} 🤖 Claude Code..."
+	echo -e "${C}[1/5]${N} 🤖 Claude Code..."
 	if command -v claude >/dev/null 2>&1; then
 		local claude_before claude_after
 		claude_before=$(claude --version 2>/dev/null)
@@ -99,32 +87,25 @@ main() {
 		echo -e "  ${Y}⚠${N} claude non trovato"
 	fi
 
-	echo -e "${C}[2/6]${N} 🐙 GitHub Copilot CLI..."
+	echo -e "${C}[2/5]${N} 🐙 GitHub Copilot CLI..."
 	if command -v gh >/dev/null 2>&1; then
 		local copilot_before copilot_after
-		if gh copilot --version >/dev/null 2>&1; then
-			copilot_before=$(gh copilot --version 2>/dev/null | head -1)
-			echo -e "  ${G}✓${N} built-in (${copilot_before})"
-		elif gh extension list 2>/dev/null | grep -q copilot; then
-			copilot_before=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
-			if gh extension upgrade gh-copilot 2>&1 | tail -2; then
-				copilot_after=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
-				if [[ "$copilot_before" != "$copilot_after" ]]; then
-					news+=("🐙 GH Copilot: ${copilot_before} → ${copilot_after}")
-				else
-					echo -e "  ${G}✓${N} già aggiornato (${copilot_after})"
-				fi
+		copilot_before=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
+		if gh extension upgrade gh-copilot 2>&1 | tail -2; then
+			copilot_after=$(gh extension list 2>/dev/null | awk '/copilot/ {print $3; exit}')
+			if [[ "$copilot_before" != "$copilot_after" ]]; then
+				news+=("🐙 GH Copilot: ${copilot_before} → ${copilot_after}")
 			else
-				echo -e "  ${R}✗${N} aggiornamento fallito"
+				echo -e "  ${G}✓${N} già aggiornato (${copilot_after})"
 			fi
 		else
-			echo -e "  ${Y}⚠${N} copilot non disponibile (né built-in né extension)"
+			echo -e "  ${R}✗${N} aggiornamento fallito"
 		fi
 	else
 		echo -e "  ${Y}⚠${N} gh non trovato"
 	fi
 
-	echo -e "${C}[3/6]${N} 🍺 Homebrew..."
+	echo -e "${C}[3/5]${N} 🍺 Homebrew..."
 	if command -v brew >/dev/null 2>&1; then
 		local outdated
 		brew update --quiet 2>/dev/null
@@ -143,29 +124,22 @@ main() {
 		echo -e "  ${Y}⚠${N} brew non disponibile su questo host, skip"
 	fi
 
-	echo -e "${C}[4/6]${N} 🔧 GitHub CLI & estensioni..."
+	echo -e "${C}[4/5]${N} 🔧 GitHub CLI & estensioni..."
 	if command -v gh >/dev/null 2>&1; then
-		local gh_ext_output
-		gh_ext_output=$(gh extension upgrade --all 2>&1) || true
-		if [[ -n "$gh_ext_output" ]]; then
-			echo "$gh_ext_output" | command grep -v "already up to date" | tail -5
-		fi
+		gh extension upgrade --all 2>&1 | grep -v "already up to date" | tail -5
 		echo -e "  ${G}✓${N} fatto"
 	else
 		echo -e "  ${Y}⚠${N} gh non trovato"
 	fi
 
-	echo -e "${C}[5/6]${N} 🌐 .claude Mesh Sync + aggiornamento peer..."
+	echo -e "${C}[5/5]${N} 🌐 Mesh Sync..."
 	_buongiorno_mesh_sync
-	_buongiorno_update_peers
 
-	echo -e "${C}[6/6]${N} 🩺 Mesh Preflight (tools + auth + versioni)..."
-	if [[ ! -x "$HOME/.claude/scripts/mesh-preflight.sh" ]]; then
-		echo -e "  ${Y}⚠${N} mesh-preflight.sh non trovato"
-	elif ! (cd "$HOME/.claude" && git rev-parse --git-dir >/dev/null 2>&1); then
-		echo -e "  ${Y}⚠${N} ~/.claude non è un git repo, preflight skip"
+	echo -e "${C}[6/6]${N} 🩺 Mesh Preflight..."
+	if [[ -x "$HOME/.claude/scripts/mesh-preflight.sh" ]]; then
+		"$HOME/.claude/scripts/mesh-preflight.sh" 2>&1 || news+=("🩺 Mesh preflight: ISSUES FOUND")
 	else
-		"$HOME/.claude/scripts/mesh-preflight.sh" 2>&1 || news+=("🩺 Mesh preflight: ISSUES FOUND — check dashboard")
+		echo -e "  ${Y}⚠${N} mesh-preflight.sh non trovato"
 	fi
 
 	local elapsed
@@ -188,4 +162,6 @@ main() {
 	echo ""
 }
 
-main "$@"
+buongiorno() {
+	claude_buongiorno "$@"
+}

@@ -6,6 +6,14 @@ mod types;
 
 pub use types::{PeerConfig, PeersError, PeersRegistry};
 
+/// Path to peers.conf: CONVERGIO_PEERS_CONF env var → ~/.claude/config/peers.conf.
+pub fn peers_conf_path_from_env() -> String {
+    std::env::var("CONVERGIO_PEERS_CONF").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        format!("{home}/.claude/config/peers.conf")
+    })
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -151,6 +159,7 @@ gh_account=Roberdan
             gh_account: None,
             runners: None,
             runner_paths: None,
+            aliases: vec![],
         };
         reg.add_peer("testnode", new_peer);
         assert_eq!(reg.peers.len(), 4);

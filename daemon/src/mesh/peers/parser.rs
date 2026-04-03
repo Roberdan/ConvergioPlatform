@@ -55,6 +55,10 @@ pub(super) fn build_peer(
         gh_account: kv.get("gh_account").cloned(),
         runners: kv.get("runners").and_then(|v| v.parse::<u32>().ok()), // intentional: malformed runner count should not fail peer record parse
         runner_paths: kv.get("runner_paths").cloned(),
+        aliases: kv
+            .get("aliases")
+            .map(|v| parse_capabilities(v))
+            .unwrap_or_default(),
     })
 }
 
@@ -154,6 +158,9 @@ pub fn peer_to_ini(name: &str, p: &PeerConfig) -> String {
     }
     if let Some(ref rp) = p.runner_paths {
         out.push_str(&format!("runner_paths={rp}\n"));
+    }
+    if !p.aliases.is_empty() {
+        out.push_str(&format!("aliases={}\n", p.aliases.join(",")));
     }
     out
 }

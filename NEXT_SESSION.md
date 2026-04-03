@@ -14,7 +14,7 @@
 |--------|-------|---------|
 | CRDT/crsqlite (mesh socket) | `mesh/sync/`, `daemon_sync_db.rs`, `ops_apply.rs` | **Feature-gated, NOT in default build** (`--features kernel` excludes it) |
 | HTTP/timestamp (background_sync) | `background_sync.rs`, `api_sync.rs`, `libsql_adapter.rs` | **4 bugs (see below), only 3 tables** |
-| rsync file-copy (scripts) | `sync-db.sh`, `deploy-node.sh` | **Works but snapshot-only, not live replication** |
+| rsync file-copy (scripts) | `deploy-node.sh` | **Works but snapshot-only, not live replication** |
 
 **Decision required**: Pick ONE replication model. The HTTP/timestamp path is the right one (simpler, no C extension, works with rusqlite). Kill the CRDT path or keep it gated forever. Stop relying on rsync except for bootstrap/repair.
 

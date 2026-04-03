@@ -25,85 +25,18 @@ if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; then
 	fi
 fi
 
-# Cleanup temp files AND child processes on exit
-_WORKER_TMPFILES=()
-_WORKER_CHILD_PIDS=()
-AGENT_COMPLETED=0
-complete_agent_tracking() {
-	if [[ "${AGENT_COMPLETED:-0}" -eq 1 ]]; then
-		return 0
-	fi
-	if [[ -n "${AGENT_ID:-}" ]]; then
-		local _status="failed"
-		[[ "${FINAL_EXIT_CODE:-1}" -eq 0 ]] && _status="completed"
-		"$SCRIPT_DIR/plan-db.sh" agent-complete "$AGENT_ID" \
-			--tokens-in "${TOKENS_USED:-0}" --tokens-out 0 --status "$_status" 2>/dev/null || true
-	fi
-	AGENT_COMPLETED=1
-}
-_worker_cleanup() {
-	set +u
-	# Emit agent_finished mesh event
-	_emit_mesh_event "agent_finished" \
-		"{\"task_id\":${TASK_ID:-0},\"exit_code\":${FINAL_EXIT_CODE:-1},\"agent_id\":\"${AGENT_ID:-}\"}" 2>/dev/null || true
-	# Complete agent tracking on exit (capture duration + status)
-	complete_agent_tracking
-	if [[ ${#_WORKER_CHILD_PIDS[@]} -gt 0 ]]; then
-		for pid in "${_WORKER_CHILD_PIDS[@]}"; do
-			kill -9 "$pid" 2>/dev/null || true
-			pkill -9 -P "$pid" 2>/dev/null || true
-		done
-	fi
-	for f in "${_WORKER_TMPFILES[@]}"; do
-		[[ -f "$f" ]] && rm -f "$f"
-	done
-	set -u
-	# Kill any remaining children of this process
-	pkill -9 -P $$ 2>/dev/null || true
-}
-trap _worker_cleanup EXIT INT TERM
-
 source "${SCRIPT_DIR}/lib/delegate-utils.sh"
 source "${SCRIPT_DIR}/lib/agent-protocol.sh"
-
-# _emit_mesh_event() — emit lifecycle events via daemon API
-_emit_mesh_event() {
-	local etype="${1:?event_type}" payload="${2:-{}}"
-	local host
-	host="$(hostname -s 2>/dev/null || echo 'unknown')"
-	curl -sf -X POST "${DAEMON_API}/api/coordinator/emit" \
-		-H 'Content-Type: application/json' \
-		-d "{\"event_type\":\"${etype}\",\"source_peer\":\"${host}\",\"plan_id\":${PLAN_ID:-0},\"payload\":${payload}}" 2>/dev/null || true
-}
-
-# _poll_messages() — background IPC inbox polling every 60s during idle.
-# Prints any received messages to stderr for visibility in worker logs.
-_poll_messages() {
-	local agent_name="$1"
-	local interval=60
-	while true; do
-		sleep "$interval"
-		local msgs count
-		msgs="$(curl -sf "${DAEMON_API}/api/ipc/messages?to_agent=${agent_name}&limit=10" 2>/dev/null || echo '{}')"
-		count="$(echo "$msgs" | jq -r '(.messages // []) | length' 2>/dev/null || echo 0)"
-		if [[ "$count" -gt 0 ]]; then
-			echo "[IPC] ${count} message(s) for ${agent_name}:" >&2
-			echo "$msgs" | jq -r '.messages[] | "[IPC] from=\(.from_agent // "?") \(.content)"' 2>/dev/null >&2 || true
-		fi
-	done
-}
+source "${SCRIPT_DIR}/lib/worker-lifecycle.sh"
+trap _worker_cleanup EXIT INT TERM
 
 TASK_ID="${1:-}"
 shift || true
 
-# Defaults — Opus 4.6 for reliable execution (was gpt-5.3-codex)
 MODEL="claude-opus-4-6"
-# 1200s default: complex multi-file tasks regularly exceed 600s, especially
-# on first attempt when the agent must read context, plan, and execute.
 TIMEOUT=1200
 MAX_RETRIES=3
-RETRY_DELAYS=(5 15 30) # Exponential backoff: 5s, 15s, 30s
-AGENT_ROLE="executor"
+RETRY_DELAYS=(5 15 30)
 AUTO_VALIDATE=true
 PLAN_ARG=""
 TASK_ARG=""
@@ -166,78 +99,23 @@ if [[ -n "$PLAN_ARG" && -n "$TASK_ARG" ]]; then
 		exit 1
 	fi
 	_found_plan_id="$PLAN_ARG"
-	STATUS="$(echo "$_exec_ctx" | jq -r '.task.status // "pending"' 2>/dev/null || echo 'pending')"
+	# execution-context returns .next_task (not .task) for the target task
+	_task_key=".next_task"
+	STATUS="$(echo "$_exec_ctx" | jq -r "${_task_key}.status // .status // \"pending\"" 2>/dev/null || echo 'pending')"
 	WT="$(echo "$_exec_ctx" | jq -r '.worktree_path // ""' 2>/dev/null || echo '')"
 	WT="${WT/#\~/$HOME}"
 	PLAN_ID="$PLAN_ARG"
-	WAVE_DB_ID="$(echo "$_exec_ctx" | jq -r '.task.wave_id_fk // 0' 2>/dev/null || echo '0')"
-	WAVE_ID="$(echo "$_exec_ctx" | jq -r '.task.wave_id // ""' 2>/dev/null || echo '')"
-	PROJECT_ID="$(echo "$_exec_ctx" | jq -r '.plan.project_id // ""' 2>/dev/null || echo '')"
-	TASK_TYPE="$(echo "$_exec_ctx" | jq -r '.task.type // "code"' 2>/dev/null || echo 'code')"
-	TASK_TITLE="$(echo "$_exec_ctx" | jq -r '.task.title // ""' 2>/dev/null || echo '')"
-	TASK_DESC="$(echo "$_exec_ctx" | jq -r '.task.description // ""' 2>/dev/null || echo '')"
+	WAVE_DB_ID="$(echo "$_exec_ctx" | jq -r "${_task_key}.wave_id_fk // 0" 2>/dev/null || echo '0')"
+	WAVE_ID="$(echo "$_exec_ctx" | jq -r "${_task_key}.wave_id // .current_wave.id // \"\"" 2>/dev/null || echo '')"
+	PROJECT_ID="$(echo "$_exec_ctx" | jq -r '.project_id // ""' 2>/dev/null || echo '')"
+	TASK_TYPE="$(echo "$_exec_ctx" | jq -r "${_task_key}.type // \"code\"" 2>/dev/null || echo 'code')"
+	TASK_TITLE="$(echo "$_exec_ctx" | jq -r "${_task_key}.title // \"\"" 2>/dev/null || echo '')"
+	TASK_DESC="$(echo "$_exec_ctx" | jq -r "${_task_key}.description // \"\"" 2>/dev/null || echo '')"
 	CTX_PROMPT="$(echo "$_exec_ctx" | jq -r '.prompt // ""' 2>/dev/null || echo '')"
 	AGENT_SESSION_NAME="worker-${PLAN_ID}-${TASK_ID}"
 else
-	# Legacy path: scan all active plans to find the task (DEPRECATED)
-	echo "WARN: --plan/--task not provided; falling back to deprecated plan-scan behavior" >&2
-	# Uses stdin to avoid triple-quote escaping issues with JSON containing apostrophes.
-	_plan_list="$(curl -sf "${DAEMON_API}/api/plan-db/list" 2>/dev/null || echo '{"plans":[]}')"
-	_found_plan_id="$(echo "$_plan_list" | python3 -c "
-import json, sys, urllib.request
-data = json.load(sys.stdin)
-plans = data.get('plans', data if isinstance(data, list) else [])
-for p in plans:
-    if p.get('status') not in ('doing', 'draft'): continue
-    try:
-        resp = urllib.request.urlopen('${DAEMON_API}/api/plan-db/json/' + str(p['id']))
-        pj = json.loads(resp.read())
-        for t in pj.get('tasks', []):
-            if t.get('id') == $TASK_ID:
-                print(p['id']); sys.exit(0)
-    except: pass
-" 2>/dev/null || echo '')"
-	if [[ -z "$_found_plan_id" ]]; then
-		echo '{"error":"task not found in any active plan"}' >&2
-		exit 1
-	fi
-	_plan_json="$(curl -sf "${DAEMON_API}/api/plan-db/json/${_found_plan_id}" 2>/dev/null || echo '{}')"
-	STATUS="$(python3 -c "
-import json, sys
-data = json.loads(sys.stdin.read())
-for t in data.get('tasks', []):
-    if t.get('id') == $TASK_ID:
-        print(t.get('status', '')); sys.exit(0)
-print('')
-" <<< "$_plan_json" 2>/dev/null || echo '')"
-	_task_json="$(python3 -c "
-import json, sys
-data = json.loads(sys.stdin.read())
-for t in data.get('tasks', []):
-    if t.get('id') == $TASK_ID:
-        json.dump(t, sys.stdout); sys.exit(0)
-print('{}')
-" <<< "$_plan_json" 2>/dev/null || echo '{}')"
-	TASK_CTX="$(echo "$_plan_json" | jq -c --argjson tid "$TASK_ID" '
-		(.tasks[] | select(.id == $tid)) as $t |
-		{worktree: ($t.worktree_path // .worktree_path // ""),
-		 plan_id: (.id // 0),
-		 wave_db_id: ($t.wave_id_fk // 0),
-		 wave_id: ($t.wave_id // ""),
-		 project_id: (.project_id // ""),
-		 task_type: ($t.type // "code"),
-		 task_title: ($t.title // "")}
-	' 2>/dev/null || echo '{}')"
-	WT="$(echo "$TASK_CTX" | jq -r '.worktree // ""')"
-	WT="${WT/#\~/$HOME}"
-	PLAN_ID="$(echo "$TASK_CTX" | jq -r '.plan_id // 0')"
-	WAVE_DB_ID="$(echo "$TASK_CTX" | jq -r '.wave_db_id // 0')"
-	WAVE_ID="$(echo "$TASK_CTX" | jq -r '.wave_id // ""')"
-	PROJECT_ID="$(echo "$TASK_CTX" | jq -r '.project_id // ""')"
-	TASK_TYPE="$(echo "$TASK_CTX" | jq -r '.task_type // "code"')"
-	TASK_TITLE="$(echo "$TASK_CTX" | jq -r '.task_title // ""')"
-	TASK_DESC="$(echo "$_task_json" | jq -r '.description // ""' 2>/dev/null || echo '')"
-	AGENT_SESSION_NAME="copilot-${TASK_ID}-$(date +%s)"
+	echo '{"error":"--plan and --task flags required (legacy scan removed)"}' >&2
+	exit 1
 fi
 
 # Fail-loud guard: task must have a title or description to execute
@@ -298,7 +176,9 @@ if [[ -n "$WT" && -d "$WT" && -x "${SCRIPT_DIR}/execution-preflight.sh" ]]; then
 	fi
 fi
 
-# Execute with retry logic for timeout (exit 124)
+# Fallback: if WT is empty, use current directory
+[[ -z "$WT" ]] && WT="$(pwd)"
+
 execute_copilot() {
 	local attempt="${1:-1}"
 	local exit_code=0
@@ -308,8 +188,6 @@ execute_copilot() {
 	copilot_stdout_file="$(mktemp)"
 	_WORKER_TMPFILES+=("$copilot_stdout_file")
 
-	# Pipe copilot output to tee: file + stderr (visible to user)
-	# Track child PID for cleanup on parent exit
 	timeout "$TIMEOUT" $CLI $CLI_ARGS --add-dir "$WT" \
 		--model "$MODEL" "$PROMPT" 2>&1 | tee "$copilot_stdout_file" >&2 &
 	local copilot_bg_pid=$!
@@ -368,131 +246,5 @@ while [[ $ATTEMPT -le $MAX_RETRIES ]]; do
 	fi
 done
 
-EXIT_CODE="$FINAL_EXIT_CODE"
-START_TS="$(($(date +%s) - TOTAL_DURATION))"
-
-# Parse worker output and extract token usage
-WORKER_RESULT_JSON="$(echo "$COPILOT_OUTPUT" | parse_worker_result 2>/dev/null || echo '{}')"
-TOKENS_USED="$(echo "$WORKER_RESULT_JSON" | jq -r '.tokens_used // 0' 2>/dev/null || echo 0)"
-
-# Try to extract tokens from copilot output
-if [[ "$TOKENS_USED" == "0" || "$TOKENS_USED" == "" ]]; then
-	# Try common patterns for token reporting in copilot output
-	# Pattern 1: "tokens used: N" or "tokens: N"
-	if [[ "$COPILOT_OUTPUT" =~ [Tt]okens[[:space:]]*used[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
-		TOKENS_USED="${BASH_REMATCH[1]}"
-	# Pattern 2: "input tokens: N, output tokens: M"
-	elif [[ "$COPILOT_OUTPUT" =~ [Ii]nput[[:space:]]*tokens[[:space:]]*:[[:space:]]*([0-9]+).*[Oo]utput[[:space:]]*tokens[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
-		TOKENS_USED=$((${BASH_REMATCH[1]} + ${BASH_REMATCH[2]}))
-	# Pattern 3: JSON format with usage field
-	elif [[ "$COPILOT_OUTPUT" =~ \"usage\"[[:space:]]*:[[:space:]]*\{[^}]*\"total_tokens\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
-		TOKENS_USED="${BASH_REMATCH[1]}"
-	fi
-fi
-
-# Fallback: estimate tokens based on prompt + output size (4 chars ≈ 1 token)
-if [[ "$TOKENS_USED" == "0" || "$TOKENS_USED" == "" ]]; then
-	PROMPT_SIZE=${#PROMPT}
-	OUTPUT_SIZE=${#COPILOT_OUTPUT}
-	TOTAL_SIZE=$((PROMPT_SIZE + OUTPUT_SIZE))
-	TOKENS_USED=$((TOTAL_SIZE / 4))
-	[[ $TOKENS_USED -lt 1 ]] && TOKENS_USED=1
-fi
-
-# Process results and update task status based on exit code
-FINAL_STATUS="$(cvg plan show "$_found_plan_id" 2>/dev/null | jq -r --argjson tid "$TASK_ID" '.tasks[] | select(.id == $tid) | .status // ""' 2>/dev/null || echo '')"
-NOTE=""
-THOR_RESULT="UNKNOWN"
-STASH_REF=""
-
-if [[ "$EXIT_CODE" -eq 124 ]]; then
-	if verify_work_done "$WT" >/dev/null 2>&1; then
-		(cd "$WT" && git stash push --include-untracked \
-			--message "copilot-worker timeout task ${TASK_ID}") >/dev/null 2>&1 || true
-		STASH_REF="$(git -C "$WT" rev-parse --verify --short stash@{0} 2>/dev/null || true)"
-	fi
-	NOTE="Timeout after $ATTEMPT attempts (${TOTAL_DURATION}s total)"
-	[[ -n "$STASH_REF" ]] && NOTE="${NOTE}; stash=${STASH_REF}"
-	safe_update_task "$TASK_ID" blocked "$NOTE" --tokens "$TOKENS_USED" || true
-	echo "{\"status\":\"timeout\",\"task_id\":${TASK_ID},\"attempts\":${ATTEMPT},\"stash_ref\":\"${STASH_REF}\"}" >&2
-	THOR_RESULT="REJECT"
-elif [[ "$EXIT_CODE" -eq 130 ]]; then
-	NOTE="Interrupted by user"
-	safe_update_task "$TASK_ID" blocked "$NOTE" --tokens "$TOKENS_USED" || true
-	echo "{\"status\":\"interrupted\",\"task_id\":${TASK_ID}}" >&2
-	THOR_RESULT="REJECT"
-elif [[ "$EXIT_CODE" -ne 0 ]]; then
-	NOTE="Copilot error (exit $EXIT_CODE)"
-	safe_update_task "$TASK_ID" blocked "$NOTE" --tokens "$TOKENS_USED" || true
-	echo "{\"status\":\"error\",\"task_id\":${TASK_ID},\"exit_code\":${EXIT_CODE}}" >&2
-	THOR_RESULT="REJECT"
-elif [[ "$FINAL_STATUS" != "done" && "$FINAL_STATUS" != "submitted" ]]; then
-	# Check if this is a verification/closure task that doesn't require file changes
-	_title_lower="$(echo "$TASK_TITLE" | tr '[:upper:]' '[:lower:]')"
-	IS_VERIFY_TASK=false
-	if [[ "$TASK_TYPE" == "chore" && "$_title_lower" == create\ pr* ]]; then IS_VERIFY_TASK=true; fi
-	if [[ "$TASK_TYPE" == "test" ]] && [[ "$_title_lower" == verify* || "$_title_lower" == consolidate\ and\ verify* || "$_title_lower" == run\ full\ validation* ]]; then IS_VERIFY_TASK=true; fi
-	if [[ "$TASK_TYPE" == "doc" || "$TASK_TYPE" == "docs" ]]; then IS_VERIFY_TASK=true; fi
-
-	if WORK_DONE="$(verify_work_done "$WT" 2>/dev/null)"; then
-		ARTIFACTS_JSON="$(git -C "$WT" status --porcelain | awk '{print $2}' | jq -Rsc 'split("\n") | map(select(length>0)) | unique')"
-		OUTPUT_DATA="$(jq -cn --arg summary 'Auto-completed from detected worktree changes' --argjson artifacts "$ARTIFACTS_JSON" '{summary:$summary,artifacts:$artifacts}')"
-		NOTE="Auto-completed: worker changed files but task status was not updated"
-		safe_update_task "$TASK_ID" done "$NOTE" --tokens "$TOKENS_USED" --output-data "$OUTPUT_DATA" || true
-		# plan-db-safe.sh sets 'submitted' (not done). Thor validation required.
-		FINAL_STATUS="submitted"
-		THOR_RESULT="PENDING"
-		echo '{"status":"submitted","task_id":'$TASK_ID',"copilot_exit":'$EXIT_CODE'}'
-	elif [[ "$IS_VERIFY_TASK" == true && "$EXIT_CODE" -eq 0 ]]; then
-		NOTE="Auto-completed: verification/closure task with clean exit (no file changes expected)"
-		OUTPUT_DATA='{"summary":"Verification task completed without file changes","artifacts":[]}'
-		safe_update_task "$TASK_ID" done "$NOTE" --tokens "$TOKENS_USED" --output-data "$OUTPUT_DATA" || true
-		FINAL_STATUS="submitted"
-		THOR_RESULT="PENDING"
-		echo '{"status":"submitted","task_id":'$TASK_ID',"copilot_exit":'$EXIT_CODE'}'
-	else
-		NOTE="Copilot exited without completing"
-		safe_update_task "$TASK_ID" blocked "$NOTE" --tokens "$TOKENS_USED" || true
-		echo '{"status":"incomplete","task_id":'$TASK_ID',"copilot_exit":'$EXIT_CODE'}' >&2
-		THOR_RESULT="REJECT"
-	fi
-else
-	# Task was marked submitted by the Copilot agent itself (via plan-db-safe.sh)
-	# or already done from a previous run
-	echo '{"status":"'$FINAL_STATUS'","task_id":'$TASK_ID'}'
-	if [[ "$FINAL_STATUS" == "done" ]]; then
-		THOR_RESULT="PASS"
-	else
-		THOR_RESULT="PENDING"
-	fi
-fi
-
-# Log delegation with proper duration
-DURATION_MS="$((TOTAL_DURATION * 1000))"
-log_delegation "$TASK_ID" "$PLAN_ID" "$PROJECT_ID" "copilot" "$MODEL" \
-	"$PROMPT_TOKENS" "$TOKENS_USED" "$DURATION_MS" "$EXIT_CODE" "$THOR_RESULT" "0" "unknown" || true
-
-# Ensure agent-complete is recorded before any post-submit wave actions.
-complete_agent_tracking
-
-# F-12: Auto-trigger @validate when wave executor work is fully submitted/resolved.
-if [[ "$AUTO_VALIDATE" == "true" && "$FINAL_STATUS" == "submitted" && "$WAVE_DB_ID" != "0" ]]; then
-	eval_json="$("$SCRIPT_DIR/plan-db.sh" evaluate-wave "$WAVE_DB_ID" 2>/dev/null || echo '{"result":"BLOCKED"}')"
-	eval_result="$(echo "$eval_json" | jq -r '.result // "BLOCKED"' 2>/dev/null || echo "BLOCKED")"
-	_wave_tasks="$(cvg plan show "$_found_plan_id" 2>/dev/null | jq --argjson wid "$WAVE_DB_ID" '[.tasks[] | select(.wave_id_fk == $wid)]' 2>/dev/null || echo '[]')"
-	unresolved_count="$(echo "$_wave_tasks" | jq '[.[] | select(.status | IN("submitted","done","cancelled","skipped") | not)] | length' 2>/dev/null || echo "1")"
-	submitted_count="$(echo "$_wave_tasks" | jq '[.[] | select(.status == "submitted")] | length' 2>/dev/null || echo "0")"
-
-	if [[ "$eval_result" == "READY" && "$unresolved_count" -eq 0 && "$submitted_count" -gt 0 ]]; then
-		validate_prompt="@validate Wave ${WAVE_ID:-$WAVE_DB_ID} in plan ${PLAN_ID}. All wave tasks are submitted. Run wave-level validation now."
-		echo "Auto-validate: wave ${WAVE_ID:-$WAVE_DB_ID} is fully submitted. Triggering @validate..."
-		timeout "$TIMEOUT" $CLI $CLI_ARGS --add-dir "$WT" \
-			-p "$validate_prompt" >/dev/null 2>&1 || {
-			echo "WARN: Auto-validate trigger failed for wave ${WAVE_ID:-$WAVE_DB_ID}" >&2
-		}
-	fi
-elif [[ "$AUTO_VALIDATE" != "true" ]]; then
-	echo "Auto-validate disabled via --no-auto-validate."
-fi
-
-exit $EXIT_CODE
+# Post-processing: token extraction, status update, delegation log, auto-validate
+source "${SCRIPT_DIR}/lib/worker-postprocess.sh"

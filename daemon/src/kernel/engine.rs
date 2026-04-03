@@ -145,13 +145,13 @@ impl KernelEngine {
             return "Il modello locale non e' disponibile. Riprova piu' tardi.".to_string();
         }
         let model = self.loaded_model.as_ref().unwrap();
-        let daemon_url = "http://localhost:8420";
-        let context = smart_context_gather(question, daemon_url);
+        let daemon_url = crate::kernel::cloud_escalation::daemon_url();
+        let context = smart_context_gather(question, &daemon_url);
         let tools_block = engine_tool_loop::tool_descriptions_block();
         let prompt = engine_tool_loop::build_ask_prompt(
             &context, question, &tools_block, history_chatml,
         );
-        engine_tool_loop::run_tool_loop(&self.bridge, model, prompt, daemon_url)
+        engine_tool_loop::run_tool_loop(&self.bridge, model, prompt, &daemon_url)
     }
 
     /// Snapshot the current engine state.

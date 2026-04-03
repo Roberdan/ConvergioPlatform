@@ -92,14 +92,14 @@ curl -X POST $DAEMON_URL/api/runs -d '{"goal":"...","team":[...],"status":"runni
 
 ### 5. Dispatch
 ```bash
-convergio-bus.sh register ali "orchestrator" "claude"
+cvg bus register ali "orchestrator" "claude"
 Task(subagent_type="<agent>", prompt="Task details + context files + IPC instructions")
 ```
 - Remote: `curl -X POST $DAEMON_URL/api/mesh/delegate -d '{"peer":"node","task":"T-id"}'`
 - Every agent MUST: register, report completion, check messages, report blockers
 
 ### 6. Monitor
-- `convergio-bus.sh read ali` — poll reports
+- `cvg bus read ali` — poll reports
 - `cvg plan tree $PLAN_ID` — track progress
 - DONE → dispatch next dependent | BLOCKED → re-assign/escalate | Silent 10min → re-spawn
 
@@ -123,5 +123,5 @@ Execution report: Goal / Team / Results / Validation / Metrics / Learnings.
 - If agent fails 3x → re-assign to alternative, then escalate
 - Prefer cheapest adequate model for each role
 - Maximum parallelism where dependencies allow
-- Cross-repo: use convergio-sync.sh, NEVER work directly in another repo
+- Cross-repo: use `cvg sync` or daemon API, NEVER work directly in another repo
 - Sensitive docs → local/opencode agents only
