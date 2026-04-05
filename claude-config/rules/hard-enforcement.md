@@ -73,13 +73,18 @@ cause, propose rebuild. Band-aid chains = REJECTED.
 
 ## Copilot Delegation
 
-| Need | Command |
-|---|---|
-| Single task | `copilot-worker.sh <db_task_id> --model claude-opus-4.6` |
-| Full plan | `copilot-plan-runner.sh <plan_id>` |
-| Task prompt | `copilot-task-prompt.sh <db_task_id> [role]` |
+Copilot delegation is handled natively by the Convergio daemon:
 
-NEVER delegate via GitHub Issues. Convergio scripts handle orchestration.
+| Need | How |
+|---|---|
+| Execute plan | `/execute {plan_id}` — auto-delegates mechanical tasks to Copilot |
+| Launch Copilot session | `cvg copilot <name>` — registers with daemon, spawns `gh copilot` |
+| Manual delegation | Claude agents read TASK.md header and call `gh copilot --model claude-opus-4-6` |
+
+The daemon spawner launches Claude, which delegates sub-tasks to Copilot per TASK.md instructions.
+Process scanner auto-discovers running Copilot PIDs and registers them in ipc_agents.
+
+NEVER delegate via GitHub Issues or external scripts. The daemon handles all orchestration.
 
 ## UI Integration Rules
 
