@@ -66,6 +66,19 @@ Delegate when specialized expertise needed or parallel workstreams. Don't delega
 Impact check: mesh nodes, legacy scripts, DB schema, sync pipeline, frontend contract.
 Pre: map endpoints | During: curl vs JS per endpoint | Post: Playwright audit, `cvg mesh sync` ALL nodes.
 
+## Repository Setup (apply to ALL repos)
+
+| Setting | Value | Why |
+|---|---|---|
+| Squash merge | **DISABLED** | Squash loses history. Parallel agents overwrite each other's work. |
+| Rebase merge | **DISABLED** | Rewrites history, breaks parallel branch refs. |
+| Merge commit | **ENABLED** (only) | Preserves full history, safe for parallel agents. |
+| Branch protection | Require PR, require CI pass | No direct push to main. |
+| AGENTS.md | Root of repo | Universal rules for any LLM agent. |
+
+Apply to new repos: `gh api repos/OWNER/REPO -X PATCH -f allow_squash_merge=false -f allow_rebase_merge=false -f allow_merge_commit=true`
+Apply to existing repos: same command. Check first: `gh api repos/OWNER/REPO -q '.allow_squash_merge'`
+
 ## Writing
 
 Tables>prose | Commands>descriptions | No preambles | Comments: WHY, <5% | Commits: conventional | PRs: Summary+Test plan

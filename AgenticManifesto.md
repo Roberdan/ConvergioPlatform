@@ -25,4 +25,6 @@ Milano — 23 June 2025
 
 ---
 
-*Signed in Milano, 23 June 2025 — Roberto D'Angelo · Claude 3 · OpenAI o3*
+*Signed in Milano, 23 June 2025 — Roberto D'Angelo · Claude · ChatGPT*
+
+*Made with ❤️ for Mario in Milano, Italy, Europe.*

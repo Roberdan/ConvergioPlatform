@@ -1,87 +1,21 @@
 #!/usr/bin/env bash
-# buongiorno.sh — Morning routine: update all tools across the mesh
-# Part of ConvergioPlatform. Runs on the master node, updates all peers.
+# buongiorno.sh — Morning routine: aggiorna i tool locali
 set -euo pipefail
 
 # --- Colors ---
 G='\033[0;32m' Y='\033[1;33m' R='\033[0;31m' C='\033[0;36m' B='\033[1m' N='\033[0m'
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# --- Config ---
-_buongiorno_master_peer() {
-	echo "${BUONGIORNO_MASTER_PEER:-m5max}"
-}
-
-_buongiorno_mesh_sync() {
-	# mesh-sync.sh replaced by daemon auto-sync
-	if command -v cvg &>/dev/null; then
-		cvg mesh sync 2>/dev/null || echo "    ⚠ daemon not running, mesh sync skip"
-	else
-		echo "    ⚠ cvg CLI not found, mesh sync skip"
-	fi
-}
-
-# Source peer update logic from separate file
-# shellcheck source=buongiorno-peers.sh
-source "${SCRIPT_DIR}/buongiorno-peers.sh"
-
-_buongiorno_redirect_to_master() {
-	local master_peer local_peer
-	master_peer="$(_buongiorno_master_peer)"
-
-	[[ -f "$HOME/.claude/scripts/lib/peers.sh" ]] || return 1
-	# shellcheck source=/dev/null
-	source "$HOME/.claude/scripts/lib/peers.sh"
-	peers_load 2>/dev/null || return 1
-
-	local_peer="${CLAUDE_LOCAL_PEER:-$(peers_self 2>/dev/null)}"
-	[[ "$local_peer" == "$master_peer" ]] && return 1
-
-	local master_route master_user master_dest
-	master_route="$(peers_best_route "$master_peer" 2>/dev/null || peers_get "$master_peer" ssh_alias 2>/dev/null)" || return 1
-	master_user="$(peers_get "$master_peer" user 2>/dev/null || echo "")"
-	master_dest="${master_user:+${master_user}@}${master_route}"
-	[[ -n "$master_dest" ]] || return 1
-
-	echo "↪ questo nodo non è il master (${local_peer:-unknown}). Reindirizzo a ${master_peer}..."
-	ssh -t -o BatchMode=yes "$master_dest" "zsh -ic 'buongiorno --no-master-redirect'"
-	return $?
-}
-
-# _buongiorno_update_peers is defined in buongiorno-peers.sh (sourced above)
-
 # --- Main ---
 main() {
-	local no_master_redirect=0
-	if [[ "${1:-}" == "--no-master-redirect" ]]; then
-		no_master_redirect=1
-		shift
-	fi
-
-	if [[ "$no_master_redirect" -eq 0 ]] && _buongiorno_redirect_to_master; then
-		exit 0
-	fi
-
-	local start master_peer local_peer execution_mode
+	local start
 	start=$(date +%s)
 	declare -a news=()
-	master_peer="$(_buongiorno_master_peer)"
-	if [[ -f "$HOME/.claude/scripts/lib/peers.sh" ]]; then
-		# shellcheck source=/dev/null
-		source "$HOME/.claude/scripts/lib/peers.sh"
-		peers_load 2>/dev/null || true
-		local_peer="${CLAUDE_LOCAL_PEER:-$(peers_self 2>/dev/null)}"
-	fi
-	execution_mode="MASTER"
-	[[ "$no_master_redirect" -eq 1 ]] && execution_mode="REMOTE-RUN"
 
 	echo ""
-	echo -e "${B}☀️  Buongiorno! Aggiorno tutto...${N}"
-	echo -e "   Nodo: ${C}${local_peer:-unknown}${N} | Master: ${C}${master_peer}${N} | Mode: ${B}${execution_mode}${N}"
+	echo -e "${B}☀️  Buongiorno! Aggiorno i tool locali...${N}"
 	echo ""
 
-	echo -e "${C}[1/6]${N} 🤖 Claude Code..."
+	echo -e "${C}[1/4]${N} 🤖 Claude Code..."
 	if command -v claude >/dev/null 2>&1; then
 		local claude_before claude_after
 		claude_before=$(claude --version 2>/dev/null)
@@ -99,7 +33,7 @@ main() {
 		echo -e "  ${Y}⚠${N} claude non trovato"
 	fi
 
-	echo -e "${C}[2/6]${N} 🐙 GitHub Copilot CLI..."
+	echo -e "${C}[2/4]${N} 🐙 GitHub Copilot CLI..."
 	if command -v gh >/dev/null 2>&1; then
 		local copilot_before copilot_after
 		if gh copilot --version >/dev/null 2>&1; then
@@ -124,7 +58,7 @@ main() {
 		echo -e "  ${Y}⚠${N} gh non trovato"
 	fi
 
-	echo -e "${C}[3/6]${N} 🍺 Homebrew..."
+	echo -e "${C}[3/4]${N} 🍺 Homebrew..."
 	if command -v brew >/dev/null 2>&1; then
 		local outdated
 		brew update --quiet 2>/dev/null
@@ -143,7 +77,7 @@ main() {
 		echo -e "  ${Y}⚠${N} brew non disponibile su questo host, skip"
 	fi
 
-	echo -e "${C}[4/6]${N} 🔧 GitHub CLI & estensioni..."
+	echo -e "${C}[4/4]${N} 🔧 GitHub CLI & estensioni..."
 	if command -v gh >/dev/null 2>&1; then
 		local gh_ext_output
 		gh_ext_output=$(gh extension upgrade --all 2>&1) || true
@@ -153,19 +87,6 @@ main() {
 		echo -e "  ${G}✓${N} fatto"
 	else
 		echo -e "  ${Y}⚠${N} gh non trovato"
-	fi
-
-	echo -e "${C}[5/6]${N} 🌐 .claude Mesh Sync + aggiornamento peer..."
-	_buongiorno_mesh_sync
-	_buongiorno_update_peers
-
-	echo -e "${C}[6/6]${N} 🩺 Mesh Preflight (tools + auth + versioni)..."
-	if [[ ! -x "$HOME/.claude/scripts/mesh-preflight.sh" ]]; then
-		echo -e "  ${Y}⚠${N} mesh-preflight.sh non trovato"
-	elif ! (cd "$HOME/.claude" && git rev-parse --git-dir >/dev/null 2>&1); then
-		echo -e "  ${Y}⚠${N} ~/.claude non è un git repo, preflight skip"
-	else
-		"$HOME/.claude/scripts/mesh-preflight.sh" 2>&1 || news+=("🩺 Mesh preflight: ISSUES FOUND — check dashboard")
 	fi
 
 	local elapsed
